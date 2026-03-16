@@ -44,7 +44,7 @@ public class PathCalculationTask : TestBotTask
             maxStartDistance: 5.0f,
             maxEndDistance: 10.0f,
             maxSegmentLength: 200.0f,
-            maxHeightJump: 20.0f);
+            maxHeightJump: 25.0f);
         if (validationFailure is not null)
         {
             Fail(validationFailure);

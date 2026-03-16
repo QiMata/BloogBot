@@ -1,159 +1,65 @@
-﻿# Master Tasks
-
-## Role
-- `docs/TASKS.md` is the master coordination list for all local `TASKS.md` files.
-- Local files hold implementation details; this file sets priority and execution order.
-- When priorities conflict, this file wins.
+# Master Tasks
 
 ## Rules
-1. **Use ONE continuous session.** Never start new sessions to run tests or continue work — auto-compaction handles context limits. Starting new sessions loses context and creates confusion.
+1. **Use ONE continuous session.** Auto-compaction handles context limits.
 2. Execute one local `TASKS.md` at a time in queue order.
-3. Keep handoff pointers (`current file`, `next file`) updated before switching.
-4. Prefer concrete file/symbol tasks over broad behavior buckets.
-5. Never blanket-kill `dotnet` or `Game.exe`; cleanup must be PID-scoped.
-6. Move completed items to `docs/ARCHIVE.md`.
-7. Before session handoff, update `Session Handoff` in both this file and the active local file.
-8. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
-9. **The MaNGOS server is ALWAYS live.** Never defer live validation tests; run them every session.
-10. **Compare to VMaNGOS server code** when implementing packet-based functionality. The server is the authority for correct behavior.
-11. Every implementation slice must add or update focused unit tests and end with those tests passing before moving to the next slice unless a blocker is recorded.
-12. Update the active plan and all impacted `TASKS.md` handoff blocks every pass with exact progress, commands, outcomes, and the next executable command.
-13. After each shipped delta, commit and push the full branch state before ending the pass.
-14. Every session handoff must direct the next session to resume the next open item in the same test-first, commit/push-as-you-go manner.
+3. Move completed items to `docs/ARCHIVE.md`.
+4. **The MaNGOS server is ALWAYS live.** Never defer live validation tests.
+5. **Compare to VMaNGOS server code** when implementing packet-based functionality.
+6. Every implementation slice must add or update focused unit tests.
+7. After each shipped delta, commit and push before ending the pass.
 
 ---
 
-## P0 - Test Infrastructure Hardening (COMPLETE)
+## P7 - Pathfinding Hardening (ACTIVE)
 
-All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for full catalog (19/25 fixed, 2 mitigated, 2 deferred, 4 open).
+Core ghost-stuck, corridor collision, and object-aware paths all done (7.1-7.5 archived). Remaining: shoreline routes, route metadata, spatial queries.
 
----
+| # | Task | Status |
+|---|------|--------|
+| 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Native lateral detour generation in PathFinder.cpp works. Service-side `[PATH_DIAG]` logging works. Missing: bot-side execution trace (planned-vs-executed drift detection). | ~70% — in progress |
+| 7.7 | **Route affordance metadata.** Classify path transitions (walk/step-up/jump/drop/swim/blocked). | Open |
+| 7.8 | **Decision-grade spatial queries.** Reachability/LOS/surface queries for better approach points. | Open |
 
-## P1 - FG Packet Capture: Send + Recv Hooks
-
-## P0A - Live Integration Test Overhaul (IN PROGRESS)
-
-**Rationale:** The live suite needs to move away from setup validation and raw action dispatches toward BG-first, task-driven behavior coverage with sharper snapshot metrics. FG remains the packet/timing reference.
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 0A.1 | **Fixture cleanup baseline.** Remove fixture-level `.gm on`, make `EnsureCleanSlateAsync()` revive + safe-zone teleport only, and update lifecycle docs. | `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture*.cs` | **Done** (2026-03-10 session 54) |
-| 0A.2 | **Phase 1 deletions.** Keep only the survivor tests in `BasicLoopTests.cs` and `CharacterLifecycleTests.cs`. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** (2026-03-10 session 54) |
-| 0A.3 | **Consumable/buff consolidation.** Replace `ConsumableUsageTests.cs` + `BuffDismissTests.cs` with `BuffAndConsumableTests.cs` and assert add-item, use-item, aura, and dismissal metrics. | `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs` | **Done** (2026-03-10 session 54) |
-| 0A.4 | **Move range coverage to deterministic tests.** Keep combat range formulas in `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`; remove the live `CombatRangeTests.cs` suite. | `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs` | **Done** (2026-03-10 session 54) |
-| 0A.5 | **Remove remaining direct `.gm on` / `.respawn` usage** from `GatheringProfessionTests.cs`, `MapTransitionTests.cs`, `LootCorpseTests.cs`, and `StarterQuestTests.cs`, then update their docs. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** (2026-03-11 session 55) |
-| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | **Done** (session 90) — All suites task-driven: NPC (`VisitVendor`/`VisitTrainer`/`VisitFlightMaster`), combat (`StartMeleeAttack`), corpse (`ReleaseCorpse`/`RetrieveCorpse`), navigation (`Goto`), quest (`StarterQuestTests`), gathering (`StartGatheringRoute`), fishing (`StartFishing`). QuestInteractionTests kept as snapshot plumbing. |
+**Note:** P7.5 (object-aware path requests) is **COMPLETE** — proto contract, BotRunner overlay builder, service-side mount/unmount all shipping. P7.6 (overlay-aware validation) was **replaced** by corridor-based pathfinding (`FindPathCorridor`). Both archived.
 
 ---
 
-## P1 - FG Packet Capture: Send + Recv Hooks
+## Navmesh — Full Map Rebuild (COMPLETE)
 
-**Rationale:** FG packet capture is the foundation for fixing all BG bot issues. By observing what the real WoW client sends and receives, we can reconstruct correct behavior in the headless BG bot. This unblocks fishing (FISH-001), movement flags (BT-MOVE-001/002), and combat reliability.
+Both continents rebuilt with GO collision baking. 515 tiles (map 0) + 785 tiles (map 1) regenerated. Tiles copied to `Bot/Debug/net8.0/mmaps/`. PathfindingService: 39/40 pass (1 pre-existing). Physics: 109/0/1.
 
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 1.1 | **Complete FG recv hook (SMSG).** Runtime pattern scanner finds ProcessMessage by scanning for `[this+0x74]` m_handlers access near NetClientSend. Assembly detour captures all inbound SMSG opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
-| 1.2 | **Structured packet log format.** C->S / S->C direction, opcode name lookup (~60 opcodes), size, timestamp. Logs first 500 packets + all important opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
-
-**Packet capture is a diagnostic tool, not a standalone test.** Use it during all LiveValidation tests to observe FG/BG packet sequences. Compare against VMaNGOS server code to validate correct behavior. Analyze `packet_logger.log` for hidden error messages and timing issues.
-
----
-
-## P2 - CraftingProfessionTests.FirstAid Fix (RESOLVED)
-
-FirstAid_LearnAndCraft_ProducesLinenBandage passes reliably as of session 86. Fixed by intervening work (snapshot pipeline improvements, spell handling fixes).
+| # | Task | Status |
+|---|------|--------|
+| N.1 | Full tile rebuild for map 0 (Eastern Kingdoms) | **Done** |
+| N.2 | Full tile rebuild for map 1 (Kalimdor) | **Done** |
+| N.3 | Verify no pathfinding regressions | **Done** — 39/40 pass, 109/110 physics pass |
 
 ---
 
-## P3 - Fishing FISH-001: BG Packet/Timing Parity Follow-Up
+## P3 - Fishing Parity (Low Priority)
 
-**Approach:** Use FG packet capture to observe a successful FG fishing session, then compare the exact cast/channel/bobber timing against BG. The cast gate is fixed and `FishingTask` now owns the live cast path for both bots; the remaining work is packet/timing and movement-stop parity hardening.
+**FishingTask is implemented and passing live validation for both BG and FG.** BG: skill 75→76, pool detection, loot success confirmed. Remaining work is packet-level optimization, not core mechanics. Intermittent skips are pool respawn timers (world state, not bugs).
 
-Current observed boundary from the 2026-03-12 live suite:
-- `FishingProfessionTests` now stages both BG and FG at Ratchet via `.tele name`, sets fishing skill `75`, adds `Nightcrawler Bait`, and dispatches `ActionType.StartFishing` into `FishingTask`.
-- BG now resolves the castable fishing rank from the known-spell list and handles server rank replacement via `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`.
-- The focused fishing pass condition now requires `bobber observed -> loot_window_open -> fishing_loot_success -> post-loot bag delta`, not just setup success or a transient loot-frame signal.
-- FG now mirrors the bobber-interact path through the recv hook plus `ForceStopImmediate()`, while BG forced-stop handling now preserves falling/swimming physics flags. The remaining Ratchet shoreline failure now needs pathfinding/route hardening more than another fishing-task change.
-- The task-owned fishing path has already completed live on BG (`skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, `catchDelta=[6358]`); the remaining intermittent failure is shoreline/pathfinding/LOS before `FishingTask in_cast_range`, not the old cast gate.
-- The remaining fishing work is packet/timing and shoreline-movement hardening, not the old `_objectManager.CanCastSpell(7620, 0)` cast gate.
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 3.1 | **Capture FG fishing packets.** Run FG fishing at Ratchet dock and capture the full cast -> channel -> bobber -> custom anim sequence. | Packet log analysis | Open |
-| 3.2 | **Compare BG fishing packets** against FG capture. Identify missing packets or timing deltas that still distinguish BG from FG. | `Exports/WoWSharpClient/` | Open |
-| 3.3 | **Harden BG fishing parity** to match FG packet/timing behavior and feed the future `FishingTask` implementation. | `Exports/WoWSharpClient/` | Open |
+| # | Task | Status |
+|---|------|--------|
+| 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | Open — packet infrastructure ready |
+| 3.2 | Compare BG fishing packets against FG capture | Blocked on 3.1 |
+| 3.3 | Harden BG fishing parity to match FG packet/timing | Blocked on 3.2 |
 
 ---
 
 ## P4 - Movement Flags After Teleport (BT-MOVE-001/002)
 
-**Approach:** Use FG packet capture to observe correct movement flag transitions during teleport. Compare FG heartbeat packets (flags, position, timing) against BG output.
+ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset() clears flags to MOVEFLAG_NONE. Recent fixes (`eda25b0`, `94f5d1a`) addressed post-teleport Z clamp and slope guard. Remaining: formal FG packet capture test to verify no flag divergence.
 
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 4.1 | **Capture FG teleport packets.** Observe `MSG_MOVE_TELEPORT_ACK` -> subsequent heartbeats. Record flag transitions and timing. | Packet log analysis | Blocked on P1 |
-| 4.2 | **Compare BG teleport behavior.** Identify where BG diverges (stale flags, missing heartbeats). | `Exports/WoWSharpClient/Movement/MovementController.cs` | Blocked on 4.1 |
-| 4.3 | **Fix MovementController** to reset flags correctly and match FG behavior. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Blocked on 4.2 |
-
----
-
-## P5 - UnitReaction Reliability (BB-COMBAT-006) — DONE
-
-**Approach:** Embedded 314 faction template entries from VMaNGOS DB into `FactionData.cs` with WoW's mask-based reaction algorithm. UnitReaction is now computed inline when `UNIT_FIELD_FACTIONTEMPLATE` is received.
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 5.1 | **Embed faction template data** with reaction calculation in `FactionData.cs`. | `Exports/GameData.Core/Constants/FactionData.cs` | **Done** (`25c5eae`) |
-| 5.2 | **Compute reaction from faction template** using WoW's mask algorithm (enemy/friend faction lists + hostile/friendly/our mask checks). | `Exports/GameData.Core/Constants/FactionData.cs` | **Done** (`25c5eae`) |
-| 5.3 | **Wire into BG bot.** Compute `UnitReaction` in `ApplyUnitFieldDiffs` when `UNIT_FIELD_FACTIONTEMPLATE` is set. | `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs` | **Done** (`25c5eae`) |
-| 5.4 | **Unit tests.** 25 tests: hostile/neutral/friendly creatures, Alliance vs Horde, helpers, edge cases. | `Tests/BotRunner.Tests/Combat/FactionDataTests.cs` | **Done** (`25c5eae`) |
+| # | Task | Status |
+|---|------|--------|
+| 4.1 | Capture FG teleport packets (MSG_MOVE_TELEPORT_ACK → first heartbeats) | Open — packet infra ready |
+| 4.2 | Compare BG teleport behavior — identify remaining flag divergence | Blocked on 4.1 |
+| 4.3 | Fix any remaining MovementController flag issues found | Blocked on 4.2 |
 
 ---
-
-## P6 - FG Crash During Teleport (FG-CRASH-TELE) — DONE
-
-**Root cause:** `ConnectionStateMachine` handled cross-map transfers (`SMSG_TRANSFER_PENDING`) but not same-map teleports (`MSG_MOVE_TELEPORT` 0x00C5). ObjectManager continued calling `EnumerateVisibleObjects` during teleport, reading WoW memory while internal object structures were being reshuffled → crash.
-
-**Fix:** Two-layer teleport cooldown (`9ba5d95`):
-1. `ConnectionStateMachine` tracks `MSG_MOVE_TELEPORT` (recv) / `MSG_MOVE_TELEPORT_ACK` (send), sets `IsTeleportCooldownActive` + `IsObjectManagerValid=false`
-2. `ObjectManager.PauseDuringTeleport` (time-based, auto-expires 3s) blocks `EnumerateVisibleObjects` during teleport
-3. Lua calls remain safe (game client Lua engine isn't torn down during same-map teleport)
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 6.1 | **Root cause: MSG_MOVE_TELEPORT not handled.** ObjectManager reads unsafe memory during same-map teleport. | `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` | **Done** (`9ba5d95`) |
-| 6.2 | **Add teleport cooldown to ConnectionStateMachine.** Track MSG_MOVE_TELEPORT/ACK, pause ObjectManager. | `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` | **Done** (`9ba5d95`) |
-| 6.3 | **Guard EnumerateVisibleObjects.** Add `PauseDuringTeleport` check to SimplePolling enumeration guard. | `Services/ForegroundBotRunner/Statics/ObjectManager.ScreenDetection.cs` | **Done** (`9ba5d95`) |
-
----
-
-## P7 - Ghost Form Stuck on Geometry (FG-GHOST-STUCK-001) (CURRENT FOCUS)
-
-**Approach:** Compare the path provided by `PathfindingService` against the path the bot actually executes. The gap reveals where corridor collision / collide-and-slide code fails to accommodate WoW movement controls. Fix the pathfinding code to navigate with precision and avoid terrain/object snags.
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 7.1 | **Log planned vs executed path.** Record `PathfindingService` waypoints AND actual bot positions at each movement tick during ghost corpse run. | `Exports/Navigation/`, `Services/PathfindingService/`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs` | In progress - `NavigationPath.TraceSnapshot` now captures requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and per-tick execution samples; `RetrieveCorpseTask` now mirrors no-path / stall-recovery trace summaries into the BotRunner diag log; and the live corpse/fishing tests now append snapshot tails plus recent BotRunner diagnostics on failure. The current live blocker is upstream of pathing: BG is entering these suites at `health=0/0` and not reaching strict-alive after `.revive`, so the new path diagnostics are wired but were not exercised in the latest live rerun. |
-| 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | **Done** (session 91) — Root cause: physics engine finds cave/gully ground below walking surface near Razor Hill graveyard. Bot sinks through terrain (0.1y/frame, bypasses 5.0y slope guard). Fixed with path-aware ground guard in MovementController (rejects ground >3y below navmesh path waypoint Z). Corpse run: SKIP → PASS. |
-| 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp`, `SceneQuery.cpp`, `SceneCache.cpp` | **Done** (`ad7741f`) — Fixed GetGroundZ asymmetric search window, removed dead code, relaxed `ShouldAcceptNearCompleteSegment` to use remaining-distance-based acceptance for short steep segments. OrgrimmarCorpseRun: FAIL → PASS. Physics: 107/2/1. Remaining: 2 teleport airborne descent tests (pre-existing). |
-| 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress - native route shaping now has a first lateral-detour pass, the service emits full short-route `[PATH_DIAG]` corner chains, BotRunner records planned-vs-executed short-route traces, and the fishing live suite now fails with explicit shoreline evidence (`FishingTask los_blocked`, `Your cast didn't land in fishable water`, recent BotRunner diagnostics) instead of a generic timeout. The latest live rerun did not reach those assertions because BG failed clean-slate revive first. |
-| 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | In progress - contract and request-overlay slices are done: BotRunner builds a conservative collidable overlay (`40y` from start/end, nearest `64` max), and the service mounts `nearby_objects` into a request-scoped synthetic-guid overlay for `CalculatePath` while serializing registry-sensitive native calls to avoid cross-request contamination. |
-| 7.6 | **Overlay-aware path validation and repair.** Validate native mmap routes against live object overlays, then reform blocked segments into usable local detours when possible. | `Services/PathfindingService/Repository/Navigation.cs`, `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/SceneQuery.cpp` | In progress - the service now validates returned segments against mounted dynamic-object overlays, retries alternate native mode, performs a bounded local detour search, and has a native `ValidateWalkableSegment` bridge plus result-mapping coverage. Native `FindPath` now honors the public `smoothPath` contract (`true=smooth`, `false=straight`), carries grounded segment ends forward, and now tries grounded lateral detour candidates before midpoint-only refinement. Deterministic native coverage now includes both the Ratchet fishing shoreline route and a known obstructed direct-segment detour. Default rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until broader native detour shaping plus shoreline drift diagnostics replace the remaining service-side repair burden. |
-| 7.7 | **Route affordance metadata.** Classify path transitions as walk / step-up / jump-gap / safe-drop / unsafe-drop / swim / blocked and return that metadata to callers. | `Services/PathfindingService/`, `Exports/Navigation/PhysicsEngine.cpp`, `pathfinding.proto` | Open |
-| 7.8 | **Decision-grade spatial queries.** After object-aware paths are stable, add higher-level reachability/LOS/surface queries so BotRunner can choose better approach points instead of only consuming corner lists. | `Services/PathfindingService/`, `Exports/BotRunner/` | Open |
-
----
-
-## Completed Phases (See `docs/ARCHIVE.md`)
-
-- P0: Test Infrastructure Hardening (sessions 48-52)
-- Phase 3: Documentation (9 `CLAUDE.md` files)
-- Phase 4: Large File Refactoring (5 monolith files split)
-- Phase 5: Command Rate-Limiting & Stability (`RATELIMIT-001/002`, `CRASH-001`)
-- AI Parity (all 3 gates pass live)
-- Live Validation Failures (2026-02-28 batch)
-- Pathfinding / Physics (all resolved)
-- Test Infrastructure: `TEST-TRAM-001`, `TEST-CRASH-001`
 
 ## Blocked - Storage Stubs (Needs NuGet)
 
@@ -164,10 +70,11 @@ Current observed boundary from the 2026-03-12 live suite:
 
 ## Capability Gaps (Low Priority)
 
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `CAP-GAP-003` | `TrainerFrame` — BG trainer Rx fixed (session 86-87), FG Lua impl added (session 87). | `Exports/WoWSharpClient/`, `Services/ForegroundBotRunner/` | **Resolved** |
-| `BG-PET-001` | BG pet support - `Pet` returns null. Hunter/Warlock will not work. | `Exports/WoWSharpClient/` | Open |
+| ID | Issue | Status |
+|----|-------|--------|
+| `BG-PET-001` | BG pet support — `Pet` returns null. Hunter/Warlock won't work. | Open |
+
+---
 
 ## Canonical Commands
 
@@ -178,89 +85,20 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 # Corpse-run only
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m
 
-# Focused overhaul slice
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"
-
-# Deterministic combat distance coverage
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatDistanceTests" --logger "console;verbosity=minimal"
-
 # Combat tests only
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatLoopTests"
 
 # Physics calibration
 dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings
 
-# AI tests
-dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"
-
-# Full solution (all test projects)
+# Full solution
 dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
-## Session Handoff (Latest)
-- **Last updated:** 2026-03-15 (session 99)
+## Session Handoff
+- **Last updated:** 2026-03-15 (session 100)
 - **Branch:** `cpp_physics_system`
-- **Completed this session:**
-  1. **Baked server-spawned GameObjects into navmesh** (`e9096a9`) — Solved the root cause of paths routing through collidable braziers/posts/barricades near Razor Hill.
-     - Created `tools/GameObjectExporter/` C# tool: queries vmangos DB, exports 54,676 GO spawns to JSON
-     - Modified `D:/vmangos/contrib/mmap/src/TerrainBuilder.{h,cpp}`: parse `temp_gameobject_models` binary + JSON, load GO collision meshes per tile with proper WoW→Recast coordinate transform
-     - Modified `D:/vmangos/contrib/mmap/src/TileWorker.cpp`: `rcMarkBoxArea(RC_NULL_AREA)` marks padded GO footprints as unwalkable after `rcBuildCompactHeightfield`
-     - Key insight: GO mesh walls are steep (Recast marks unwalkable), but span merging takes MAX area → terrain stays walkable. `rcMarkBoxArea` explicitly overrides merged spans.
-     - Rebuilt tile `0013140.mmtile` (Kalimdor tile 40,31 covering Razor Hill area)
-  2. **Razor Hill corpse run test: PASS** — Path now routes around brazier at (273,-4729) and building cluster at (330,-4705). 11 waypoints, all segments have clear LOS.
-  3. **Updated diagnostic test** — Replaced hard-coded segment probe with path-level LOS validation
-- **Test results:**
-  - PathfindingService: 39/40 pass (1 pre-existing failure: `CalculatePath_ShouldReturnValidPath` segment 46→47 = 389y gap in unrelated tile area)
+- **Completed this session:** FG ghost corpse run fix (`5fe0ea1`). TASKS.md cleanup. Full navmesh rebuild — maps 0+1 (1300 tiles) with GO collision baking. PathCalculationTask threshold adjusted for new routing.
 - **Next:**
-  1. Full tile rebuild for maps 0 and 1 (currently only tile 40,31 rebuilt)
-  2. FG corpse run: investigate why RetrieveCorpse action doesn't reach FG bot (action dispatch/timing issue)
-  3. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
-  4. P7 remaining items (shoreline route hardening, object-aware paths)
-
-## Session Handoff (Session 98 Archive)
-- **Last updated:** 2026-03-14 (session 98)
-- **Completed:** FG ClickToMove, improved corpse run stall recovery, CHECK_MAIL end-to-end, mail/trainer tests pass.
-
-## Session Handoff (Session 95 Archive)
-- **Last updated:** 2026-03-14 (session 95)
-- **Completed:** Post-teleport slope guard fix, teleport Z clamp epsilon, false-freefall log throttle.
-- **Test results:** Physics 109/0/1. OrgrimmarGroundZ 2/0. Core LiveValidation 13/0.
-
-## Session Handoff (Session 94 Archive)
-- **Last updated:** 2026-03-14 (session 94)
-- **Completed:** FG DismissBuff fix (`c1151d0`), FG fishing LOS fix (`39eaee5`), BG post-teleport physics fix (`d1e0601`).
-- **Test results:** Physics 108/1/0. Key LiveValidation tests pass. Fishing pool on respawn timer.
-
-## Session Handoff (Session 93 Archive)
-- **Last updated:** 2026-03-14 (session 93)
-- **Completed:** CombatLoopTests fix (`69d4d63`), P7.3 OrgrimmarCorpseRun fix (`ad7741f`), P6 FG crash during teleport fix (`9ba5d95`).
-- **Test results:** 12 passed, 2 failed, 1 skipped (timeout at 25min aborted remaining).
-
-## Session Handoff (Session 91 Archive)
-- **Last updated:** 2026-03-14 (session 91)
-- **Completed:** NPC population race fix (`73fb676`), P7 ghost form Z-sinking fix (`c35fb9e`), FG trainer skip-on-timeout.
-- **Test results:** 35 passed, 0 failed, 8 skipped.
-
-## Session Handoff (Session 86 Archive)
-- **Last updated:** 2026-03-13 (session 86)
-- **Completed:** CMSG_RECLAIM_CORPSE GUID fix, BG trainer Rx fix (BRT-OVR-006), P2 CraftingProfessionTests resolved.
-
-## Session Handoff (Session 85 Archive)
-- **Last updated:** 2026-03-13 (session 85)
-- **Completed:** Pathfinding perf fix (16s→0ms), slope guard, FG ghost crash fix, combat retry, BG console windows.
-- **Test results:** 36 passed, 1 failed (DeathCorpseRun intermittent), 7 skipped.
-
-## Session Handoff (Session 80 Archive)
-- **Last updated:** 2026-03-13 (session 80)
-- **Completed:** Migrated herbalism to route-task contract. Added herb route selection + 3 unit tests. Live validation found 24 Durotar herb candidates (all on respawn → skip). Commits: `0c5c6d8`, `7c8b269`, `13f047b`.
-
-## Session Handoff (Session 53 Archive)
-- **Last updated:** 2026-03-10 (session 53)
-- **Current work:** P1 - FG Packet Capture. P1.1 + P1.2 DONE. P0 COMPLETE.
-- **Completed this session:**
-  1. **P1.1 recv hook** (`087085e`): Runtime pattern scanner finds `ProcessMessage` via `m_handlers[+0x74]` signature. Assembly detour captures all inbound SMSG packets.
-  2. **P1.2 structured log** (`087085e`): C->S / S->C direction, opcode name table (~60 opcodes), first 500 packets logged.
-  3. **TASKS.md priorities** (`962862b`): P1-P7 priority rewrite per user guidance.
-- **Test results:** 46 passed, 2 failed (FirstAid + Fishing), 2 skipped out of 50.
-- **Next:** P1.4 - Live validate recv hook (run FG bot, check `packet_logger.log` for SMSG opcodes). Then P1.3 (LiveValidation test). Then P2 (FirstAid diagnostic).
-- **Sessions 1-52:** See `docs/ARCHIVE.md` for full history.
+  1. P7.4: Bot-side execution trace for shoreline route drift detection
+  2. P3/P4: FG packet capture sessions (fishing + teleport) when convenient

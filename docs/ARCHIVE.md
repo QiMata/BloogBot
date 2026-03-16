@@ -1832,3 +1832,56 @@ ForbiddenTransitionRuleTests (20), ForbiddenTransitionRegistryTests (17), Adviso
 |----|------------|
 | `PATH-DYNOBJ-001` | Darkmoon Faire dynamic object LOS + path segment validation. SceneQuery::LineOfSight() includes DynamicObjectRegistry. SegmentIntersectsDynamicObjects C++ export + ValidateSegmentsAgainstDynamicObjects in GetValidatedPath. Commits `8c0401b`, `d537215`. |
 | `PATH-BOT-FORWARD-001` | Closed (not a bug). MovementController.Reset() fully clears velocity/flags/path. Horizontal velocity rebuilt from flags each frame. |
+
+---
+
+## Archived from TASKS.md (2026-03-15, session 100)
+
+### P0 - Test Infrastructure Hardening (COMPLETE)
+All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for full catalog (19/25 fixed, 2 mitigated, 2 deferred, 4 open).
+
+### P0A - Live Integration Test Overhaul (COMPLETE)
+All 6 tasks done (sessions 54-90). Fixture cleanup, phase 1 deletions, consumable/buff consolidation, combat range deterministic tests, GM cleanup, task-driven behavior suites.
+
+### P1 - FG Packet Capture: Send + Recv Hooks (COMPLETE)
+- 1.1: FG recv hook (SMSG) — runtime pattern scanner, assembly detour. (`087085e`)
+- 1.2: Structured packet log format — direction, opcode names, size, timestamp. (`087085e`)
+
+### P2 - CraftingProfessionTests.FirstAid Fix (RESOLVED)
+FirstAid_LearnAndCraft_ProducesLinenBandage passes reliably as of session 86.
+
+### P5 - UnitReaction Reliability (BB-COMBAT-006) (COMPLETE)
+Embedded 314 faction template entries, WoW mask-based reaction algorithm. (`25c5eae`)
+
+### P6 - FG Crash During Teleport (FG-CRASH-TELE) (COMPLETE)
+Two-layer teleport cooldown: ConnectionStateMachine tracks MSG_MOVE_TELEPORT, ObjectManager.PauseDuringTeleport blocks enumeration. (`9ba5d95`)
+
+### P7 Ghost Form — Completed Sub-tasks
+- 7.1: Planned vs executed path logging — `NavigationPath.TraceSnapshot`, diag log mirroring.
+- 7.2: Divergence analysis — root cause: physics engine cave/gully ground sinking. Fixed with path-aware ground guard.
+- 7.3: Corridor collision fix — GetGroundZ asymmetric search, relaxed ShouldAcceptNearCompleteSegment. (`ad7741f`)
+- 7.5: Object-aware path requests — proto contract (`nearby_objects`), BotRunner `PathfindingOverlayBuilder` (40y, max 64), service-side `ExecuteWithOverlay()`. Actively shipping.
+- 7.6: Overlay-aware validation — superseded by corridor-based pathfinding (`FindPathCorridor`). Native code handles path shaping directly.
+
+### CAP-GAP-003 - TrainerFrame (RESOLVED)
+BG trainer Rx fixed (session 86-87), FG Lua impl added (session 87).
+
+### Navmesh GO Baking (session 99)
+Baked server-spawned GameObjects into MoveMapGenerator navmesh (`e9096a9`). Created `tools/GameObjectExporter/`, modified TerrainBuilder to parse `temp_gameobject_models` + JSON, `rcMarkBoxArea` marks GO footprints unwalkable. Rebuilt tile 40,31. Razor Hill corpse run test passes.
+
+### FG Ghost Corpse Run Packet Flood Fix (session 100)
+Two packet floods identified and fixed:
+1. SET_FACING flood: facing delta check in `ObjectManager.Movement.cs` (skip when `< 0.01f` change)
+2. MOVE_STOP flood: `_stoppedForRetrieval` flag in `RetrieveCorpseTask.cs` (ForceStopImmediate fires once)
+Commit: `5fe0ea1`.
+
+### Session Handoff Archives
+- Session 98: FG ClickToMove, corpse run stall recovery, CHECK_MAIL end-to-end.
+- Session 95: Post-teleport slope guard fix, teleport Z clamp epsilon, false-freefall log throttle.
+- Session 94: FG DismissBuff fix, FG fishing LOS fix, BG post-teleport physics fix.
+- Session 93: CombatLoopTests fix, P7.3 OrgrimmarCorpseRun fix, P6 FG crash during teleport fix.
+- Session 91: NPC population race fix, P7 ghost form Z-sinking fix, FG trainer skip-on-timeout.
+- Session 86: CMSG_RECLAIM_CORPSE GUID fix, BG trainer Rx fix, P2 resolved.
+- Session 85: Pathfinding perf fix (16s→0ms), slope guard, FG ghost crash fix.
+- Session 80: Herbalism route-task migration, herb route selection + 3 unit tests.
+- Session 53: P1.1 recv hook, P1.2 structured log, TASKS.md priority rewrite.
