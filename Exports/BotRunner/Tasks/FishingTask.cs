@@ -476,6 +476,12 @@ public class FishingTask : BotTask, IBotTask
         _sawLootWindow = false;
         _sawLootItem = false;
         var castTarget = FishingData.GetPoolCastTarget(player.Position, pool.Position, CastTargetInsetFromPool);
+
+        // Pool Z can read as 0 from memory (FG) or stale data (BG). Correct to player Z so the
+        // server places the bobber at the water surface, not at z=0 (which may be underground).
+        if (player.Position.Z - castTarget.Z > 3f)
+            castTarget = new Position(castTarget.X, castTarget.Y, player.Position.Z);
+
         ObjectManager.CastSpellAtLocation((int)_fishingSpellId, castTarget.X, castTarget.Y, castTarget.Z);
         Log.Information(
             "[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId} targeting ({X:F1}, {Y:F1}, {Z:F1}) distance={Distance:F1}.",
@@ -755,7 +761,12 @@ public class FishingTask : BotTask, IBotTask
         if (fromPosition.Z - castTarget.Z > 3f)
             castTarget = new Position(castTarget.X, castTarget.Y, fromPosition.Z);
 
-        return TryHasLineOfSight(mapId, fromPosition, castTarget);
+        // Raise both endpoints by eye height so the LOS ray clears the dock surface geometry.
+        // Without this, a ray at exact dock Z clips through the dock plank collision mesh.
+        const float eyeHeight = 1.8f;
+        var losFrom = new Position(fromPosition.X, fromPosition.Y, fromPosition.Z + eyeHeight);
+        var losTo = new Position(castTarget.X, castTarget.Y, castTarget.Z + eyeHeight);
+        return TryHasLineOfSight(mapId, losFrom, losTo);
     }
 
     private bool TryHasLineOfSight(uint mapId, Position fromPosition, Position toPosition)
