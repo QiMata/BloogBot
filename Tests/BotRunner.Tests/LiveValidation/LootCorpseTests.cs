@@ -21,12 +21,12 @@ namespace BotRunner.Tests.LiveValidation;
 /// 3) Teleport to Valley of Trials boar area.
 /// 4) Wait for a living mob in snapshot.
 /// 5) Teleport bot to within melee range of the mob.
-/// 6) Kill the mob via StartMeleeAttack + .damage (testing loot, not combat).
+/// 6) Kill the mob via StartMeleeAttack (natural auto-attack combat).
 /// 7) Send LootCorpse action with the dead mob's GUID.
 /// 8) Assert inventory changed (bag contents increased).
 ///
-/// NOTE: This test validates the loot mechanic, not combat. .damage is used
-/// to kill the mob quickly. CombatLoopTests validates the combat mechanics.
+/// NOTE: This test validates the full kill → loot loop using natural combat.
+/// No GM shortcuts (.damage) — the game engine handles combat correctly.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~LootCorpseTests" --configuration Release
 /// </summary>
@@ -115,24 +115,21 @@ public class LootCorpseTests
             await Task.Delay(1500);
         }
 
-        // Step 6: Kill the mob with StartMeleeAttack + .damage
-        _output.WriteLine($"  [{label}] Step 6: Kill mob with StartMeleeAttack + .damage");
+        // Step 6: Kill the mob with StartMeleeAttack (natural combat, no GM shortcuts)
+        _output.WriteLine($"  [{label}] Step 6: Kill mob with StartMeleeAttack (natural auto-attack)");
         var attackResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] StartMeleeAttack result: {attackResult}");
-        await Task.Delay(1500);
 
-        // GM setup: weaken mob so auto-attack finishes quickly (this test validates looting, not combat)
-        await _bot.SendGmChatCommandAsync(account, ".damage 500");
-        await Task.Delay(500);
-
-        // Wait for the mob to die
+        // Wait for the mob to die from natural auto-attack combat.
+        // Valley of Trials mobs have ~100 HP, level 1 warrior does ~15-30 per hit.
+        // Should die in ~10-15s. 45s timeout gives ample margin.
         var killSw = Stopwatch.StartNew();
         var mobDead = false;
-        while (killSw.Elapsed < TimeSpan.FromSeconds(20))
+        while (killSw.Elapsed < TimeSpan.FromSeconds(45))
         {
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account);

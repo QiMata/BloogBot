@@ -11,6 +11,20 @@
 
 ---
 
+## P1 - BG Movement Physics Calibration (HIGH PRIORITY)
+
+BG bot rubber-bands, stands in air, and fails to clamp to slopes. Movement flags don't match what the server expects. This breaks gathering, NPC interaction, and loot tests because the bot can't reliably reach targets.
+
+| # | Task | Status |
+|---|------|--------|
+| 1.1 | **Moveflag calibration tests.** Physics calibration tests must FAIL when BG moveflags diverge from expected ground/slope/fall states. Currently tests only check position, not flags. | Open |
+| 1.2 | **Falling movement restriction.** During fall/knockback, the BG MovementController must NOT adjust horizontal movement direction — only facing. Horizontal velocity is locked at the moment of leaving ground. Verify this in MovementController and add tests. | Open |
+| 1.3 | **Spline movement lockout.** During server-driven spline movement (knockback, charge, etc.), player input must be suppressed until the spline completes. Verify MovementController handles this. | Open |
+| 1.4 | **Slope clamping.** BG bot must stay clamped to terrain slopes during movement. Verify Z position tracks ADT/navmesh height correctly at each movement tick, not just at waypoint arrival. | Open |
+| 1.5 | **Post-teleport settle.** After teleport, ensure movement flags reset to MOVEFLAG_NONE and first heartbeat has correct ground-clamped Z before allowing any new movement. | Open |
+
+---
+
 ## P7 - Pathfinding Hardening (ACTIVE)
 
 Core ghost-stuck, corridor collision, and object-aware paths all done (7.1-7.5 archived). Remaining: shoreline routes, route metadata, spatial queries.
