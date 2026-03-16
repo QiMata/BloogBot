@@ -25,8 +25,20 @@ namespace WoWStateManager.Settings
 
         private void LoadConfig()
         {
-            string currentFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string settingsFilePath = Path.Combine(currentFolder, "Settings\\StateManagerSettings.json");
+            // Allow tests to override the settings file via environment variable
+            var overridePath = Environment.GetEnvironmentVariable("WWOW_SETTINGS_OVERRIDE");
+            string settingsFilePath;
+
+            if (!string.IsNullOrEmpty(overridePath) && File.Exists(overridePath))
+            {
+                settingsFilePath = overridePath;
+                Log.Information("Loading settings from override: {Path}", settingsFilePath);
+            }
+            else
+            {
+                string currentFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                settingsFilePath = Path.Combine(currentFolder, "Settings\\StateManagerSettings.json");
+            }
 
             CharacterSettings = JsonConvert.DeserializeObject<List<CharacterSettings>>(File.ReadAllText(settingsFilePath)) ?? [];
         }

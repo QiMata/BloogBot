@@ -490,6 +490,112 @@ public partial class LiveBotFixture : IAsyncLifetime
     }
 
 
+    /// <summary>
+    /// Tears down the current StateManager and bots, then restarts with a different
+    /// <c>StateManagerSettings.json</c>. Use this when a test method needs a specific
+    /// bot configuration (e.g., COMBATTEST as FG vs BG).
+    /// </summary>
+    /// <param name="settingsPath">Absolute path to a custom StateManagerSettings.json file.</param>
+    public async Task RestartWithSettingsAsync(string settingsPath)
+    {
+        _logger.LogInformation("[FIXTURE] Restarting with custom settings: {Path}", settingsPath);
+
+        // Reset fixture state
+        IsReady = false;
+        FailureReason = null;
+        BackgroundBot = null;
+        ForegroundBot = null;
+        CombatTestBot = null;
+        BgAccountName = null;
+        FgAccountName = null;
+        CombatTestAccountName = null;
+        BgCharacterName = null;
+        FgCharacterName = null;
+        CombatTestCharacterName = null;
+        AllBots = [];
+        _fgResponsive = true;
+        _stateManagerClient = null;
+
+        // Restart BotServiceFixture with new settings
+        await _serviceFixture.RestartWithSettingsAsync(settingsPath);
+
+        if (!_serviceFixture.ServicesReady)
+        {
+            FailureReason = _serviceFixture.UnavailableReason ?? "BotServiceFixture: services not ready after restart";
+            _logger.LogWarning("[FIXTURE] {Reason}", FailureReason);
+            return;
+        }
+
+        // Re-run the init pipeline (SOAP, bots, etc.)
+        var health = _serviceFixture.MangosFixture.Health;
+        var soapOk = await health.IsServiceAvailableAsync("127.0.0.1", Config.SoapPort);
+        if (!soapOk)
+        {
+            FailureReason = $"SOAP port {Config.SoapPort} not available after restart";
+            return;
+        }
+
+        await EnsureGmCommandsEnabledAsync();
+
+        _stateManagerClient = new StateManagerTestClient("127.0.0.1", 8088);
+        using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await _stateManagerClient.ConnectAsync(connectCts.Token);
+        _logger.LogInformation("[FIXTURE] Reconnected to StateManager on port 8088.");
+
+        SeedExpectedAccountsFromStateManagerSettings();
+        await SeedExpectedCharacterNamesFromDatabaseAsync();
+
+        // Wait for bots to enter world
+        _logger.LogInformation("[FIXTURE] Waiting for bots to enter world after restart...");
+        var sw = Stopwatch.StartNew();
+        var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
+        while (sw.Elapsed < TimeSpan.FromSeconds(120))
+        {
+            var snapshots = await _stateManagerClient.QuerySnapshotsAsync(null, CancellationToken.None);
+            foreach (var snap in snapshots)
+            {
+                NormalizeSnapshotCharacterName(snap);
+                if (IsHydratedInWorldSnapshot(snap))
+                    everSeenInWorld[snap.AccountName] = snap;
+            }
+
+            if (everSeenInWorld.Count >= 1)
+            {
+                AllBots = everSeenInWorld.Values.ToList();
+                IdentifyBots(AllBots);
+                if (HasRequiredRoleCoverage(everSeenInWorld))
+                    break;
+                if (sw.Elapsed > TimeSpan.FromSeconds(45))
+                    break;
+            }
+
+            await Task.Delay(500);
+        }
+
+        if (AllBots.Count == 0)
+        {
+            FailureReason = "No bots entered world after restart.";
+            _logger.LogError("[FIXTURE] {Reason}", FailureReason);
+            return;
+        }
+
+        if (BgCharacterName != null)
+            await WaitForSoapPlayerResolutionAsync(BgCharacterName);
+        if (FgCharacterName != null)
+            await WaitForSoapPlayerResolutionAsync(FgCharacterName);
+        if (CombatTestCharacterName != null)
+            await WaitForSoapPlayerResolutionAsync(CombatTestCharacterName);
+
+        await EnsureCleanCharacterStateAsync();
+        await WaitForBotsStabilizedAsync();
+
+        _logger.LogInformation("[FIXTURE] Restart complete. BG='{Bg}' ({BgAccount}), FG='{Fg}' ({FgAccount}), Combat='{Combat}' ({CombatAccount})",
+            BgCharacterName ?? "N/A", BgAccountName ?? "N/A",
+            FgCharacterName ?? "N/A", FgAccountName ?? "N/A",
+            CombatTestCharacterName ?? "N/A", CombatTestAccountName ?? "N/A");
+        IsReady = true;
+    }
+
     private void IdentifyBots(List<WoWActivitySnapshot> inWorldBots)
     {
         // Non-destructive: only update snapshot references when we find a matching bot
@@ -501,8 +607,10 @@ public partial class LiveBotFixture : IAsyncLifetime
         // they haven't been set yet) or when explicitly rebuilding (e.g. during init).
 
         // Match by account name:
-        //   TESTBOT1 (ends in "1") = Foreground (injected, gold standard)
         //   COMBATTEST = dedicated non-GM combat testing bot (never receives .gm on)
+        //     - Also assigned to FG or BG based on seeded FgAccountName/BgAccountName
+        //   Account matching FgAccountName (seeded from config) = Foreground
+        //   Account ending in "1" = Foreground (legacy fallback)
         //   Others = Background (headless)
         WoWActivitySnapshot? newFg = null;
         WoWActivitySnapshot? newBg = null;
@@ -512,9 +620,16 @@ public partial class LiveBotFixture : IAsyncLifetime
         {
             if (snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 newCombat = snap;
-            else if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
+
+            // Assign FG/BG: prefer seeded account names from config, fall back to "ends in 1" heuristic
+            if (string.Equals(snap.AccountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
                 newFg = snap;
-            else
+            else if (string.Equals(snap.AccountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
+                newBg = snap;
+            else if (newFg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase)
+                     && snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
+                newFg = snap;
+            else if (newBg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 newBg = snap;
         }
 
@@ -585,7 +700,7 @@ public partial class LiveBotFixture : IAsyncLifetime
                 if (string.Equals(accountName, CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 {
                     CombatTestAccountName ??= accountName;
-                    continue;
+                    // COMBATTEST can also be FG or BG — fall through to assign runner role
                 }
 
                 if (string.Equals(runnerType, "Foreground", StringComparison.OrdinalIgnoreCase))
@@ -604,8 +719,13 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
     }
 
-    private static string? ResolveStateManagerSettingsPath()
+    private string? ResolveStateManagerSettingsPath()
     {
+        // Prefer custom settings override (set via RestartWithSettingsAsync)
+        if (!string.IsNullOrEmpty(_serviceFixture.CustomSettingsPath)
+            && File.Exists(_serviceFixture.CustomSettingsPath))
+            return _serviceFixture.CustomSettingsPath;
+
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {

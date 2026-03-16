@@ -41,6 +41,13 @@ public class BotServiceFixture : IAsyncLifetime
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
     private readonly List<int> _managedWoWPids = [];
+
+    /// <summary>
+    /// Optional path to a custom StateManagerSettings.json file.
+    /// When set, StateManager will load bot configuration from this file instead of the default.
+    /// Set this before calling <see cref="InitializeAsync"/>.
+    /// </summary>
+    public string? CustomSettingsPath { get; set; }
     private static readonly System.Text.RegularExpressions.Regex WoWPidRegex =
         new(@"WoW\.exe started.*Process ID: (\d+)", System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -394,7 +401,45 @@ public class BotServiceFixture : IAsyncLifetime
         return null;
     }
 
+    /// <summary>
+    /// Tears down the current StateManager and all managed processes, then restarts
+    /// with a new settings file. Use this to reconfigure which accounts run as FG/BG
+    /// between test methods within a shared fixture.
+    /// </summary>
+    public async Task RestartWithSettingsAsync(string settingsPath)
+    {
+        Log($"[Restart] Tearing down for reconfigure with: {settingsPath}");
+        await TeardownProcessesAsync();
+
+        // Reset state for fresh init
+        ServicesReady = false;
+        ClientCrashed = false;
+        CrashMessage = null;
+        UnavailableReason = null;
+        PathfindingServiceReady = false;
+
+        CustomSettingsPath = settingsPath;
+        await InitializeAsync();
+    }
+
     public async Task DisposeAsync()
+    {
+        await TeardownProcessesAsync();
+
+        // Always release the machine-wide mutex so the next test run can proceed
+        try
+        {
+            _globalMutex?.ReleaseMutex();
+            _globalMutex?.Dispose();
+            _globalMutex = null;
+        }
+        catch (ApplicationException)
+        {
+            // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
+        }
+    }
+
+    private async Task TeardownProcessesAsync()
     {
         // Stop crash monitor first
         try { _crashMonitorCts?.Cancel(); } catch { }
@@ -413,94 +458,70 @@ public class BotServiceFixture : IAsyncLifetime
         }
         catch { /* process may have exited */ }
 
-        try
+        // 1. Kill StateManager FIRST — prevents its monitoring loop (every 5s) from
+        //    relaunching WoW.exe after we kill bot processes. StateManager detects
+        //    terminated bots and re-creates them via ApplyDesiredWorkerState.
+        if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
         {
-            // 1. Kill StateManager FIRST — prevents its monitoring loop (every 5s) from
-            //    relaunching WoW.exe after we kill bot processes. StateManager detects
-            //    terminated bots and re-creates them via ApplyDesiredWorkerState.
-            if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
+            Log("Stopping StateManager (must die first to prevent WoW.exe relaunch)...");
+            try
             {
-                Log("Stopping StateManager (must die first to prevent WoW.exe relaunch)...");
-                try
-                {
-                    _stateManagerProcess.Kill(entireProcessTree: true);
-                    _stateManagerProcess.WaitForExit(5000);
-                    Log("  StateManager process terminated.");
-                }
-                catch (Exception ex)
-                {
-                    Log($"  Warning: Could not stop StateManager: {ex.Message}");
-                }
-                _stateManagerProcess.Dispose();
-                _stateManagerProcess = null;
+                _stateManagerProcess.Kill(entireProcessTree: true);
+                _stateManagerProcess.WaitForExit(5000);
+                Log("  StateManager process terminated.");
             }
-
-            // 2. Brief delay for the process tree to finish dying
-            await Task.Delay(1000);
-
-            // 3. Kill ALL WoW.exe processes spawned by this fixture.
-            //    WoW.exe is created via native CreateProcess by StateManager, so
-            //    .NET's Process.Kill() often gets "Access is denied" — the
-            //    taskkill fallback in ForceKillProcessAsync handles this.
-            foreach (var proc in Process.GetProcessesByName("WoW"))
+            catch (Exception ex)
             {
+                Log($"  Warning: Could not stop StateManager: {ex.Message}");
+            }
+            _stateManagerProcess.Dispose();
+            _stateManagerProcess = null;
+        }
+
+        // 2. Brief delay for the process tree to finish dying
+        await Task.Delay(1000);
+
+        // 3. Kill ALL WoW.exe processes spawned by this fixture.
+        foreach (var proc in Process.GetProcessesByName("WoW"))
+        {
+            try
+            {
+                Log($"Cleanup: killing WoW.exe PID {proc.Id}");
+                if (await ForceKillProcessAsync(proc, "WoW"))
+                    wowKilled++;
+            }
+            finally { proc.Dispose(); }
+        }
+
+        // 4. Kill orphaned PathfindingService
+        pfKilled += await KillPathfindingServiceProcessesAsync("PF");
+
+        // 5. Kill orphaned BackgroundBotRunner processes
+        int bgKilled = 0;
+        foreach (var bgPid in FindDotnetProcessesByDll("BackgroundBotRunner"))
+        {
+            try
+            {
+                var proc = Process.GetProcessById(bgPid);
                 try
                 {
-                    Log($"Cleanup: killing WoW.exe PID {proc.Id}");
-                    if (await ForceKillProcessAsync(proc, "WoW"))
-                        wowKilled++;
+                    Log($"Cleanup: killing BackgroundBotRunner PID {bgPid}");
+                    if (await ForceKillProcessAsync(proc, "BGBot"))
+                        bgKilled++;
                 }
                 finally { proc.Dispose(); }
             }
-
-            // 4. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
-            pfKilled += await KillPathfindingServiceProcessesAsync("PF");
-
-            // 5. Kill orphaned BackgroundBotRunner processes (dotnet-hosted).
-            //    BackgroundBotRunner runs as "dotnet BackgroundBotRunner.dll" — we find it
-            //    by querying wmic for command lines containing "BackgroundBotRunner".
-            int bgKilled = 0;
-            foreach (var bgPid in FindDotnetProcessesByDll("BackgroundBotRunner"))
-            {
-                try
-                {
-                    var proc = Process.GetProcessById(bgPid);
-                    try
-                    {
-                        Log($"Cleanup: killing BackgroundBotRunner PID {bgPid}");
-                        if (await ForceKillProcessAsync(proc, "BGBot"))
-                            bgKilled++;
-                    }
-                    finally { proc.Dispose(); }
-                }
-                catch (ArgumentException) { /* already dead */ }
-            }
-
-            lock (_managedWoWPids)
-                _managedWoWPids.Clear();
-
-            if (wowKilled + pfKilled + bgKilled > 0)
-                Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService, {bgKilled} BackgroundBotRunner killed.");
-
-            // 6. Orphan detection — wait briefly, then force-kill any tracked PIDs still alive.
-            //    Previous behavior was to log-only, but orphaned processes caused runaway resource
-            //    consumption (endless WoW.exe relaunch loops) that crashed the test host overnight.
-            await ForceKillOrphanedProcessesAsync(stateManagerPid, launchedPids);
+            catch (ArgumentException) { /* already dead */ }
         }
-        finally
-        {
-            // Always release the machine-wide mutex so the next test run can proceed
-            try
-            {
-                _globalMutex?.ReleaseMutex();
-                _globalMutex?.Dispose();
-                _globalMutex = null;
-            }
-            catch (ApplicationException)
-            {
-                // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
-            }
-        }
+
+        lock (_managedWoWPids)
+            _managedWoWPids.Clear();
+
+        if (wowKilled + pfKilled + bgKilled > 0)
+            Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService, {bgKilled} BackgroundBotRunner killed.");
+
+        // 6. Orphan detection
+        await ForceKillOrphanedProcessesAsync(stateManagerPid, launchedPids);
     }
 
     /// <summary>
@@ -697,6 +718,13 @@ public class BotServiceFixture : IAsyncLifetime
 
             if (!string.IsNullOrEmpty(envRecording))
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
+
+            // Pass custom settings override to StateManager if configured
+            if (!string.IsNullOrEmpty(CustomSettingsPath) && File.Exists(CustomSettingsPath))
+            {
+                psi.Environment["WWOW_SETTINGS_OVERRIDE"] = CustomSettingsPath;
+                Log($"  [StateManager] Using custom settings: {CustomSettingsPath}");
+            }
 
             _stateManagerProcess = Process.Start(psi);
             if (_stateManagerProcess == null)

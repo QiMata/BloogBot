@@ -52,6 +52,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="LiveValidation\Settings\*.settings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
