@@ -149,9 +149,11 @@ namespace BotRunner
                             if (!player.IsFacing(target.Position))
                                 _objectManager.Face(target.Position);
 
-                            // Re-send CMSG_ATTACKSWING only if auto-attack was cancelled
-                            // (server sent SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT).
-                            _objectManager.StartMeleeAttack();
+                            // Re-send CMSG_ATTACKSWING only if the server cancelled it
+                            // (SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT clears IsAutoAttacking).
+                            // Calling StartMeleeAttack every tick resets the swing timer.
+                            if (!player.IsAutoAttacking)
+                                _objectManager.StartMeleeAttack();
                         }
                         return BehaviourTreeStatus.Running;
                     })
