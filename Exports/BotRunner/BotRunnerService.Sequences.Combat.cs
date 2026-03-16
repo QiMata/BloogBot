@@ -101,9 +101,21 @@ namespace BotRunner
 
                             if (waypoint != null)
                             {
-                                var dx = waypoint.X - player.Position.X;
-                                var dy = waypoint.Y - player.Position.Y;
-                                var facing = MathF.Atan2(dy, dx);
+                                float facing;
+                                if (dist < 10f)
+                                {
+                                    // Close to target — face the mob so auto-attack can
+                                    // resume the instant we cross into melee range.
+                                    var tdx = target.Position.X - player.Position.X;
+                                    var tdy = target.Position.Y - player.Position.Y;
+                                    facing = MathF.Atan2(tdy, tdx);
+                                }
+                                else
+                                {
+                                    var dx = waypoint.X - player.Position.X;
+                                    var dy = waypoint.Y - player.Position.Y;
+                                    facing = MathF.Atan2(dy, dx);
+                                }
                                 _objectManager.MoveToward(waypoint, facing);
                             }
 
@@ -117,11 +129,9 @@ namespace BotRunner
                             return BehaviourTreeStatus.Running;
                         }
 
-                        // In melee range.  Stop movement and start auto-attack on
-                        // the first arrival, then let the server run the swing timer.
-                        // Do NOT spam StopAllMovement/Face/StartMeleeAttack every tick
-                        // — flooding the server with movement packets disrupts the
-                        // auto-attack swing timer.
+                        // In melee range.  Stop movement, face the target, start auto-attack.
+                        // Always re-face on first arrival or when returning from a chase —
+                        // the mob may have moved and the bot's orientation may be stale.
                         if (!attackStarted)
                         {
                             _objectManager.StopAllMovement();
@@ -134,6 +144,11 @@ namespace BotRunner
                         }
                         else
                         {
+                            // Re-face the target if not already facing it — the mob
+                            // may have repositioned during combat or after a re-chase.
+                            if (!player.IsFacing(target.Position))
+                                _objectManager.Face(target.Position);
+
                             // Re-send CMSG_ATTACKSWING only if auto-attack was cancelled
                             // (server sent SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT).
                             _objectManager.StartMeleeAttack();
