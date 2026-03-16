@@ -235,25 +235,32 @@ namespace BotRunner.Combat
         /// </summary>
         public static Position[] GetPoolApproachCandidates(Position playerPosition, Position poolPosition, float desiredDistance)
         {
-            var planarTargetDistance = GetPlanarTargetDistance(playerPosition, poolPosition, desiredDistance);
             var dx = playerPosition.X - poolPosition.X;
             var dy = playerPosition.Y - poolPosition.Y;
             var baseAngle = MathF.Atan2(dy, dx);
             if (MathF.Abs(dx) < 0.01f && MathF.Abs(dy) < 0.01f)
                 baseAngle = MathF.PI;
 
-            ReadOnlySpan<float> angleOffsetsDeg = [0f, 20f, -20f, 40f, -40f, 60f, -60f];
-            var candidates = new Position[angleOffsetsDeg.Length];
-            for (var i = 0; i < angleOffsetsDeg.Length; i++)
+            // Sweep ±120° in 20° steps at multiple distance rings within casting range.
+            // Wider sweep finds dock/shore positions even when the pool is off to the side.
+            ReadOnlySpan<float> angleOffsetsDeg = [0f, 20f, -20f, 40f, -40f, 60f, -60f, 80f, -80f, 100f, -100f, 120f, -120f];
+            ReadOnlySpan<float> distanceFactors = [1.0f, 0.7f, 1.3f]; // desired, closer, farther
+
+            var candidates = new List<Position>(angleOffsetsDeg.Length * distanceFactors.Length);
+            foreach (var distFactor in distanceFactors)
             {
-                var angle = baseAngle + (angleOffsetsDeg[i] * (MathF.PI / 180f));
-                candidates[i] = new Position(
-                    poolPosition.X + (MathF.Cos(angle) * planarTargetDistance),
-                    poolPosition.Y + (MathF.Sin(angle) * planarTargetDistance),
-                    playerPosition.Z);
+                var ringDistance = GetPlanarTargetDistance(playerPosition, poolPosition, desiredDistance * distFactor);
+                foreach (var offsetDeg in angleOffsetsDeg)
+                {
+                    var angle = baseAngle + (offsetDeg * (MathF.PI / 180f));
+                    candidates.Add(new Position(
+                        poolPosition.X + (MathF.Cos(angle) * ringDistance),
+                        poolPosition.Y + (MathF.Sin(angle) * ringDistance),
+                        playerPosition.Z));
+                }
             }
 
-            return candidates;
+            return candidates.ToArray();
         }
 
         /// <summary>

@@ -82,11 +82,17 @@ public class FishingProfessionTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
 
-        await _bot.EnsureCleanSlateAsync(bgAccount!, "BG", teleportToSafeZone: false);
-        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG", teleportToSafeZone: false);
+        // Teleport both bots to Orgrimmar for safe setup (away from water/mobs).
+        await _bot.EnsureCleanSlateAsync(bgAccount!, "BG", teleportToSafeZone: true);
+        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG", teleportToSafeZone: true);
 
         var fgActionable = await _bot.CheckFgActionableAsync(requireTeleportProbe: false);
         global::Tests.Infrastructure.Skip.IfNot(fgActionable, "FG bot is not actionable for the dual fishing validation.");
+
+        // Prepare both bots in parallel: learn spells, set skill, give items.
+        var bgPrep = PrepareBotAsync(bgAccount!, "BG");
+        var fgPrep = PrepareBotAsync(fgAccount!, "FG");
+        await Task.WhenAll(bgPrep, fgPrep);
 
         // Query DB for fishing pool spawn positions near Ratchet to use as search waypoints.
         var poolSpawns = await _bot.QueryGameObjectSpawnsNearAsync(
@@ -103,8 +109,7 @@ public class FishingProfessionTests
         Assert.True(searchWaypoints.Count > 0,
             "DB must have fishing pool spawns near Ratchet. If this fails, the world DB is missing fishing pool gameobject entries.");
 
-        await PrepareBotAsync(bgAccount!, "BG");
-        await PrepareBotAsync(fgAccount!, "FG");
+        // Teleport both to Ratchet for fishing.
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
 
@@ -131,30 +136,27 @@ public class FishingProfessionTests
             await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
         }
 
-        await ForceFishingSpellSyncAsync(account, label);
-        await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, StartingFishingSkill, 300);
-        await Task.Delay(500);
+        // Batch all setup: learn spells, set skill, reset items, add items.
+        // Learn spells directly (no unlearn/relearn cycle — just ensure they're known).
+        foreach (var spellId in FishingSpellSyncIds)
+            await _bot.BotLearnSpellAsync(account, spellId);
 
+        await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, StartingFishingSkill, 300);
         await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
-        await Task.Delay(1000);
+        await Task.Delay(500);
 
         await _bot.BotAddItemAsync(account, FishingData.FishingPole);
         await _bot.BotAddItemAsync(account, FishingLureItemId);
-        var polePresent = await _bot.WaitForSnapshotConditionAsync(
-            account,
-            snapshot => ContainsFishingPole(snapshot),
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: $"{label} fishing-pole-added");
-        var baitPresent = await _bot.WaitForSnapshotConditionAsync(
-            account,
-            snapshot => CountItem(snapshot, FishingLureItemId) > 0,
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: $"{label} fishing-bait-added");
 
-        Assert.True(polePresent, $"[{label}] Fishing pole never appeared in bags after setup.");
-        Assert.True(baitPresent, $"[{label}] Fishing bait never appeared in bags after setup.");
+        // Single wait for both items to appear.
+        var itemsReady = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => ContainsFishingPole(snapshot) && CountItem(snapshot, FishingLureItemId) > 0,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} fishing-items");
+
+        Assert.True(itemsReady, $"[{label}] Fishing pole or bait never appeared in bags after setup.");
     }
 
     private async Task TeleportToRatchetAsync(string account, string? characterName, string label)
@@ -456,36 +458,7 @@ public class FishingProfessionTests
         => $"lastMessage={result.LastFishingTaskMessage} lastError={result.LastRelevantError} " +
            $"recentErrors=[{string.Join(" || ", result.RecentErrors)}] diag={result.RecentDiagnosticsSummary}";
 
-    private async Task ForceFishingSpellSyncAsync(string account, string label)
-    {
-        _output.WriteLine($"[{label}] Forcing fishing spell sync (.unlearn -> .learn).");
-
-        foreach (var spellId in FishingSpellSyncIds)
-        {
-            await _bot.BotUnlearnSpellAsync(account, spellId);
-            await Task.Delay(250);
-        }
-
-        foreach (var spellId in FishingSpellSyncIds)
-        {
-            await _bot.BotLearnSpellAsync(account, spellId);
-            await Task.Delay(250);
-        }
-
-        var synced = await _bot.WaitForSnapshotConditionAsync(
-            account,
-            HasRequiredFishingSpells,
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: $"{label} fishing-spell-sync");
-
-        Assert.True(synced, $"[{label}] Fishing spell sync failed.");
-    }
-
     private static bool HasRequiredFishingSpells(WoWActivitySnapshot snapshot)
-        // FG chat reliably confirms the learn path, but FG snapshots do not always surface
-        // Fishing Pole Proficiency in SpellList. The live contract is the task-owned equip/
-        // cast/loot path, so the setup gate only requires a castable fishing spell here.
         => snapshot.Player?.SpellList?.Any(IsFishingSpellId) == true;
 
     private static bool ContainsFishingPole(WoWActivitySnapshot? snapshot)

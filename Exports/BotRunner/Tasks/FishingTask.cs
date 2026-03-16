@@ -40,8 +40,11 @@ public class FishingTask : BotTask, IBotTask
         AwaitLootCompletion,
     }
 
-    internal const float DesiredPoolDistance = 18f;
-    internal const float PoolDistanceTolerance = 4f;
+    // WoW fishing bobbers land 15-30y from the player. Pool fishing works up to ~30y.
+    // The bot should cast from docks/shoreline without walking into water.
+    // Previous 18±4y range forced the bot too close and off docks into water.
+    internal const float DesiredPoolDistance = 24f;
+    internal const float PoolDistanceTolerance = 14f;
     internal const float MinCastingDistance = DesiredPoolDistance - PoolDistanceTolerance;
     internal const float MaxCastingDistance = DesiredPoolDistance + PoolDistanceTolerance;
     private const float CastTargetInsetFromPool = 4f;
@@ -74,6 +77,8 @@ public class FishingTask : BotTask, IBotTask
     private readonly Dictionary<uint, int> _startingBagItemCounts = [];
     private bool _startingBagSnapshotCaptured;
     private float _lastApproachDiagnosticDistance = float.MaxValue;
+    private Position? _cachedApproachPosition;
+    private ulong _cachedApproachPoolGuid;
     private readonly IReadOnlyList<Position> _searchWaypoints;
     private int _searchWaypointIndex;
     private DateTime _searchStartedAt;
@@ -350,6 +355,17 @@ public class FishingTask : BotTask, IBotTask
 
     private void MoveToFishingPool(IWoWLocalPlayer player)
     {
+        // If the bot walked into water during approach, stop and pop.
+        // Fishing requires standing on solid ground (dock/shoreline), not swimming.
+        if (player.IsSwimming)
+        {
+            ObjectManager.ForceStopImmediate();
+            Log.Warning("[FISH] Entered water while approaching pool; aborting.");
+            BotContext.AddDiagnosticMessage("[TASK] FishingTask retry reason=player_swimming_approach");
+            PopTask("player_swimming");
+            return;
+        }
+
         var pool = FindTrackedOrNearestPool(player.Position);
         if (pool?.Position == null)
         {
@@ -655,18 +671,77 @@ public class FishingTask : BotTask, IBotTask
         Log.Warning("[FISH] {Reason}; resetting fishing state for another cast.", reason);
         BotContext.AddDiagnosticMessage($"[TASK] FishingTask retry reason={reason}");
         ClearNavigation();
+        _cachedApproachPosition = null;
         SetState(FishingState.AcquireFishingPool);
     }
 
     private Position ResolveFishingApproachPosition(IWoWLocalPlayer player, Position poolPosition)
     {
-        foreach (var candidate in FishingData.GetPoolApproachCandidates(player.Position, poolPosition, DesiredPoolDistance))
+        // Return cached position if we're still targeting the same pool.
+        if (_cachedApproachPosition != null && _cachedApproachPoolGuid == _activePoolGuid)
+            return _cachedApproachPosition;
+
+        var candidates = FishingData.GetPoolApproachCandidates(player.Position, poolPosition, DesiredPoolDistance);
+
+        // Phase 1: candidates that are both on walkable ground (dock/shore) AND have LOS to pool.
+        foreach (var candidate in candidates)
         {
-            if (CanCastFromPosition(player.MapId, candidate, poolPosition))
+            if (IsOnWalkableGround(player.MapId, candidate, player.Position.Z)
+                && CanCastFromPosition(player.MapId, candidate, poolPosition))
+            {
+                _cachedApproachPosition = candidate;
+                _cachedApproachPoolGuid = _activePoolGuid;
+                Log.Debug("[FISH] Walkable approach position found at ({X:F1}, {Y:F1}, {Z:F1}) — on solid ground with LOS.",
+                    candidate.X, candidate.Y, candidate.Z);
                 return candidate;
+            }
         }
 
-        return FishingData.GetPoolApproachPosition(player.Position, poolPosition, DesiredPoolDistance);
+        // Phase 2: relax — any candidate with walkable ground, even if LOS is uncertain.
+        foreach (var candidate in candidates)
+        {
+            if (IsOnWalkableGround(player.MapId, candidate, player.Position.Z))
+            {
+                _cachedApproachPosition = candidate;
+                _cachedApproachPoolGuid = _activePoolGuid;
+                Log.Debug("[FISH] Walkable approach position found at ({X:F1}, {Y:F1}, {Z:F1}) — on solid ground (LOS unconfirmed).",
+                    candidate.X, candidate.Y, candidate.Z);
+                return candidate;
+            }
+        }
+
+        // Phase 3: no walkable candidate found — fall back to direct approach (pathfinding should
+        // keep the bot on the dock as it walks, even if the final target is over water).
+        Log.Warning("[FISH] No walkable approach candidate found; falling back to direct approach.");
+        var fallback = FishingData.GetPoolApproachPosition(player.Position, poolPosition, DesiredPoolDistance);
+        _cachedApproachPosition = fallback;
+        _cachedApproachPoolGuid = _activePoolGuid;
+        return fallback;
+    }
+
+    /// <summary>
+    /// Checks whether a candidate position has solid ground (dock, shore, terrain) at roughly
+    /// the same elevation as the player. Positions over water will have ground Z far below
+    /// (ocean floor) or no ground at all — both are rejected.
+    /// </summary>
+    private bool IsOnWalkableGround(uint mapId, Position candidate, float referenceZ)
+    {
+        const float maxGroundZDelta = 4f; // dock surface ± tolerance
+        try
+        {
+            var (groundZ, found) = Container.PathfindingClient?.GetGroundZ(mapId, candidate) ?? (0f, false);
+            if (!found)
+                return false;
+
+            // Ground Z should be close to the reference (player/dock) elevation.
+            // If it's far below, the candidate is over water (ground = ocean floor).
+            return MathF.Abs(groundZ - referenceZ) <= maxGroundZDelta;
+        }
+        catch
+        {
+            // Pathfinding unavailable — can't validate, assume not walkable to be safe.
+            return false;
+        }
     }
 
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
