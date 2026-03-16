@@ -16,7 +16,8 @@ namespace WoWSharpClient.Handlers
     {
         public static void HandleUpdateObject(Opcode opcode, byte[] data)
         {
-            if (opcode == Opcode.SMSG_COMPRESSED_UPDATE_OBJECT)
+            bool wasCompressed = opcode == Opcode.SMSG_COMPRESSED_UPDATE_OBJECT;
+            if (wasCompressed)
                 data = PacketManager.Decompress([.. data.Skip(4)]);
 
             using var stream = new MemoryStream(data);
@@ -25,6 +26,10 @@ namespace WoWSharpClient.Handlers
             var objectCount = reader.ReadUInt32();
             var hasTransport = reader.ReadBoolean();
 
+            if (objectCount > 1 || wasCompressed)
+                Log.Information("[HandleUpdateObject] opcode={Opcode} compressed={Compressed} objectCount={Count} dataLen={Len}",
+                    opcode, wasCompressed, objectCount, data.Length);
+
             for (int i = 0; i < objectCount; i++)
                 ParseNextUpdate(reader);
         }
@@ -32,6 +37,7 @@ namespace WoWSharpClient.Handlers
         private static void ParseNextUpdate(BinaryReader reader)
         {
             var updateType = (ObjectUpdateType)reader.ReadByte();
+            var posBeforeBytes = reader.BaseStream.Position;
             try
             {
                 switch (updateType)
@@ -55,7 +61,10 @@ namespace WoWSharpClient.Handlers
             }
             catch (Exception ex)
             {
-                Log.Error($"[{updateType}] {ex}");
+                var consumed = reader.BaseStream.Position - posBeforeBytes;
+                Log.Error("[{UpdateType}] streamPos={Pos} consumed={Consumed} remaining={Remaining} {Error}",
+                    updateType, reader.BaseStream.Position, consumed,
+                    reader.BaseStream.Length - reader.BaseStream.Position, ex);
             }
         }
 
@@ -63,6 +72,9 @@ namespace WoWSharpClient.Handlers
         {
             var guid = ReaderUtils.ReadPackedGuid(reader);
             var objectType = (WoWObjectType)reader.ReadByte();
+
+            Log.Information("[ParseCreateObject] GUID=0x{Guid:X} type={Type}", guid, objectType);
+
             MovementInfoUpdate movementUpdateData = ParseMovementInfo(reader);
             var update = new WoWSharpObjectManager.ObjectStateUpdate(
                 guid,
@@ -73,6 +85,15 @@ namespace WoWSharpClient.Handlers
             );
 
             ReadValuesUpdateBlock(reader, update);
+
+            // Log item-specific fields for diagnostics
+            if (objectType == WoWObjectType.Item || objectType == WoWObjectType.Container)
+            {
+                var entryField = (uint)EObjectFields.OBJECT_FIELD_ENTRY;
+                var hasEntry = update.UpdatedFields.ContainsKey(entryField);
+                Log.Information("[ParseCreateObject] Item GUID=0x{Guid:X} hasEntryField={HasEntry} fieldCount={Count}",
+                    guid, hasEntry, update.UpdatedFields.Count);
+            }
 
             WoWSharpObjectManager.Instance.QueueUpdate(update);
         }

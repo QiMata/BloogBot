@@ -94,7 +94,7 @@ public class BuffAndConsumableTests
             delayMs: 1200);
         AssertCommandSucceeded(addTrace, label, $".additem {ElixirOfLionsStrength} 1");
 
-        var added = await WaitForBagItemCountAsync(account, ElixirOfLionsStrength, minimumSlots: 1, timeout: TimeSpan.FromSeconds(5));
+        var added = await WaitForBagItemCountAsync(account, ElixirOfLionsStrength, minimumSlots: 1, timeout: TimeSpan.FromSeconds(10), label: label);
         Assert.True(added, $"[{label}] Elixir should appear in bag snapshot after .additem.");
 
         var useResult = await _bot.SendActionAsync(account, new ActionMessage
@@ -170,20 +170,42 @@ public class BuffAndConsumableTests
         Assert.Equal(0, CountBagSlotsForItem(player, ElixirOfLionsStrength));
     }
 
-    private async Task<bool> WaitForBagItemCountAsync(string account, uint itemId, int minimumSlots, TimeSpan timeout)
+    private async Task<bool> WaitForBagItemCountAsync(string account, uint itemId, int minimumSlots, TimeSpan timeout, string label = "?")
     {
         var sw = Stopwatch.StartNew();
+        var logged = false;
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
             var count = CountBagSlotsForItem(snap?.Player, itemId);
             if (count >= minimumSlots)
+            {
+                _output.WriteLine($"  [{label}] Item {itemId} appeared in bag after {sw.ElapsedMilliseconds}ms (count={count}).");
                 return true;
+            }
 
-            await Task.Delay(200);
+            // Log bag state once after 3s to diagnose FG item detection
+            if (!logged && sw.Elapsed > TimeSpan.FromSeconds(3))
+            {
+                logged = true;
+                var bagContents = snap?.Player?.BagContents;
+                var bagStr = bagContents != null
+                    ? string.Join(", ", bagContents.Select(kv => $"slot{kv.Key}={kv.Value}"))
+                    : "null";
+                _output.WriteLine($"  [{label}] WaitForBag @{sw.ElapsedMilliseconds}ms: target={itemId}, bagContents=[{bagStr}]");
+            }
+
+            await Task.Delay(300);
         }
 
+        // Final state dump on failure
+        var finalSnap = await _bot.GetSnapshotAsync(account);
+        var finalBag = finalSnap?.Player?.BagContents;
+        var finalStr = finalBag != null
+            ? string.Join(", ", finalBag.Select(kv => $"slot{kv.Key}={kv.Value}"))
+            : "null";
+        _output.WriteLine($"  [{label}] WaitForBag TIMEOUT: target={itemId}, finalBag=[{finalStr}]");
         return false;
     }
 

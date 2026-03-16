@@ -139,19 +139,23 @@ public class NpcInteractionTests
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ));
         await Task.WhenAll(setupTasks);
 
-        // Retry up to 3 times — NPC flags may arrive in PARTIAL updates after CREATE_OBJECT
+        // Post-teleport settle: server streams nearby objects via SMSG_UPDATE_OBJECT
+        // over several seconds. Wait for the initial burst to complete.
+        await Task.Delay(2000);
+
+        // Retry up to 5 times — NPC flags may arrive in PARTIAL updates after CREATE_OBJECT
         System.Collections.Generic.List<Game.WoWUnit> bgWithFlags = [];
         System.Collections.Generic.List<Game.WoWUnit> bgUnits = [];
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < 5; attempt++)
         {
             await _bot.RefreshSnapshotsAsync();
             bgUnits = _bot.BackgroundBot?.NearbyUnits?.ToList() ?? [];
             bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
             if (bgWithFlags.Count > 0) break;
-            if (attempt < 2)
+            if (attempt < 4)
             {
-                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1}, retrying in 1s...");
-                await Task.Delay(1000);
+                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1} (units={bgUnits.Count}), retrying in 1.5s...");
+                await Task.Delay(1500);
             }
         }
 

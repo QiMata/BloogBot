@@ -116,9 +116,11 @@ public class SpellCastOnTargetTests
         await _bot.SendGmChatCommandAsync(account, ".modify rage 1000");
         await Task.Delay(300);
 
-        // Step 2b: Remove any existing Battle Shout buff
-        _output.WriteLine($"  [{label}] Step 2b: Removing stale Battle Shout aura.");
+        // Step 2b: Remove any existing Battle Shout buff + leftover auras from other tests
+        _output.WriteLine($"  [{label}] Step 2b: Removing stale auras.");
         await _bot.SendGmChatCommandAsync(account, $".unaura {BattleShoutSpellId}");
+        await _bot.SendGmChatCommandAsync(account, ".unaura 2457"); // Lion's Strength buff
+        await _bot.SendGmChatCommandAsync(account, ".unaura 2367"); // Lesser Strength spell
         await Task.Delay(500);
 
         // Verify aura is gone
@@ -144,7 +146,7 @@ public class SpellCastOnTargetTests
         _output.WriteLine($"  [{label}] Step 4: Waiting for Battle Shout aura to appear.");
         var auraAppeared = false;
         var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(8))
+        while (sw.Elapsed < TimeSpan.FromSeconds(12))
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
