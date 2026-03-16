@@ -478,4 +478,341 @@ public class MovementControllerPhysicsTests
         Assert.True(player.Position.Z > -50f,
             $"Player fell through world: Z={player.Position.Z:F1}");
     }
+
+    // =====================================================================
+    // P1 — MOVEFLAG CALIBRATION TESTS
+    // These tests verify that movement flags transition correctly between
+    // ground/falling/swimming states. They FAIL when the BG bot's flags
+    // diverge from what the server expects.
+    // =====================================================================
+
+    /// <summary>
+    /// P1.1a: Walking on flat/slope terrain must NEVER set FALLINGFAR or JUMPING.
+    /// The BG bot exhibits false freefall on walkable terrain (ADT gullies),
+    /// causing rubber-banding when the server rejects airborne heartbeats
+    /// for a character that should be grounded.
+    /// </summary>
+    [Fact]
+    public void Grounded_ForwardOnTerrain_NeverSetsFallingFlags()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
+
+        // Walk forward for 3 seconds across Orgrimmar terrain
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 60,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(Grounded_ForwardOnTerrain_NeverSetsFallingFlags), trace);
+
+        const MovementFlags airborneFlags =
+            MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING;
+
+        int airborneFrames = 0;
+        foreach (var frame in trace)
+        {
+            if ((frame.Flags & airborneFlags) != MovementFlags.MOVEFLAG_NONE)
+                airborneFrames++;
+        }
+
+        _output.WriteLine($"Airborne frames: {airborneFrames}/{trace.Count}");
+
+        // Tolerance: up to 2 transient frames are acceptable (step transitions),
+        // but persistent airborne on flat terrain is a real bug.
+        Assert.True(airborneFrames <= 2,
+            $"Expected <= 2 transient airborne frames on flat terrain, " +
+            $"got {airborneFrames}/{trace.Count}. Flags diverge from grounded expectation.");
+    }
+
+    /// <summary>
+    /// P1.1b: Walking off a high ledge MUST set FALLINGFAR within a few frames.
+    /// Place the bot on a high platform and walk it off the edge — if the false
+    /// freefall prevention suppresses the fall, the bot hovers in mid-air.
+    /// </summary>
+    [Fact]
+    public void WalkOffLedge_SetsFallingFar()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start at Orgrimmar spawn, elevated 30y above ground (simulating a cliff edge).
+        // With no path set, the false freefall guard should NOT engage (requires _currentPath).
+        float elevatedZ = SpawnZ + 30f;
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, elevatedZ, facing: 0f);
+
+        // Walk forward — there's no ground at this height, should fall
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 20,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(WalkOffLedge_SetsFallingFar), trace);
+
+        const MovementFlags airborneFlags =
+            MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING;
+
+        // Find first frame with airborne flag
+        int firstAirborneFrame = -1;
+        for (int i = 0; i < trace.Count; i++)
+        {
+            if ((trace[i].Flags & airborneFlags) != MovementFlags.MOVEFLAG_NONE)
+            {
+                firstAirborneFrame = i;
+                break;
+            }
+        }
+
+        _output.WriteLine($"First airborne frame: {firstAirborneFrame}");
+
+        // FALLINGFAR must be set within the first 5 frames (250ms at 50ms/frame)
+        Assert.True(firstAirborneFrame >= 0 && firstAirborneFrame <= 5,
+            $"Expected FALLINGFAR within first 5 frames when walking off ledge, " +
+            $"first airborne at frame {firstAirborneFrame}. " +
+            $"False freefall prevention may be suppressing real falls.");
+
+        // Z must have decreased — the bot must actually fall
+        float drop = elevatedZ - player.Position.Z;
+        Assert.True(drop > 2.0f,
+            $"Expected > 2y drop after 20 frames off ledge, got {drop:F3}y. " +
+            $"Bot may be hovering in mid-air.");
+    }
+
+    /// <summary>
+    /// P1.1c: After landing from a fall, FALLINGFAR must be cleared and the bot
+    /// must be grounded. Persistent FALLINGFAR after landing causes the server
+    /// to reject position updates.
+    /// </summary>
+    [Fact]
+    public void Landing_ClearsFallingFlags()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start 10y above ground — short fall, should land within 40 frames
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 10f, facing: 0f);
+
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 40,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(Landing_ClearsFallingFlags), trace);
+
+        const MovementFlags airborneFlags =
+            MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING;
+
+        // Find when we land: first frame at/near ground without airborne flags
+        float minGap = MinAbsGroundGap(trace);
+        Assert.True(minGap <= 1.5f,
+            $"Expected to reach ground (gap <= 1.5y), min gap was {minGap:F3}.");
+
+        // Check last 10 frames — should all be grounded after landing
+        int groundedCount = 0;
+        for (int i = Math.Max(0, trace.Count - 10); i < trace.Count; i++)
+        {
+            if ((trace[i].Flags & airborneFlags) == MovementFlags.MOVEFLAG_NONE)
+                groundedCount++;
+        }
+
+        Assert.True(groundedCount >= 8,
+            $"Expected >= 8 grounded frames in final 10 frames after landing, " +
+            $"got {groundedCount}. FALLINGFAR may be persisting after ground contact.");
+    }
+
+    /// <summary>
+    /// P1.1d: Airborne horizontal velocity must NOT change direction when facing changes.
+    /// In WoW, once you leave the ground, horizontal velocity is locked — only facing
+    /// can change (for camera/spell targeting), but movement direction is fixed.
+    /// This test verifies the physics engine preserves horizontal velocity during fall.
+    /// </summary>
+    [Fact]
+    public void Airborne_HorizontalVelocityLockedDespiteFacingChange()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start elevated, facing east (0 rad), moving forward
+        float startZ = SpawnZ + 25f;
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, startZ, facing: 0f);
+
+        // First 5 frames: establish airborne state moving east
+        var setupTrace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 5,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace("Airborne_Setup", setupTrace);
+
+        float afterSetupX = player.Position.X;
+        float afterSetupY = player.Position.Y;
+
+        // Record velocity direction after initial airborne frames
+        // (X should be increasing = moving east since facing=0)
+        float setupDeltaX = afterSetupX - SpawnX;
+        float setupDeltaY = afterSetupY - SpawnY;
+        _output.WriteLine($"After setup: dX={setupDeltaX:F3} dY={setupDeltaY:F3}");
+
+        // Now change facing to NORTH (π/2) while still airborne with FORWARD flag
+        // In WoW, this should NOT change movement direction
+        player.Facing = MathF.PI / 2f;
+
+        var postTurnTrace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 10,
+            startTimeMs: 2000,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace("Airborne_AfterFacingChange", postTurnTrace);
+
+        // Calculate post-turn movement direction
+        float postTurnDeltaX = player.Position.X - afterSetupX;
+        float postTurnDeltaY = player.Position.Y - afterSetupY;
+        _output.WriteLine($"After turn: dX={postTurnDeltaX:F3} dY={postTurnDeltaY:F3}");
+
+        // If horizontal velocity is locked (correct): bot continues moving east (positive X)
+        // If horizontal velocity follows facing (BUG): bot moves north (positive Y)
+        // We check that X displacement is dominant over Y displacement change
+        float xMagnitude = MathF.Abs(postTurnDeltaX);
+        float yMagnitude = MathF.Abs(postTurnDeltaY);
+
+        _output.WriteLine($"Post-turn |dX|={xMagnitude:F3} |dY|={yMagnitude:F3}");
+
+        // The original direction (east) should still dominate movement
+        // If the bug exists, Y magnitude will be much larger than X
+        Assert.True(xMagnitude > yMagnitude * 0.5f,
+            $"Airborne horizontal velocity changed direction after facing change! " +
+            $"|dX|={xMagnitude:F3} should dominate |dY|={yMagnitude:F3}. " +
+            $"Horizontal velocity must be locked when airborne.");
+    }
+
+    /// <summary>
+    /// P1.1e: Flag transition sequence for walk-off-ledge must be:
+    /// FORWARD (grounded) → FORWARD|FALLINGFAR (airborne) → FORWARD (grounded after landing).
+    /// The FALLINGFAR flag should appear within a few frames of leaving ground,
+    /// persist during the fall, and clear on landing.
+    /// </summary>
+    [Fact]
+    public void FlagTransitionSequence_WalkOffAndLand()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start 12y above ground — enough for a clear fall + landing within 60 frames
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 12f, facing: 0f);
+
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 60,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(FlagTransitionSequence_WalkOffAndLand), trace);
+
+        const MovementFlags airborneFlags =
+            MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING;
+
+        // Phase 1: Find transition to airborne
+        int firstAirborneFrame = -1;
+        for (int i = 0; i < trace.Count; i++)
+        {
+            if ((trace[i].Flags & airborneFlags) != MovementFlags.MOVEFLAG_NONE)
+            {
+                firstAirborneFrame = i;
+                break;
+            }
+        }
+
+        // Phase 2: Find landing (airborne→grounded)
+        int landingFrame = -1;
+        if (firstAirborneFrame >= 0)
+        {
+            for (int i = firstAirborneFrame + 1; i < trace.Count; i++)
+            {
+                if ((trace[i].Flags & airborneFlags) == MovementFlags.MOVEFLAG_NONE)
+                {
+                    landingFrame = i;
+                    break;
+                }
+            }
+        }
+
+        _output.WriteLine($"First airborne: frame {firstAirborneFrame}, Landing: frame {landingFrame}");
+
+        // Assertions
+        Assert.True(firstAirborneFrame >= 0,
+            "Bot never entered airborne state when starting 12y above ground.");
+
+        Assert.True(firstAirborneFrame <= 5,
+            $"Airborne flag set too late (frame {firstAirborneFrame}). " +
+            $"Should detect no ground within first few frames.");
+
+        Assert.True(landingFrame >= 0,
+            $"Bot never landed within 60 frames. " +
+            $"FALLINGFAR may be stuck or bot fell through world (Z={player.Position.Z:F1}).");
+
+        // Fall duration should be reasonable (12y fall ≈ 1.1s ≈ 22 frames at 50ms)
+        int fallDuration = landingFrame - firstAirborneFrame;
+        Assert.InRange(fallDuration, 5, 40);
+
+        // After landing, remaining frames should be grounded
+        int postLandGrounded = 0;
+        for (int i = landingFrame; i < trace.Count; i++)
+        {
+            if ((trace[i].Flags & airborneFlags) == MovementFlags.MOVEFLAG_NONE)
+                postLandGrounded++;
+        }
+
+        int postLandTotal = trace.Count - landingFrame;
+        Assert.True(postLandGrounded >= postLandTotal - 2,
+            $"After landing at frame {landingFrame}, " +
+            $"expected mostly grounded but got {postLandGrounded}/{postLandTotal} grounded frames.");
+    }
+
+    /// <summary>
+    /// P1.4: Slope clamping — Z must track ground height during forward movement
+    /// on sloped terrain, not hovering above or sinking below.
+    /// </summary>
+    [Fact]
+    public void SlopeClamping_ZTracksGroundDuringMovement()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
+
+        // Walk 3 seconds across terrain
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 60,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(SlopeClamping_ZTracksGroundDuringMovement), trace);
+
+        // Check ground gap for all frames that have valid ground data
+        int framesWithGround = 0;
+        int framesWithGoodGap = 0;
+        float maxGap = 0f;
+
+        foreach (var frame in trace)
+        {
+            if (float.IsNaN(frame.GroundGap))
+                continue;
+
+            framesWithGround++;
+            float absGap = MathF.Abs(frame.GroundGap);
+            maxGap = MathF.Max(maxGap, absGap);
+
+            // Ground gap should be within 2y (accounting for step-ups and minor physics lag)
+            if (absGap <= 2.0f)
+                framesWithGoodGap++;
+        }
+
+        _output.WriteLine($"Frames with ground: {framesWithGround}, good gap: {framesWithGoodGap}, maxGap: {maxGap:F3}");
+
+        Assert.True(framesWithGround >= 30,
+            $"Expected at least 30 frames with valid ground data, got {framesWithGround}.");
+
+        // At least 90% of frames should be within 2y of ground
+        float goodRatio = (float)framesWithGoodGap / framesWithGround;
+        Assert.True(goodRatio >= 0.9f,
+            $"Expected >= 90% of frames clamped to ground (gap <= 2y), " +
+            $"got {goodRatio:P0} ({framesWithGoodGap}/{framesWithGround}). " +
+            $"Max gap was {maxGap:F3}y — bot is floating or sinking.");
+    }
 }
