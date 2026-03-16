@@ -61,15 +61,19 @@ namespace WoWStateManager
             // Launch BackgroundBotRunner as a separate process so each bot owns its own
             // WoWSharpObjectManager/EventEmitter singletons (no cross-contamination).
             var botExePath = Path.Combine(AppContext.BaseDirectory, "BackgroundBotRunner.dll");
+            var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
                 Arguments = $"\"{botExePath}\"",
                 WorkingDirectory = AppContext.BaseDirectory,
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
+                // When WWOW_SHOW_WINDOWS=1, don't redirect stdout/stderr so Serilog's Console
+                // sink writes to the visible console window. Log file sink (WWoWLogs/bg_{account}.log)
+                // still captures everything regardless.
+                RedirectStandardOutput = !showWindows,
+                RedirectStandardError = !showWindows,
+                CreateNoWindow = !showWindows,
             };
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
@@ -81,8 +85,8 @@ namespace WoWStateManager
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
 
-            // Forward stdout/stderr to our logger in background tasks
-            if (process != null)
+            // Forward stdout/stderr to our logger (only when redirecting, i.e. no visible window)
+            if (process != null && !showWindows)
             {
                 _ = Task.Run(async () =>
                 {
