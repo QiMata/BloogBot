@@ -922,6 +922,8 @@ namespace WoWSharpClient.Movement
 
         private Opcode DetermineOpcode(MovementFlags current, MovementFlags previous)
         {
+            bool isAirborne = (current & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+
             // Stopped moving entirely
             if (current == MovementFlags.MOVEFLAG_NONE && previous != MovementFlags.MOVEFLAG_NONE)
                 return Opcode.MSG_MOVE_STOP;
@@ -930,8 +932,11 @@ namespace WoWSharpClient.Movement
             if (current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && !previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
                 return Opcode.MSG_MOVE_JUMP;
 
-            // Landed
+            // Landed (FALLINGFAR→grounded also counts as landing)
             if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
+                return Opcode.MSG_MOVE_FALL_LAND;
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR) && previous.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR)
+                && !current.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
                 return Opcode.MSG_MOVE_FALL_LAND;
 
             // Started/stopped swimming
@@ -939,6 +944,11 @@ namespace WoWSharpClient.Movement
                 return Opcode.MSG_MOVE_START_SWIM;
             if (!current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
                 return Opcode.MSG_MOVE_STOP_SWIM;
+
+            // While airborne, never send directional START/STOP opcodes — use heartbeat only.
+            // Directional flag transitions mid-air are illegal and trigger anticheat.
+            if (isAirborne)
+                return Opcode.MSG_MOVE_HEARTBEAT;
 
             // Started moving forward
             if (current.HasFlag(MovementFlags.MOVEFLAG_FORWARD) && !previous.HasFlag(MovementFlags.MOVEFLAG_FORWARD))

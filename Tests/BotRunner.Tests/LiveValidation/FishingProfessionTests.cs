@@ -108,8 +108,12 @@ public class FishingProfessionTests
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
 
-        var bgResult = await RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
-        var fgResult = await RunFishingTaskAsync(fgAccount!, "FG", searchWaypoints);
+        // Run both bots fishing simultaneously — they fish side by side at Ratchet.
+        var bgTask = RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
+        var fgTask = RunFishingTaskAsync(fgAccount!, "FG", searchWaypoints);
+        var results = await Task.WhenAll(bgTask, fgTask);
+        var bgResult = results[0];
+        var fgResult = results[1];
 
         AssertFishingResult("BG", bgResult);
         AssertFishingResult("FG", fgResult);
@@ -280,16 +284,8 @@ public class FishingProfessionTests
             if (!string.IsNullOrWhiteSpace(latestTaskMessage))
                 lastFishingTaskMessage = latestTaskMessage;
 
-            // Early exit when FishingTask pops without catching anything —
-            // avoids polling for the full timeout when no pool is available.
-            var popMessage = currentTaskMessages.LastOrDefault(m => m.Contains("FishingTask pop reason=", StringComparison.Ordinal));
-            if (!string.IsNullOrWhiteSpace(popMessage) && !sawLootSuccessDiagnostic)
-            {
-                _output.WriteLine($"[{label}] FishingTask popped early: {popMessage}");
-                recentDiagnosticsSummary = _bot.FormatRecentBotRunnerDiagnostics("FishingTask", "NavigationPath");
-                break;
-            }
-
+            // Scan diagnostic flags BEFORE the early exit check so that
+            // sawLootSuccessDiagnostic is set when pop and loot_success arrive in the same poll.
             sawPoolAcquireDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask pool_acquired", StringComparison.Ordinal));
             sawInCastRangeDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask in_cast_range", StringComparison.Ordinal));
             sawLosBlockedDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask los_blocked", StringComparison.Ordinal));
@@ -302,6 +298,17 @@ public class FishingProfessionTests
             {
                 sawLootSuccessDiagnostic = true;
                 lastFishingTaskMessage = lootSuccessMessage;
+            }
+
+            // Early exit when FishingTask pops without catching anything —
+            // avoids polling for the full timeout when no pool is available.
+            // Must come AFTER diagnostic scanning so sawLootSuccessDiagnostic is current.
+            var popMessage = currentTaskMessages.LastOrDefault(m => m.Contains("FishingTask pop reason=", StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(popMessage) && !sawLootSuccessDiagnostic)
+            {
+                _output.WriteLine($"[{label}] FishingTask popped early: {popMessage}");
+                recentDiagnosticsSummary = _bot.FormatRecentBotRunnerDiagnostics("FishingTask", "NavigationPath");
+                break;
             }
 
             var poolDistance = FindNearestPoolDistance(snapshot);

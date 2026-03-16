@@ -48,10 +48,24 @@ namespace WoWSharpClient
 
 
         // ============= INPUT HANDLERS =============
+
+        /// <summary>
+        /// True when the player is airborne (jumping or falling). While airborne,
+        /// directional input and facing changes are locked to prevent mid-air steering
+        /// that would cause the bot to spiral and send illegal movement packets.
+        /// </summary>
+        private static bool IsPlayerAirborne(WoWLocalPlayer player)
+            => (player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+
         public void StartMovement(ControlBits bits)
         {
             var player = (WoWLocalPlayer)Player;
             if (player == null) return;
+
+            // While airborne, don't allow new directional input — keep pre-jump direction.
+            // Jump input is allowed (double-jump protection is elsewhere).
+            if (IsPlayerAirborne(player) && (bits & (ControlBits.Front | ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight)) != 0)
+                return;
 
             // Convert control bits to movement flags and update player state
             MovementFlags flags = ConvertControlBitsToFlags(bits, player.MovementFlags, true);
@@ -63,6 +77,11 @@ namespace WoWSharpClient
         {
             var player = (WoWLocalPlayer)Player;
             if (player == null) return;
+
+            // While airborne, don't allow clearing directional flags — keep pre-jump direction.
+            // Clearing FORWARD mid-fall would send MSG_MOVE_STOP while airborne.
+            if (IsPlayerAirborne(player) && (bits & (ControlBits.Front | ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight)) != 0)
+                return;
 
             // Clear the corresponding movement flags.
             // MovementController (game loop, 50ms) detects the flag change
@@ -374,6 +393,12 @@ namespace WoWSharpClient
         {
             if (pos == null || Player == null) return;
 
+            // While airborne, don't change facing or directional flags.
+            // The bot keeps its pre-jump trajectory — steering mid-air causes spiraling
+            // and sends illegal movement flag transitions to the server.
+            var player = (WoWLocalPlayer)Player;
+            if (IsPlayerAirborne(player)) return;
+
             // Face the target
             if (!Player.IsFacing(pos))
                 SetFacing(Player.GetFacingForPosition(pos));
@@ -395,6 +420,11 @@ namespace WoWSharpClient
         {
             var player = (WoWLocalPlayer)Player;
             if (player == null) return;
+
+            // While airborne, don't change facing or directional flags.
+            // The bot keeps its pre-jump trajectory — steering mid-air causes spiraling
+            // and sends illegal movement flag transitions to the server.
+            if (IsPlayerAirborne(player)) return;
 
             // Set facing and movement flags.
             // The MovementController (running in the game loop every 50ms) handles:
