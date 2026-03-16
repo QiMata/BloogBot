@@ -37,7 +37,11 @@ namespace WoWSharpClient.Movement
         private Position[]? _currentPath;
         private int _currentWaypointIndex;
         private const float WAYPOINT_ARRIVE_DIST = 2.0f;
-        private const float TARGET_WAYPOINT_REFRESH_DIST_2D = 0.35f;
+        // Callers (behavior tree) set a new target waypoint every tick. Only rebuild
+        // the internal 2-waypoint path when the target shifts more than this threshold.
+        // Too small (0.35y) → constant rebuilds as NavigationPath advances index → jitter.
+        // Too large → slow reactions when the destination genuinely changes.
+        private const float TARGET_WAYPOINT_REFRESH_DIST_2D = 3.0f;
         private const float TARGET_WAYPOINT_REFRESH_Z = 1.0f;
 
         // Post-teleport ground snap: when true, forces at least one physics step

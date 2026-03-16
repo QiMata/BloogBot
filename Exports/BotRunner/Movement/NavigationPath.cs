@@ -488,13 +488,16 @@ public class NavigationPath(
         // a later waypoint, jump ahead. This prevents the bot from doubling back to a
         // waypoint it already passed. Common when navmesh Z is inaccurate and the bot
         // walks over the waypoint without triggering the radius check.
+        // Limit scan to a small window (3 waypoints) to prevent distant waypoints from
+        // pulling the bot off course and causing oscillation/jitter.
         if (_currentIndex < _waypoints.Length - 1)
         {
             var distToCurrent = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
             var bestIndex = _currentIndex;
             var bestDist = distToCurrent;
 
-            for (int i = _currentIndex + 1; i < _waypoints.Length; i++)
+            var scanEnd = Math.Min(_currentIndex + 4, _waypoints.Length);
+            for (int i = _currentIndex + 1; i < scanEnd; i++)
             {
                 var d = currentPosition.DistanceTo2D(_waypoints[i]);
                 if (d < bestDist)

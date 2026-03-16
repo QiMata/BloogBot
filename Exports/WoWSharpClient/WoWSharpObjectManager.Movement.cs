@@ -401,7 +401,17 @@ namespace WoWSharpClient
             //   - Physics step (ground snapping, collision, gravity)
             //   - Position update
             //   - Network packet sending (MSG_MOVE_START_FORWARD, heartbeats, etc.)
-            player.Facing = facing;
+            //
+            // Dampen facing updates: only apply if the change exceeds a small threshold.
+            // Sub-threshold facing jitter (from waypoint changes each tick) causes the
+            // physics engine to oscillate movement direction → visible bouncing/jitter.
+            const float facingDampenThreshold = 0.15f; // ~8.6 degrees
+            var facingDelta = MathF.Abs(facing - player.Facing);
+            // Handle wrap-around (e.g. 6.2 → 0.1 = 0.18 rad, not 6.1 rad)
+            if (facingDelta > MathF.PI)
+                facingDelta = 2f * MathF.PI - facingDelta;
+            if (facingDelta > facingDampenThreshold)
+                player.Facing = facing;
             player.MovementFlags &= ~(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
 
