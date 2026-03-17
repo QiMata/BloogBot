@@ -115,7 +115,6 @@ public class MovementParityTests
         // Start on elevated terrain near the cave, walk downhill to the road.
         // The elevation drop triggers FALLINGFAR → landing flag transition.
         // Exercises: MOVEFLAG_FALLINGFAR, false freefall suppression, landing Z clamp.
-        // Z+3 offset on start to avoid undermap detection.
         await RunParityTest(
             name: "Valley of Trials — Ledge Drop (FALLINGFAR)",
             startX: -240f, startY: -4330f, startZ: 63f,
@@ -202,9 +201,12 @@ public class MovementParityTests
         _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({targetX},{targetY},{targetZ}) = {routeDist:F1}y\n");
 
         // --- TELEPORT ---
+        // .go xyz with exact ground Z triggers undermap detection on VMaNGOS.
+        // Always teleport Z+3 above nominal ground — physics/gravity will settle the bot down.
+        float teleportZ = startZ + 3f;
         await Task.WhenAll(
-            _bot.BotTeleportAsync(bgAccount!, MapId, startX, startY, startZ),
-            _bot.BotTeleportAsync(fgAccount!, MapId, startX, startY, startZ));
+            _bot.BotTeleportAsync(bgAccount!, MapId, startX, startY, teleportZ),
+            _bot.BotTeleportAsync(fgAccount!, MapId, startX, startY, teleportZ));
 
         var bgSettled = await _bot.WaitForTeleportSettledAsync(bgAccount!, startX, startY, timeoutMs: 8000);
         var fgSettled = await _bot.WaitForTeleportSettledAsync(fgAccount!, startX, startY, timeoutMs: 8000);
