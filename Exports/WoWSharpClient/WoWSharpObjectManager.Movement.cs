@@ -383,6 +383,7 @@ namespace WoWSharpClient
 
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
+            _physicsTimeAccumulator = 0f; // Clear sub-step accumulator on zone/map change
             StartGameLoop();
 
             _ = _woWClient.SendMoveWorldPortAcknowledgeAsync();

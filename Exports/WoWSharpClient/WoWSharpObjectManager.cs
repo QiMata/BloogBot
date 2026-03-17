@@ -158,20 +158,22 @@ namespace WoWSharpClient
         public bool IsGameLoopRunning { get; private set; }
 
         /// <summary>
-        /// Starts the fixed-timestep game loop (50ms / ~20 Hz).
-        /// Tick order: spline updates → ping heartbeat → physics/movement → bot AI.
-        /// Object updates are processed on a separate background thread.
-        /// </summary>
-
-
-        /// <summary>
-        /// Starts the fixed-timestep game loop (50ms / ~20 Hz).
-        /// Tick order: spline updates → ping heartbeat → physics/movement → bot AI.
+        /// Starts the game loop (~20 Hz timer). Physics runs at a fixed 50ms sub-step
+        /// regardless of timer jitter. Prevents rubber banding and terrain sinking from
+        /// variable delta times when System.Timers.Timer fires late under thread pool pressure.
+        /// Tick order: spline updates → ping heartbeat → physics sub-steps → bot AI.
         /// Object updates are processed on a separate background thread.
         /// </summary>
         public void StartGameLoop()
         {
             if (IsGameLoopRunning) return;
+
+            // Seed time tracking so the first tick doesn't see a huge delta from TimeSpan.Zero.
+            if (_worldTimeTracker != null && _lastPositionUpdate == TimeSpan.Zero)
+            {
+                _lastPositionUpdate = _worldTimeTracker.NowMS;
+                _physicsTimeAccumulator = 0f;
+            }
 
             _gameLoopTimer = new Timer(50);
             _gameLoopTimer.Elapsed += OnGameLoopTick;
@@ -184,11 +186,6 @@ namespace WoWSharpClient
             IsGameLoopRunning = true;
             Log.Information("[GameLoop] Started (50ms tick, ~20 Hz)");
         }
-
-        /// <summary>
-        /// Stops the game loop and background update processor.
-        /// </summary>
-
 
         /// <summary>
         /// Stops the game loop and background update processor.
@@ -211,6 +208,16 @@ namespace WoWSharpClient
         }
 
 
+        // Fixed physics timestep: 50ms (matches timer interval). When the timer fires late,
+        // physics runs multiple sub-steps at this fixed dt instead of one large step.
+        // This prevents rubber banding (large single-frame jumps) and sinking (over-integrated gravity).
+        private const float PHYSICS_FIXED_DT = 0.050f;
+        // Maximum wall-clock delta to process per tick. Prevents runaway catch-up after long stalls
+        // (e.g. GC pause, thread pool starvation). Caps at 4 sub-steps (200ms).
+        private const float PHYSICS_MAX_DT = 0.200f;
+        // Accumulated fractional time from previous tick, carried forward for sub-stepping.
+        private float _physicsTimeAccumulator = 0f;
+
         private void OnGameLoopTick(object? sender, ElapsedEventArgs e)
         {
             try
@@ -232,7 +239,19 @@ namespace WoWSharpClient
                     && (!_isBeingTeleported || _movementController.NeedsGroundSnap);
                 if (allowPhysics)
                 {
-                    _movementController.Update(deltaSec, (uint)now.TotalMilliseconds);
+                    // Sub-step physics at a fixed timestep to prevent rubber banding from timer jitter.
+                    // System.Timers.Timer is thread-pool based — actual intervals can be 50-500ms.
+                    // Without sub-stepping, a 200ms delta causes a single large physics step that
+                    // moves the character 4x further than expected, then the server rubber-bands.
+                    var clampedDelta = MathF.Min(deltaSec, PHYSICS_MAX_DT);
+                    _physicsTimeAccumulator += clampedDelta;
+
+                    var gameTimeMs = (uint)now.TotalMilliseconds;
+                    while (_physicsTimeAccumulator >= PHYSICS_FIXED_DT)
+                    {
+                        _movementController.Update(PHYSICS_FIXED_DT, gameTimeMs);
+                        _physicsTimeAccumulator -= PHYSICS_FIXED_DT;
+                    }
                 }
 
                 // 4. Bot AI callback
