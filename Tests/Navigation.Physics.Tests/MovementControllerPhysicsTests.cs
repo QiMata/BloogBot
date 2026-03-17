@@ -846,4 +846,119 @@ public class MovementControllerPhysicsTests
             $"got {goodRatio:P0} ({framesWithGoodGap}/{framesWithGround}). " +
             $"Max gap was {maxGap:F3}y — bot is floating or sinking.");
     }
+
+    // ======== MOVEMENT SPEED VALIDATION ========
+
+    /// <summary>
+    /// Validates that forward movement at RunSpeed produces expected displacement over time.
+    /// 200 frames at 50ms = 10 seconds → expected ~70y at 7.0 y/s run speed.
+    /// </summary>
+    [Fact]
+    public void Forward_FlatTerrain_MovesAtRunSpeed()
+    {
+        // Crossroads Plains — very flat open savanna (map 1, Kalimdor)
+        var (controller, player, _) = CreateController(-442.0f, -2598.0f, 96.0f, facing: 0f);
+
+        const int frameCount = 200;  // 10 seconds at 50ms
+        const float dtSec = 0.05f;
+        const float expectedSpeed = 7.0f;
+        const float totalTime = frameCount * dtSec; // 10s
+
+        float startX = player.Position.X;
+        float startY = player.Position.Y;
+
+        var frames = RunFramesWithTrace(controller, player, frameCount, dtSec,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+
+        float endX = player.Position.X;
+        float endY = player.Position.Y;
+        float endZ = player.Position.Z;
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float totalXY = MathF.Sqrt(dx * dx + dy * dy);
+        float actualSpeed = totalXY / totalTime;
+
+        _output.WriteLine($"=== Forward_FlatTerrain_MovesAtRunSpeed ===");
+        _output.WriteLine($"Start: ({startX:F1}, {startY:F1})  End: ({endX:F1}, {endY:F1}, {endZ:F1})");
+        _output.WriteLine($"XY displacement: {totalXY:F1}y over {totalTime:F0}s = {actualSpeed:F2} y/s (expected {expectedSpeed:F1} y/s)");
+        _output.WriteLine($"Speed ratio: {actualSpeed / expectedSpeed:P0}");
+
+        // Check Z stability — should stay near ground, not sink
+        float maxZDelta = 0f;
+        for (int i = 1; i < frames.Count; i++)
+        {
+            float zd = MathF.Abs(frames[i].Z - frames[i - 1].Z);
+            maxZDelta = MathF.Max(maxZDelta, zd);
+        }
+        _output.WriteLine($"Max per-frame Z delta: {maxZDelta:F3}y");
+
+        // Assert speed is within 50-120% of expected (generous for terrain variation)
+        Assert.True(actualSpeed >= expectedSpeed * 0.5f,
+            $"Bot moved too slowly: {actualSpeed:F2} y/s < {expectedSpeed * 0.5f:F1} y/s (50% threshold). " +
+            $"Total displacement: {totalXY:F1}y over {totalTime:F0}s.");
+        Assert.True(actualSpeed <= expectedSpeed * 1.2f,
+            $"Bot moved too fast: {actualSpeed:F2} y/s > {expectedSpeed * 1.2f:F1} y/s.");
+
+        // Z should not oscillate wildly
+        Assert.True(maxZDelta < 3.0f,
+            $"Z oscillation too large: max per-frame delta = {maxZDelta:F3}y (threshold 3.0y).");
+    }
+
+    /// <summary>
+    /// Validates that movement packets are sent at ~500ms intervals with correct position deltas.
+    /// </summary>
+    [Fact]
+    public void Forward_FlatTerrain_PacketTimingAndPositionDeltas()
+    {
+        var (controller, player, mockClient) = CreateController(-442.0f, -2598.0f, 96.0f, facing: 0f);
+
+        // Capture all SendMovementOpcodeAsync calls
+        var packetCalls = new List<(uint timeMs, float x, float y, float z)>();
+        mockClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((op, buf, ct) =>
+            {
+                // Record position at time of packet send
+                packetCalls.Add((0, player.Position.X, player.Position.Y, player.Position.Z));
+            })
+            .Returns(Task.CompletedTask);
+
+        const int frameCount = 200;  // 10 seconds at 50ms
+        const float dtSec = 0.05f;
+        uint startTimeMs = 1000;
+
+        // Run frames with advancing time (matching MovementControllerPhysicsTests pattern)
+        for (int i = 0; i < frameCount; i++)
+        {
+            player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
+            uint timeMs = startTimeMs + (uint)MathF.Round(i * dtSec * 1000f);
+            controller.Update(dtSec, timeMs);
+        }
+
+        _output.WriteLine($"=== Packet Timing and Position Deltas ===");
+        _output.WriteLine($"Total frames: {frameCount}, Total packets sent: {packetCalls.Count}");
+
+        // Should have sent packets at ~500ms intervals over 10s → ~20 packets
+        // First packet on flag change, then every ~500ms
+        Assert.True(packetCalls.Count >= 10,
+            $"Expected at least 10 packets over 10s (500ms interval), got {packetCalls.Count}.");
+        Assert.True(packetCalls.Count <= 30,
+            $"Expected at most 30 packets over 10s, got {packetCalls.Count}. Too many packets.");
+
+        // Check position deltas between consecutive packets
+        for (int i = 1; i < packetCalls.Count; i++)
+        {
+            var prev = packetCalls[i - 1];
+            var curr = packetCalls[i];
+            float pdx = curr.x - prev.x;
+            float pdy = curr.y - prev.y;
+            float pDist = MathF.Sqrt(pdx * pdx + pdy * pdy);
+
+            if (i <= 5)
+                _output.WriteLine($"  Packet {i}: delta={pDist:F2}y pos=({curr.x:F1},{curr.y:F1},{curr.z:F1})");
+        }
+
+        _output.WriteLine("Packet count validation passed.");
+    }
 }

@@ -247,10 +247,13 @@ namespace WoWSharpClient
                     _physicsTimeAccumulator += clampedDelta;
 
                     var gameTimeMs = (uint)now.TotalMilliseconds;
+                    int subSteps = 0;
                     while (_physicsTimeAccumulator >= PHYSICS_FIXED_DT)
                     {
                         _movementController.Update(PHYSICS_FIXED_DT, gameTimeMs);
                         _physicsTimeAccumulator -= PHYSICS_FIXED_DT;
+                        gameTimeMs += 50; // Advance virtual time so packet timing and stale-forward detection work across sub-steps
+                        subSteps++;
                     }
                 }
 
