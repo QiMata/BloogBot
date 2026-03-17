@@ -527,6 +527,7 @@ namespace WoWSharpClient.Movement
             //   slope ratio (tan 63 deg = 2.0), we detect when descent is physically impossible
             //   for grounded movement.
             bool slopeGuardRejected = false;
+            bool isFalling = (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
 
             if (physicsHasGround && float.IsNaN(_teleportZ)
                 && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f)
@@ -574,6 +575,14 @@ namespace WoWSharpClient.Movement
                     _descentAnchorY = float.NaN;
                 }
             }
+            // Reset descent anchors when entering freefall so stale accumulation
+            // doesn't cause false slope guard rejections after landing.
+            if (isFalling)
+            {
+                _descentAnchorZ = float.NaN;
+                _descentAnchorX = float.NaN;
+                _descentAnchorY = float.NaN;
+            }
 
             // Update position from physics — clamp Z when slope guard rejected the ground.
             // When the slope guard triggers, use navmesh path Z as fallback instead of
@@ -604,6 +613,24 @@ namespace WoWSharpClient.Movement
                 pathGroundGuardActive = true;
                 output.NewVelZ = 0;
                 output.FallTime = 0;
+            }
+            // N.5 fix: Path-based underground snap for freefall. When following a navmesh path and
+            // the character falls more than 10y below the path waypoint Z, it has fallen through
+            // terrain (physics gap on steep slopes where DownPass can't find ground within its 4y
+            // snap range). Snap back to the path waypoint Z and clear fall state. This is path-based
+            // (not _prevGroundZ based) to avoid interfering with legitimate falls from heights.
+            if (isFalling && _currentPath != null && _currentWaypointIndex < _currentPath.Length)
+            {
+                float pathZ = _currentPath[_currentWaypointIndex].Z;
+                if (finalPosZ < pathZ - 10f)
+                {
+                    Log.Warning("[MovementController] Underground snap: fell {Drop:F1}y below path waypoint Z={PathZ:F1}. " +
+                        "Snapping to path Z.", pathZ - finalPosZ, pathZ);
+                    finalPosZ = pathZ;
+                    pathGroundGuardActive = true;
+                    output.NewVelZ = 0;
+                    output.FallTime = 0;
+                }
             }
             _player.Position = new Position(output.NewPosX, output.NewPosY, finalPosZ);
             _player.SwimPitch = output.Pitch;
