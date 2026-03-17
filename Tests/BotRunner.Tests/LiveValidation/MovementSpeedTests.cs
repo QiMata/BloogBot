@@ -36,12 +36,32 @@ public class MovementSpeedTests
     // Expected run speed for a level 1 character
     private const float ExpectedRunSpeed = 7.0f;
 
+    // How often (in poll iterations) to teleport FG to shadow BG position
+    private const int FgShadowEveryNPolls = 3;
+
     public MovementSpeedTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+    }
+
+    /// <summary>
+    /// Teleport FG bot near a position so the user can observe BG behavior in the WoW client.
+    /// Offset slightly (+2y X) so FG doesn't stack exactly on top of BG.
+    /// Uses bot chat .go xyz — requires FG to be in-world and actionable.
+    /// Silently swallows errors — FG shadowing is observational, never fails the test.
+    /// </summary>
+    private async Task ShadowFgToBgPositionAsync(float x, float y, float z, int mapId = MapId)
+    {
+        try
+        {
+            var fgAccount = _bot.FgAccountName;
+            if (string.IsNullOrWhiteSpace(fgAccount) || !_bot.IsFgActionable) return;
+            await _bot.BotTeleportAsync(fgAccount, mapId, x + 2f, y, z);
+        }
+        catch { /* observational only */ }
     }
 
     [SkippableFact]
@@ -53,9 +73,11 @@ public class MovementSpeedTests
         _output.WriteLine($"Start: ({StartX}, {StartY}, {StartZ})  Target: ({TargetX}, {TargetY}, {TargetZ})");
         _output.WriteLine($"Expected speed: {ExpectedRunSpeed} y/s\n");
 
-        // Teleport to start position (Z+3 to avoid undermap)
+        // Teleport BG to start position (Z+3 to avoid undermap)
         await _bot.BotTeleportAsync(bgAccount!, MapId, StartX, StartY, StartZ);
         await _bot.WaitForTeleportSettledAsync(bgAccount!, StartX, StartY);
+        // Teleport FG nearby so user can observe BG in the WoW client
+        await ShadowFgToBgPositionAsync(StartX, StartY, StartZ);
 
         // Read start position from snapshot
         await _bot.RefreshSnapshotsAsync();
@@ -106,6 +128,10 @@ public class MovementSpeedTests
             samples.Add((elapsed, pos.X, pos.Y, pos.Z));
             _output.WriteLine($"{elapsed,6:F1}s {pos.X,10:F2} {pos.Y,12:F2} {pos.Z,10:F2} {dist,8:F1} {speed,8:F2}");
 
+            // Periodically teleport FG to shadow BG so user can observe
+            if (i % FgShadowEveryNPolls == 0)
+                await ShadowFgToBgPositionAsync(pos.X, pos.Y, pos.Z);
+
             // Stop early if we arrived
             float toTarget = MathF.Sqrt(
                 (pos.X - TargetX) * (pos.X - TargetX) +
@@ -144,9 +170,10 @@ public class MovementSpeedTests
         var bgAccount = _bot.BgAccountName;
         _output.WriteLine("=== BG Flat Terrain Z Stability Test ===");
 
-        // Teleport to start position
+        // Teleport BG to start position, FG shadows nearby
         await _bot.BotTeleportAsync(bgAccount!, MapId, StartX, StartY, StartZ);
         await _bot.WaitForTeleportSettledAsync(bgAccount!, StartX, StartY);
+        await ShadowFgToBgPositionAsync(StartX, StartY, StartZ);
 
         // Read start Z
         await _bot.RefreshSnapshotsAsync();
@@ -185,6 +212,10 @@ public class MovementSpeedTests
             float dz = pos.Z - baseZ;
             zValues.Add(pos.Z);
             _output.WriteLine($"{(i + 1) * 0.5f,6:F1}s {pos.Z,10:F3} {dz,8:F3}");
+
+            // Shadow FG to BG position for observation
+            if (i % FgShadowEveryNPolls == 0)
+                await ShadowFgToBgPositionAsync(pos.X, pos.Y, pos.Z);
         }
 
         Assert.True(zValues.Count >= 5, "Not enough Z samples collected");
