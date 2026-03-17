@@ -476,12 +476,9 @@ public class FishingTask : BotTask, IBotTask
         _sawLootWindow = false;
         _sawLootItem = false;
         var castTarget = FishingData.GetPoolCastTarget(player.Position, pool.Position, CastTargetInsetFromPool);
-
-        // Pool Z can read as 0 from memory (FG) or stale data (BG). Correct to player Z so the
-        // server places the bobber at the water surface, not at z=0 (which may be underground).
-        if (player.Position.Z - castTarget.Z > 3f)
-            castTarget = new Position(castTarget.X, castTarget.Y, player.Position.Z);
-
+        // Don't correct cast target Z — pool Z=0 (or water surface) is what the server needs to
+        // place the bobber in fishable water. Elevating Z to dock level causes "didn't land in
+        // fishable water." The Z correction is only for LOS checks (in CanCastFromPosition).
         ObjectManager.CastSpellAtLocation((int)_fishingSpellId, castTarget.X, castTarget.Y, castTarget.Z);
         Log.Information(
             "[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId} targeting ({X:F1}, {Y:F1}, {Z:F1}) distance={Distance:F1}.",
@@ -687,38 +684,21 @@ public class FishingTask : BotTask, IBotTask
         if (_cachedApproachPosition != null && _cachedApproachPoolGuid == _activePoolGuid)
             return _cachedApproachPosition;
 
-        var candidates = FishingData.GetPoolApproachCandidates(player.Position, poolPosition, DesiredPoolDistance);
-
-        // Phase 1: candidates that are both on walkable ground (dock/shore) AND have LOS to pool.
-        foreach (var candidate in candidates)
+        // Sweep outward from the pool in a radial pattern. Sample ground Z at each point.
+        // The nearest point with solid ground (dock/shore) at player elevation is the approach.
+        var result = FindNearestPierPoint(player.MapId, poolPosition, player.Position.Z);
+        if (result != null)
         {
-            if (IsOnWalkableGround(player.MapId, candidate, player.Position.Z)
-                && CanCastFromPosition(player.MapId, candidate, poolPosition))
-            {
-                _cachedApproachPosition = candidate;
-                _cachedApproachPoolGuid = _activePoolGuid;
-                Log.Debug("[FISH] Walkable approach position found at ({X:F1}, {Y:F1}, {Z:F1}) — on solid ground with LOS.",
-                    candidate.X, candidate.Y, candidate.Z);
-                return candidate;
-            }
+            _cachedApproachPosition = result;
+            _cachedApproachPoolGuid = _activePoolGuid;
+            var dist = poolPosition.DistanceTo(result);
+            Log.Information("[FISH] Pier sweep found approach at ({X:F1}, {Y:F1}, {Z:F1}) — {Dist:F1}y from pool.",
+                result.X, result.Y, result.Z, dist);
+            return result;
         }
 
-        // Phase 2: relax — any candidate with walkable ground, even if LOS is uncertain.
-        foreach (var candidate in candidates)
-        {
-            if (IsOnWalkableGround(player.MapId, candidate, player.Position.Z))
-            {
-                _cachedApproachPosition = candidate;
-                _cachedApproachPoolGuid = _activePoolGuid;
-                Log.Debug("[FISH] Walkable approach position found at ({X:F1}, {Y:F1}, {Z:F1}) — on solid ground (LOS unconfirmed).",
-                    candidate.X, candidate.Y, candidate.Z);
-                return candidate;
-            }
-        }
-
-        // Phase 3: no walkable candidate found — fall back to direct approach (pathfinding should
-        // keep the bot on the dock as it walks, even if the final target is over water).
-        Log.Warning("[FISH] No walkable approach candidate found; falling back to direct approach.");
+        // Fallback: direct approach toward pool from player position (pathfinding keeps bot on dock).
+        Log.Warning("[FISH] Pier sweep found no solid ground near pool; using direct approach.");
         var fallback = FishingData.GetPoolApproachPosition(player.Position, poolPosition, DesiredPoolDistance);
         _cachedApproachPosition = fallback;
         _cachedApproachPoolGuid = _activePoolGuid;
@@ -726,28 +706,82 @@ public class FishingTask : BotTask, IBotTask
     }
 
     /// <summary>
-    /// Checks whether a candidate position has solid ground (dock, shore, terrain) at roughly
-    /// the same elevation as the player. Positions over water will have ground Z far below
-    /// (ocean floor) or no ground at all — both are rejected.
+    /// Sweeps outward from the pool in all directions, sampling ground height.
+    /// Returns the closest point to the pool that has solid ground (pier/dock/shore)
+    /// at roughly the player's elevation and within casting range.
     /// </summary>
-    private bool IsOnWalkableGround(uint mapId, Position candidate, float referenceZ)
+    private Position? FindNearestPierPoint(uint mapId, Position poolPosition, float referenceZ)
     {
-        const float maxGroundZDelta = 4f; // dock surface ± tolerance
+        const float maxGroundZDelta = 4f;
+        const int angleSteps = 24;          // every 15°
+        const float startDist = MinCastingDistance;
+        const float endDist = MaxCastingDistance;
+        const float distStep = 3f;
+
+        var client = Container.PathfindingClient;
+        if (client == null)
+            return null;
+
+        // Build sample points: rings radiating outward from pool at each angle.
+        var samplePoints = new List<Position>();
+        var distStepCount = (int)((endDist - startDist) / distStep) + 1;
+        for (var a = 0; a < angleSteps; a++)
+        {
+            var angle = a * (2f * MathF.PI / angleSteps);
+            var cos = MathF.Cos(angle);
+            var sin = MathF.Sin(angle);
+            for (var d = 0; d < distStepCount; d++)
+            {
+                var dist = startDist + (d * distStep);
+                samplePoints.Add(new Position(
+                    poolPosition.X + (cos * dist),
+                    poolPosition.Y + (sin * dist),
+                    referenceZ));
+            }
+        }
+
+        // Batch query ground Z for all sample points in one IPC call.
+        (float groundZ, bool found)[] results;
         try
         {
-            var (groundZ, found) = Container.PathfindingClient?.GetGroundZ(mapId, candidate) ?? (0f, false);
-            if (!found)
-                return false;
-
-            // Ground Z should be close to the reference (player/dock) elevation.
-            // If it's far below, the candidate is over water (ground = ocean floor).
-            return MathF.Abs(groundZ - referenceZ) <= maxGroundZDelta;
+            results = client.BatchGetGroundZ(mapId, samplePoints.ToArray());
         }
         catch
         {
-            // Pathfinding unavailable — can't validate, assume not walkable to be safe.
-            return false;
+            return null;
         }
+
+        // Find the closest walkable point to the pool (prefer points with LOS).
+        Position? bestWithLos = null;
+        float bestWithLosDist = float.MaxValue;
+        Position? bestAny = null;
+        float bestAnyDist = float.MaxValue;
+
+        for (var i = 0; i < results.Length; i++)
+        {
+            if (!results[i].found)
+                continue;
+            if (MathF.Abs(results[i].groundZ - referenceZ) > maxGroundZDelta)
+                continue;
+
+            // Snap candidate to actual ground Z.
+            var candidate = new Position(samplePoints[i].X, samplePoints[i].Y, results[i].groundZ);
+            var distToPool = poolPosition.DistanceTo(candidate);
+
+            if (distToPool < bestAnyDist)
+            {
+                bestAny = candidate;
+                bestAnyDist = distToPool;
+            }
+
+            if (distToPool < bestWithLosDist && CanCastFromPosition(mapId, candidate, poolPosition))
+            {
+                bestWithLos = candidate;
+                bestWithLosDist = distToPool;
+            }
+        }
+
+        return bestWithLos ?? bestAny;
     }
 
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
