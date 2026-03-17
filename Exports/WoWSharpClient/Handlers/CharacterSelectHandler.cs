@@ -86,6 +86,17 @@ namespace WoWSharpClient.Handlers
         public static void HandleCharDelete(Opcode opcode, byte[] data)
         {
             var result = (DeleteCharacterResult)data[0];
+
+            if (result == DeleteCharacterResult.Success)
+            {
+                // Server confirmed the delete — clear stale character list and trigger
+                // a fresh CMSG_CHAR_ENUM on the next tick.
+                var screen = WoWSharpObjectManager.Instance.CharacterSelectScreen;
+                screen.CharacterSelects.Clear();
+                screen.HasReceivedCharacterList = false;
+                screen.HasRequestedCharacterList = false;
+            }
+
             WoWSharpEventEmitter.Instance.FireOnCharacterDeleteResponse(new CharDeleteResponse(result));
         }
 

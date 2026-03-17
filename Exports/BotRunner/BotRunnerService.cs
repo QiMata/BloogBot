@@ -68,6 +68,9 @@ namespace BotRunner
         // sequences until an explicit logout is detected. Prevents CreateCharacter spam
         // during transient state drops (teleports, zone transitions).
         private bool _everEnteredWorld;
+        // Set when we initiate a character delete (race/gender mismatch).
+        // Cleared once the char list is empty so we don't spam delete every tick.
+        private bool _pendingCharacterDeletion;
         private DateTime _lastDeathRecoveryPush = DateTime.MinValue;
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
@@ -332,20 +335,27 @@ namespace BotRunner
 
             // If existing characters don't match the configured race/gender, delete first
             // and recreate. This ensures parity tests use identical capsule dimensions.
+            // The _pendingCharacterDeletion flag prevents rebuilding the delete tree every tick
+            // while we wait for the server to process the delete and refresh the char list.
             if (charSelects?.Count > 0)
             {
                 var first = charSelects[0];
                 if (first.Gender != gender || first.Race != race)
                 {
-                    Log.Warning("[BOT RUNNER] Character mismatch: existing={Race}/{Gender}, configured={CfgRace}/{CfgGender}. Deleting to recreate.",
-                        first.Race, first.Gender, race, gender);
-                    _behaviorTree = BuildDeleteCharacterSequence(first.Guid);
+                    if (!_pendingCharacterDeletion)
+                    {
+                        Log.Warning("[BOT RUNNER] Character mismatch: existing={Race}/{Gender}, configured={CfgRace}/{CfgGender}. Deleting to recreate.",
+                            first.Race, first.Gender, race, gender);
+                        _behaviorTree = BuildDeleteCharacterSequence(first.Guid);
+                        _pendingCharacterDeletion = true;
+                    }
                     return;
                 }
             }
 
             if (charSelects?.Count == 0)
             {
+                _pendingCharacterDeletion = false;
                 _behaviorTree = BuildCreateCharacterSequence(
                     [
                         WoWNameGenerator.GenerateName(race, gender),
@@ -362,6 +372,9 @@ namespace BotRunner
 
                 return;
             }
+
+            // Character matches — clear any pending deletion flag
+            _pendingCharacterDeletion = false;
 
             // Not yet in world — build EnterWorld sequence
             _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);

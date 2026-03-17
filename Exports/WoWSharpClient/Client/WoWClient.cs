@@ -200,6 +200,15 @@ namespace WoWSharpClient.Client
             await _worldClient.SendOpcodeAsync(Opcode.CMSG_CHAR_CREATE, ms.ToArray(), cancellationToken);
         }
 
+        public async Task SendCharacterDeleteAsync(ulong characterGuid, CancellationToken cancellationToken = default)
+        {
+            if (_worldClient == null)
+                throw new InvalidOperationException("Not connected to world server");
+
+            var payload = BitConverter.GetBytes(characterGuid);
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_CHAR_DELETE, payload, cancellationToken);
+        }
+
         public async Task SendPingAsync(CancellationToken cancellationToken = default)
         {
             if (_worldClient == null)

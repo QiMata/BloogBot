@@ -73,7 +73,16 @@ public class FgCharacterSelectScreen(
 
             // FG doesn't have detailed character data from memory — return a minimal entry
             // so BotRunnerService sees at least one character and proceeds to EnterWorld.
-            return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1 }];
+            // Populate race/gender from env vars so the mismatch check doesn't block entry.
+            var race = Race.None;
+            var gender = Gender.Male;
+            var raceEnv = Environment.GetEnvironmentVariable("WWOW_CHARACTER_RACE");
+            var genderEnv = Environment.GetEnvironmentVariable("WWOW_CHARACTER_GENDER");
+            if (!string.IsNullOrEmpty(raceEnv))
+                Enum.TryParse(raceEnv, ignoreCase: true, out race);
+            if (!string.IsNullOrEmpty(genderEnv))
+                Enum.TryParse(genderEnv, ignoreCase: true, out gender);
+            return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1, Race = race, Gender = gender }];
         }
     }
 
