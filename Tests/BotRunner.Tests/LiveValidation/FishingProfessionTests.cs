@@ -82,12 +82,6 @@ public class FishingProfessionTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
 
-        // Restart MaNGOS to clear stale in-memory pool respawn timers.
-        // Fishing pools are managed by the pool system and respawn timers are cached in memory.
-        // A server restart forces a clean reload from DB, ensuring pools are available.
-        _output.WriteLine("Restarting MaNGOS server to clear stale pool respawn timers...");
-        await _bot.RestartMangosdAsync();
-
         // Teleport both bots to Orgrimmar for safe setup (away from water/mobs).
         await _bot.EnsureCleanSlateAsync(bgAccount!, "BG", teleportToSafeZone: true);
         await _bot.EnsureCleanSlateAsync(fgAccount!, "FG", teleportToSafeZone: true);
@@ -118,6 +112,13 @@ public class FishingProfessionTests
         // Teleport both to Ratchet for fishing.
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
+
+        // Force the pool system to re-evaluate and respawn depleted fishing pools.
+        // .pool update requires a player session (won't work via SOAP) — use bot chat.
+        // Pool 2628 = "Barrens - Oily Blackmouth School / Floating Wreckage" (master pool for Ratchet area).
+        _output.WriteLine("Forcing pool system refresh via .pool update 2628");
+        await _bot.SendGmChatCommandAsync(bgAccount!, ".pool update 2628");
+        await Task.Delay(3000); // Allow pools to spawn and stream into ObjectManager
 
         // Run both bots fishing simultaneously — they fish side by side at Ratchet.
         var bgTask = RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
