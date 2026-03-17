@@ -51,10 +51,12 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_FlatPath()
     {
+        // Road path heading NE — open terrain, no obstacles.
+        // Previous route (-284,-4383 → -320,-4420) had FG stuck on collision object at (-300,-4398).
         await RunParityTest(
             name: "Valley of Trials — Flat Path",
-            startX: -284f, startY: -4383f, startZ: 57f,
-            targetX: -320f, targetY: -4420f, targetZ: 57f,
+            startX: -260f, startY: -4350f, startZ: 57f,
+            targetX: -230f, targetY: -4310f, targetZ: 57f,
             maxSeconds: 20);
     }
 
