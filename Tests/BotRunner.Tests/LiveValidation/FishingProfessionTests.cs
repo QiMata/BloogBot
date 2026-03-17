@@ -109,6 +109,10 @@ public class FishingProfessionTests
         Assert.True(searchWaypoints.Count > 0,
             "DB must have fishing pool spawns near Ratchet. If this fails, the world DB is missing fishing pool gameobject entries.");
 
+        // Clear depleted fishing pool respawn timers so pools respawn before the bots arrive.
+        var clearedPools = await _bot.ClearFishingPoolRespawnTimersAsync(MapId, RatchetAnchorX, RatchetAnchorY, RatchetPoolSearchRadius);
+        _output.WriteLine($"Cleared {clearedPools} fishing pool respawn timers near Ratchet.");
+
         // Teleport both to Ratchet for fishing.
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");

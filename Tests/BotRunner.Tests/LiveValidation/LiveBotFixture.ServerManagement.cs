@@ -415,4 +415,49 @@ public partial class LiveBotFixture
     /// Returns up to <paramref name="limit"/> (map, x, y, z) tuples.
     /// </summary>
 
+
+    /// <summary>
+    /// Clears respawn timers for fishing pool gameobjects near a given position.
+    /// MaNGOS tracks depleted pools in characters.gameobject_respawn; deleting those rows
+    /// and reloading the gameobject table forces the server to respawn them immediately.
+    /// </summary>
+    public async Task<int> ClearFishingPoolRespawnTimersAsync(int mapId, float centerX, float centerY, float radius)
+    {
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                DELETE gr FROM gameobject_respawn gr
+                INNER JOIN mangos.gameobject g ON gr.guid = g.guid
+                INNER JOIN mangos.gameobject_template gt ON g.id = gt.entry
+                WHERE gt.type = 25
+                  AND gr.map = @map
+                  AND g.position_x BETWEEN @minX AND @maxX
+                  AND g.position_y BETWEEN @minY AND @maxY";
+            cmd.Parameters.AddWithValue("@map", mapId);
+            cmd.Parameters.AddWithValue("@minX", centerX - radius);
+            cmd.Parameters.AddWithValue("@maxX", centerX + radius);
+            cmd.Parameters.AddWithValue("@minY", centerY - radius);
+            cmd.Parameters.AddWithValue("@maxY", centerY + radius);
+
+            var deleted = await cmd.ExecuteNonQueryAsync();
+            _logger.LogInformation("[MySQL] Cleared {Count} fishing pool respawn timers near ({X:F0},{Y:F0}) radius={Radius}",
+                deleted, centerX, centerY, radius);
+
+            if (deleted > 0)
+            {
+                await ExecuteGMCommandAsync(".reload gameobject");
+            }
+
+            return deleted;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[MySQL] ClearFishingPoolRespawnTimers failed: {Error}", ex.Message);
+            return 0;
+        }
+    }
 }
