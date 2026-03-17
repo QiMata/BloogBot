@@ -372,15 +372,29 @@ public class FishingTask : BotTask, IBotTask
         var poolDistance = player.Position.DistanceTo(pool.Position);
         const float approachArrivalRadius = 5f;
 
+        // Detect if the bot fell off the pier (Z dropped significantly below approach position).
+        // The BG bot's physics can drop through the pier edge, leaving it at terrain level.
+        // When this happens, the bot walks under the pier through its support posts.
+        if (approachPosition.Z - player.Position.Z > 3f)
+        {
+            ObjectManager.ForceStopImmediate();
+            Log.Warning("[FISH] Player Z ({PlayerZ:F1}) dropped far below approach Z ({ApproachZ:F1}) — fell off pier.",
+                player.Position.Z, approachPosition.Z);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask fell_off_pier playerZ={player.Position.Z:F1} approachZ={approachPosition.Z:F1}");
+            PopTask("fell_off_pier");
+            return;
+        }
+
         if (distToApproach <= approachArrivalRadius
             && CanCastFromPosition(player.MapId, player.Position, pool.Position))
         {
             ObjectManager.ForceStopImmediate();
             ObjectManager.Face(pool.Position);
-            Log.Information("[FISH] Reached approach position at {Distance:F1}y from pool (pool=0x{Guid:X}).",
-                poolDistance, pool.Guid);
+            Log.Information("[FISH] Reached approach position at {Distance:F1}y from pool (pool=0x{Guid:X}), playerZ={PlayerZ:F1}.",
+                poolDistance, pool.Guid, player.Position.Z);
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask in_cast_range guid=0x{pool.Guid:X} distance={poolDistance:F1}");
+                $"[TASK] FishingTask in_cast_range guid=0x{pool.Guid:X} distance={poolDistance:F1} playerZ={player.Position.Z:F1}");
             SetState(FishingState.ResolveAndCast);
             return;
         }
@@ -389,7 +403,7 @@ public class FishingTask : BotTask, IBotTask
         {
             _lastApproachDiagnosticDistance = poolDistance;
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask approaching_pool guid=0x{pool.Guid:X} distance={poolDistance:F1}");
+                $"[TASK] FishingTask approaching_pool guid=0x{pool.Guid:X} distance={poolDistance:F1} playerZ={player.Position.Z:F1}");
         }
 
         if (!TryNavigateToward(approachPosition))
