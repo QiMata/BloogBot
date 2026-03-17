@@ -89,6 +89,19 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void CorridorDestroy(uint handle);
 
+        // ── Segment Validation P/Invoke ──
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint ValidateWalkableSegment(
+            uint mapId,
+            NativeXyz start,
+            NativeXyz end,
+            float radius,
+            float height,
+            out float resolvedEndZ,
+            out float supportDelta,
+            out float travelFraction);
+
         // ── Constructors ──
 
         public Navigation() { }
@@ -163,10 +176,121 @@ namespace PathfindingService.Repository
             // Future: keep corridor alive for incremental updates via CorridorUpdate.
             try { CorridorDestroy(corridorResult.Handle); } catch { /* ignore cleanup errors */ }
 
-            var path = waypoints.ToArray();
-            Console.Error.WriteLine($"[CORRIDOR] map={mapId} corners={corridorResult.CornerCount} path=[{string.Join(" -> ", path.Select(p => $"({p.X:F1},{p.Y:F1},{p.Z:F1})"))}]");
+            var rawPath = waypoints.ToArray();
+            Console.Error.WriteLine($"[CORRIDOR] map={mapId} corners={corridorResult.CornerCount} path=[{string.Join(" -> ", rawPath.Select(p => $"({p.X:F1},{p.Y:F1},{p.Z:F1})"))}]");
 
-            return new NavigationPathResult(path, path, "corridor_path", null);
+            // Post-corridor segment validation: check each segment against physics capsule
+            // sweeps to detect obstacles the navmesh doesn't account for (small rocks, etc.).
+            // The navmesh was generated with walkableRadius=0.2 which is too small for most
+            // characters — corridor paths can route within 0.2y of obstacle surfaces.
+            var validatedPath = ValidateCorridorSegments(mapId, rawPath, agentRadius, agentHeight, out int? blockedIdx);
+
+            var resultTag = blockedIdx.HasValue ? "corridor_path_repaired" : "corridor_path";
+            return new NavigationPathResult(validatedPath, rawPath, resultTag, blockedIdx);
+        }
+
+        // ── Corridor Segment Validation ──
+
+        /// <summary>
+        /// Validate each corridor segment with a physics capsule sweep.
+        /// If a segment is blocked, try lateral offsets to route around the obstacle.
+        /// Returns the validated (potentially repaired) path.
+        /// </summary>
+        private static XYZ[] ValidateCorridorSegments(uint mapId, XYZ[] path, float radius, float height, out int? firstBlockedIdx)
+        {
+            firstBlockedIdx = null;
+            if (path.Length < 2) return path;
+
+            var result = new List<XYZ> { path[0] };
+            int repairCount = 0;
+
+            for (int i = 0; i < path.Length - 1; i++)
+            {
+                var segStart = result[^1]; // use the (potentially adjusted) current position
+                var segEnd = path[i + 1];
+
+                uint validationCode;
+                try
+                {
+                    validationCode = ValidateWalkableSegment(
+                        mapId,
+                        new NativeXyz(segStart),
+                        new NativeXyz(segEnd),
+                        radius,
+                        height,
+                        out _,
+                        out _,
+                        out _);
+                }
+                catch
+                {
+                    // Native call failed — accept the segment as-is
+                    result.Add(segEnd);
+                    continue;
+                }
+
+                if (validationCode == 0) // SegmentValidationClear
+                {
+                    result.Add(segEnd);
+                    continue;
+                }
+
+                // Segment blocked — try lateral offsets to route around the obstacle.
+                if (!firstBlockedIdx.HasValue) firstBlockedIdx = i;
+
+                float dx = segEnd.X - segStart.X;
+                float dy = segEnd.Y - segStart.Y;
+                float segLen = MathF.Sqrt(dx * dx + dy * dy);
+                if (segLen < 0.01f) { result.Add(segEnd); continue; }
+
+                // Perpendicular direction for lateral offsets
+                float perpX = -dy / segLen;
+                float perpY = dx / segLen;
+
+                bool repaired = false;
+                float[] offsets = { 1.5f, 3.0f, -1.5f, -3.0f, 5.0f, -5.0f };
+
+                foreach (float offset in offsets)
+                {
+                    // Offset the midpoint laterally
+                    float midX = (segStart.X + segEnd.X) * 0.5f + perpX * offset;
+                    float midY = (segStart.Y + segEnd.Y) * 0.5f + perpY * offset;
+                    float midZ = (segStart.Z + segEnd.Z) * 0.5f;
+                    var midPoint = new XYZ(midX, midY, midZ);
+
+                    // Validate start→mid and mid→end
+                    try
+                    {
+                        uint v1 = ValidateWalkableSegment(mapId, new NativeXyz(segStart), new NativeXyz(midPoint),
+                            radius, height, out _, out _, out _);
+                        uint v2 = ValidateWalkableSegment(mapId, new NativeXyz(midPoint), new NativeXyz(segEnd),
+                            radius, height, out _, out _, out _);
+
+                        if (v1 == 0 && v2 == 0)
+                        {
+                            result.Add(midPoint);
+                            result.Add(segEnd);
+                            repairCount++;
+                            Console.Error.WriteLine($"[CORRIDOR-REPAIR] seg {i}: blocked code={validationCode}, repaired with offset={offset:F1}y mid=({midX:F1},{midY:F1},{midZ:F1})");
+                            repaired = true;
+                            break;
+                        }
+                    }
+                    catch { /* try next offset */ }
+                }
+
+                if (!repaired)
+                {
+                    // Could not repair — include the segment as-is and let runtime physics handle it
+                    Console.Error.WriteLine($"[CORRIDOR-BLOCKED] seg {i}: blocked code={validationCode}, no repair found, accepting as-is");
+                    result.Add(segEnd);
+                }
+            }
+
+            if (repairCount > 0)
+                Console.Error.WriteLine($"[CORRIDOR-VALIDATE] {repairCount} segments repaired out of {path.Length - 1}");
+
+            return result.ToArray();
         }
 
         // ── Utility ──
