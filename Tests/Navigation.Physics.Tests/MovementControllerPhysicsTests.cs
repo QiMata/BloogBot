@@ -905,6 +905,43 @@ public class MovementControllerPhysicsTests
     }
 
     /// <summary>
+    /// Same as above but at Valley of Trials coordinates (used by live tests).
+    /// Tests whether the physics engine produces movement at this specific location.
+    /// </summary>
+    [Fact]
+    public void Forward_ValleyOfTrials_MovesAtRunSpeed()
+    {
+        // Valley of Trials — same coords as NavigationTests and live MovementSpeedTests
+        var (controller, player, _) = CreateController(-284.0f, -4383.0f, 57.0f, facing: 5.54f);
+
+        const int frameCount = 200;
+        const float dtSec = 0.05f;
+        const float expectedSpeed = 7.0f;
+        const float totalTime = frameCount * dtSec;
+
+        float startX = player.Position.X;
+        float startY = player.Position.Y;
+
+        var frames = RunFramesWithTrace(controller, player, frameCount, dtSec,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+
+        float endX = player.Position.X;
+        float endY = player.Position.Y;
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float totalXY = MathF.Sqrt(dx * dx + dy * dy);
+        float actualSpeed = totalXY / totalTime;
+
+        _output.WriteLine($"=== Forward_ValleyOfTrials_MovesAtRunSpeed ===");
+        _output.WriteLine($"Start: ({startX:F1}, {startY:F1})  End: ({endX:F1}, {endY:F1})");
+        _output.WriteLine($"XY displacement: {totalXY:F1}y over {totalTime:F0}s = {actualSpeed:F2} y/s");
+        _output.WriteLine($"Speed ratio: {actualSpeed / expectedSpeed:P0}");
+
+        Assert.True(actualSpeed >= expectedSpeed * 0.5f,
+            $"Bot moved too slowly at VoT: {actualSpeed:F2} y/s (expected >{expectedSpeed * 0.5f:F1})");
+    }
+
+    /// <summary>
     /// Validates that movement packets are sent at ~500ms intervals with correct position deltas.
     /// </summary>
     [Fact]
