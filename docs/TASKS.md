@@ -40,15 +40,18 @@ Core ghost-stuck, corridor collision, and object-aware paths all done (7.1-7.5 a
 
 ---
 
-## Navmesh — Full Map Rebuild (COMPLETE)
+## Navmesh — Full VMAP Re-extraction + Rebuild (COMPLETE)
 
-Both continents rebuilt with GO collision baking. 515 tiles (map 0) + 785 tiles (map 1) regenerated. Tiles copied to `Bot/Debug/net8.0/mmaps/`. PathfindingService: 39/40 pass (1 pre-existing). Physics: 109/0/1.
+Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor (was using old CMaNGOS 2022 data). Regenerated mmaps for maps 0+1. Valley of Trials tile gained 119 polygons, 97 vertices. Added post-corridor segment validation with lateral repair.
 
 | # | Task | Status |
 |---|------|--------|
-| N.1 | Full tile rebuild for map 0 (Eastern Kingdoms) | **Done** |
-| N.2 | Full tile rebuild for map 1 (Kalimdor) | **Done** |
-| N.3 | Verify no pathfinding regressions | **Done** — 39/40 pass, 109/110 physics pass |
+| N.1 | Full tile rebuild for map 0 (Eastern Kingdoms) — 687 tiles | **Done** |
+| N.2 | Full tile rebuild for map 1 (Kalimdor) — 1018 tiles | **Done** |
+| N.3 | VMAP re-extraction from WoW 1.12.1 MPQs with VMaNGOS tools | **Done** (2026-03-17) |
+| N.4 | Post-corridor ValidateWalkableSegment with lateral repair | **Done** (57ec3eb) |
+| N.5 | BG undermap fall on downhill (ReverseHill Z=-2083) — physics ground-clamping bug | **Open** |
+| N.6 | FG rock collision at (-294,-4394) — rock NOT in VMAP data, navmesh walkableRadius=0.2 too small | **Open** — may need larger walkableRadius in MoveMapGenerator |
 
 ---
 
@@ -111,18 +114,25 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-17 (session 103)
+- **Last updated:** 2026-03-17 (session 104)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Fixed BG bot "barely moves" regression: sub-step gameTimeMs advancement (`18d5108`)
-  - Root-caused zero-displacement in PathfindingService: missing .scene files in `D:\World of Warcraft\scenes\` caused BIH fallback instead of SceneCache collision path
-  - Deployed scene files (0.scene, 1.scene, 229.scene) to service data directory
-  - Added 3 offline physics tests: Forward_FlatTerrain_MovesAtRunSpeed, Forward_ValleyOfTrials_MovesAtRunSpeed, Forward_FlatTerrain_PacketTimingAndPositionDeltas (`18d5108`)
-  - Added 3 live movement speed tests: BG_FlatTerrain_MovesAtExpectedSpeed, BG_FlatTerrain_ZStableWhileWalking, DualClient_FlatWalk_SpeedComparison (`bed6ce3`)
-  - All 3 live movement tests pass, all offline physics tests pass, AggregateDriftGate regression passes
-- **Key fix:** Scene files must exist at `WWOW_DATA_DIR/scenes/` for the PathfindingService. Without them, the C++ engine uses the BIH tree fallback which has position-specific collision issues that produce zero horizontal displacement.
+  - Created 5 FG/BG movement parity tests (4910b4c, d720ae8): FlatPath, HillPath, RoadPath, LongDiagonal, ReverseHill
+  - Rolling-window stuck detection (1.2s FG, 0.2s BG) eliminates FG false positives from 500ms packet bursts
+  - Speed segment analysis flags pathfinding obstacles (1s windows, <50% expected speed)
+  - Arrival time comparison and Z drift trend analysis
+  - Post-corridor segment validation with lateral repair (57ec3eb): ValidateWalkableSegment P/Invoke + 6-offset repair
+  - Full VMAP re-extraction from WoW 1.12.1 MPQs using VMaNGOS VMapExtractor (Jan 2022 → Mar 2026)
+  - Regenerated mmaps for maps 0 (687 tiles) and 1 (1018 tiles) with new vmaps
+  - Copied all data to D:/MaNGOS/data/ and Bot/Debug/net8.0/
+- **Key findings:**
+  - Navmesh walkableRadius=0.2 (baked in mmtile header) — too small for character capsules (0.25+)
+  - Rock at (-294,-4394) NOT in VMAP collision data even after re-extraction — model likely not flagged for collision in MPQ
+  - BG undermap fall on downhill routes (ReverseHill: Z=-2083) — physics ground-clamping fails at elevated start positions
+  - FG rock collisions vary between runs due to slight pathing angle differences
+- **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Next:**
-  1. P1.4: Spline movement lockout
-  2. P1.5: Post-teleport settle
-  3. Phase 3 from plan: Recording replay through MovementController
-  4. Investigate teleport verification failures (TESTBOT2 not reaching target after 3 attempts)
+  1. N.5: Fix BG undermap fall on downhill routes
+  2. N.6: Increase walkableRadius in MoveMapGenerator config (or add agent radius padding)
+  3. P1.4: Spline movement lockout
+  4. P1.5: Post-teleport settle
