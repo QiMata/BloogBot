@@ -617,16 +617,11 @@ namespace WoWSharpClient.Movement
             {
                 finalPosZ = _prevGroundZ;
             }
-            // Path-aware position clamp: when physics lands the bot on cave/gully geometry
-            // far below the navmesh path, snap position Z up to the waypoint level.
-            if (_currentPath != null && _currentWaypointIndex < _currentPath.Length
-                && finalPosZ < _currentPath[_currentWaypointIndex].Z - PATH_GROUND_Z_TOLERANCE)
-            {
-                finalPosZ = _currentPath[_currentWaypointIndex].Z;
-                pathGroundGuardActive = true;
-                output.NewVelZ = 0;
-                output.FallTime = 0;
-            }
+            // Path-aware position clamp DISABLED: navmesh waypoint Z can be grossly wrong
+            // (e.g., 61.4 vs actual terrain 56.8 on hills). The physics engine's ground
+            // detection is the correct source of truth — it matches WoW's native terrain
+            // height. Previously this guard would snap the bot UP to the wrong navmesh Z,
+            // causing +3-6y Z offset vs the FG gold standard.
             // N.5 fix: Path-based underground snap for freefall. When following a navmesh path and
             // the character falls more than 10y below the path waypoint Z, it has fallen through
             // terrain (physics gap on steep slopes where DownPass can't find ground within its 4y
@@ -675,20 +670,10 @@ namespace WoWSharpClient.Movement
                     _prevGroundZ = finalPosZ;
                     _prevGroundNormal = new Vector3(0, 0, 1);
                 }
-                else if (_currentPath != null && _currentWaypointIndex < _currentPath.Length
-                    && output.GroundZ < _currentPath[_currentWaypointIndex].Z - PATH_GROUND_Z_TOLERANCE)
-                {
-                    // Path-aware ground rejection: the physics engine found ground (e.g., a cave
-                    // floor) significantly below the navmesh path waypoint. The navmesh represents
-                    // the walkable surface; trust it over the physics raytrace. Hold _prevGroundZ
-                    // at the path waypoint Z to prevent gradual sinking through terrain.
-                    var wpZ = _currentPath[_currentWaypointIndex].Z;
-                    Log.Warning("[MovementController] Path-aware ground guard: physics ground={GroundZ:F1} is {Delta:F1}y below " +
-                        "path waypoint Z={WpZ:F1}. Holding prevGroundZ at waypoint level.",
-                        output.GroundZ, wpZ - output.GroundZ, wpZ);
-                    _prevGroundZ = wpZ;
-                    _prevGroundNormal = new Vector3(0, 0, 1);
-                }
+                // Path-aware ground rejection DISABLED: navmesh waypoint Z can be wrong
+                // by 3-6y on hills, causing the bot to hold _prevGroundZ at the inflated
+                // waypoint level, which then cascades into false freefall suppression
+                // clamping position to the wrong height.
                 else
                 {
                     _prevGroundZ = output.GroundZ;

@@ -150,9 +150,11 @@ public class MovementParityTests
         // Allow physics to snap to ground
         await Task.Delay(2000);
 
-        // --- START BG PHYSICS RECORDING ---
-        await _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording));
-        _output.WriteLine("[RECORDING] BG physics frame recording started");
+        // --- START RECORDINGS (both bots) ---
+        await Task.WhenAll(
+            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)));
+        _output.WriteLine("[RECORDING] FG transform + BG physics frame recording started");
 
         // --- GOTO ---
         var bgGoto = _bot.SendActionAsync(bgAccount!, MakeGoto(targetX, targetY, targetZ));
@@ -267,10 +269,12 @@ public class MovementParityTests
             if (fgArrived && bgArrived) break;
         }
 
-        // --- STOP BG PHYSICS RECORDING ---
-        await _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording));
+        // --- STOP RECORDINGS (both bots) ---
+        await Task.WhenAll(
+            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)));
         await Task.Delay(500); // Allow file write to complete
-        _output.WriteLine("[RECORDING] BG physics frame recording stopped");
+        _output.WriteLine("[RECORDING] FG transform + BG physics frame recording stopped");
 
         // --- SUMMARY ---
         _output.WriteLine($"\n=== RESULTS: {name} ===");
@@ -348,8 +352,9 @@ public class MovementParityTests
         PrintSpeedSegments("FG", fgSamples, fgAnomalies);
         PrintSpeedSegments("BG", bgSamples, bgAnomalies);
 
-        // --- BG PHYSICS FRAME RECORDING ANALYSIS ---
+        // --- RECORDING ANALYSIS ---
         AnalyzeBgPhysicsRecording(bgAccount!);
+        AnalyzeTransformComparison(fgAccount!, bgAccount!);
 
         Assert.True(fgSamples.Count >= 3 || bgSamples.Count >= 3,
             "Neither bot produced enough position samples");
@@ -486,6 +491,8 @@ public class MovementParityTests
                 frames.Add(new FrameData
                 {
                     Frame = int.Parse(parts[0]),
+                    PosX = float.Parse(parts[3], CultureInfo.InvariantCulture),
+                    PosY = float.Parse(parts[4], CultureInfo.InvariantCulture),
                     PosZ = float.Parse(parts[5], CultureInfo.InvariantCulture),
                     RawPosZ = float.Parse(parts[6], CultureInfo.InvariantCulture),
                     PhysicsGroundZ = float.Parse(parts[7], CultureInfo.InvariantCulture),
@@ -584,12 +591,176 @@ public class MovementParityTests
     private sealed class FrameData
     {
         public int Frame;
-        public float PosZ, RawPosZ, PhysicsGroundZ, PrevGroundZ;
+        public float PosX, PosY, PosZ, RawPosZ, PhysicsGroundZ, PrevGroundZ;
         public float VelZ;
         public uint FallTimeMs;
         public bool IsFalling;
         public string MoveFlags = "";
         public bool SlopeGuard, PathGuard, FalseFreefallSup, TeleportClamp, UndergroundSnap, HitWall;
         public float PathWpZ, ZDelta;
+    }
+
+    private sealed class TransformData
+    {
+        public int Frame;
+        public long ElapsedMs;
+        public float PosX, PosY, PosZ;
+        public float Facing;
+        public string MoveFlags = "";
+        public float RunSpeed;
+        public uint FallTime;
+    }
+
+    /// <summary>
+    /// Load FG transform CSV and BG physics CSV, time-align frames, and print
+    /// side-by-side position comparison with Z divergence analysis.
+    /// </summary>
+    private void AnalyzeTransformComparison(string fgAccount, string bgAccount)
+    {
+        var recordingDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WWoW", "PhysicsRecordings");
+
+        if (!Directory.Exists(recordingDir)) return;
+
+        // Load FG transform CSV
+        var fgFiles = Directory.GetFiles(recordingDir, $"transform_{fgAccount}_*.csv")
+            .OrderByDescending(f => f).ToArray();
+        // Load BG transform CSV (for position comparison — physics CSV has different format)
+        var bgFiles = Directory.GetFiles(recordingDir, $"transform_{bgAccount}_*.csv")
+            .OrderByDescending(f => f).ToArray();
+
+        if (fgFiles.Length == 0)
+        {
+            _output.WriteLine("\n--- FG Transform Recording: no CSV found ---");
+            return;
+        }
+        if (bgFiles.Length == 0)
+        {
+            _output.WriteLine("\n--- BG Transform Recording: no CSV found ---");
+            return;
+        }
+
+        var fgFrames = LoadTransformCsv(fgFiles[0]);
+        var bgFrames = LoadTransformCsv(bgFiles[0]);
+
+        _output.WriteLine($"\n=== TRANSFORM COMPARISON (FG gold standard vs BG physics) ===");
+        _output.WriteLine($"    FG: {fgFrames.Count} frames from {Path.GetFileName(fgFiles[0])}");
+        _output.WriteLine($"    BG: {bgFrames.Count} frames from {Path.GetFileName(bgFiles[0])}");
+
+        if (fgFrames.Count == 0 || bgFrames.Count == 0)
+        {
+            _output.WriteLine("    Insufficient data for comparison.");
+            return;
+        }
+
+        // Time-align: match BG frames to FG by elapsed time
+        var comparisons = new List<(TransformData fg, TransformData bg, float dXY, float dZ)>();
+        foreach (var fg in fgFrames)
+        {
+            var bg = bgFrames.MinBy(b => Math.Abs(b.ElapsedMs - fg.ElapsedMs));
+            if (bg != null && Math.Abs(bg.ElapsedMs - fg.ElapsedMs) < 200) // within 200ms
+            {
+                float dXY = Distance2D(fg.PosX, fg.PosY, bg.PosX, bg.PosY);
+                float dZ = bg.PosZ - fg.PosZ;
+                comparisons.Add((fg, bg, dXY, dZ));
+            }
+        }
+
+        if (comparisons.Count == 0)
+        {
+            _output.WriteLine("    No time-aligned frame pairs found.");
+            return;
+        }
+
+        // Summary stats
+        float avgDXY = comparisons.Average(c => c.dXY);
+        float maxDXY = comparisons.Max(c => c.dXY);
+        float avgDZ = comparisons.Average(c => MathF.Abs(c.dZ));
+        float maxDZ = comparisons.Max(c => MathF.Abs(c.dZ));
+        float avgSignedDZ = comparisons.Average(c => c.dZ);
+
+        _output.WriteLine($"\n    Paired frames: {comparisons.Count}");
+        _output.WriteLine($"    XY divergence: avg={avgDXY:F2}y  max={maxDXY:F2}y");
+        _output.WriteLine($"    Z  divergence: avg={avgDZ:F2}y  max={maxDZ:F2}y  signed avg={avgSignedDZ:+0.00;-0.00}y (BG {(avgSignedDZ > 0 ? "higher" : "lower")})");
+
+        // Z trend over time
+        int half = comparisons.Count / 2;
+        if (half >= 3)
+        {
+            float firstHalf = comparisons.Take(half).Average(c => c.dZ);
+            float secondHalf = comparisons.Skip(half).Average(c => c.dZ);
+            float drift = secondHalf - firstHalf;
+            _output.WriteLine($"    Z trend: 1st half={firstHalf:+0.00;-0.00}y  2nd half={secondHalf:+0.00;-0.00}y  drift={drift:+0.00;-0.00}y");
+        }
+
+        // Speed comparison (FG gold standard vs BG)
+        var fgMoving = fgFrames.Where(f => f.MoveFlags.Contains("0x1") || f.RunSpeed > 0).ToList();
+        var bgMoving = bgFrames.Where(f => f.MoveFlags.Contains("0x1") || f.RunSpeed > 0).ToList();
+        if (fgMoving.Count >= 2 && bgMoving.Count >= 2)
+        {
+            float fgDuration = (fgMoving.Last().ElapsedMs - fgMoving.First().ElapsedMs) / 1000f;
+            float bgDuration = (bgMoving.Last().ElapsedMs - bgMoving.First().ElapsedMs) / 1000f;
+            float fgDist = Distance2D(fgMoving.First().PosX, fgMoving.First().PosY,
+                fgMoving.Last().PosX, fgMoving.Last().PosY);
+            float bgDist = Distance2D(bgMoving.First().PosX, bgMoving.First().PosY,
+                bgMoving.Last().PosX, bgMoving.Last().PosY);
+            float fgSpeed = fgDuration > 0.1f ? fgDist / fgDuration : 0;
+            float bgSpeed = bgDuration > 0.1f ? bgDist / bgDuration : 0;
+            _output.WriteLine($"    Effective speed: FG={fgSpeed:F2}y/s  BG={bgSpeed:F2}y/s  ratio={bgSpeed / Math.Max(fgSpeed, 0.01f):F3}");
+        }
+
+        // Print first 25 paired frames for detailed inspection
+        _output.WriteLine($"\n    --- Side-by-side (first 25 paired frames) ---");
+        _output.WriteLine($"    {"Ms",6} | {"FG_X",8} {"FG_Y",8} {"FG_Z",7} {"FGflg",8} | {"BG_X",8} {"BG_Y",8} {"BG_Z",7} {"BGflg",8} | {"dXY",5} {"dZ",6}");
+        _output.WriteLine("    " + new string('-', 105));
+        foreach (var (fg, bg, dXY, dZ) in comparisons.Take(25))
+        {
+            _output.WriteLine(
+                $"    {fg.ElapsedMs,6} | {fg.PosX,8:F1} {fg.PosY,8:F1} {fg.PosZ,7:F2} {fg.MoveFlags,8} | " +
+                $"{bg.PosX,8:F1} {bg.PosY,8:F1} {bg.PosZ,7:F2} {bg.MoveFlags,8} | " +
+                $"{dXY,5:F1} {dZ,6:F2}");
+        }
+
+        // Print frames with large divergence (> 2y Z or > 5y XY)
+        var divergent = comparisons.Where(c => MathF.Abs(c.dZ) > 2f || c.dXY > 5f).ToList();
+        if (divergent.Count > 0)
+        {
+            _output.WriteLine($"\n    --- Divergent frames (|dZ|>2y or dXY>5y): {divergent.Count} ---");
+            foreach (var (fg, bg, dXY, dZ) in divergent.Take(30))
+            {
+                _output.WriteLine(
+                    $"    t={fg.ElapsedMs}ms FG=({fg.PosX:F1},{fg.PosY:F1},{fg.PosZ:F2}) " +
+                    $"BG=({bg.PosX:F1},{bg.PosY:F1},{bg.PosZ:F2}) dXY={dXY:F1} dZ={dZ:+0.00;-0.00}");
+            }
+        }
+    }
+
+    private static List<TransformData> LoadTransformCsv(string path)
+    {
+        var result = new List<TransformData>();
+        var lines = File.ReadAllLines(path);
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(',');
+            if (parts.Length < 9) continue;
+            try
+            {
+                result.Add(new TransformData
+                {
+                    Frame = int.Parse(parts[0]),
+                    ElapsedMs = long.Parse(parts[1]),
+                    PosX = float.Parse(parts[2], CultureInfo.InvariantCulture),
+                    PosY = float.Parse(parts[3], CultureInfo.InvariantCulture),
+                    PosZ = float.Parse(parts[4], CultureInfo.InvariantCulture),
+                    Facing = float.Parse(parts[5], CultureInfo.InvariantCulture),
+                    MoveFlags = parts[6],
+                    RunSpeed = float.Parse(parts[7], CultureInfo.InvariantCulture),
+                    FallTime = uint.Parse(parts[8]),
+                });
+            }
+            catch { }
+        }
+        return result;
     }
 }

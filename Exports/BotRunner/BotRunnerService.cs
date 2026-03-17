@@ -149,6 +149,7 @@ namespace BotRunner
                 try
                 {
                     PopulateSnapshotFromObjectManager();
+                    CaptureTransformFrame();
 
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
                     var playerWorldReady = _objectManager.HasEnteredWorld
