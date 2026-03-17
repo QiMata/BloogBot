@@ -357,7 +357,9 @@ public class FishingTask : BotTask, IBotTask
         {
             if (ElapsedMs >= PoolAcquireTimeoutMs)
             {
-                Log.Warning("[FISH] Lost fishing pool while approaching.");
+                Log.Warning("[FISH] Lost fishing pool while approaching (trackedGuid=0x{Guid:X}).", _activePoolGuid);
+                BotContext.AddDiagnosticMessage(
+                    $"[TASK] FishingTask lost_fishing_pool trackedGuid=0x{_activePoolGuid:X} playerZ={player.Position.Z:F1} pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
                 PopTask("lost_fishing_pool");
             }
 

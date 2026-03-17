@@ -109,13 +109,16 @@ public class FishingProfessionTests
         Assert.True(searchWaypoints.Count > 0,
             "DB must have fishing pool spawns near Ratchet. If this fails, the world DB is missing fishing pool gameobject entries.");
 
-        // Clear depleted fishing pool respawn timers so pools respawn before the bots arrive.
-        var clearedPools = await _bot.ClearFishingPoolRespawnTimersAsync(MapId, RatchetAnchorX, RatchetAnchorY, RatchetPoolSearchRadius);
-        _output.WriteLine($"Cleared {clearedPools} fishing pool respawn timers near Ratchet.");
-
         // Teleport both to Ratchet for fishing.
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
+
+        // Force the pool system to re-evaluate and respawn fishing pools near Ratchet.
+        // .pool update requires a player session (won't work via SOAP) — send via bot chat.
+        // Pool 2628 = "Barrens - Oily Blackmouth School / Floating Wreckage" (master pool for Ratchet area).
+        _output.WriteLine("Forcing fishing pool respawn via .pool update 2628");
+        await _bot.SendGmChatCommandAsync(bgAccount!, ".pool update 2628");
+        await Task.Delay(2000); // Give pools time to spawn and stream into ObjectManager
 
         // Run both bots fishing simultaneously — they fish side by side at Ratchet.
         var bgTask = RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
