@@ -102,6 +102,78 @@ public class MovementParityTests
             maxSeconds: 20);
     }
 
+    // ======= Diverse MoveFlag Tests =======
+    // These routes are chosen to exercise flag transitions beyond simple FORWARD walking:
+    //   - FALLINGFAR (ledge drops, steep descents)
+    //   - Slope guard engagement (steep climbs)
+    //   - Wall collision / deflection (obstacle-dense terrain)
+    //   - Multiple facing changes (winding route with sharp turns)
+
+    [SkippableFact]
+    public async Task Parity_ValleyOfTrials_LedgeDrop()
+    {
+        // Start on elevated terrain near the cave, walk downhill to the road.
+        // The elevation drop triggers FALLINGFAR → landing flag transition.
+        // Exercises: MOVEFLAG_FALLINGFAR, false freefall suppression, landing Z clamp.
+        // Z+3 offset on start to avoid undermap detection.
+        await RunParityTest(
+            name: "Valley of Trials — Ledge Drop (FALLINGFAR)",
+            startX: -240f, startY: -4330f, startZ: 63f,
+            targetX: -270f, targetY: -4380f, targetZ: 53f,
+            maxSeconds: 25);
+    }
+
+    [SkippableFact]
+    public async Task Parity_ValleyOfTrials_SteepClimb()
+    {
+        // Start at the road, walk steeply uphill toward the high ground north of cave.
+        // Exercises: slope guard, sustained uphill Z changes, path ground guard.
+        await RunParityTest(
+            name: "Valley of Trials — Steep Climb (slope guard)",
+            startX: -284f, startY: -4383f, startZ: 57f,
+            targetX: -224f, targetY: -4310f, targetZ: 72f,
+            maxSeconds: 30);
+    }
+
+    [SkippableFact]
+    public async Task Parity_Durotar_ObstacleDense()
+    {
+        // Path through the tree-and-rock-dense area south of Valley of Trials entrance.
+        // Exercises: wall collision, L2 wall-normal deflection, L3 repath fallback,
+        // avoidance waypoints, consecutive wall hit tracking.
+        await RunParityTest(
+            name: "Durotar — Obstacle Dense (wall collision)",
+            startX: -356f, startY: -4490f, startZ: 40f,
+            targetX: -310f, targetY: -4530f, targetZ: 35f,
+            maxSeconds: 30);
+    }
+
+    [SkippableFact]
+    public async Task Parity_Durotar_WindingPath()
+    {
+        // Longer path from Razor Hill area across varied terrain — road, dirt, slight hills.
+        // Exercises: sustained FORWARD flag, multiple waypoint transitions, facing changes,
+        // speed consistency over distance.
+        await RunParityTest(
+            name: "Durotar — Winding Path (sustained movement)",
+            startX: -500f, startY: -4800f, startZ: 38f,
+            targetX: -400f, targetY: -4700f, targetZ: 42f,
+            maxSeconds: 40);
+    }
+
+    [SkippableFact]
+    public async Task Parity_ValleyOfTrials_SteepDescent()
+    {
+        // Start on high ground, descend steeply toward the valley floor.
+        // Opposite of SteepClimb — exercises FALLINGFAR flicker on steep terrain,
+        // FFS hysteresis, and whether BG stays grounded where FG does.
+        await RunParityTest(
+            name: "Valley of Trials — Steep Descent (FFS hysteresis)",
+            startX: -224f, startY: -4310f, startZ: 72f,
+            targetX: -310f, targetY: -4410f, targetZ: 48f,
+            maxSeconds: 30);
+    }
+
     /// <summary>
     /// Core parity test runner. Teleports both bots, sends GOTO, records transforms,
     /// detects per-frame anomalies, and reports parity metrics.
@@ -348,6 +420,10 @@ public class MovementParityTests
             }
         }
 
+        // MoveFlag diversity summary — shows which flags were observed during the run
+        PrintMoveFlagSummary("FG", fgSamples);
+        PrintMoveFlagSummary("BG", bgSamples);
+
         // Speed segment analysis — flag 1-second windows where speed drops below 50% expected
         PrintSpeedSegments("FG", fgSamples, fgAnomalies);
         PrintSpeedSegments("BG", bgSamples, bgAnomalies);
@@ -418,6 +494,98 @@ public class MovementParityTests
             if (slowSegments.Count > 15)
                 _output.WriteLine($"  ... and {slowSegments.Count - 15} more");
         }
+    }
+
+    /// <summary>
+    /// Print which movement flags were observed and for how many frames.
+    /// This is the key diagnostic for diverse-flag tests — confirms the route
+    /// actually exercised the intended flag transitions.
+    /// </summary>
+    private void PrintMoveFlagSummary(string label, List<TransformSample> samples)
+    {
+        if (samples.Count < 2) return;
+
+        // Decode flag bits into named flags with frame counts
+        var flagCounts = new Dictionary<string, int>();
+        var transitions = new List<string>();
+        uint prevFlags = 0;
+
+        foreach (var s in samples)
+        {
+            // Count individual flag bits
+            for (int bit = 0; bit < 32; bit++)
+            {
+                uint mask = 1u << bit;
+                if ((s.MoveFlags & mask) != 0)
+                {
+                    string name = FlagBitName(mask);
+                    flagCounts[name] = flagCounts.GetValueOrDefault(name) + 1;
+                }
+            }
+
+            // Track flag transitions (edges)
+            if (s.MoveFlags != prevFlags && prevFlags != 0)
+            {
+                uint gained = s.MoveFlags & ~prevFlags;
+                uint lost = prevFlags & ~s.MoveFlags;
+                if (gained != 0 || lost != 0)
+                {
+                    var parts = new List<string>();
+                    if (gained != 0) parts.Add($"+{FormatFlags(gained)}");
+                    if (lost != 0) parts.Add($"-{FormatFlags(lost)}");
+                    transitions.Add($"t={s.T:F2}s {string.Join(" ", parts)}");
+                }
+            }
+            prevFlags = s.MoveFlags;
+        }
+
+        _output.WriteLine($"\n--- {label} MoveFlag Summary ---");
+        if (flagCounts.Count == 0)
+        {
+            _output.WriteLine($"  No movement flags observed (all NONE)");
+            return;
+        }
+
+        foreach (var (flag, count) in flagCounts.OrderByDescending(kv => kv.Value))
+            _output.WriteLine($"  {flag,-20} {count,4} frames ({100f * count / samples.Count:F0}%)");
+
+        if (transitions.Count > 0)
+        {
+            _output.WriteLine($"  Flag transitions ({transitions.Count}):");
+            foreach (var t in transitions.Take(25))
+                _output.WriteLine($"    {t}");
+            if (transitions.Count > 25)
+                _output.WriteLine($"    ... and {transitions.Count - 25} more");
+        }
+    }
+
+    private static string FlagBitName(uint mask) => mask switch
+    {
+        0x00000001 => "FORWARD",
+        0x00000002 => "BACKWARD",
+        0x00000004 => "STRAFE_LEFT",
+        0x00000008 => "STRAFE_RIGHT",
+        0x00000010 => "TURN_LEFT",
+        0x00000020 => "TURN_RIGHT",
+        0x00000100 => "WALK_MODE",
+        0x00002000 => "JUMPING",
+        0x00004000 => "FALLINGFAR",
+        0x00200000 => "SWIMMING",
+        0x00400000 => "SPLINE",
+        0x02000000 => "ONTRANSPORT",
+        _ => $"0x{mask:X}"
+    };
+
+    private static string FormatFlags(uint flags)
+    {
+        var parts = new List<string>();
+        for (int bit = 0; bit < 32; bit++)
+        {
+            uint mask = 1u << bit;
+            if ((flags & mask) != 0)
+                parts.Add(FlagBitName(mask));
+        }
+        return string.Join("|", parts);
     }
 
     private static ActionMessage MakeGoto(float x, float y, float z)
