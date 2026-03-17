@@ -149,6 +149,16 @@ namespace WoWSharpClient.Movement
         private int _movementDiagCounter = 0;
         private Vector3 _lastPacketPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
 
+        // ======== FRAME RECORDING (parity diagnostics) ========
+        // Per-frame capture of physics input/output and all guard decisions.
+        // Opt-in: callers set IsRecording=true, then retrieve frames via GetRecordedFrames().
+        public bool IsRecording { get; set; }
+        private const int MAX_RECORDED_FRAMES = 4000; // ~2 min at 30fps
+        private readonly List<PhysicsFrameRecord> _recordedFrames = new(MAX_RECORDED_FRAMES);
+
+        public List<PhysicsFrameRecord> GetRecordedFrames() => new(_recordedFrames);
+        public void ClearRecordedFrames() => _recordedFrames.Clear();
+
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaSec, uint gameTimeMs)
         {
@@ -397,6 +407,9 @@ namespace WoWSharpClient.Movement
             // the physics engine should find ground on its own. The teleport Z clamp (#4) handles
             // the post-teleport geometry-loading window.
             bool physicsHasGround = output.GroundZ > -50000f;
+            float rawPosZ = output.NewPosZ; // Before any guard modifications
+            bool undergroundSnapFired = false;
+            bool falseFreefallSuppressed = false;
             if (!physicsHasGround)
             {
                 _noGroundFrameCount++;
@@ -628,6 +641,7 @@ namespace WoWSharpClient.Movement
                         "Snapping to path Z.", pathZ - finalPosZ, pathZ);
                     finalPosZ = pathZ;
                     pathGroundGuardActive = true;
+                    undergroundSnapFired = true;
                     output.NewVelZ = 0;
                     output.FallTime = 0;
                 }
@@ -738,6 +752,7 @@ namespace WoWSharpClient.Movement
                     _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
                     _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
                     _fallTimeMs = 0;
+                    falseFreefallSuppressed = true;
                 }
                 else
                 {
@@ -754,6 +769,47 @@ namespace WoWSharpClient.Movement
 
             Log.Verbose("[MovementController] Applied: ({OldX:F1},{OldY:F1},{OldZ:F1}) -> ({NewX:F1},{NewY:F1},{NewZ:F1}) Flags={Flags}",
                 oldPos.X, oldPos.Y, oldPos.Z, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
+
+            // Record frame for parity diagnostics
+            if (IsRecording && _recordedFrames.Count < MAX_RECORDED_FRAMES)
+            {
+                float pathWpZ = (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
+                    ? _currentPath[_currentWaypointIndex].Z : float.NaN;
+                int pathWpIdx = (_currentPath != null) ? _currentWaypointIndex : -1;
+                float prevZ = _recordedFrames.Count > 0 ? _recordedFrames[^1].PosZ : _player.Position.Z;
+
+                _recordedFrames.Add(new PhysicsFrameRecord
+                {
+                    FrameNumber = _frameCounter,
+                    GameTimeMs = _latestGameTimeMs,
+                    DeltaSec = deltaSec,
+                    PosX = _player.Position.X,
+                    PosY = _player.Position.Y,
+                    PosZ = _player.Position.Z,
+                    RawPosZ = rawPosZ,
+                    PhysicsGroundZ = output.GroundZ,
+                    PrevGroundZ = _prevGroundZ,
+                    HasPhysicsGroundContact = _hasPhysicsGroundContact,
+                    VelX = _velocity.X,
+                    VelY = _velocity.Y,
+                    VelZ = _velocity.Z,
+                    FallTimeMs = _fallTimeMs,
+                    IsFalling = isFalling,
+                    MovementFlags = (uint)_player.MovementFlags,
+                    SlopeGuardRejected = slopeGuardRejected,
+                    PathGroundGuardActive = pathGroundGuardActive,
+                    FalseFreefallSuppressed = falseFreefallSuppressed,
+                    TeleportClampActive = !float.IsNaN(_teleportZ),
+                    UndergroundSnapFired = undergroundSnapFired,
+                    HitWall = output.HitWall,
+                    WallNormalX = output.WallNormalX,
+                    WallNormalY = output.WallNormalY,
+                    BlockedFraction = output.BlockedFraction,
+                    PathWaypointZ = pathWpZ,
+                    PathWaypointIndex = pathWpIdx,
+                    ZDeltaFromPrev = _player.Position.Z - prevZ,
+                });
+            }
         }
 
         // ======== NETWORKING ========

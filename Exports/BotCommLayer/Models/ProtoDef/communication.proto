@@ -105,6 +105,8 @@ enum ActionType {
     START_FISHING = 67;
     START_GATHERING_ROUTE = 68;
     CHECK_MAIL = 69;
+    START_PHYSICS_RECORDING = 70;
+    STOP_PHYSICS_RECORDING = 71;
 }
 
 message ActionMap {

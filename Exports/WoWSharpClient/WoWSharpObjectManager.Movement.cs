@@ -495,6 +495,29 @@ namespace WoWSharpClient
         /// </summary>
         public float PhysicsBlockedFraction => _movementController?.LastBlockedFraction ?? 1.0f;
 
+        // ======== Frame Recording (parity diagnostics) ========
+
+        /// <summary>
+        /// Enable/disable per-frame physics recording. When enabled, MovementController captures
+        /// every physics frame with full guard decision state for parity analysis.
+        /// </summary>
+        public bool IsPhysicsRecording
+        {
+            get => _movementController?.IsRecording ?? false;
+            set { if (_movementController != null) _movementController.IsRecording = value; }
+        }
+
+        /// <summary>
+        /// Retrieve a snapshot of all recorded physics frames. Returns empty list if not recording.
+        /// </summary>
+        public List<PhysicsFrameRecord> GetPhysicsFrameRecording()
+            => _movementController?.GetRecordedFrames() ?? [];
+
+        /// <summary>
+        /// Clear the recorded frame buffer (e.g. between test runs).
+        /// </summary>
+        public void ClearPhysicsFrameRecording()
+            => _movementController?.ClearRecordedFrames();
 
         public void ReleaseSpirit()
         {

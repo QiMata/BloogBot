@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -147,6 +149,10 @@ public class MovementParityTests
         // Allow physics to snap to ground
         await Task.Delay(2000);
 
+        // --- START BG PHYSICS RECORDING ---
+        await _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording));
+        _output.WriteLine("[RECORDING] BG physics frame recording started");
+
         // --- GOTO ---
         var bgGoto = _bot.SendActionAsync(bgAccount!, MakeGoto(targetX, targetY, targetZ));
         var fgGoto = _bot.SendActionAsync(fgAccount!, MakeGoto(targetX, targetY, targetZ));
@@ -260,6 +266,11 @@ public class MovementParityTests
             if (fgArrived && bgArrived) break;
         }
 
+        // --- STOP BG PHYSICS RECORDING ---
+        await _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording));
+        await Task.Delay(500); // Allow file write to complete
+        _output.WriteLine("[RECORDING] BG physics frame recording stopped");
+
         // --- SUMMARY ---
         _output.WriteLine($"\n=== RESULTS: {name} ===");
         _output.WriteLine($"Samples: FG={fgSamples.Count} BG={bgSamples.Count}  Arrived: FG={fgArrived} BG={bgArrived}");
@@ -335,6 +346,9 @@ public class MovementParityTests
         // Speed segment analysis — flag 1-second windows where speed drops below 50% expected
         PrintSpeedSegments("FG", fgSamples, fgAnomalies);
         PrintSpeedSegments("BG", bgSamples, bgAnomalies);
+
+        // --- BG PHYSICS FRAME RECORDING ANALYSIS ---
+        AnalyzeBgPhysicsRecording(bgAccount!);
 
         Assert.True(fgSamples.Count >= 3 || bgSamples.Count >= 3,
             "Neither bot produced enough position samples");
@@ -420,5 +434,161 @@ public class MovementParityTests
         return MathF.Sqrt(dx * dx + dy * dy);
     }
 
+    private static ActionMessage MakeRecordingAction(ActionType type) => new() { ActionType = type };
+
+    /// <summary>
+    /// Find and analyze the most recent BG physics recording CSV.
+    /// Prints Z-trace with guard annotations — the key diagnostic for bouncing.
+    /// </summary>
+    private void AnalyzeBgPhysicsRecording(string bgAccount)
+    {
+        var recordingDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WWoW", "PhysicsRecordings");
+
+        if (!Directory.Exists(recordingDir))
+        {
+            _output.WriteLine("\n--- BG Physics Recording: directory not found ---");
+            return;
+        }
+
+        // Find the most recent file for this account
+        var files = Directory.GetFiles(recordingDir, $"physics_{bgAccount}_*.csv")
+            .OrderByDescending(f => f)
+            .ToArray();
+
+        if (files.Length == 0)
+        {
+            _output.WriteLine("\n--- BG Physics Recording: no CSV found ---");
+            return;
+        }
+
+        var csvPath = files[0];
+        var lines = File.ReadAllLines(csvPath);
+        if (lines.Length < 2)
+        {
+            _output.WriteLine($"\n--- BG Physics Recording: empty ({csvPath}) ---");
+            return;
+        }
+
+        _output.WriteLine($"\n--- BG Physics Frame Recording ({lines.Length - 1} frames) ---");
+        _output.WriteLine($"    File: {csvPath}");
+
+        // Parse frames
+        var frames = new List<FrameData>();
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(',');
+            if (parts.Length < 28) continue;
+            try
+            {
+                frames.Add(new FrameData
+                {
+                    Frame = int.Parse(parts[0]),
+                    PosZ = float.Parse(parts[5], CultureInfo.InvariantCulture),
+                    RawPosZ = float.Parse(parts[6], CultureInfo.InvariantCulture),
+                    PhysicsGroundZ = float.Parse(parts[7], CultureInfo.InvariantCulture),
+                    PrevGroundZ = float.Parse(parts[8], CultureInfo.InvariantCulture),
+                    VelZ = float.Parse(parts[12], CultureInfo.InvariantCulture),
+                    FallTimeMs = uint.Parse(parts[13]),
+                    IsFalling = parts[14] == "1",
+                    MoveFlags = parts[15],
+                    SlopeGuard = parts[16] == "1",
+                    PathGuard = parts[17] == "1",
+                    FalseFreefallSup = parts[18] == "1",
+                    TeleportClamp = parts[19] == "1",
+                    UndergroundSnap = parts[20] == "1",
+                    HitWall = parts[21] == "1",
+                    PathWpZ = parts[25] == "NaN" ? float.NaN : float.Parse(parts[25], CultureInfo.InvariantCulture),
+                    ZDelta = float.Parse(parts[27], CultureInfo.InvariantCulture),
+                });
+            }
+            catch { /* skip malformed lines */ }
+        }
+
+        if (frames.Count == 0)
+        {
+            _output.WriteLine("    No parseable frames.");
+            return;
+        }
+
+        // Z statistics
+        float minZ = frames.Min(f => f.PosZ);
+        float maxZ = frames.Max(f => f.PosZ);
+        float zRange = maxZ - minZ;
+        int bounceCount = 0;
+        for (int i = 2; i < frames.Count; i++)
+        {
+            // Detect Z direction reversals > 0.1y (bouncing signature)
+            float d1 = frames[i - 1].PosZ - frames[i - 2].PosZ;
+            float d2 = frames[i].PosZ - frames[i - 1].PosZ;
+            if (MathF.Abs(d1) > 0.1f && MathF.Abs(d2) > 0.1f && MathF.Sign(d1) != MathF.Sign(d2))
+                bounceCount++;
+        }
+
+        int slopeGuardFrames = frames.Count(f => f.SlopeGuard);
+        int pathGuardFrames = frames.Count(f => f.PathGuard);
+        int falseFreefallFrames = frames.Count(f => f.FalseFreefallSup);
+        int teleportClampFrames = frames.Count(f => f.TeleportClamp);
+        int undergroundSnapFrames = frames.Count(f => f.UndergroundSnap);
+        int fallingFrames = frames.Count(f => f.IsFalling);
+        int wallHitFrames = frames.Count(f => f.HitWall);
+
+        _output.WriteLine($"    Z range: [{minZ:F2}..{maxZ:F2}] ({zRange:F2}y)");
+        _output.WriteLine($"    Z bounces (direction reversals > 0.1y): {bounceCount}");
+        _output.WriteLine($"    Guard activations:");
+        _output.WriteLine($"      Slope guard:        {slopeGuardFrames} frames");
+        _output.WriteLine($"      Path ground guard:  {pathGuardFrames} frames");
+        _output.WriteLine($"      False freefall sup: {falseFreefallFrames} frames");
+        _output.WriteLine($"      Teleport clamp:     {teleportClampFrames} frames");
+        _output.WriteLine($"      Underground snap:   {undergroundSnapFrames} frames");
+        _output.WriteLine($"      Falling:            {fallingFrames} frames");
+        _output.WriteLine($"      Wall hit:           {wallHitFrames} frames");
+
+        // Print frames where guards fired (the diagnostic gold)
+        var guardFrames = frames.Where(f =>
+            f.SlopeGuard || f.PathGuard || f.FalseFreefallSup ||
+            f.UndergroundSnap || MathF.Abs(f.ZDelta) > 0.5f).ToList();
+
+        if (guardFrames.Count > 0)
+        {
+            _output.WriteLine($"\n    --- Guard events + large Z jumps ({guardFrames.Count} frames) ---");
+            _output.WriteLine($"    {"Frame",7} {"PosZ",8} {"RawZ",8} {"GndZ",8} {"PrevGZ",8} {"VelZ",7} {"ZΔ",7} {"Guards"}");
+            foreach (var f in guardFrames.Take(50))
+            {
+                var guards = new List<string>();
+                if (f.SlopeGuard) guards.Add("SLOPE");
+                if (f.PathGuard) guards.Add("PATH");
+                if (f.FalseFreefallSup) guards.Add("FREEFALL_SUP");
+                if (f.UndergroundSnap) guards.Add("UNDERMAP");
+                if (MathF.Abs(f.ZDelta) > 0.5f) guards.Add($"JUMP({f.ZDelta:+0.0;-0.0})");
+
+                _output.WriteLine($"    {f.Frame,7} {f.PosZ,8:F2} {f.RawPosZ,8:F2} {f.PhysicsGroundZ,8:F2} {f.PrevGroundZ,8:F2} {f.VelZ,7:F2} {f.ZDelta,7:F3} {string.Join("+", guards)}");
+            }
+            if (guardFrames.Count > 50)
+                _output.WriteLine($"    ... and {guardFrames.Count - 50} more");
+        }
+
+        // Print first 20 frames for Z trace context
+        _output.WriteLine($"\n    --- First 20 frames Z trace ---");
+        _output.WriteLine($"    {"Frame",7} {"PosZ",8} {"RawZ",8} {"GndZ",8} {"PrevGZ",8} {"VelZ",7} {"Fall",5} {"Flags",8}");
+        foreach (var f in frames.Take(20))
+        {
+            _output.WriteLine($"    {f.Frame,7} {f.PosZ,8:F2} {f.RawPosZ,8:F2} {f.PhysicsGroundZ,8:F2} {f.PrevGroundZ,8:F2} {f.VelZ,7:F2} {f.FallTimeMs,5} {f.MoveFlags,8}");
+        }
+    }
+
     private sealed record TransformSample(float T, float X, float Y, float Z, uint MoveFlags);
+
+    private sealed class FrameData
+    {
+        public int Frame;
+        public float PosZ, RawPosZ, PhysicsGroundZ, PrevGroundZ;
+        public float VelZ;
+        public uint FallTimeMs;
+        public bool IsFalling;
+        public string MoveFlags = "";
+        public bool SlopeGuard, PathGuard, FalseFreefallSup, TeleportClamp, UndergroundSnap, HitWall;
+        public float PathWpZ, ZDelta;
+    }
 }

@@ -231,6 +231,11 @@ namespace BotRunner
 
                 _currentActionCorrelationId = $"act-{Interlocked.Increment(ref _actionSequenceNumber)}";
                 Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType}) [{_currentActionCorrelationId}]");
+
+                // Diagnostic actions â€” handle directly without CharacterAction mapping
+                if (HandleDiagnosticAction(action))
+                    return;
+
                 var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
@@ -285,14 +290,14 @@ namespace BotRunner
                 var loginScreen = _objectManager.LoginScreen;
                 if (loginScreen != null && loginScreen.IsOpen)
                 {
-                    // Explicit logout detected — allow re-login
+                    // Explicit logout detected ï¿½ allow re-login
                     Log.Information("[BOT RUNNER] Explicit logout detected, resetting world entry state");
                     _everEnteredWorld = false;
                     _tasksInitialized = false;
                 }
                 else
                 {
-                    // Transient state drop — wait for HasEnteredWorld to recover
+                    // Transient state drop ï¿½ wait for HasEnteredWorld to recover
                     return;
                 }
             }
