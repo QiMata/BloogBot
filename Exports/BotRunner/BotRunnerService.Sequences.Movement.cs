@@ -68,9 +68,17 @@ namespace BotRunner
                     // long stuck-forward loops when direct steering has no valid route.
                     // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
                     // detection when the bot is genuinely blocked by geometry.
-                    bool hitWall = _objectManager is WoWSharpClient.WoWSharpObjectManager wsOm && wsOm.PhysicsHitWall;
+                    bool hitWall = false;
+                    float wnx = 0f, wny = 0f, bf = 1f;
+                    if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
+                    {
+                        hitWall = wsOm.PhysicsHitWall;
+                        var wn = wsOm.PhysicsWallNormal2D;
+                        wnx = wn.X; wny = wn.Y;
+                        bf = wsOm.PhysicsBlockedFraction;
+                    }
                     try {
-                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall);
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
                         if (waypoint == null)
                         {
                             _objectManager.StopAllMovement();

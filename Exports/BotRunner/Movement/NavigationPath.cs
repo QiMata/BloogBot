@@ -185,6 +185,20 @@ public class NavigationPath(
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
     private int _consecutiveWallHitSamples;
+
+    // Layer 2: Wall-normal deflection avoidance
+    private Position? _avoidanceWaypoint;
+    private int _avoidanceFramesRemaining;
+    private int _consecutiveAvoidanceFailures;
+    private const int AVOIDANCE_LIFETIME_FRAMES = 10;       // 500ms at 50ms ticks
+    private const int MAX_AVOIDANCE_FAILURES = 3;
+    private const float DEFLECTION_MULTIPLIER = 3f;          // * capsuleRadius
+    private const float BLOCKED_FRACTION_THRESHOLD = 0.5f;
+
+    // Layer 1: Proactive LOS lookahead
+    private bool _nextSegmentBlocked;
+    private int _lastProbeWaypointIndex = -1;
+
     private float _characterSpeed = 7.0f;         // actual run speed; updated via UpdateCharacterSpeed()
 
     /// <summary>
@@ -239,6 +253,7 @@ public class NavigationPath(
     private const int MAX_TRACE_SAMPLES = 64;
     private const float SHORT_ROUTE_TRACE_DISTANCE = 40f;
     private const string TRACE_RESOLUTION_WAYPOINT = "waypoint";
+    private const string TRACE_RESOLUTION_WALL_DEFLECT = "wall_deflect";
     private const string TRACE_RESOLUTION_DIRECT_FALLBACK = "direct_fallback";
     private const string TRACE_RESOLUTION_NO_ROUTE = "no_route";
 
@@ -285,7 +300,7 @@ public class NavigationPath(
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
     /// Automatically calculates/recalculates the path as needed.
     /// </summary>
-    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false)
+    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false, float wallNormalX = 0f, float wallNormalY = 0f, float blockedFraction = 1f)
     {
         if (_pathfinding == null)
         {
@@ -386,19 +401,59 @@ public class NavigationPath(
             }
         }
 
-        // Phase 2 (physics-confirmed wall contact): track consecutive wall hits.
-        // Brief wall contact (sliding along geometry) is normal — reset the stall counter.
-        // But sustained wall contact (15+ ticks ≈ 0.75s at 50ms) means the bot is truly
-        // stuck against an obstacle and needs a repath to find an alternate route.
+        // Phase 2: Wall-normal deflection + fallback repath.
+        // Layer 2 (reactive): When significantly blocked, compute an avoidance waypoint using
+        // the wall normal — the bot deflects away from the wall geometrically instead of
+        // walking into it and counting ticks.
+        // Layer 3 (fallback): If deflection fails 3x consecutively, force a full repath.
         const int WALL_STUCK_THRESHOLD = 15;
         if (physicsHitWall)
         {
             _consecutiveWallHitSamples++;
-            if (_consecutiveWallHitSamples >= WALL_STUCK_THRESHOLD)
+
+            // Layer 2: Geometric deflection using wall normal
+            if (blockedFraction < BLOCKED_FRACTION_THRESHOLD && _avoidanceWaypoint == null)
+            {
+                float normalLen2D = MathF.Sqrt(wallNormalX * wallNormalX + wallNormalY * wallNormalY);
+                if (normalLen2D > 0.01f)
+                {
+                    float deflectDist = _capsuleRadius * DEFLECTION_MULTIPLIER;
+                    float deflectX = (wallNormalX / normalLen2D) * deflectDist;
+                    float deflectY = (wallNormalY / normalLen2D) * deflectDist;
+                    var candidate = new Position(
+                        currentPosition.X + deflectX,
+                        currentPosition.Y + deflectY,
+                        currentPosition.Z);
+
+                    // Validate the deflection point is reachable (LOS check via pathfinding service)
+                    bool reachable = false;
+                    try { reachable = _pathfinding.IsInLineOfSight(mapId, currentPosition, candidate); }
+                    catch { /* IPC failure — skip deflection this frame */ }
+
+                    if (reachable)
+                    {
+                        _avoidanceWaypoint = candidate;
+                        _avoidanceFramesRemaining = AVOIDANCE_LIFETIME_FRAMES;
+                        _consecutiveAvoidanceFailures = 0;
+                        _consecutiveWallHitSamples = 0;
+                    }
+                    else
+                    {
+                        _consecutiveAvoidanceFailures++;
+                    }
+                }
+            }
+
+            // Layer 3: If deflection keeps failing, force a full repath
+            if (_consecutiveAvoidanceFailures >= MAX_AVOIDANCE_FAILURES
+                || _consecutiveWallHitSamples >= WALL_STUCK_THRESHOLD)
             {
                 CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.WallStuck);
                 AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
                 _consecutiveWallHitSamples = 0;
+                _consecutiveAvoidanceFailures = 0;
+                _avoidanceWaypoint = null;
+                _avoidanceFramesRemaining = 0;
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSampleDistance = float.NaN;
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
@@ -411,7 +466,7 @@ public class NavigationPath(
             }
             else if (_stalledNearWaypointSamples > 0)
             {
-                // Brief wall contact — reset stall counter (bot is moving, just sliding)
+                // Wall contact but not significantly blocked — reset stall counter (bot is sliding)
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
                 _lastWaypointSampleDistance = float.NaN;
@@ -421,6 +476,7 @@ public class NavigationPath(
         else
         {
             _consecutiveWallHitSamples = 0;
+            _consecutiveAvoidanceFailures = 0;
         }
 
         // If the next waypoint remains near while the bot itself does not move,
@@ -472,6 +528,25 @@ public class NavigationPath(
 
         _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
         _lastWaypointSampleDistance = waypointDistance;
+
+        // Layer 2: If an avoidance waypoint is active, steer toward it instead of the path waypoint.
+        // The bot deflects away from the wall and resumes the normal path once the avoidance expires.
+        if (_avoidanceWaypoint != null && _avoidanceFramesRemaining > 0)
+        {
+            _avoidanceFramesRemaining--;
+            var avoidResult = _avoidanceWaypoint;
+            if (_avoidanceFramesRemaining <= 0)
+                _avoidanceWaypoint = null;
+            return RecordWaypointResult(currentPosition, destination, avoidResult, usedDirectFallback: false, TRACE_RESOLUTION_WALL_DEFLECT);
+        }
+
+        // Clear avoidance if bot has moved past the wall (no longer hitting)
+        if (!physicsHitWall && _avoidanceWaypoint != null)
+        {
+            _avoidanceWaypoint = null;
+            _avoidanceFramesRemaining = 0;
+        }
+
         return RecordWaypointResult(currentPosition, destination, waypoint, usedDirectFallback: false, TRACE_RESOLUTION_WAYPOINT);
     }
 
@@ -978,6 +1053,22 @@ public class NavigationPath(
         if (_currentIndex + 1 >= _waypoints.Length)
             return false;
 
+        // Layer 1: Proactive LOS lookahead — when waypoint index changes, probe the
+        // segment from the next waypoint to the one after it. If blocked, the next
+        // waypoint is a real corner — cap skip-ahead so we don't jump past it.
+        if (_currentIndex != _lastProbeWaypointIndex && _currentIndex + 2 < _waypoints.Length)
+        {
+            _lastProbeWaypointIndex = _currentIndex;
+            try
+            {
+                // Check if the segment AFTER the next waypoint has LOS. If not, the
+                // next waypoint is likely a corner that must be honored.
+                _nextSegmentBlocked = !_pathfinding!.IsInLineOfSight(
+                    mapId, _waypoints[_currentIndex + 1], _waypoints[_currentIndex + 2]);
+            }
+            catch { _nextSegmentBlocked = false; }
+        }
+
         var nowTick = _tickProvider();
 
         // Use cached result if still valid and the index hasn't changed.
@@ -985,12 +1076,22 @@ public class NavigationPath(
             && nowTick - _losSkipCacheTick < LOS_SKIP_CACHE_TTL_MS
             && _losSkipCacheFarthest > _currentIndex)
         {
-            _currentIndex = _losSkipCacheFarthest;
-            return true;
+            // Respect Layer 1 corner cap even for cached results
+            var cappedFarthest = _nextSegmentBlocked
+                ? Math.Min(_losSkipCacheFarthest, _currentIndex + 1)
+                : _losSkipCacheFarthest;
+            if (cappedFarthest > _currentIndex)
+            {
+                _currentIndex = cappedFarthest;
+                return true;
+            }
         }
 
         var farthestVisible = _currentIndex;
-        var scanLimit = Math.Min(_waypoints.Length - 1, _currentIndex + MAX_RUNTIME_LOS_LOOKAHEAD);
+        // When the segment after the next waypoint is blocked, the next waypoint is a
+        // corner — cap skip-ahead to at most that corner (don't jump past it).
+        var maxLookahead = _nextSegmentBlocked ? 1 : MAX_RUNTIME_LOS_LOOKAHEAD;
+        var scanLimit = Math.Min(_waypoints.Length - 1, _currentIndex + maxLookahead);
 
         for (var candidate = _currentIndex + 1; candidate <= scanLimit; candidate++)
         {
@@ -1245,6 +1346,11 @@ public class NavigationPath(
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
         _consecutiveWallHitSamples = 0;
+        _avoidanceWaypoint = null;
+        _avoidanceFramesRemaining = 0;
+        _consecutiveAvoidanceFailures = 0;
+        _nextSegmentBlocked = false;
+        _lastProbeWaypointIndex = -1;
 
         if (_pathfinding == null)
         {
@@ -1845,6 +1951,11 @@ public class NavigationPath(
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
         _consecutiveWallHitSamples = 0;
+        _avoidanceWaypoint = null;
+        _avoidanceFramesRemaining = 0;
+        _consecutiveAvoidanceFailures = 0;
+        _nextSegmentBlocked = false;
+        _lastProbeWaypointIndex = -1;
         _losSkipCacheIndex = -1;
         _losSkipCacheFarthest = -1;
         _losSkipCacheTick = 0;

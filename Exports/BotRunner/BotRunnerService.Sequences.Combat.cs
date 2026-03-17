@@ -95,9 +95,17 @@ namespace BotRunner
                             if (player.RunSpeed > 0)
                                 navPath.UpdateCharacterSpeed(player.RunSpeed);
 
-                            bool hitWall = _objectManager is WoWSharpClient.WoWSharpObjectManager wsOm && wsOm.PhysicsHitWall;
+                            bool hitWall = false;
+                            float wnx = 0f, wny = 0f, bf = 1f;
+                            if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm2)
+                            {
+                                hitWall = wsOm2.PhysicsHitWall;
+                                var wn = wsOm2.PhysicsWallNormal2D;
+                                wnx = wn.X; wny = wn.Y;
+                                bf = wsOm2.PhysicsBlockedFraction;
+                            }
                             var waypoint = navPath.GetNextWaypoint(player.Position, target.Position,
-                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall);
+                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
 
                             if (waypoint != null)
                             {
