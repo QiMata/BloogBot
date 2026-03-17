@@ -12,7 +12,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// fixture readiness and post-teleport physics stability.
 /// See docs/BasicLoopTests.md for the owning production code paths.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class BasicLoopTests
 {

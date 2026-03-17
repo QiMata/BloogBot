@@ -20,7 +20,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// FG parity is intentionally excluded here. Foreground crafting still depends on Lua spell-name
 /// resolution and is not the behavior surface we are overhauling first.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class CraftingProfessionTests
 {

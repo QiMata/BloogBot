@@ -28,7 +28,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// 4) Find a living mob, dispatch StartMeleeAttack
 /// 5) Assert the mob takes damage and dies
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class CombatLoopTests
 {

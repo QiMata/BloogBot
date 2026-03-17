@@ -20,7 +20,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   - Exports/BotRunner/BotRunnerService.ActionDispatch.cs
 ///   - Exports/BotRunner/Tasks/RetrieveCorpseTask.cs
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class DeathCorpseRunTests
 {

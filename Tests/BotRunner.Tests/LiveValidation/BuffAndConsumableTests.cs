@@ -18,7 +18,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// - DismissBuff action removes the aura when the implementation supports it
 /// See docs/BuffAndConsumableTests.md for the owning production code paths.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class BuffAndConsumableTests
 {

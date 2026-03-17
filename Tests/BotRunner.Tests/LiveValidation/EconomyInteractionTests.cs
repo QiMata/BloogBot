@@ -17,7 +17,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~EconomyInteractionTests" --configuration Release
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class EconomyInteractionTests
 {

@@ -14,7 +14,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// other live tests depend on.
 /// See docs/CharacterLifecycleTests.md for the owning production code paths.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class CharacterLifecycleTests
 {

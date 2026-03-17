@@ -23,7 +23,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~SpellCastOnTargetTests" --configuration Release
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class SpellCastOnTargetTests
 {

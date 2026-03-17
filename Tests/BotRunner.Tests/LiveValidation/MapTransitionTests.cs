@@ -20,7 +20,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~MapTransitionTests" --configuration Release
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class MapTransitionTests
 {

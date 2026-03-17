@@ -23,7 +23,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   3) .quest complete -> assert QuestLog2/3 state change.
 ///   4) .quest remove -> assert quest absence from snapshot.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class QuestInteractionTests
 {

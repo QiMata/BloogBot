@@ -31,7 +31,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~StarterQuestTests" --configuration Release
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class StarterQuestTests
 {

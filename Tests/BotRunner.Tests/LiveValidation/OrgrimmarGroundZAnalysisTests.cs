@@ -16,7 +16,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --configuration Release
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class OrgrimmarGroundZAnalysisTests
 {

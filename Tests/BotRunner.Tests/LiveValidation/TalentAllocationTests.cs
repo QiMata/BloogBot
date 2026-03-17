@@ -19,7 +19,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   4) Learn talent via GM command.
 ///   5) Assert spell appears in snapshot spell list.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class TalentAllocationTests
 {

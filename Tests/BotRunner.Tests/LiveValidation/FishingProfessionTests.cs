@@ -27,7 +27,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   3) casting and waiting through the bobber/channel cycle
 ///   4) looting the catch from the loot window after bobber interaction
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class FishingProfessionTests
 {

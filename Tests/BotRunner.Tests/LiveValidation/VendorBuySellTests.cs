@@ -21,7 +21,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// FG parity is intentionally excluded. The foreground merchant-frame path is still legacy Lua/UI logic,
 /// while the live overhaul is prioritizing the packet-driven BG implementation first.
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class VendorBuySellTests
 {

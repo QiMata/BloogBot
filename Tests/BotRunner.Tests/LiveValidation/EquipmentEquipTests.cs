@@ -21,7 +21,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~EquipmentEquipTests" --configuration Release -v n
 /// </summary>
-[RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
 public class EquipmentEquipTests
 {
