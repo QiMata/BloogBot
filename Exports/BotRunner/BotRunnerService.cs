@@ -324,12 +324,28 @@ namespace BotRunner
                 return;
             }
 
-            if (_objectManager.CharacterSelectScreen?.CharacterSelects.Count == 0)
-            {
-                Class @class = WoWNameGenerator.ResolveClass(_activitySnapshot.AccountName);
-                Race race = WoWNameGenerator.ResolveRace(_activitySnapshot.AccountName);
-                Gender gender = WoWNameGenerator.DetermineGender(@class);
+            Class @class = WoWNameGenerator.ResolveClass(_activitySnapshot.AccountName);
+            Race race = WoWNameGenerator.ResolveRace(_activitySnapshot.AccountName);
+            Gender gender = WoWNameGenerator.ResolveGender(@class);
 
+            var charSelects = _objectManager.CharacterSelectScreen?.CharacterSelects;
+
+            // If existing characters don't match the configured race/gender, delete first
+            // and recreate. This ensures parity tests use identical capsule dimensions.
+            if (charSelects?.Count > 0)
+            {
+                var first = charSelects[0];
+                if (first.Gender != gender || first.Race != race)
+                {
+                    Log.Warning("[BOT RUNNER] Character mismatch: existing={Race}/{Gender}, configured={CfgRace}/{CfgGender}. Deleting to recreate.",
+                        first.Race, first.Gender, race, gender);
+                    _behaviorTree = BuildDeleteCharacterSequence(first.Guid);
+                    return;
+                }
+            }
+
+            if (charSelects?.Count == 0)
+            {
                 _behaviorTree = BuildCreateCharacterSequence(
                     [
                         WoWNameGenerator.GenerateName(race, gender),

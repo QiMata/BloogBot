@@ -113,5 +113,14 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("CharacterRace", NullValueHandling = NullValueHandling.Ignore)]
         public string? CharacterRace { get; set; }
+
+        /// <summary>
+        /// Optional: Character gender override ("Male" or "Female").
+        /// If set, used instead of the class-based default from WoWNameGenerator.DetermineGender().
+        /// CRITICAL for parity tests: FG and BG characters must share the same gender
+        /// so capsule dimensions match (race+gender determines capsule radius/height).
+        /// </summary>
+        [JsonProperty("CharacterGender", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterGender { get; set; }
     }
 }

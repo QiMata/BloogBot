@@ -118,12 +118,13 @@ public class MovementParityTests
         global::Tests.Infrastructure.Skip.IfNot(hasFg,
             "FG client required — this test compares FG (gold standard) with BG (headless physics)");
 
-        // Both characters MUST be Orc Warrior (configured in StateManagerSettings.json).
-        // Same race/gender = identical capsule dimensions (radius=0.3064, height=2.0313).
-        // If this changes, update the settings so both match.
+        // Both characters MUST be Male Orc Warrior (configured in StateManagerSettings.json).
+        // Same race/gender = identical capsule dimensions (radius=0.3064, height=2.0313 for Orc Male).
+        // CharacterGender in StateManagerSettings.json → WWOW_CHARACTER_GENDER env var → ResolveGender().
+        // If gender mismatches, BotRunnerService auto-deletes and recreates the character on next login.
         _output.WriteLine($"=== {name} ===");
-        _output.WriteLine($"FG: {_bot.FgCharacterName} (TESTBOT1=Orc Warrior)");
-        _output.WriteLine($"BG: {_bot.BgCharacterName} (TESTBOT2=Orc Warrior)");
+        _output.WriteLine($"FG: {_bot.FgCharacterName} (TESTBOT1=Male Orc Warrior)");
+        _output.WriteLine($"BG: {_bot.BgCharacterName} (TESTBOT2=Male Orc Warrior)");
 
         float routeDist = Distance2D(startX, startY, targetX, targetY);
         _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({targetX},{targetY},{targetZ}) = {routeDist:F1}y\n");

@@ -97,6 +97,22 @@ namespace BotRunner
             return Race.Orc;
         }
 
+        /// <summary>
+        /// Resolves the character gender from the WWOW_CHARACTER_GENDER env var (if set),
+        /// then falls back to the class-based default.
+        /// The env var is set from CharacterSettings.CharacterGender in StateManagerSettings.json.
+        /// </summary>
+        public static Gender ResolveGender(Class @class)
+        {
+            var envGender = Environment.GetEnvironmentVariable("WWOW_CHARACTER_GENDER");
+            if (!string.IsNullOrEmpty(envGender))
+            {
+                if (Enum.TryParse<Gender>(envGender, ignoreCase: true, out var parsed))
+                    return parsed;
+            }
+            return DetermineGender(@class);
+        }
+
         public static Gender DetermineGender(Class @class)
         {
             return @class switch

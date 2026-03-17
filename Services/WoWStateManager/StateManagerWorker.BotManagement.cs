@@ -54,7 +54,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null)
+        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null)
         {
             var tokenSource = new CancellationTokenSource();
 
@@ -81,6 +81,8 @@ namespace WoWStateManager
                 psi.Environment["WWOW_CHARACTER_CLASS"] = characterClass;
             if (!string.IsNullOrEmpty(characterRace))
                 psi.Environment["WWOW_CHARACTER_RACE"] = characterRace;
+            if (!string.IsNullOrEmpty(characterGender))
+                psi.Environment["WWOW_CHARACTER_GENDER"] = characterGender;
 
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
@@ -122,7 +124,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null)
+        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
             lock (_managedServicesLock)
@@ -136,7 +138,7 @@ namespace WoWStateManager
             }
 
             // Start WoW process and inject the bot worker service
-            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace);
+            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender);
         }
 
         /// <summary>
@@ -235,7 +237,7 @@ namespace WoWStateManager
         }
 
 
-        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null)
+        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null)
         {
             // Set the path to ForegroundBotRunner.dll in an environment variable
             var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
@@ -251,6 +253,8 @@ namespace WoWStateManager
                 Environment.SetEnvironmentVariable("WWOW_CHARACTER_CLASS", characterClass);
             if (!string.IsNullOrEmpty(characterRace))
                 Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", characterRace);
+            if (!string.IsNullOrEmpty(characterGender))
+                Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", characterGender);
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
             // Enable optional loader console + extra diagnostics (config flag or always on for now)
