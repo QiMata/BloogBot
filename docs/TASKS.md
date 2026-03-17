@@ -111,23 +111,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-16 (session 102)
+- **Last updated:** 2026-03-17 (session 103)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - P1.1-1.3: BG movement flag calibration — airborne velocity lock, false-freefall guard hardening (`5b4a1c5`)
-  - BG bot console window fix: stdout not redirected when WWOW_SHOW_WINDOWS=1 (`20e0fe5`)
-  - BG bot Serilog file sink: `WWoWLogs/bg_{account}.log` for real-time observability (`2e94f83`)
-  - Test execution mode documentation: TEST_EXECUTION_MODES.md + Bot Execution Mode sections on all 22 test docs (`2e94f83`)
-  - Added P7.9 swim-avoidance pathfinding task (`52ac498`)
-- **Suite results:** 17 passed, 15 failed, 2 skipped out of 34 total (40m18s)
-- **Key observations:**
-  - Teleport position verification failing for TESTBOT2 → cascading NPC/Economy failures
-  - Combat/Loot: still GM mode faction corruption (needs COMBATTEST account)
-  - Mining passed (6m54s), Herbalism failed (12m5s)
-  - All 3 Navigation tests pass, both GroundZ tests pass
+  - Fixed BG bot "barely moves" regression: sub-step gameTimeMs advancement (`18d5108`)
+  - Root-caused zero-displacement in PathfindingService: missing .scene files in `D:\World of Warcraft\scenes\` caused BIH fallback instead of SceneCache collision path
+  - Deployed scene files (0.scene, 1.scene, 229.scene) to service data directory
+  - Added 3 offline physics tests: Forward_FlatTerrain_MovesAtRunSpeed, Forward_ValleyOfTrials_MovesAtRunSpeed, Forward_FlatTerrain_PacketTimingAndPositionDeltas (`18d5108`)
+  - Added 3 live movement speed tests: BG_FlatTerrain_MovesAtExpectedSpeed, BG_FlatTerrain_ZStableWhileWalking, DualClient_FlatWalk_SpeedComparison (`bed6ce3`)
+  - All 3 live movement tests pass, all offline physics tests pass, AggregateDriftGate regression passes
+- **Key fix:** Scene files must exist at `WWOW_DATA_DIR/scenes/` for the PathfindingService. Without them, the C++ engine uses the BIH tree fallback which has position-specific collision issues that produce zero horizontal displacement.
 - **Next:**
-  1. Investigate teleport verification failures (TESTBOT2 not reaching target after 3 attempts)
-  2. NpcInteraction failures — likely cascading from teleport issue
-  3. CombatLoop/LootCorpse — switch to COMBATTEST account per plan
-  4. P1.4: Spline movement lockout
-  5. P1.5: Post-teleport settle
+  1. P1.4: Spline movement lockout
+  2. P1.5: Post-teleport settle
+  3. Phase 3 from plan: Recording replay through MovementController
+  4. Investigate teleport verification failures (TESTBOT2 not reaching target after 3 attempts)
