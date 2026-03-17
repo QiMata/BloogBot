@@ -283,14 +283,8 @@ public class FishingTask : BotTask, IBotTask
         var poolDistance = player.Position.DistanceTo(pool.Position!);
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask pool_acquired guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1}");
-        if (IsInCastingWindow(player.Position, pool.Position!))
-        {
-            ObjectManager.ForceStopImmediate();
-            ObjectManager.Face(pool.Position!);
-            SetState(FishingState.ResolveAndCast);
-            return;
-        }
 
+        // Always go through MoveToFishingPool so the pier sweep finds the best spot.
         ClearNavigation();
         SetState(FishingState.MoveToFishingPool);
     }
@@ -306,16 +300,8 @@ public class FishingTask : BotTask, IBotTask
                 $"[TASK] FishingTask search_walk_found_pool guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
             Log.Information("[FISH] Pool found during search walk at {Distance:F1}y.", poolDistance);
             ClearNavigation();
-            if (IsInCastingWindow(player.Position, pool.Position!))
-            {
-                ObjectManager.ForceStopImmediate();
-                ObjectManager.Face(pool.Position!);
-                SetState(FishingState.ResolveAndCast);
-            }
-            else
-            {
-                SetState(FishingState.MoveToFishingPool);
-            }
+            // Always move to pier sweep position first, even if already in range.
+            SetState(FishingState.MoveToFishingPool);
             return;
         }
 
@@ -378,13 +364,20 @@ public class FishingTask : BotTask, IBotTask
             return;
         }
 
+        // Walk to the pier sweep approach position (nearest solid ground to pool).
+        // Don't stop at any arbitrary point in the casting window — walk all the way
+        // to the approach position so we're on the pier edge near the water.
+        var approachPosition = ResolveFishingApproachPosition(player, pool.Position);
+        var distToApproach = player.Position.DistanceTo(approachPosition);
         var poolDistance = player.Position.DistanceTo(pool.Position);
-        if (IsInCastingWindow(player.Position, pool.Position)
+        const float approachArrivalRadius = 5f;
+
+        if (distToApproach <= approachArrivalRadius
             && CanCastFromPosition(player.MapId, player.Position, pool.Position))
         {
             ObjectManager.ForceStopImmediate();
             ObjectManager.Face(pool.Position);
-            Log.Information("[FISH] Reached fishing pool range at {Distance:F1}y (pool=0x{Guid:X}).",
+            Log.Information("[FISH] Reached approach position at {Distance:F1}y from pool (pool=0x{Guid:X}).",
                 poolDistance, pool.Guid);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask in_cast_range guid=0x{pool.Guid:X} distance={poolDistance:F1}");
@@ -392,21 +385,13 @@ public class FishingTask : BotTask, IBotTask
             return;
         }
 
-        var approachPosition = ResolveFishingApproachPosition(player, pool.Position);
         if (_lastApproachDiagnosticDistance == float.MaxValue || poolDistance <= _lastApproachDiagnosticDistance - 2f)
         {
             _lastApproachDiagnosticDistance = poolDistance;
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask approaching_pool guid=0x{pool.Guid:X} distance={poolDistance:F1}");
         }
-        else if (IsInCastingWindow(player.Position, pool.Position))
-        {
-            EmitLosBlockedDiagnostic(player, pool.Position, "move");
-        }
 
-        // Prefer the task's normal pathfinding waypoint selection, but fall back to a direct
-        // movement nudge if the shoreline approach does not yield a usable short waypoint.
-        // Repeated stalls here are pathfinding/terrain evidence, not a fishing-contract failure.
         if (!TryNavigateToward(approachPosition))
             ObjectManager.MoveToward(approachPosition);
     }
