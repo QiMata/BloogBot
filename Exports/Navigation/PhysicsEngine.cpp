@@ -1044,7 +1044,19 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
     // several yards below, making the character walk through support posts.
     // =========================================================================
     if (wasGrounded && !isJumping && sideDist > MIN_MOVE_DISTANCE) {
-        float groundProbeZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, originalZ,
+        // Probe at the capsule's leading edge, not just the center.
+        // The capsule extends 'radius' past the center, so the bottom can overhang
+        // a pier edge even while the center is still above the pier surface.
+        float sideDx = st.x - afterUpX;
+        float sideDy = st.y - afterUpY;
+        float sideDirLen = std::sqrt(sideDx * sideDx + sideDy * sideDy);
+        float probeX = st.x, probeY = st.y;
+        if (sideDirLen > 1e-4f) {
+            probeX = st.x + (sideDx / sideDirLen) * radius;
+            probeY = st.y + (sideDy / sideDirLen) * radius;
+        }
+
+        float groundProbeZ = SceneQuery::GetGroundZ(input.mapId, probeX, probeY, originalZ,
             PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
         // Also probe at the pre-side position to know what surface we were on
         float originGroundZ = SceneQuery::GetGroundZ(input.mapId, afterUpX, afterUpY, originalZ,
