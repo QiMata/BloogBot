@@ -107,6 +107,7 @@ public static class NavigationTraceReason
     public const string PathExhaustedStillFar = "path_exhausted_still_far";
     public const string StalledNearWaypoint = "stalled_near_waypoint";
     public const string StrictWaypointRecalc = "strict_waypoint_recalc";
+    public const string WallStuck = "wall_stuck";
     public const string Manual = "manual";
 }
 
@@ -183,6 +184,7 @@ public class NavigationPath(
     private Position? _lastWaypointSamplePosition;
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
+    private int _consecutiveWallHitSamples;
     private float _characterSpeed = 7.0f;         // actual run speed; updated via UpdateCharacterSpeed()
 
     /// <summary>
@@ -384,16 +386,41 @@ public class NavigationPath(
             }
         }
 
-        // Phase 2 (physics-confirmed corridor): when physics reports a wall contact,
-        // the bot IS actively trying to move but is blocked by geometry — this is NOT a
-        // navigation stall. Reset the stall counter so wall contact doesn't trigger a
-        // wasteful path recalculation.
-        if (physicsHitWall && _stalledNearWaypointSamples > 0)
+        // Phase 2 (physics-confirmed wall contact): track consecutive wall hits.
+        // Brief wall contact (sliding along geometry) is normal — reset the stall counter.
+        // But sustained wall contact (15+ ticks ≈ 0.75s at 50ms) means the bot is truly
+        // stuck against an obstacle and needs a repath to find an alternate route.
+        const int WALL_STUCK_THRESHOLD = 15;
+        if (physicsHitWall)
         {
-            _stalledNearWaypointSamples = 0;
-            _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
-            _lastWaypointSampleDistance = float.NaN;
-            Metrics.IncrementCorridorAdvances();
+            _consecutiveWallHitSamples++;
+            if (_consecutiveWallHitSamples >= WALL_STUCK_THRESHOLD)
+            {
+                CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.WallStuck);
+                AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+                _consecutiveWallHitSamples = 0;
+                _stalledNearWaypointSamples = 0;
+                _lastWaypointSampleDistance = float.NaN;
+                _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+
+                if (_currentIndex < _waypoints.Length)
+                {
+                    waypoint = _waypoints[_currentIndex];
+                    waypointDistance = currentPosition.DistanceTo2D(waypoint);
+                }
+            }
+            else if (_stalledNearWaypointSamples > 0)
+            {
+                // Brief wall contact — reset stall counter (bot is moving, just sliding)
+                _stalledNearWaypointSamples = 0;
+                _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+                _lastWaypointSampleDistance = float.NaN;
+                Metrics.IncrementCorridorAdvances();
+            }
+        }
+        else
+        {
+            _consecutiveWallHitSamples = 0;
         }
 
         // If the next waypoint remains near while the bot itself does not move,
@@ -1217,6 +1244,7 @@ public class NavigationPath(
         _lastWaypointSamplePosition = null;
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
+        _consecutiveWallHitSamples = 0;
 
         if (_pathfinding == null)
         {
@@ -1816,6 +1844,7 @@ public class NavigationPath(
         _lastWaypointSamplePosition = null;
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
+        _consecutiveWallHitSamples = 0;
         _losSkipCacheIndex = -1;
         _losSkipCacheFarthest = -1;
         _losSkipCacheTick = 0;

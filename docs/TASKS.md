@@ -50,8 +50,9 @@ Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor (was usin
 | N.2 | Full tile rebuild for map 1 (Kalimdor) — 1018 tiles | **Done** |
 | N.3 | VMAP re-extraction from WoW 1.12.1 MPQs with VMaNGOS tools | **Done** (2026-03-17) |
 | N.4 | Post-corridor ValidateWalkableSegment with lateral repair | **Done** (57ec3eb) |
-| N.5 | BG undermap fall on downhill (ReverseHill Z=-2083) — physics ground-clamping bug | **Open** |
-| N.6 | FG rock collision at (-294,-4394) — rock NOT in VMAP data, navmesh walkableRadius=0.2 too small | **Open** — may need larger walkableRadius in MoveMapGenerator |
+| N.5 | BG undermap fall on downhill (ReverseHill Z=-2083) — path-based underground snap at -10y below waypoint Z | **Done** (5a73465) |
+| N.6 | FG rock collision — walkableRadius=2 in config.json erodes 2 cells (0.533y) from walls. Mmaps regenerated + deployed. | **Done** (config.json, data deployed) |
+| N.7 | Wall-stuck repath suppression — physicsHitWall was permanently resetting stall counter. Now tracks consecutive wall hits (15 threshold) and forces repath. | **Done** |
 
 ---
 
@@ -114,25 +115,14 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-17 (session 104)
+- **Last updated:** 2026-03-17 (session 105)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Created 5 FG/BG movement parity tests (4910b4c, d720ae8): FlatPath, HillPath, RoadPath, LongDiagonal, ReverseHill
-  - Rolling-window stuck detection (1.2s FG, 0.2s BG) eliminates FG false positives from 500ms packet bursts
-  - Speed segment analysis flags pathfinding obstacles (1s windows, <50% expected speed)
-  - Arrival time comparison and Z drift trend analysis
-  - Post-corridor segment validation with lateral repair (57ec3eb): ValidateWalkableSegment P/Invoke + 6-offset repair
-  - Full VMAP re-extraction from WoW 1.12.1 MPQs using VMaNGOS VMapExtractor (Jan 2022 → Mar 2026)
-  - Regenerated mmaps for maps 0 (687 tiles) and 1 (1018 tiles) with new vmaps
-  - Copied all data to D:/MaNGOS/data/ and Bot/Debug/net8.0/
-- **Key findings:**
-  - Navmesh walkableRadius=0.2 (baked in mmtile header) — too small for character capsules (0.25+)
-  - Rock at (-294,-4394) NOT in VMAP collision data even after re-extraction — model likely not flagged for collision in MPQ
-  - BG undermap fall on downhill routes (ReverseHill: Z=-2083) — physics ground-clamping fails at elevated start positions
-  - FG rock collisions vary between runs due to slight pathing angle differences
+  - N.5: Path-based underground snap — catches terrain fallthrough at -10y below waypoint Z (5a73465)
+  - N.6: walkableRadius=2 in config.json for maps 0+1, mmaps regenerated + deployed
+  - N.7: Wall-stuck repath — NavigationPath tracks consecutive physicsHitWall ticks (threshold=15), forces repath instead of permanently suppressing stall detection
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Next:**
-  1. N.5: Fix BG undermap fall on downhill routes
-  2. N.6: Increase walkableRadius in MoveMapGenerator config (or add agent radius padding)
-  3. P1.4: Spline movement lockout
-  4. P1.5: Post-teleport settle
+  1. P1.4: Spline movement lockout
+  2. P1.5: Post-teleport settle
+  3. P7.4: Ratchet shoreline route hardening
