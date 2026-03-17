@@ -22,9 +22,11 @@ BG bot rubber-bands, stands in air, and fails to clamp to slopes. Movement flags
 | 1.3 | **False-freefall guard hardening (C#).** Added `_hasPhysicsGroundContact` tracking. Guard requires confirmed ground contact before engaging, preventing elevated-spawn hover. Retains `_currentPath != null` for production safety. | **Done** (5b4a1c5) |
 | 1.4 | **Spline movement lockout.** During server-driven spline movement (knockback, charge, etc.), player input must be suppressed until the spline completes. Verify MovementController handles this. | Open |
 | 1.5 | **Post-teleport settle.** After teleport, ensure movement flags reset to MOVEFLAG_NONE and first heartbeat has correct ground-clamped Z before allowing any new movement. | Open |
-| 1.6 | **BG bot Z bouncing.** Multiple competing ground clamps (slope guard, path guard, false-freefall, teleport clamp, N.5 snap) cause Z oscillation. Use physics frame recording parity data to identify which guard(s) conflict. | Open |
+| 1.6 | **BG bot Z bouncing.** PATH guard disabled (navmesh waypoint Z wrong by 3-6y on hills). Hill Z avg +3.48→+0.48y (86% reduction). Road path near-perfect (avg +0.11y). Remaining: +0.4y initial offset (physics ground query vs WoW native), +2y peak on steep descents (FFS hysteresis). | ~80% — PATH guard fixed (c0918ce) |
 | 1.7 | **Collision-aware path following.** L1 LOS lookahead + L2 wall-normal deflection + L3 repath fallback. Wall normal from physics exposed through WoWSharpObjectManager to NavigationPath. | **Done** (d0196c8) |
 | 1.8 | **Physics frame recording parity system.** Per-frame capture of position, groundZ, velocity, fall state, and all guard decisions. Controlled via START/STOP_PHYSICS_RECORDING actions. CSV output to `%LOCALAPPDATA%/WWoW/PhysicsRecordings/`. MovementParityTests enhanced with deep Z-trace analysis. | **Done** |
+| 1.9 | **FG+BG dual transform recording.** Per-frame position/flags/speed recording on BOTH bots (IPC-triggered). Parity tests start/stop both, compare CSVs side-by-side with time-aligned Z/XY deltas. | **Done** (c0918ce) |
+| 1.10 | **Diverse moveflag parity tests.** 5 new routes: LedgeDrop (FALLINGFAR), SteepClimb (slope guard), SteepDescent (FFS hysteresis), ObstacleDense (wall collision/deflection), WindingPath (sustained movement). MoveFlag summary diagnostic prints per-flag frame counts + transition timeline. | **Done** (d373e63) |
 
 ---
 
@@ -118,15 +120,15 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-17 (session 106)
+- **Last updated:** 2026-03-17 (session 107)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - N.7: Wall-stuck repath — NavigationPath tracks consecutive physicsHitWall ticks (threshold=15), forces repath (24e082c)
-  - 1.7: Collision-aware path following — L1 LOS lookahead, L2 wall-normal deflection, L3 repath fallback (d0196c8)
-  - 1.8: Physics frame recording parity system — PhysicsFrameRecord struct, MovementController recording, CSV export, deep Z-trace analysis in MovementParityTests
+  - 1.9: FG+BG dual transform recording (c0918ce)
+  - 1.10: Diverse moveflag parity tests — 5 new routes (LedgeDrop, SteepClimb, SteepDescent, ObstacleDense, WindingPath) + MoveFlag summary diagnostic (d373e63)
+  - PATH guard Z inflation fix — disabled navmesh waypoint Z clamping, Hill Z avg +3.48→+0.48y (86% reduction) (c0918ce)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Next:**
-  1. P1.6: BG bot Z bouncing — run MovementParityTests to capture frame recordings, analyze guard conflicts
+  1. P1.6: Remaining Z offset (+0.4y initial from C++ ground query, +2y peak on steep descents from FFS hysteresis)
   2. P1.4: Spline movement lockout
   3. P1.5: Post-teleport settle
   4. P7.4: Ratchet shoreline route hardening
