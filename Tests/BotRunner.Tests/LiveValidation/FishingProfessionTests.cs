@@ -113,12 +113,13 @@ public class FishingProfessionTests
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
 
-        // Force the pool system to re-evaluate and respawn depleted fishing pools.
-        // .pool update requires a player session (won't work via SOAP) — use bot chat.
-        // Pool 2628 = "Barrens - Oily Blackmouth School / Floating Wreckage" (master pool for Ratchet area).
+        // Wait for objects to stream in after teleport, then force pool refresh.
+        // .pool update re-rolls the pool — must happen AFTER teleport so the bots are on
+        // the correct map and the spawned pools will appear in their ObjectManagers.
+        await Task.Delay(3000);
         _output.WriteLine("Forcing pool system refresh via .pool update 2628");
         await _bot.SendGmChatCommandAsync(bgAccount!, ".pool update 2628");
-        await Task.Delay(3000); // Allow pools to spawn and stream into ObjectManager
+        await Task.Delay(5000); // Allow pools to spawn and stream into ObjectManager
 
         // Run both bots fishing simultaneously — they fish side by side at Ratchet.
         var bgTask = RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);

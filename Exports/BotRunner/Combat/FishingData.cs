@@ -62,6 +62,7 @@ namespace BotRunner.Combat
         [
             180248, // School of Tastyfish
             180582, // Oily Blackmouth School
+            180655, // Floating Debris (Barrens pool system)
             180683, // Firefin Snapper School
             180684, // Greater Sagefish School
             180685, // Deviate Fish Node
