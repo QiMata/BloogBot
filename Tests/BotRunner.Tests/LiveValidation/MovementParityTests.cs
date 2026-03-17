@@ -78,6 +78,28 @@ public class MovementParityTests
             maxSeconds: 20);
     }
 
+    [SkippableFact]
+    public async Task Parity_ValleyOfTrials_LongDiagonal()
+    {
+        // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity
+        await RunParityTest(
+            name: "Valley of Trials — Long Diagonal",
+            startX: -284f, startY: -4383f, startZ: 57f,
+            targetX: -340f, targetY: -4450f, targetZ: 55f,
+            maxSeconds: 30);
+    }
+
+    [SkippableFact]
+    public async Task Parity_ValleyOfTrials_ReverseHill()
+    {
+        // Reverse of HillPath — start uphill, walk toward the road (downhill)
+        await RunParityTest(
+            name: "Valley of Trials — Reverse Hill (downhill)",
+            startX: -254f, startY: -4340f, startZ: 55f,
+            targetX: -284f, targetY: -4383f, targetZ: 57f,
+            maxSeconds: 20);
+    }
+
     /// <summary>
     /// Core parity test runner. Teleports both bots, sends GOTO, records transforms,
     /// detects per-frame anomalies, and reports parity metrics.
@@ -242,6 +264,23 @@ public class MovementParityTests
         _output.WriteLine($"\n=== RESULTS: {name} ===");
         _output.WriteLine($"Samples: FG={fgSamples.Count} BG={bgSamples.Count}  Arrived: FG={fgArrived} BG={bgArrived}");
 
+        // Arrival time comparison
+        float? fgArrivalT = null, bgArrivalT = null;
+        foreach (var s in fgSamples)
+            if (Distance2D(s.X, s.Y, targetX, targetY) < 5f) { fgArrivalT = s.T; break; }
+        foreach (var s in bgSamples)
+            if (Distance2D(s.X, s.Y, targetX, targetY) < 5f) { bgArrivalT = s.T; break; }
+
+        if (fgArrivalT.HasValue && bgArrivalT.HasValue)
+        {
+            float arrivalDelta = bgArrivalT.Value - fgArrivalT.Value;
+            _output.WriteLine($"Arrival: FG={fgArrivalT.Value:F1}s  BG={bgArrivalT.Value:F1}s  delta={arrivalDelta:+0.0;-0.0}s (BG {(arrivalDelta > 0 ? "slower" : "faster")})");
+        }
+        else
+        {
+            _output.WriteLine($"Arrival: FG={(fgArrivalT.HasValue ? $"{fgArrivalT.Value:F1}s" : "DNF")}  BG={(bgArrivalT.HasValue ? $"{bgArrivalT.Value:F1}s" : "DNF")}");
+        }
+
         PrintBotSummary("FG", fgSamples);
         PrintBotSummary("BG", bgSamples);
 
@@ -279,6 +318,17 @@ public class MovementParityTests
                 _output.WriteLine($"\n--- Parity ---");
                 _output.WriteLine($"XY: avg={deltas.Average(d => d.dXY):F1}y  max={deltas.Max(d => d.dXY):F1}y");
                 _output.WriteLine($" Z: avg={deltas.Average(d => MathF.Abs(d.dZ)):F2}y  max={deltas.Max(d => MathF.Abs(d.dZ)):F2}y");
+
+                // Z drift trend: compare first-half vs second-half average Z delta.
+                // Growing delta = BG physics Z is diverging from FG over time.
+                int half = deltas.Count / 2;
+                if (half >= 5)
+                {
+                    float firstHalfZ = deltas.Take(half).Average(d => d.dZ);
+                    float secondHalfZ = deltas.Skip(half).Average(d => d.dZ);
+                    float drift = secondHalfZ - firstHalfZ;
+                    _output.WriteLine($" Z drift: 1st half avg={firstHalfZ:+0.00;-0.00}y  2nd half avg={secondHalfZ:+0.00;-0.00}y  trend={drift:+0.00;-0.00}y ({(MathF.Abs(drift) < 0.5f ? "stable" : "DRIFTING")})");
+                }
             }
         }
 
