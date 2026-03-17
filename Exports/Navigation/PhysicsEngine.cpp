@@ -951,8 +951,9 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
     result.groundNormal = G3D::Vector3(0, 0, 1);
     
     float originalZ = st.z;
+    bool wasGrounded = st.isGrounded;
     G3D::Vector3 upDirection(0, 0, 1);
-    
+
     // =========================================================================
     // Determine if player is jumping - ONLY use explicit jump flags, not velocity
     // The velocity can be artificially high from computation errors or previous
@@ -1031,6 +1032,52 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
 
     float afterSideX = st.x, afterSideY = st.y, afterSideZ = st.z;
     float sideDist = std::sqrt((afterSideX - afterUpX)*(afterSideX - afterUpX) + (afterSideY - afterUpY)*(afterSideY - afterUpY));
+
+    // =========================================================================
+    // Step 3b: LEDGE GUARD - Prevent walking off elevated surfaces
+    // When the character was grounded and has moved horizontally, probe ground
+    // at the new XY. If the only ground is significantly below the pre-step Z,
+    // the character is walking off a ledge (e.g. pier edge, bridge edge).
+    // Undo the horizontal movement to prevent snapping down to terrain below.
+    // Without this, thin WMO floors (piers, docks) with no vertical edge walls
+    // let the capsule slide past the edge; the DOWN pass then snaps to terrain
+    // several yards below, making the character walk through support posts.
+    // =========================================================================
+    if (wasGrounded && !isJumping && sideDist > MIN_MOVE_DISTANCE) {
+        float groundProbeZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, originalZ,
+            PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
+        // Also probe at the pre-side position to know what surface we were on
+        float originGroundZ = SceneQuery::GetGroundZ(input.mapId, afterUpX, afterUpY, originalZ,
+            PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
+
+        const float ledgeThreshold = PhysicsConstants::STEP_HEIGHT + 0.5f; // ~2.625y
+        bool isLedgeDrop = false;
+
+        if (VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
+            // The ground at the new position is much lower than where we started
+            float dropFromOrigin = originGroundZ - groundProbeZ;
+            isLedgeDrop = (dropFromOrigin > ledgeThreshold);
+        } else if (!VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
+            // No ground found at new position at all — void beyond the edge
+            isLedgeDrop = true;
+        }
+
+        if (isLedgeDrop) {
+            // Clamp back to pre-side position
+            st.x = afterUpX;
+            st.y = afterUpY;
+            st.z = afterUpZ;
+            result.collisionSide = true; // Report as if we hit a wall
+            {
+                std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+                oss << "[LedgeGuard] Blocked ledge drop: groundProbeZ=" << groundProbeZ
+                    << " originGroundZ=" << originGroundZ
+                    << " originalZ=" << originalZ
+                    << " sideDist=" << sideDist;
+                PHYS_INFO(PHYS_MOVE, oss.str());
+            }
+        }
+    }
 
     // =========================================================================
     // Step 4: DOWN PASS - Undo step offset + snap to ground
