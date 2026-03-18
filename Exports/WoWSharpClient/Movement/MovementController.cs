@@ -347,6 +347,7 @@ namespace WoWSharpClient.Movement
         private int _deadReckonCount = 0;
         private int _noGroundFrameCount = 0;
         private int _falseFreefallCount = 0;
+        private float _ffsStartZ = float.NaN;  // Z where FFS first engaged — tracks cumulative drift
         // Track whether _prevGroundZ was established from actual physics ground contact
         // (not just constructor initialization from player.Position.Z). The hysteresis guard
         // must NOT engage until we've confirmed real ground contact — otherwise elevated spawns
@@ -726,28 +727,52 @@ namespace WoWSharpClient.Movement
                     && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
                     && gapFromGround < 3.0f;
 
-                if (closeToGround)
+                // Cumulative drift check: FFS is designed for transient capsule sweep
+                // misses on flat terrain, where the bot stays at approximately the same Z.
+                // On slopes, each FFS frame clamps position but Z keeps dropping. If the
+                // cumulative Z drift since FFS started exceeds a threshold, the bot is
+                // clearly descending a slope and should be allowed to fall.
+                // A transient miss on flat terrain drifts < 0.5y. Slope descent drifts > 2y.
+                const float MAX_FFS_DRIFT = 1.5f;
+                if (float.IsNaN(_ffsStartZ))
+                    _ffsStartZ = _prevGroundZ;
+                float ffsDrift = MathF.Abs(_prevGroundZ - _ffsStartZ);
+                bool driftedTooFar = ffsDrift > MAX_FFS_DRIFT;
+
+                if (closeToGround && !driftedTooFar)
                 {
                     // Transient sweep miss: suppress FALLINGFAR, hold at last known ground Z.
                     _falseFreefallCount++;
                     if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
-                        Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, gap={Gap:F2}",
-                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, gapFromGround);
+                        Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, gap={Gap:F2}, drift={Drift:F2}",
+                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, gapFromGround, ffsDrift);
                     newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
                     _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
                     _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
                     _fallTimeMs = 0;
                     falseFreefallSuppressed = true;
                 }
+                else if (closeToGround && driftedTooFar)
+                {
+                    // Slope descent: FFS has been engaged too long and position has drifted.
+                    // Allow the fall through so BG matches FG behavior on slopes.
+                    if (_falseFreefallCount > 0)
+                        Log.Information("[MovementController] FFS released: slope drift {Drift:F2}y exceeds {Max:F1}y after {Count} frames. physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
+                            ffsDrift, MAX_FFS_DRIFT, _falseFreefallCount, output.NewPosZ, _prevGroundZ);
+                    _falseFreefallCount = 0;
+                    _ffsStartZ = float.NaN;
+                }
                 else
                 {
                     // Real fall: large gap from ground, allow transition normally
                     _falseFreefallCount = 0;
+                    _ffsStartZ = float.NaN;
                 }
             }
             else
             {
                 _falseFreefallCount = 0;
+                _ffsStartZ = float.NaN;
             }
 
             _player.MovementFlags = inputFlags | newPhysicsFlags;
@@ -1236,6 +1261,7 @@ namespace WoWSharpClient.Movement
             _descentAnchorX = float.NaN;
             _descentAnchorY = float.NaN;
             _falseFreefallCount = 0;
+            _ffsStartZ = float.NaN;
             _hasPhysicsGroundContact = false;
 
             // After teleport/zone change, force at least one physics step even while idle

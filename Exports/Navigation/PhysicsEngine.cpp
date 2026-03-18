@@ -1327,17 +1327,20 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
 
     G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
 
+    // Save pre-move Z for cliff detection after 3-pass
+    const float preMoveZ = st.z;
+
     // =========================================================================
     // Use the new 3-pass movement system (PhysX CCT style)
     // UP → SIDE → DOWN
     // =========================================================================
-    
+
     {
         std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
         oss << "[GroundMove] Starting 3-pass movement dist=" << intendedDist;
         PHYS_INFO(PHYS_MOVE, oss.str());
     }
-    
+
     ThreePassResult result = PerformThreePassMove(input, st, r, h, dirN, intendedDist, dt);
     
     {
@@ -1390,11 +1393,50 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         st.vz = -0.1f;
         ProcessAirMovement(input, intent, st, dt, moveSpeed);
     } else {
-        // Grounded - set horizontal velocity
-        G3D::Vector3 vProj = dirN * moveSpeed;
-        st.vx = vProj.x; 
-        st.vy = vProj.y; 
-        st.vz = 0.0f;
+        // =====================================================================
+        // Cliff detection: if the ground dropped too fast from previous frame,
+        // this is a cliff edge — transition to freefall instead of snapping.
+        // WoW's native engine detects when the terrain falls away faster than
+        // a walkable slope allows and enters freefall. Our DOWN pass snaps
+        // through cliffs because STEP_DOWN_HEIGHT (4.0y) is generous.
+        //
+        // Threshold: max ground drop per frame on steepest walkable slope (60°)
+        // = horizontal_distance * tan(60°) + step tolerance
+        // At 7 y/s, 50ms dt: 0.35y * 1.732 + 0.5 ≈ 1.1y per frame
+        // Use prevGroundZ from the previous frame as the reference.
+        // =====================================================================
+        const float groundDrop = input.prevGroundZ - st.z;
+        // Max expected drop per frame: steepest walkable slope * max horizontal distance + step tolerance.
+        // tan(60°) ≈ 1.732 (walkable min normal Z = cos(60°) = 0.5)
+        // At 7 y/s, 50ms: 0.35 * 1.732 + 2.125 ≈ 2.73y
+        const float maxSlopeDrop = moveSpeed * dt * 1.732f;
+        const float cliffThreshold = maxSlopeDrop + PhysicsConstants::STEP_HEIGHT;
+
+        if (groundDrop > cliffThreshold &&
+            VMAP::IsValidHeight(input.prevGroundZ) &&
+            input.prevGroundZ > -100000.0f) {
+            // Cliff edge: ground dropped too fast — enter freefall
+            st.z = preMoveZ;  // Restore pre-move Z (don't snap below cliff)
+            st.isGrounded = false;
+            st.vx = 0.0f;
+            st.vy = 0.0f;
+            st.vz = -0.1f;
+            {
+                std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(3);
+                oss << "[GroundMove] CLIFF DETECTED: groundDrop=" << groundDrop
+                    << " > threshold=" << cliffThreshold
+                    << " prevGZ=" << input.prevGroundZ << " newZ=" << st.z
+                    << " -> freefall";
+                PHYS_INFO(PHYS_MOVE, oss.str());
+            }
+            ProcessAirMovement(input, intent, st, dt, moveSpeed);
+        } else {
+            // Normal grounded movement - set horizontal velocity
+            G3D::Vector3 vProj = dirN * moveSpeed;
+            st.vx = vProj.x;
+            st.vy = vProj.y;
+            st.vz = 0.0f;
+        }
     }
 }
 

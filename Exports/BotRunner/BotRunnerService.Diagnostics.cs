@@ -91,8 +91,7 @@ namespace BotRunner
             // Write frames to CSV in well-known location
             Directory.CreateDirectory(PhysicsRecordingDir);
             var accountName = _activitySnapshot?.AccountName ?? "unknown";
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            var filePath = Path.Combine(PhysicsRecordingDir, $"physics_{accountName}_{timestamp}.csv");
+            var filePath = Path.Combine(PhysicsRecordingDir, $"physics_{accountName}.csv");
 
             var sb = new StringBuilder();
             sb.AppendLine("Frame,GameTimeMs,DeltaSec,PosX,PosY,PosZ,RawPosZ,PhysicsGroundZ,PrevGroundZ," +
@@ -157,8 +156,7 @@ namespace BotRunner
 
             Directory.CreateDirectory(PhysicsRecordingDir);
             var accountName = _activitySnapshot?.AccountName ?? "unknown";
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            var filePath = Path.Combine(PhysicsRecordingDir, $"transform_{accountName}_{timestamp}.csv");
+            var filePath = Path.Combine(PhysicsRecordingDir, $"transform_{accountName}.csv");
 
             var sb = new StringBuilder();
             sb.AppendLine("Frame,ElapsedMs,PosX,PosY,PosZ,Facing,MoveFlags,RunSpeed,FallTime");
