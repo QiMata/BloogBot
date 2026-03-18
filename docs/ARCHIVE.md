@@ -1935,3 +1935,12 @@ Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor. Regenera
 |---|------|---------|
 | C.1 | Remove PhysicsThreePass.cpp — 727+148 lines dead code | Done |
 | C.2 | Magic number extraction — ~30 constants extracted (VECTOR_EPSILON, TERMINAL_VELOCITY, etc.) | Done |
+
+## BG/FG Parity Gaps — Session 113 (completed 2026-03-18)
+
+| ID | Task | Commit |
+|----|------|--------|
+| BG-MERCHANT-001 | Guard legacy MerchantFrame sequences against NullRef on BG bot | 75039ed |
+| FISH-UNIT-001 | Fix 7 pre-existing FishingData/FishingTask unit test failures (1315/1315 pass) | facd3e7 |
+| BG-FRAMES-001 | Null guard GossipFrame, TaxiFrame, QuestFrame, TrainerFrame, TalentFrame, CraftFrame sequences | 6f93ea7 |
+| BG-PET-001 | BG pet discovery from SMSG_UPDATE_OBJECT + Attack/Follow/Cast via CMSG_PET_ACTION + SMSG_PET_SPELLS handler | 26552ca, 34fdc2d |

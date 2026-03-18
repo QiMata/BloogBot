@@ -42,15 +42,6 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | `RTS-MISS-001` | S3 ops in `RecordedTests.Shared` | Requires `AWSSDK.S3` |
 | `RTS-MISS-002` | Azure ops in `RecordedTests.Shared` | Requires `Azure.Storage.Blobs` |
 
-## BG/FG Parity Gaps
-
-| ID | Issue | Priority | Status |
-|----|-------|----------|--------|
-| `BG-MERCHANT-001` | Legacy MerchantFrame sequences guarded against NullRef | CRITICAL | **Done** (commit 75039ed) |
-| `BG-PET-001` | BG pet discovery, Attack/Follow/Cast via CMSG_PET_ACTION + SMSG_PET_SPELLS | CRITICAL | **Done** (commits 26552ca, 34fdc2d) |
-| `BG-FRAMES-001` | GossipFrame, TrainerFrame, TaxiFrame, QuestFrame, TalentFrame, CraftFrame null-guarded on BG | HIGH | **Done** |
-| `FISH-UNIT-001` | 7 FishingData/FishingTask unit tests failing (pre-existing, not regression) | MEDIUM | **Done** (commit facd3e7) |
-
 ---
 
 ## Canonical Commands
