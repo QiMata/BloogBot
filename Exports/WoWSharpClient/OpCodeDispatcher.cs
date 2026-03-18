@@ -116,6 +116,8 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_LEVELUP_INFO] = SpellHandler.HandleLevelUpInfo;
             _handlers[Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM] = SpellHandler.HandleGameObjectCustomAnim;
 
+            _handlers[Opcode.SMSG_PET_SPELLS] = PetHandler.HandlePetSpells;
+
             _handlers[Opcode.SMSG_STANDSTATE_UPDATE] = StandStateHandler.HandleStandStateUpdate;
             _handlers[Opcode.SMSG_CORPSE_RECLAIM_DELAY] = DeathHandler.HandleCorpseReclaimDelay;
 

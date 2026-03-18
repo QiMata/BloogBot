@@ -320,6 +320,52 @@ namespace WoWSharpClient
 
         public IWoWLocalPet Pet => _activePet;
 
+        // Pet action bar and spell IDs populated from SMSG_PET_SPELLS
+        private readonly List<(uint SpellId, byte ActionType)> _petActionBar = [];
+        private readonly List<uint> _petSpellIds = [];
+        private readonly object _petSpellLock = new();
+
+        /// <summary>
+        /// All pet spell IDs (action bar + additional spells) from SMSG_PET_SPELLS.
+        /// </summary>
+        internal IReadOnlyList<uint> PetSpellIds
+        {
+            get { lock (_petSpellLock) return _petSpellIds.ToArray(); }
+        }
+
+        /// <summary>
+        /// Called by PetHandler when SMSG_PET_SPELLS is received.
+        /// </summary>
+        internal void SetPetSpells(ulong petGuid, List<(uint SpellId, byte ActionType)> actionBar, List<uint> spells)
+        {
+            lock (_petSpellLock)
+            {
+                _petActionBar.Clear();
+                _petActionBar.AddRange(actionBar);
+                _petSpellIds.Clear();
+                // Merge action bar spell IDs and additional spells
+                foreach (var entry in actionBar)
+                    _petSpellIds.Add(entry.SpellId);
+                foreach (var id in spells)
+                {
+                    if (!_petSpellIds.Contains(id))
+                        _petSpellIds.Add(id);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called by PetHandler when pet is dismissed (petGuid=0 or empty packet).
+        /// </summary>
+        internal void ClearPetSpells()
+        {
+            lock (_petSpellLock)
+            {
+                _petActionBar.Clear();
+                _petSpellIds.Clear();
+            }
+        }
+
         /// <summary>
         /// Sends a CMSG_PET_ACTION packet. Called by WoWLocalPet methods.
         /// </summary>

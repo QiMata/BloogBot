@@ -1,8 +1,10 @@
+using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
 using System;
+using System.Linq;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
@@ -29,9 +31,37 @@ namespace WoWSharpClient.Models
 
         public void Cast(string spellName)
         {
-            // Pet spell casting requires spell ID lookup from the pet's action bar.
-            // SMSG_PET_SPELLS provides the action bar on summon; for now, log the attempt.
-            Log.Information("[PET] Cast requested for '{SpellName}' — pet spell lookup not yet wired", spellName);
+            var om = WoWSharpObjectManager.Instance;
+            if (om == null) return;
+
+            // Resolve spell name → possible spell IDs via SpellData
+            uint? abilityId = null;
+            if (SpellData.SpellNameToIds.TryGetValue(spellName, out var candidates))
+            {
+                var petSpells = om.PetSpellIds;
+                // Find highest-rank match in the pet's actual spell list
+                for (int i = candidates.Length - 1; i >= 0; i--)
+                {
+                    if (petSpells.Contains(candidates[i]))
+                    {
+                        abilityId = candidates[i];
+                        break;
+                    }
+                }
+            }
+
+            if (!abilityId.HasValue)
+            {
+                Log.Warning("[PET] Cast '{SpellName}' failed — spell not found in pet action bar", spellName);
+                return;
+            }
+
+            var targetGuid = om.Player?.TargetGuid ?? 0;
+            var payload = CombatSpellNetworkClientComponent.CreatePetAbilityPayload(
+                Guid, abilityId.Value, targetGuid);
+            om.SendPetAction(payload);
+            Log.Information("[PET] Cast '{SpellName}' (spellId={SpellId}) on target 0x{Target:X}",
+                spellName, abilityId.Value, targetGuid);
         }
 
         public void FollowPlayer()
