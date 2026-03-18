@@ -22,42 +22,63 @@ class Navigation;
 // WoW 1.12.1 Physics Constants (values adjusted to more closely reflect retail client behaviour)
 namespace PhysicsConstants
 {
-    // Gravity and movement
-    constexpr float GRAVITY = 19.2911f;          // kept same
-    constexpr float JUMP_VELOCITY = 7.95577f;    // kept same
+    // =========================================================================
+    // GRAVITY AND MOVEMENT
+    // =========================================================================
+    constexpr float GRAVITY = 19.2911f;
+    constexpr float JUMP_VELOCITY = 7.95577f;
     constexpr float WATER_LEVEL_DELTA = 2.0f;
 
-    // Ground detection (authentic vanilla: client allows ~2.1-2.2 unit step ups; testing shows 2.125f safe)
-    constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f; // tighter tolerance (remove hover)
-    constexpr float STEP_HEIGHT = 2.125f;            // maximum upward auto step (was 2.1f)
-    constexpr float STEP_DOWN_HEIGHT = 4.0f;         // maximum downward snap while still considered grounded (was 3.0f, vanilla allows larger safe drops)
-
-    // Height constants
-    constexpr float INVALID_HEIGHT = -200000.0f;
-    constexpr float MAX_HEIGHT = 100000.0f;
-    constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
-
-    // Legacy smoothing / acceleration tuning (kept for compatibility but mostly bypassed now)
-    constexpr float GROUND_ACCEL = 40.0f;        // no longer used (instant ground velocity)
-    constexpr float GROUND_DECEL = 30.0f;        // no longer used
-    constexpr float AIR_ACCEL = 5.0f;            // mild air control (full directional)
-    constexpr float AIR_DECEL = 0.0f;            // no passive damping
-    constexpr float SWIM_ACCEL = 20.0f;          // retained
-    constexpr float SWIM_DECEL = 0.0f;           // no passive damping in water
-    constexpr float MIN_GROUND_SNAP_EPS = 0.02f; // smaller jitter ignore
-    // Removed time-based snap speeds (instant snap like client); constants kept to avoid compile issues if referenced
-    constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
-    constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
-
-    // Slope walkability threshold: cos(50°) ≈ 0.6428 per WoW 1.12.1 client memory
-    // Address 0x0080DFFC ("WallClimb" / mountain climb angle). Slopes steeper than
-    // 50° are non-walkable for players. CMaNGOS navmesh uses 0.5 (cos 60°) for mob
-    // pathability, but the client physics engine enforces the stricter 50° limit.
-    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
+    // Initial downward velocity when transitioning from grounded to freefall.
+    // Small nudge ensures the character doesn't hover for one frame at vz=0.
+    constexpr float FALL_START_VELOCITY = -0.1f;
 
     // Terminal fall velocity (max vertical speed during free-fall)
     // Address 0x0087D894 in 1.12.1, 0x00BC4AF8 in 2.4.3
     constexpr float TERMINAL_VELOCITY = 60.148f;
+
+    // =========================================================================
+    // GROUND DETECTION
+    // =========================================================================
+    constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f;
+    constexpr float STEP_HEIGHT = 2.125f;       // max upward auto-step (vanilla ~2.1-2.2)
+    constexpr float STEP_DOWN_HEIGHT = 4.0f;    // max downward snap while grounded
+
+    // =========================================================================
+    // HEIGHT CONSTANTS
+    // =========================================================================
+    constexpr float INVALID_HEIGHT = -200000.0f;
+    constexpr float MAX_HEIGHT = 100000.0f;
+    constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
+
+    // =========================================================================
+    // SLOPE WALKABILITY
+    // =========================================================================
+
+    // cos(50°) ≈ 0.6428 per WoW 1.12.1 client memory at 0x0080DFFC.
+    // Slopes steeper than 50° are non-walkable for players.
+    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
+
+    // tan(50°) ≈ 1.1918 — max Z-drop per unit horizontal distance on walkable slope.
+    // Used for cliff detection: if ground drops faster than this, enter freefall.
+    constexpr float WALKABLE_TAN_MAX_SLOPE = 1.1918f;
+
+    // =========================================================================
+    // TERRAIN NORMAL ESTIMATION
+    // =========================================================================
+
+    // XY offset for finite-difference terrain normal probes (4 GetGroundZ calls)
+    constexpr float NORMAL_PROBE_OFFSET = 0.3f;
+
+    // =========================================================================
+    // STEP-UP TOLERANCES
+    // =========================================================================
+
+    // Extra penetration tolerance added to capsule radius during step-up promotion
+    constexpr float STEP_UP_PEN_TOLERANCE_EXTRA = 0.05f;
+
+    // Max Z above pre-step position for step-up candidate promotion
+    constexpr float MAX_STEP_UP_ABOVE_PRE_STEP = 1.5f;
 }
 
 class PhysicsEngine

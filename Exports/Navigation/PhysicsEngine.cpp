@@ -784,8 +784,8 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // Re-check higher candidates with relaxed tolerance (up to capsule radius).
     // Limit step-up to 1.5y above preStepZ to avoid snapping to bridges/upper floors.
     if (chosen && undoStepOffset > 0.0f) {
-        const float stepUpPenTolerance = radius + 0.05f;
-        const float maxStepUpZ = preStepZ + 1.5f; // reasonable step-up limit
+        const float stepUpPenTolerance = radius + PhysicsConstants::STEP_UP_PEN_TOLERANCE_EXTRA;
+        const float maxStepUpZ = preStepZ + PhysicsConstants::MAX_STEP_UP_ABOVE_PRE_STEP;
         const GroundCandidate* stepUpBest = nullptr;
         float stepUpBestPen = FLT_MAX;
         int stepUpBestPenCount = 0;
@@ -919,7 +919,7 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
                 st.isGrounded = true;
                 st.vz = 0.0f;
                 // Estimate terrain normal from finite differences
-                const float probeOffset = 0.3f;
+                const float probeOffset = PhysicsConstants::NORMAL_PROBE_OFFSET;
                 float zPx = SceneQuery::GetGroundZ(input.mapId, st.x + probeOffset, st.y, st.z + 2.0f, 10.0f);
                 float zNx = SceneQuery::GetGroundZ(input.mapId, st.x - probeOffset, st.y, st.z + 2.0f, 10.0f);
                 float zPy = SceneQuery::GetGroundZ(input.mapId, st.x, st.y + probeOffset, st.z + 2.0f, 10.0f);
@@ -1304,7 +1304,7 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
     if (!snapped) {
         st.isGrounded = false;
         // Only process vertical falling here to avoid double-applying XY when a ground move already occurred.
-        if (st.vz >= 0.0f) st.vz = -0.1f;
+        if (st.vz >= 0.0f) st.vz = PhysicsConstants::FALL_START_VELOCITY;
         // Apply gravity and vertical displacement without changing XY
         const float vz0 = st.vz;
         const float dz = vz0 * dt - 0.5f * GRAVITY * dt * dt;
@@ -1437,7 +1437,7 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         // actualV = (sweep + air) / dt → next frame air = actualV*dt → growing each frame.
         st.vx = 0.0f;
         st.vy = 0.0f;
-        st.vz = -0.1f;
+        st.vz = PhysicsConstants::FALL_START_VELOCITY;
         ProcessAirMovement(input, intent, st, dt, moveSpeed);
     } else {
         // =====================================================================
@@ -1447,16 +1447,16 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         // a walkable slope allows and enters freefall. Our DOWN pass snaps
         // through cliffs because STEP_DOWN_HEIGHT (4.0y) is generous.
         //
-        // Threshold: max ground drop per frame on steepest walkable slope (60°)
-        // = horizontal_distance * tan(60°) + step tolerance
-        // At 7 y/s, 50ms dt: 0.35y * 1.732 + 0.5 ≈ 1.1y per frame
+        // Threshold: max ground drop per frame on steepest walkable slope (50°)
+        // = horizontal_distance * tan(50°) + step tolerance
+        // At 7 y/s, 50ms dt: 0.35y * 1.1918 + 2.125 ≈ 2.54y per frame
         // Use prevGroundZ from the previous frame as the reference.
         // =====================================================================
         const float groundDrop = input.prevGroundZ - st.z;
         // Max expected drop per frame: steepest walkable slope * max horizontal distance + step tolerance.
-        // tan(60°) ≈ 1.732 (walkable min normal Z = cos(60°) = 0.5)
-        // At 7 y/s, 50ms: 0.35 * 1.732 + 2.125 ≈ 2.73y
-        const float maxSlopeDrop = moveSpeed * dt * 1.732f;
+        // tan(50°) ≈ 1.1918 (walkable limit = cos(50°) = 0.6428, per WoW client)
+        // At 7 y/s, 50ms: 0.35 * 1.1918 + 2.125 ≈ 2.54y
+        const float maxSlopeDrop = moveSpeed * dt * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE;
         const float cliffThreshold = maxSlopeDrop + PhysicsConstants::STEP_HEIGHT;
 
         if (groundDrop > cliffThreshold &&
@@ -1467,7 +1467,7 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
             st.isGrounded = false;
             st.vx = 0.0f;
             st.vy = 0.0f;
-            st.vz = -0.1f;
+            st.vz = PhysicsConstants::FALL_START_VELOCITY;
             {
                 std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(3);
                 oss << "[GroundMove] CLIFF DETECTED: groundDrop=" << groundDrop

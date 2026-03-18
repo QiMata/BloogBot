@@ -67,11 +67,15 @@ From `Exports/Navigation/PhysicsEngine.h` (`PhysicsConstants` namespace):
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `STEP_HEIGHT` | 2.125f | Max height for auto-stepping (vanilla allows ~2.1y step-ups) |
-| `STEP_DOWN_HEIGHT` | 4.0f | Max downward snap while grounded |
-| `GRAVITY` | 19.2911f | WoW gravity (yards/s�) |
+| `GRAVITY` | 19.2911f | WoW gravity (yards/s²) |
 | `JUMP_VELOCITY` | 7.95577f | Initial jump velocity (yards/s) |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428f | ~50� max walkable slope |
+| `TERMINAL_VELOCITY` | 60.148f | Max fall speed (0x0087D894) |
+| `FALL_START_VELOCITY` | -0.1f | Initial downward nudge entering freefall |
+| `STEP_HEIGHT` | 2.125f | Max height for auto-stepping (~2.1y) |
+| `STEP_DOWN_HEIGHT` | 4.0f | Max downward snap while grounded |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428f | cos(50°), max walkable slope |
+| `WALKABLE_TAN_MAX_SLOPE` | 1.1918f | tan(50°), cliff detection threshold |
+| `NORMAL_PROBE_OFFSET` | 0.3f | Finite-difference terrain normal offset |
 | `WATER_LEVEL_DELTA` | 2.0f | Swim threshold below water surface |
 
 ## Source Code Locations

@@ -28,6 +28,18 @@ public static class PhysicsTestConstants
     /// </summary>
     public const float WaterLevelDelta = 2.0f;
 
+    /// <summary>
+    /// Initial downward velocity when transitioning from grounded to freefall.
+    /// Small nudge to prevent one-frame hover at vz=0.
+    /// </summary>
+    public const float FallStartVelocity = -0.1f;
+
+    /// <summary>
+    /// Terminal fall velocity (max vertical speed during free-fall).
+    /// Address 0x0087D894 in 1.12.1.
+    /// </summary>
+    public const float TerminalVelocity = 60.148f;
+
     // ==========================================================================
     // GROUND DETECTION
     // ==========================================================================
@@ -81,6 +93,35 @@ public static class PhysicsTestConstants
     /// Maximum walkable slope angle in degrees (50° per WoW client)
     /// </summary>
     public const float MaxWalkableSlopeDegrees = 50.0f;
+
+    /// <summary>
+    /// tan(50°) — max Z-drop per unit horizontal distance on walkable slope.
+    /// Used for cliff detection.
+    /// </summary>
+    public const float WalkableTanMaxSlope = 1.1918f;
+
+    // ==========================================================================
+    // TERRAIN NORMAL ESTIMATION
+    // ==========================================================================
+
+    /// <summary>
+    /// XY offset for finite-difference terrain normal probes
+    /// </summary>
+    public const float NormalProbeOffset = 0.3f;
+
+    // ==========================================================================
+    // STEP-UP TOLERANCES
+    // ==========================================================================
+
+    /// <summary>
+    /// Extra penetration tolerance added to capsule radius during step-up promotion
+    /// </summary>
+    public const float StepUpPenToleranceExtra = 0.05f;
+
+    /// <summary>
+    /// Max Z above pre-step position for step-up candidate promotion
+    /// </summary>
+    public const float MaxStepUpAbovePreStep = 1.5f;
 
     // ==========================================================================
     // CAPSULE DIMENSIONS (Standard WoW Character)
