@@ -436,7 +436,7 @@ namespace WoWSharpClient
             // Dampen facing updates: only apply if the change exceeds a small threshold.
             // Sub-threshold facing jitter (from waypoint changes each tick) causes the
             // physics engine to oscillate movement direction → visible bouncing/jitter.
-            const float facingDampenThreshold = 0.15f; // ~8.6 degrees
+            const float facingDampenThreshold = 0.02f; // ~1.1deg (tightened from 0.15 to match FG parity)
             var facingDelta = MathF.Abs(facing - player.Facing);
             // Handle wrap-around (e.g. 6.2 → 0.1 = 0.18 rad, not 6.1 rad)
             if (facingDelta > MathF.PI)

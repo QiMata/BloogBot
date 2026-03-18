@@ -862,11 +862,19 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
             ((input.moveFlags & (MOVEFLAG_SWIMMING | MOVEFLAG_FLYING | MOVEFLAG_LEVITATING | MOVEFLAG_HOVER |
                                  MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) == 0);
         const float preciseRiseTolerance = trustGroundedReplayInput ? 0.2f : 0.05f;
+        // Downward correction tolerance: the capsule sweep picks candidates by TOI and
+        // plane projection, which on steep slopes can place the character above the actual
+        // terrain surface at the capsule center. GetGroundZ is the ray-cast ground truth.
+        // Allow correction down to the full step-down distance for walkable candidates,
+        // but limit to 0.5y for non-walkable to prevent wrong-floor snaps in WMOs.
+        const float preciseFallTolerance = chosen->walkable
+            ? PhysicsConstants::STEP_DOWN_HEIGHT
+            : 0.5f;
         float preciseZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, st.z,
             PhysicsConstants::STEP_DOWN_HEIGHT);
         if (VMAP::IsValidHeight(preciseZ) &&
             preciseZ <= st.z + preciseRiseTolerance &&
-            preciseZ >= st.z - 0.5f) {
+            preciseZ >= st.z - preciseFallTolerance) {
             st.z = preciseZ;
         }
 
