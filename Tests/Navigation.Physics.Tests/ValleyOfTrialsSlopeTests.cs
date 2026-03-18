@@ -337,4 +337,120 @@ public class ValleyOfTrialsSlopeTests
 
         _output.WriteLine($"\nMismatches: {mismatches}/{numSamples}");
     }
+
+    /// <summary>
+    /// Simulate the SteepDescent parity route at 50ms ticks (live bot rate).
+    /// This exercises the exact conditions where the DOWN pass fails to find
+    /// ground on steep terrain, causing the bot to float ~2y above FG.
+    /// </summary>
+    [Fact]
+    public void SteepDescent_50msTicks_GroundDetectionDiagnostic()
+    {
+        Assert.True(_fixture.IsInitialized, "Physics engine not initialized");
+
+        // SteepDescent route: same as MovementParityTests.Parity_ValleyOfTrials_SteepDescent
+        float startX = -224f, startY = -4310f, startZ = 65f; // Actual start Z from recording
+        float endX = -310f, endY = -4410f;
+
+        float dt = 0.05f; // 50ms — matches live bot tick rate
+        float runSpeed = 7.0f;
+        int maxSteps = 600; // 30 seconds
+
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float dist = MathF.Sqrt(dx * dx + dy * dy);
+        float dirX = dx / dist;
+        float dirY = dy / dist;
+        float facing = MathF.Atan2(dirY, dirX);
+        float vx = dirX * runSpeed;
+        float vy = dirY * runSpeed;
+
+        float posX = startX, posY = startY, posZ = startZ;
+        float prevGroundZ = startZ;
+
+        int airborneFrames = 0;
+        int noGroundFrames = 0; // GroundNz == 1.0 (default, no ground found)
+        float maxZAboveGround = 0f;
+        float maxZAboveGroundX = 0f;
+
+        _output.WriteLine($"=== SteepDescent 50ms Tick Simulation ===");
+        _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({endX},{endY})");
+        _output.WriteLine($"dt={dt}s, speed={runSpeed}, maxSteps={maxSteps}");
+        _output.WriteLine("");
+        _output.WriteLine($"{"Step",4} {"X",10} {"Y",12} {"Z",8} {"GndZ",8} {"GndNz",6} {"Flags",12} {"dZ",7} {"AbvGnd",7}");
+        _output.WriteLine(new string('-', 85));
+
+        for (int step = 0; step < maxSteps; step++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x00000001, // MOVEFLAG_FORWARD
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Vx = vx,
+                Vy = vy,
+                Vz = 0f,
+                WalkSpeed = 2.5f,
+                RunSpeed = runSpeed,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                TurnSpeed = 3.14159f,
+                Height = 2.0313f,  // Orc male (TESTBOT2)
+                Radius = 0.3718f,  // Orc male
+                PrevGroundZ = prevGroundZ,
+                StepUpBaseZ = -200000f,
+                MapId = MapId,
+                DeltaTime = dt
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float deltaZ = output.Z - posZ;
+            string flags = $"0x{output.MoveFlags:X}";
+            bool isAirborne = (output.MoveFlags & 0x4000) != 0 || // FALLINGFAR
+                              (output.MoveFlags & 0x2000) != 0;   // JUMPING
+
+            if (isAirborne) airborneFrames++;
+            if (MathF.Abs(output.GroundNz - 1.0f) < 0.001f && MathF.Abs(output.GroundNx) < 0.001f)
+                noGroundFrames++;
+
+            // Check how far above true ground (ray-cast) we are
+            float trueGroundZ = NavigationInterop.GetGroundZ(MapId, output.X, output.Y, output.Z, 20f);
+            float aboveGround = (trueGroundZ > -50000f) ? output.Z - trueGroundZ : 0f;
+            if (aboveGround > maxZAboveGround)
+            {
+                maxZAboveGround = aboveGround;
+                maxZAboveGroundX = output.X;
+            }
+
+            // Print every 10th frame, plus any frame with big Z delta or airborne
+            if (step % 10 == 0 || MathF.Abs(deltaZ) > 0.5f || isAirborne || aboveGround > 1.0f)
+            {
+                _output.WriteLine($"{step,4} {output.X,10:F2} {output.Y,12:F2} {output.Z,8:F2} {output.GroundZ,8:F2} {output.GroundNz,6:F3} {flags,12} {deltaZ,7:F3} {aboveGround,7:F2}");
+            }
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            if (output.GroundZ > -50000f)
+                prevGroundZ = output.GroundZ;
+
+            float remainDist = MathF.Sqrt((posX - endX) * (posX - endX) + (posY - endY) * (posY - endY));
+            if (remainDist < 3f) break;
+        }
+
+        _output.WriteLine($"\n=== Summary ===");
+        _output.WriteLine($"Airborne frames (FALLINGFAR/JUMPING): {airborneFrames}");
+        _output.WriteLine($"No-ground frames (GroundNz=1.0 default): {noGroundFrames}");
+        _output.WriteLine($"Max Z above true ground: {maxZAboveGround:F2}y at X={maxZAboveGroundX:F0}");
+        _output.WriteLine($"Final position: ({posX:F1}, {posY:F1}, {posZ:F1})");
+
+        // The bot should mostly stay grounded on this terrain
+        // Allow some transient airborne frames but not sustained floating
+        Assert.True(noGroundFrames < 20,
+            $"Physics failed to find ground for {noGroundFrames} frames on steep terrain — DOWN pass capsule sweep is missing ground");
+    }
 }

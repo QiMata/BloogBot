@@ -899,20 +899,67 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
             PHYS_INFO(PHYS_MOVE, oss.str());
         }
     } else {
-        // No ground found - will transition to falling
-        // IMPORTANT: Undo the step offset lift to prevent artificial height gain
-        // The UP pass lifted us by clampedStepOffset for auto-step purposes,
-        // but since we found no ground, we must restore the original Z before falling
+        // No ground found from capsule sweep.
+        // IMPORTANT: Undo the step offset lift to prevent artificial height gain.
         st.z -= clampedStepOffset;
-        st.isGrounded = false;
-        result.distanceRemaining = totalDown;
-        result.finalPosition = G3D::Vector3(st.x, st.y, st.z);
-        
-        {
-            std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-            oss << "[DownPass] No ground found - will fall, undid stepOffset=" << clampedStepOffset
-                << " newZ=" << st.z;
-            PHYS_INFO(PHYS_MOVE, oss.str());
+
+        // Ray-cast fallback: on steep terrain, the capsule DOWN sweep can miss ground
+        // that a simple vertical ray finds. This is because the capsule's width causes
+        // it to miss thin terrain geometry at steep angles. Fall back to GetGroundZ
+        // when the character was previously grounded, not on a transport, and the ray
+        // finds ground within STEP_DOWN_HEIGHT of the pre-step position.
+        bool rayFallbackUsed = false;
+        const bool prevGrounded = (input.fallTime == 0) &&
+            ((input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) == 0);
+        if (prevGrounded && input.transportGuid == 0) {
+            float rayZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, st.z,
+                PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
+            if (VMAP::IsValidHeight(rayZ) && rayZ <= st.z && rayZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT) {
+                st.z = rayZ;
+                st.isGrounded = true;
+                st.vz = 0.0f;
+                // Estimate terrain normal from finite differences
+                const float probeOffset = 0.3f;
+                float zPx = SceneQuery::GetGroundZ(input.mapId, st.x + probeOffset, st.y, st.z + 2.0f, 10.0f);
+                float zNx = SceneQuery::GetGroundZ(input.mapId, st.x - probeOffset, st.y, st.z + 2.0f, 10.0f);
+                float zPy = SceneQuery::GetGroundZ(input.mapId, st.x, st.y + probeOffset, st.z + 2.0f, 10.0f);
+                float zNy = SceneQuery::GetGroundZ(input.mapId, st.x, st.y - probeOffset, st.z + 2.0f, 10.0f);
+                if (VMAP::IsValidHeight(zPx) && VMAP::IsValidHeight(zNx) &&
+                    VMAP::IsValidHeight(zPy) && VMAP::IsValidHeight(zNy)) {
+                    float dzdx = (zPx - zNx) / (2.0f * probeOffset);
+                    float dzdy = (zPy - zNy) / (2.0f * probeOffset);
+                    st.groundNormal = G3D::Vector3(-dzdx, -dzdy, 1.0f).directionOrZero();
+                } else {
+                    st.groundNormal = G3D::Vector3(0, 0, 1);
+                }
+                if (st.groundNormal.z < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) {
+                    // Non-walkable slope — let the character slide/fall instead
+                    st.isGrounded = false;
+                } else {
+                    rayFallbackUsed = true;
+                    result.finalPosition = G3D::Vector3(st.x, st.y, st.z);
+                    result.hitWall = false;
+                    result.lastHitNormal = st.groundNormal;
+                    {
+                        std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+                        oss << "[DownPass] Ray-cast fallback: z=" << st.z
+                            << " normal=(" << st.groundNormal.x << "," << st.groundNormal.y << "," << st.groundNormal.z << ")";
+                        PHYS_INFO(PHYS_MOVE, oss.str());
+                    }
+                }
+            }
+        }
+
+        if (!rayFallbackUsed) {
+            st.isGrounded = false;
+            result.distanceRemaining = totalDown;
+            result.finalPosition = G3D::Vector3(st.x, st.y, st.z);
+            {
+                std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+                oss << "[DownPass] No ground found - will fall, undid stepOffset=" << clampedStepOffset
+                    << " newZ=" << st.z;
+                PHYS_INFO(PHYS_MOVE, oss.str());
+            }
         }
     }
     
