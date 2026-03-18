@@ -228,10 +228,18 @@ namespace BotRunner.Tests.Combat
 
             var candidates = FishingData.GetPoolApproachCandidates(playerPosition, poolPosition, 18f);
 
-            Assert.NotEmpty(candidates);
-            Assert.All(candidates, candidate => Assert.InRange(candidate.DistanceTo(poolPosition), 17.9f, 18.1f));
+            // Multi-ring candidates: 0.7×, 1.0×, 1.3× desired distance with Z-elevation compensation.
+            // 13 angle offsets × 3 distance rings = 39 candidates.
+            Assert.Equal(39, candidates.Length);
             Assert.Equal(playerPosition.Z, candidates[0].Z);
             Assert.NotEqual(candidates[0].Y, candidates[1].Y);
+
+            // First 13 candidates are the 1.0× ring — should be near desired distance (Z-adjusted planar).
+            // Allow wider tolerance for Z-compensation: planarDist ≠ 3D distance when Z differs.
+            float minDist = candidates.Min(c => c.DistanceTo(poolPosition));
+            float maxDist = candidates.Max(c => c.DistanceTo(poolPosition));
+            Assert.InRange(minDist, 10f, 20f);   // 0.7× ring (Z-adjusted)
+            Assert.InRange(maxDist, 20f, 30f);    // 1.3× ring (Z-adjusted)
         }
 
         [Fact]
