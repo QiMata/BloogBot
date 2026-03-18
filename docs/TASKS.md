@@ -63,8 +63,8 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | 5.1 | Create MaNGOS accounts (RFCBOT2–RFCBOT10) + GM level 6 via SOAP. Characters auto-created on first bot login, then leveled via `.character level` | **Done** (SOAP) |
 | 5.2 | Create `RagefireChasm.settings.json` — 10-bot StateManager config with dungeoneering mode | **Done** (eb3fddd) |
 | 5.3 | Restore `DungeoneeringTask` from commit `0e7e0bf` — adapt to current BotRunner architecture (IBotTask, behavior trees, NavigationPath) | **Done** (541a941) |
-| 5.4 | Add dungeoneering coordinator to StateManager — group formation, raid conversion, ready check, dungeon entry at RFC portal (1811, -4410, -18) on Kalimdor | Open |
-| 5.5 | Implement role-aware combat sequences — tank (hold aggro, skull mark), healer (lowest-HP party member), DPS (assist skull target), off-tank (pickup adds) | Open |
+| 5.4 | Add dungeoneering coordinator to StateManager — group formation, raid conversion, ready check, dungeon entry at RFC portal (1811, -4410, -18) on Kalimdor | **Done** (5a2ae0b) |
+| 5.5 | Implement role-aware combat sequences — tank (hold aggro, skull mark), healer (lowest-HP party member), DPS (assist skull target), off-tank (pickup adds) | **Done** (DungeoneeringCoordinator + DungeoneeringTask) |
 | 5.6 | Add rest/buff coordination — CanProceed check (all members HP>85%, mana>80%) before pulls | **Done** (541a941, built into DungeoneeringTask) |
 | 5.7 | Create `RagefireChasmTests.cs` — test fixture launches StateManager with RFC config, asserts: group formed, dungeon entered (map=389), mobs killed, forward progress | **Done** (eb3fddd) |
 | 5.8 | Add dungeon waypoint data for RFC map 389 — encounter positions from `creature` table for mapId=389 | **Done** (541a941, DungeonWaypoints.cs) |
@@ -123,16 +123,19 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 - **Last updated:** 2026-03-18 (session 114)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
+  - P5.1: Created RFCBOT2-10 MaNGOS accounts + GM level 6 via SOAP
   - P5.2: Created `RagefireChasm.settings.json` — 10-bot StateManager config (eb3fddd)
   - P5.3: Restored `DungeoneeringTask` from old commit, adapted to current BotTask architecture (541a941)
+  - P5.4: Created `DungeoneeringCoordinator` — N-bot group formation + dungeon dispatch (5a2ae0b)
+  - P5.5: Role-aware combat — healers heal lowest HP, DPS assist leader's target
   - P5.6: CanProceed rest/buff check built into DungeoneeringTask (541a941)
   - P5.7: Created `RagefireChasmTests.cs` — 4 test methods (enter world, form raid, teleport, full run placeholder) (eb3fddd)
   - P5.8: Added RFC waypoint data in `DungeonWaypoints.cs` (541a941)
   - Added `START_DUNGEONEERING` action type through full pipeline (proto → CharacterAction → ActionMapping → ActionDispatch → Task)
-- **Test baseline:** 1266/1266 WoWSharpClient, BotRunner builds clean (0 errors)
+- **Test baseline:** 1266/1266 WoWSharpClient, BotRunner + WoWStateManager build clean (0 errors)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
+- **P5 status:** All 8 tasks complete. Ready for live RFC test when RFCBOT characters are created and leveled.
 - **Next:**
-  1. P5.1: Create MaNGOS accounts (RFCBOT2–RFCBOT10) + level 8 characters via SOAP
-  2. P5.4: Dungeoneering coordinator in StateManager — group formation, raid conversion, dungeon entry
-  3. P5.5: Role-aware combat sequences (tank/heal/DPS/off-tank)
-  4. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot
+  1. Run RFC_AllBotsEnterWorld to trigger character creation for RFCBOT2-10, then level them via SOAP
+  2. Run full RFC test suite to validate end-to-end dungeon run
+  3. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot

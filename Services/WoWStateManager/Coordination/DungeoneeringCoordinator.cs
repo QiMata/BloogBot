@@ -242,9 +242,7 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Leader runs on its own via DungeoneeringTask.
-        // Members also run DungeoneeringTask in follower mode.
-        // Coordinator provides overlay: heal support for members who are healers.
+        // Leader runs on its own via DungeoneeringTask — no coordinator overlay needed.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -254,19 +252,25 @@ public class DungeoneeringCoordinator
         if (!snapshots.TryGetValue(requestingAccount, out var mySnap))
             return null;
 
-        // Resolve healer spells for this account if not done
+        // Resolve spells for this account if not done
         if (!_spellsResolved.Contains(requestingAccount))
             ResolveSpells(requestingAccount, mySnap);
 
-        // If leader is in combat and this bot has heal spells, check if anyone needs healing
-        if (IsInCombat(leaderSnap) && _healSpells.TryGetValue(requestingAccount, out var healSpell) && healSpell != 0)
+        // Only overlay combat coordination when leader is in combat
+        if (!IsInCombat(leaderSnap))
+            return null;
+
+        if (!CanAct(requestingAccount, ACTION_COOLDOWN_SEC))
+            return null;
+
+        // Priority 1: Heal if any party member is below threshold
+        if (_healSpells.TryGetValue(requestingAccount, out var healSpell) && healSpell != 0)
         {
-            // Find lowest HP party member
             var lowestHpAccount = FindLowestHpMember(snapshots);
             if (lowestHpAccount != null)
             {
                 var hpRatio = GetHealthRatio(snapshots[lowestHpAccount]);
-                if (hpRatio < HEAL_THRESHOLD && CanAct(requestingAccount, ACTION_COOLDOWN_SEC))
+                if (hpRatio < HEAL_THRESHOLD)
                 {
                     var targetGuid = GetPlayerGuid(snapshots[lowestHpAccount]);
                     _logger.LogInformation("DUNGEON_COORD: {Account} healing {Target} (HP={Hp:P0})",
@@ -274,6 +278,19 @@ public class DungeoneeringCoordinator
                     _lastActionSent[requestingAccount] = DateTime.UtcNow;
                     return MakeCastSpellAction((int)healSpell, (long)targetGuid);
                 }
+            }
+        }
+
+        // Priority 2: DPS — assist the leader's target
+        if (_damageSpells.TryGetValue(requestingAccount, out var dpsSpell) && dpsSpell != 0)
+        {
+            var leaderTargetGuid = GetTargetGuid(leaderSnap);
+            if (leaderTargetGuid != 0)
+            {
+                _logger.LogInformation("DUNGEON_COORD: {Account} DPS on leader's target 0x{Target:X} (spell {Spell})",
+                    requestingAccount, leaderTargetGuid, dpsSpell);
+                _lastActionSent[requestingAccount] = DateTime.UtcNow;
+                return MakeCastSpellAction((int)dpsSpell, (long)leaderTargetGuid);
             }
         }
 
@@ -369,6 +386,9 @@ public class DungeoneeringCoordinator
 
     private static ulong GetPlayerGuid(WoWActivitySnapshot snapshot)
         => snapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
+
+    private static ulong GetTargetGuid(WoWActivitySnapshot snapshot)
+        => snapshot.Player?.Unit?.TargetGuid ?? 0;
 
     private static float GetHealthRatio(WoWActivitySnapshot snapshot)
     {
