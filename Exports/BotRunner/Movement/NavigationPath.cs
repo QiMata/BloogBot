@@ -50,6 +50,18 @@ public sealed class NavigationMetrics
     /// <summary>Wall-clock milliseconds spent on the most recent path calculation.</summary>
     public long LastPathDurationMs { get; private set; }
 
+    /// <summary>Maximum 2D perpendicular drift from planned path observed during execution.</summary>
+    public float MaxObservedDrift { get; private set; }
+
+    /// <summary>Number of execution samples where drift exceeded the warning threshold (8y).</summary>
+    public int DriftWarnings { get; private set; }
+
+    internal void RecordDrift(float drift)
+    {
+        if (drift > MaxObservedDrift) MaxObservedDrift = drift;
+        if (drift > 8f) DriftWarnings++;
+    }
+
     // Running totals for computing the average incrementally.
     private long _totalWaypointCount;
 
@@ -95,6 +107,8 @@ public sealed class NavigationMetrics
         DynamicObstacleDeflections = 0;
         AveragePathLength = 0f;
         LastPathDurationMs = 0;
+        MaxObservedDrift = 0f;
+        DriftWarnings = 0;
         _totalWaypointCount = 0;
     }
 }
@@ -139,7 +153,87 @@ public sealed record NavigationTraceSnapshot(
     bool SmoothPath,
     bool IsShortRoute,
     long LastPlanTick,
-    NavigationExecutionSample[] ExecutionSamples);
+    NavigationExecutionSample[] ExecutionSamples)
+{
+    /// <summary>
+    /// Compute planned-vs-executed drift metrics from the execution samples
+    /// and planned waypoints. Returns (maxDrift, avgDrift, wallDeflectCount,
+    /// directFallbackCount, distinctPlanVersions).
+    /// </summary>
+    public (float MaxDrift, float AvgDrift, int WallDeflectCount, int DirectFallbackCount, int ReplanCount) ComputeDriftMetrics()
+    {
+        if (ExecutionSamples.Length == 0 || PlannedWaypoints.Length < 2)
+            return (0f, 0f, 0, 0, 0);
+
+        float maxDrift = 0f;
+        float totalDrift = 0f;
+        int driftSamples = 0;
+        int wallDeflectCount = 0;
+        int directFallbackCount = 0;
+        var planVersions = new HashSet<int>();
+
+        foreach (var sample in ExecutionSamples)
+        {
+            planVersions.Add(sample.PlanVersion);
+
+            if (sample.Resolution == "wall_deflect") wallDeflectCount++;
+            if (sample.UsedDirectFallback) directFallbackCount++;
+
+            // Compute perpendicular distance from actual position to nearest planned path segment
+            var drift = MinDistanceToPath(sample.CurrentPosition, PlannedWaypoints);
+            if (drift > maxDrift) maxDrift = drift;
+            totalDrift += drift;
+            driftSamples++;
+        }
+
+        var avgDrift = driftSamples > 0 ? totalDrift / driftSamples : 0f;
+        return (maxDrift, avgDrift, wallDeflectCount, directFallbackCount, planVersions.Count);
+    }
+
+    private static float MinDistanceToPath(Position point, Position[] path)
+    {
+        var minDist = float.MaxValue;
+        for (int i = 0; i < path.Length - 1; i++)
+        {
+            var dist = PerpendicularDistance2D(point, path[i], path[i + 1]);
+            if (dist < minDist) minDist = dist;
+        }
+        // Also check distance to last waypoint
+        if (path.Length > 0)
+        {
+            var endDist = Distance2D(point, path[^1]);
+            if (endDist < minDist) minDist = endDist;
+        }
+        return minDist == float.MaxValue ? 0f : minDist;
+    }
+
+    private static float PerpendicularDistance2D(Position point, Position segA, Position segB)
+    {
+        var dx = segB.X - segA.X;
+        var dy = segB.Y - segA.Y;
+        var lenSq = dx * dx + dy * dy;
+
+        if (lenSq < 1e-6f)
+            return Distance2D(point, segA);
+
+        // Project point onto segment, clamped to [0,1]
+        var t = ((point.X - segA.X) * dx + (point.Y - segA.Y) * dy) / lenSq;
+        t = Math.Clamp(t, 0f, 1f);
+
+        var projX = segA.X + t * dx;
+        var projY = segA.Y + t * dy;
+        var ex = point.X - projX;
+        var ey = point.Y - projY;
+        return MathF.Sqrt(ex * ex + ey * ey);
+    }
+
+    private static float Distance2D(Position a, Position b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+}
 
 internal readonly record struct ValidatedPathResult(
     Position[] RawPath,
@@ -811,6 +905,21 @@ public class NavigationPath(
         if (_executionSamples.Count > MAX_TRACE_SAMPLES)
             _executionSamples.RemoveAt(0);
 
+        // Drift detection: compute perpendicular distance from actual position to planned path
+        if (_waypoints.Length >= 2)
+        {
+            var drift = ComputeDriftFromPath(currentPosition, _waypoints);
+            Metrics.RecordDrift(drift);
+
+            if (drift > 12f)
+            {
+                Serilog.Log.Warning(
+                    "[NavigationPath] Drift {Drift:F1}y from planned path at ({X:F1},{Y:F1},{Z:F1}) res={Resolution} idx={Idx}/{Total}",
+                    drift, currentPosition.X, currentPosition.Y, currentPosition.Z,
+                    resolution, _currentIndex, _waypoints.Length);
+            }
+        }
+
         return waypoint;
     }
 
@@ -875,6 +984,37 @@ public class NavigationPath(
 
     private static Position? ClonePosition(Position? position)
         => position == null ? null : new Position(position.X, position.Y, position.Z);
+
+    /// <summary>
+    /// Minimum 2D perpendicular distance from a point to the nearest segment of the path.
+    /// </summary>
+    private static float ComputeDriftFromPath(Position point, Position[] path)
+    {
+        var minDist = float.MaxValue;
+        for (int i = 0; i < path.Length - 1; i++)
+        {
+            var dist = PerpendicularDistance2D(point, path[i], path[i + 1]);
+            if (dist < minDist) minDist = dist;
+        }
+        return minDist == float.MaxValue ? 0f : minDist;
+    }
+
+    private static float PerpendicularDistance2D(Position point, Position segA, Position segB)
+    {
+        var dx = segB.X - segA.X;
+        var dy = segB.Y - segA.Y;
+        var lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-6f)
+        {
+            var ex = point.X - segA.X;
+            var ey = point.Y - segA.Y;
+            return MathF.Sqrt(ex * ex + ey * ey);
+        }
+        var t = Math.Clamp(((point.X - segA.X) * dx + (point.Y - segA.Y) * dy) / lenSq, 0f, 1f);
+        var px = point.X - (segA.X + t * dx);
+        var py = point.Y - (segA.Y + t * dy);
+        return MathF.Sqrt(px * px + py * py);
+    }
 
     private bool HasLineOfSight(Position from, Position to, uint mapId)
     {

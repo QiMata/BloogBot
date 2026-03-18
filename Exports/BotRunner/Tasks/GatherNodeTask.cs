@@ -43,6 +43,15 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
             return;
         }
 
+        // Swimming means pathfinding routed us into water — abort and let coordinator retry
+        if (player.IsSwimming)
+        {
+            Log.Warning("[GATHER] Entered water while approaching node {Guid:X}; aborting", nodeGuid);
+            ObjectManager.StopAllMovement();
+            BotTasks.Pop();
+            return;
+        }
+
         // Find the node
         var node = ObjectManager.GameObjects
             .FirstOrDefault(go => go.Guid == nodeGuid);

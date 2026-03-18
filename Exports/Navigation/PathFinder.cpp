@@ -878,16 +878,21 @@ void PathFinder::createFilter()
 	m_filter.setIncludeFlags(includeFlags);
 	m_filter.setExcludeFlags(excludeFlags);
 
-	// Penalize steep slope polygons so paths prefer walkable terrain.
-	// Detour area costs multiply the traversal cost for polygons with that area type.
-	// VMaNGOS area IDs (GridMapDefines.h): AREA_NONE=0, AREA_GROUND=1,
-	// AREA_GROUND_MODEL=2, AREA_STEEP_SLOPE=3, AREA_STEEP_SLOPE_MODEL=4.
-	// Cost of 10x makes the pathfinder strongly prefer flat ground but still route
-	// through steep areas when no alternative exists (e.g., narrow canyon approaches).
-	m_filter.setAreaCost(3, 10.0f);  // AREA_STEEP_SLOPE
-	m_filter.setAreaCost(4, 10.0f);  // AREA_STEEP_SLOPE_MODEL
+	// Penalize undesirable terrain so paths prefer flat walkable ground.
+	// Detour area costs multiply traversal cost for polygons with that area type.
+	// VMaNGOS area IDs (GridMapDefines.h):
+	//   AREA_NONE=0, AREA_GROUND=1, AREA_GROUND_MODEL=2,
+	//   AREA_STEEP_SLOPE=3, AREA_STEEP_SLOPE_MODEL=4,
+	//   AREA_WATER_TRANSITION=5, AREA_WATER=6, AREA_MAGMA=7, AREA_SLIME=8
+	//
+	// Steep slopes (>52°): 10x cost — prefer flat ground but allow when no alternative.
+	// AREA_WATER/MAGMA/SLIME: already excluded via includeFlags (no NAV_GROUND flag).
+	// AREA_WATER_TRANSITION (5): has NAV_GROUND|NAV_WATER — included in filter.
+	//   Not penalized here because even small costs cause cascading path changes.
+	//   Swim-avoidance is handled at the task level (IsSwimming check).
+	m_filter.setAreaCost(3, 10.0f);   // AREA_STEEP_SLOPE
+	m_filter.setAreaCost(4, 10.0f);   // AREA_STEEP_SLOPE_MODEL
 
-	// TODO
 	updateFilter(false, 0, 0, 0);
 }
 
