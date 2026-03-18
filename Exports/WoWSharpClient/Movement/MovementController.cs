@@ -274,8 +274,10 @@ namespace WoWSharpClient.Movement
                 }
             }
 
-            // 2. Send network packet if needed
-            if (ShouldSendPacket(gameTimeMs))
+            // 2. Send network packet if needed.
+            // Suppress packets during post-teleport ground snap — physics is still settling
+            // and sending transient FALLINGFAR heartbeats confuses the server.
+            if (!_needsGroundSnap && ShouldSendPacket(gameTimeMs))
             {
                 SendMovementPacket(gameTimeMs);
             }
