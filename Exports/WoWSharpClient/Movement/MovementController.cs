@@ -743,14 +743,16 @@ namespace WoWSharpClient.Movement
                     // This matches FG behavior: smooth grounded descent at walk speed.
                     _falseFreefallCount++;
 
-                    // Calculate descent toward path waypoint
+                    // Path-guided descent: when physics loses ground on slopes,
+                    // descend at the max walkable slope rate toward the path waypoint Z.
+                    // This matches FG behavior (smooth grounded descent at walk speed).
                     float ffsZ = _prevGroundZ;
                     if (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
                     {
                         float wpZ = _currentPath[_currentWaypointIndex].Z;
                         if (wpZ < _prevGroundZ)
                         {
-                            // Descend toward waypoint Z at a max rate based on movement speed.
+                            // Descend toward waypoint Z at max walkable slope rate.
                             // At 7 y/s horizontal, max vertical drop per frame on steepest
                             // walkable slope (60°): speed * dt * tan(60°) = 7 * 0.05 * 1.732 = 0.606y
                             float maxDropPerFrame = _player.RunSpeed * deltaSec * 1.732f;
