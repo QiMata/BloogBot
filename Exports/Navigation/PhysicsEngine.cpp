@@ -136,7 +136,7 @@ float PhysicsEngine::LogSlideImpactAndComputeRatio(
     // Compute angle for logging
     G3D::Vector3 nH(slideSourceN.x, slideSourceN.y, 0.0f);
     float angleDeg = 0.0f;
-    if (nH.magnitude() > 1e-6f) {
+    if (nH.magnitude() > PhysicsConstants::VECTOR_EPSILON) {
         nH = nH.directionOrZero();
         float cosA = std::fabs(dirN.dot(nH));
         cosA = std::max(0.0f, std::min(1.0f, cosA));
@@ -179,11 +179,11 @@ bool PhysicsEngine::ComputeStartOverlapSlideNormal(
     for (const auto& oh : startOverlaps) {
         if (!oh.startPenetrating) 
             continue;
-        if (std::fabs(oh.normal.z) >= 0.7f) 
+        if (std::fabs(oh.normal.z) >= PhysicsConstants::OVERLAP_NORMAL_Z_FILTER)
             continue;
             
         G3D::Vector3 nH(oh.normal.x, oh.normal.y, 0.0f);
-        if (nH.magnitude() <= 1e-6f) 
+        if (nH.magnitude() <= PhysicsConstants::VECTOR_EPSILON) 
             continue;
             
         nH = nH.directionOrZero();
@@ -236,7 +236,7 @@ void PhysicsEngine::ApplySlideMovement(
     float remaining)
 {
     G3D::Vector3 nH(slideSourceN.x, slideSourceN.y, 0.0f);
-    if (nH.magnitude() <= 1e-6f) {
+    if (nH.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
         PHYS_INFO(PHYS_MOVE, "[Slide] skipped: invalid horizontal normal");
         return;
     }
@@ -248,7 +248,7 @@ void PhysicsEngine::ApplySlideMovement(
     slideDir = slideDir.directionOrZero();
     
     float slideIntended = remaining;
-    if (slideDir.magnitude() <= 1e-6f || slideIntended <= 1e-6f)
+    if (slideDir.magnitude() <= PhysicsConstants::VECTOR_EPSILON || slideIntended <= PhysicsConstants::VECTOR_EPSILON)
         return;
 
     // Sweep along slide direction
@@ -265,7 +265,7 @@ void PhysicsEngine::ApplySlideMovement(
             continue;
         if (hh.region != SceneHit::CapsuleRegion::Side) 
             continue;
-        if (hh.distance < 1e-6f) 
+        if (hh.distance < PhysicsConstants::VECTOR_EPSILON) 
             continue;
         if (hh.distance < minDist2) { 
             minDist2 = hh.distance; 
@@ -512,7 +512,7 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteUpPass(
     for (const auto& hit : upHits) {
         if (!hit.hit || hit.startPenetrating) 
             continue;
-        if (hit.distance < 1e-6f) 
+        if (hit.distance < PhysicsConstants::VECTOR_EPSILON) 
             continue;
         if (hit.distance < minDist) {
             minDist = hit.distance;
@@ -660,7 +660,7 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // - Prefer "highest valid" support (avoid snapping down onto terrain under WMOs).
     // ---------------------------------------------------------------------
     const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-    const float snapEps = 1e-4f;
+    const float snapEps = PhysicsConstants::GROUND_SNAP_EPSILON;
     // Tightened penetration tolerance (Phase 1b): 0.5× radius instead of 1.0× radius.
     // Previous tolerance allowed contacts where the capsule center was nearly inside geometry,
     // masking bad candidates. Half-radius still permits natural wall contact when walking
@@ -693,14 +693,14 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // Collect candidates (walkable first; keep non-walkable only as last resort fallback).
     for (const auto& hit : downHits) {
         if (!hit.hit || hit.startPenetrating) continue;
-        if (hit.distance < 1e-6f) continue;
+        if (hit.distance < PhysicsConstants::VECTOR_EPSILON) continue;
 
         const bool walkable = (std::fabs(hit.normal.z) >= walkableCosMin);
 
         float nx = hit.normal.x, ny = hit.normal.y, nz = hit.normal.z;
         float px = hit.point.x, py = hit.point.y, pz = hit.point.z;
         float planeZ = pz;
-        if (std::fabs(nz) > 1e-6f) {
+        if (std::fabs(nz) > PhysicsConstants::VECTOR_EPSILON) {
             planeZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
         }
 
@@ -752,7 +752,7 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
         if (a.walkable != b.walkable) return a.walkable > b.walkable;
         float errA = std::fabs(a.planeZ - preStepZ);
         float errB = std::fabs(b.planeZ - preStepZ);
-        if (std::fabs(errA - errB) > 1e-4f) return errA < errB;
+        if (std::fabs(errA - errB) > PhysicsConstants::GROUND_SNAP_EPSILON) return errA < errB;
         return a.toi < b.toi;
     });
 
@@ -1106,7 +1106,7 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
         float sideDy = st.y - afterUpY;
         float sideDirLen = std::sqrt(sideDx * sideDx + sideDy * sideDy);
         float probeX = st.x, probeY = st.y;
-        if (sideDirLen > 1e-4f) {
+        if (sideDirLen > PhysicsConstants::GROUND_SNAP_EPSILON) {
             probeX = st.x + (sideDx / sideDirLen) * radius;
             probeY = st.y + (sideDy / sideDirLen) * radius;
         }
@@ -1328,8 +1328,8 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
                 if (!bestNP) better = true; else {
                     if ((hhit.instanceId == 0) && (bestNP->instanceId != 0)) better = true;
                     else if ((hhit.instanceId == bestNP->instanceId)) {
-                        if (hhit.distance < bestTOI - 1e-6f) better = true;
-                        else if (std::fabs(hhit.distance - bestTOI) <= 1e-6f && hhit.point.z < bestZ) better = true;
+                        if (hhit.distance < bestTOI - PhysicsConstants::VECTOR_EPSILON) better = true;
+                        else if (std::fabs(hhit.distance - bestTOI) <= PhysicsConstants::VECTOR_EPSILON && hhit.point.z < bestZ) better = true;
                     }
                 }
                 if (better) { bestNP = &hhit; bestTOI = hhit.distance; bestZ = hhit.point.z; }
@@ -1338,7 +1338,7 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
                 float nx = bestNP->normal.x, ny = bestNP->normal.y, nz = bestNP->normal.z;
                 float px = bestNP->point.x,  py = bestNP->point.y,  pz = bestNP->point.z;
                 float snapZ = pz;
-                if (std::fabs(nz) > 1e-6f) {
+                if (std::fabs(nz) > PhysicsConstants::VECTOR_EPSILON) {
                     snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
                 }
                 st.z = snapZ;
@@ -1366,7 +1366,7 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
     dirN.z = 0.0f;
     dirN = dirN.directionOrZero();
     
-    if (dirN.magnitude() < 1e-6f || intendedDist < MIN_MOVE_DISTANCE) {
+    if (dirN.magnitude() < PhysicsConstants::VECTOR_EPSILON || intendedDist < MIN_MOVE_DISTANCE) {
         // No horizontal movement - just handle vertical placement
         HandleNoHorizontalMovement(input, intent, st, r, h, dirN, intendedDist, dt, moveSpeed);
         return;
@@ -1513,8 +1513,8 @@ float PhysicsEngine::CalculateMoveSpeed(const PhysicsInput& input, bool swim)
 void PhysicsEngine::ApplyGravity(MovementState& st, float dt)
 {
     st.vz -= GRAVITY * dt; 
-    if (st.vz < -60.0f) 
-        st.vz = -60.0f;
+    if (st.vz < -PhysicsConstants::TERMINAL_VELOCITY)
+        st.vz = -PhysicsConstants::TERMINAL_VELOCITY;
 }
 
 // =====================================================================================
@@ -1792,7 +1792,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// captured frame deltas only, so skip carry-over depen application in that path.
 		if (!trustGroundedReplayInput && !trustAirborneReplayInput) {
 			G3D::Vector3 pending(input.pendingDepenX, input.pendingDepenY, input.pendingDepenZ);
-			if (pending.magnitude() > 1e-6f) {
+			if (pending.magnitude() > PhysicsConstants::VECTOR_EPSILON) {
 				st.x += pending.x;
 				st.y += pending.y;
 				st.z += pending.z;
@@ -1888,18 +1888,17 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// mUserParams.mOverlapRecovery is enabled (computeMTD path). We do a simplified,
 		// bounded depenetration pre-pass here because our MMO controller is not based on
 		// PhysX geometry types and we need deterministic behavior across content (terrain/WMO).
-		constexpr int kMaxRecoverIters = 4;
 		float totalRecovered = 0.0f;
 		const bool preserveAirborne = inputAirborneFlag;
 		const float savedVz = st.vz;
-		for (int i = 0; i < kMaxRecoverIters; ++i) {
+		for (int i = 0; i < PhysicsConstants::MAX_OVERLAP_RECOVER_ITERATIONS; ++i) {
 			// Using existing helpers as a first-class overlap recovery step.
 			// Vertical first (most common: clipped into ground), then horizontal.
 			float dz = ApplyVerticalDepenetration(input, st, r, h);
 			float dxy = ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ false);
 			float step = dz + dxy;
 			totalRecovered += step;
-			if (step <= 1e-6f)
+			if (step <= PhysicsConstants::VECTOR_EPSILON)
 				break;
 		}
 		// Overlap recovery can falsely set isGrounded and zero vz when the character
@@ -1925,23 +1924,23 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			for (const auto& oh : overlaps) {
 				if (!oh.startPenetrating) continue;
 				float d = std::max(0.0f, oh.penetrationDepth);
-				if (d <= 1e-6f) continue;
+				if (d <= PhysicsConstants::VECTOR_EPSILON) continue;
 				G3D::Vector3 n = oh.normal.directionOrZero();
-				if (n.magnitude() <= 1e-6f) continue;
+				if (n.magnitude() <= PhysicsConstants::VECTOR_EPSILON) continue;
 				depenSum += n * d;
 				++penCount;
 			}
 
 			// Conservative per-tick clamp (PhysX-style).
 			// Keep this small to avoid tunneling/overshoot.
-			const float maxDeferredDepen = 0.05f;
+			const float maxDeferredDepen = PhysicsConstants::MAX_DEFERRED_DEPEN_PER_TICK;
 			float mag = depenSum.magnitude();
-			if (penCount > 0 && mag > 1e-6f) {
+			if (penCount > 0 && mag > PhysicsConstants::VECTOR_EPSILON) {
 				deferredDepen = depenSum * (std::min(maxDeferredDepen, mag) / mag);
 			}
 		}
 
-		if (totalRecovered > 1e-6f) {
+		if (totalRecovered > PhysicsConstants::VECTOR_EPSILON) {
 			std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(5);
 			oss << "[OverlapRecover] total=" << totalRecovered
 				<< " pos=(" << st.x << "," << st.y << "," << st.z << ")";
@@ -2290,7 +2289,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		const float probeR = std::max(0.05f, r);
 		const float diagR = probeR * 0.707f;
 		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
-		const bool hasMoveDir = speedSq > 1e-6f;
+		const bool hasMoveDir = speedSq > PhysicsConstants::VECTOR_EPSILON;
 		const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
 		const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
 		const float dirY = hasMoveDir ? (input.vy * invSpeed) : 0.0f;
@@ -2402,8 +2401,8 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		if (finalLiq.hasLevel) {
 			st.z = std::max(st.z, finalLiq.level - PhysicsConstants::WATER_LEVEL_DELTA);
 		}
-		st.vx *= 0.5f;
-		st.vy *= 0.5f;
+		st.vx *= PhysicsConstants::WATER_ENTRY_VELOCITY_DAMP;
+		st.vy *= PhysicsConstants::WATER_ENTRY_VELOCITY_DAMP;
 		st.vz = 0.0f;
 		st.isGrounded = false;
 	}
@@ -2472,7 +2471,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			const float diagR1 = probeR1 * 0.707f;
 			const float diagR2 = probeR2 * 0.707f;
 			const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
-			const bool hasMoveDir = speedSq > 1e-6f;
+			const bool hasMoveDir = speedSq > PhysicsConstants::VECTOR_EPSILON;
 			const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
 			const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
 			const float dirY = hasMoveDir ? (input.vy * invSpeed) : 0.0f;
@@ -2530,7 +2529,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				}
 
 				const float offLenSq = (ox * ox) + (oy * oy);
-				if (offLenSq <= 1e-6f) {
+				if (offLenSq <= PhysicsConstants::VECTOR_EPSILON) {
 					return;
 				}
 
@@ -2661,7 +2660,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				// captured frame to avoid latching to nearby higher surfaces.
 				float maxReplayInputRise = 0.03f;
 				const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
-				const bool movingReplay = speedSq > 1e-6f;
+				const bool movingReplay = speedSq > PhysicsConstants::VECTOR_EPSILON;
 				const bool nearFlatPrevSupport = input.prevGroundNz >= 0.97f;
 				const bool steepOrInvertedPrevSupport = input.prevGroundNz <= -0.70f;
 				if (!movingReplay && steepOrInvertedPrevSupport) {
@@ -2750,7 +2749,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			referenceZ + 0.30f
 		};
 		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
-		const bool hasMoveDir = speedSq > 1e-6f;
+		const bool hasMoveDir = speedSq > PhysicsConstants::VECTOR_EPSILON;
 		const bool stationaryReplay = !hasMoveDir;
 		const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
 		const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
@@ -2851,7 +2850,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		const bool surfaceStepActive = (std::fabs(input.vz) > 0.1f);
 		if (nonWalkableSupport && !surfaceStepActive) {
 			const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
-			const bool movingReplay = speedSq > 1e-6f;
+			const bool movingReplay = speedSq > PhysicsConstants::VECTOR_EPSILON;
 			float maxReplayRise = 0.0f;
 			if (movingReplay) {
 				maxReplayRise = 0.02f;
@@ -2886,7 +2885,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 						supportN.z = -supportN.z;
 					}
 
-					if (std::fabs(supportN.z) > 1e-4f) {
+					if (std::fabs(supportN.z) > PhysicsConstants::GROUND_SNAP_EPSILON) {
 						supportTrendDz =
 							-((supportN.x * frameDx) + (supportN.y * frameDy)) / supportN.z;
 						resolvedTrend = true;

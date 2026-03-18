@@ -85,7 +85,7 @@
 
 ### NAV-OBJ-003 Surface-transition affordance classification
 - [ ] Problem: the engine has step/jump/fall substrate, but route planning does not yet tag transitions as step-up, jump-gap, safe-drop, unsafe-drop, or blocked.
-- [ ] Target files: `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsThreePass.cpp`, `Exports/Navigation/SceneQuery.cpp`, helper exports/tests.
+- [ ] Target files: `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/SceneQuery.cpp`, helper exports/tests.
 - [ ] Required change:
   1. Reuse existing jump/fall/gap detection to classify candidate transitions.
   2. Emit quantitative metrics for climb height, gap distance, and drop height.

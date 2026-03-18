@@ -140,5 +140,88 @@ namespace WoWSharpClient.Tests.Movement
 
             controller.Remove(2);
         }
+
+        [Fact]
+        public void HasActiveSpline_TrueAfterAdd()
+        {
+            var controller = new SplineController();
+            var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+            controller.AddOrUpdate(new Spline(42, 1, 0, SplineFlags.None, points, 1000));
+
+            Assert.True(controller.HasActiveSpline(42));
+        }
+
+        [Fact]
+        public void HasActiveSpline_FalseForUnknownGuid()
+        {
+            var controller = new SplineController();
+
+            Assert.False(controller.HasActiveSpline(999));
+        }
+
+        [Fact]
+        public void HasActiveSpline_FalseAfterRemove()
+        {
+            var controller = new SplineController();
+            var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+            controller.AddOrUpdate(new Spline(42, 1, 0, SplineFlags.None, points, 1000));
+            controller.Remove(42);
+
+            Assert.False(controller.HasActiveSpline(42));
+        }
+
+        [Fact]
+        public void HasActiveSpline_TrueAfterReplacement()
+        {
+            var controller = new SplineController();
+            var points1 = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+            var points2 = new List<Position> { new(50, 50, 50), new(100, 100, 100) };
+
+            controller.AddOrUpdate(new Spline(42, 1, 0, SplineFlags.None, points1, 1000));
+            controller.AddOrUpdate(new Spline(42, 2, 0, SplineFlags.None, points2, 2000));
+
+            Assert.True(controller.HasActiveSpline(42));
+        }
+
+        [Fact]
+        public void Remove_FiresOnSplineCompleted()
+        {
+            var controller = new SplineController();
+            var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+            controller.AddOrUpdate(new Spline(42, 1, 0, SplineFlags.None, points, 1000));
+
+            ulong? completedGuid = null;
+            controller.OnSplineCompleted += guid => completedGuid = guid;
+
+            controller.Remove(42);
+
+            Assert.Equal(42UL, completedGuid);
+        }
+
+        [Fact]
+        public void Remove_NonExistent_DoesNotFireEvent()
+        {
+            var controller = new SplineController();
+            bool eventFired = false;
+            controller.OnSplineCompleted += _ => eventFired = true;
+
+            controller.Remove(999);
+
+            Assert.False(eventFired);
+        }
+
+        [Fact]
+        public void Remove_OnlyRemovesTargetGuid()
+        {
+            var controller = new SplineController();
+            var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+            controller.AddOrUpdate(new Spline(1, 1, 0, SplineFlags.None, points, 1000));
+            controller.AddOrUpdate(new Spline(2, 2, 0, SplineFlags.None, points, 1000));
+
+            controller.Remove(1);
+
+            Assert.False(controller.HasActiveSpline(1));
+            Assert.True(controller.HasActiveSpline(2));
+        }
     }
 }

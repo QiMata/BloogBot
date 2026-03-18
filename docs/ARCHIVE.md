@@ -1885,3 +1885,37 @@ Commit: `5fe0ea1`.
 - Session 85: Pathfinding perf fix (16s→0ms), slope guard, FG ghost crash fix.
 - Session 80: Herbalism route-task migration, herb route selection + 3 unit tests.
 - Session 53: P1.1 recv hook, P1.2 structured log, TASKS.md priority rewrite.
+
+---
+
+## P1 - BG Movement Physics Calibration (COMPLETE — sessions 90-109)
+
+All 11 tasks completed. BG bot movement now matches FG gold standard on slopes, ledges, teleports, splines, and collision.
+
+| # | Task | Commit |
+|---|------|--------|
+| 1.1 | Moveflag calibration tests (6 tests, 13 physics pass) | 5b4a1c5 |
+| 1.2 | Airborne horizontal velocity lock (C++) | 5b4a1c5 |
+| 1.3 | False-freefall guard hardening (C#) | 5b4a1c5 |
+| 1.4 | Spline movement lockout (SMSG_MONSTER_MOVE → SplineController, _isInControl) | 8a612d3 |
+| 1.5 | Post-teleport settle (NotifyTeleportIncoming, _isBeingTeleported, stale flag strip) | existing |
+| 1.6 | BG bot Z bouncing (walkable slope cos(50°), DOWN pass ray-cast fallback, terminal velocity) | 8b7a77e |
+| 1.7 | Collision-aware path following (L1 LOS + L2 wall-normal deflection + L3 repath) | d0196c8 |
+| 1.8 | Physics frame recording parity system (per-frame CSV capture) | shipped |
+| 1.9 | FG+BG dual transform recording (IPC-triggered, time-aligned parity) | c0918ce |
+| 1.10 | Diverse moveflag parity tests (5 routes: LedgeDrop, SteepClimb, SteepDescent, ObstacleDense, WindingPath) | d373e63 |
+| 1.11 | Physics constants cleanup (cliff tan(50°) fix, 5 new constants, 9 dead removed, 3 validation tests) | 9068b71 |
+
+## Navmesh — Full VMAP Re-extraction + Rebuild (COMPLETE — sessions 100-108)
+
+Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor. Regenerated mmaps for maps 0+1.
+
+| # | Task | Commit |
+|---|------|--------|
+| N.1 | Full tile rebuild for map 0 (Eastern Kingdoms) — 687 tiles | done |
+| N.2 | Full tile rebuild for map 1 (Kalimdor) — 1018 tiles | done |
+| N.3 | VMAP re-extraction from WoW 1.12.1 MPQs with VMaNGOS tools | 2026-03-17 |
+| N.4 | Post-corridor ValidateWalkableSegment with lateral repair | 57ec3eb |
+| N.5 | BG undermap fall on downhill — path-based underground snap | 5a73465 |
+| N.6 | FG rock collision — walkableRadius=2 in config.json, mmaps regenerated | config.json |
+| N.7 | Wall-stuck repath suppression — consecutive wall hit tracking (15 threshold) | shipped |

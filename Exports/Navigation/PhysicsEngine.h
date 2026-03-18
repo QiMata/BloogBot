@@ -19,29 +19,65 @@ namespace G3D {
 }
 class Navigation;
 
-// WoW 1.12.1 Physics Constants (values adjusted to more closely reflect retail client behaviour)
+// WoW 1.12.1 Physics Constants — extracted from client binary (build 5875)
+// and VMaNGOS server source. All addresses refer to WoW.exe unless noted.
 namespace PhysicsConstants
 {
     // =========================================================================
     // GRAVITY AND MOVEMENT
     // =========================================================================
+
+    // Client: 19.291105 @ 0x0081DA58. Server (double): 19.29110527038574.
+    // Pre-computed GRAVITY/2 @ 0x0081DA60, 2*GRAVITY @ 0x0081DA64.
     constexpr float GRAVITY = 19.2911f;
-    constexpr float JUMP_VELOCITY = 7.95577f;
+
+    // ~7.9535 appears 26x in client with slight precision variance — computed
+    // inline as sqrt(2*g*h), NOT a static constant. Implied max jump height:
+    // v^2/(2g) = 1.6396 yards.
+    constexpr float JUMP_VELOCITY = 7.9535f;
+
     constexpr float WATER_LEVEL_DELTA = 2.0f;
 
     // Initial downward velocity when transitioning from grounded to freefall.
     // Small nudge ensures the character doesn't hover for one frame at vz=0.
     constexpr float FALL_START_VELOCITY = -0.1f;
 
-    // Terminal fall velocity (max vertical speed during free-fall)
-    // Address 0x0087D894 in 1.12.1, 0x00BC4AF8 in 2.4.3
+    // Client: 60.148003 @ 0x0087D894. VMaNGOS: 60.148003f.
     constexpr float TERMINAL_VELOCITY = 60.148f;
+
+    // Client: 7.0 @ 0x0087D898 (adjacent to TERMINAL_VELOCITY).
+    // Used when Safe Fall aura is active.
+    constexpr float SAFE_FALL_TERMINAL_VELOCITY = 7.0f;
+
+    // =========================================================================
+    // BASE MOVEMENT SPEEDS (VMaNGOS baseMoveSpeed[], yards/second)
+    // Walk and Run confirmed in client @ 0x0081018C, 0x00810190.
+    // =========================================================================
+    constexpr float BASE_WALK_SPEED      = 2.5f;
+    constexpr float BASE_RUN_SPEED       = 7.0f;
+    constexpr float BASE_RUN_BACK_SPEED  = 4.5f;
+    constexpr float BASE_SWIM_SPEED      = 4.722222f;  // server-side only
+    constexpr float BASE_SWIM_BACK_SPEED = 2.5f;
+    constexpr float BASE_TURN_RATE       = 3.141594f;   // pi rad/s
+
+    // =========================================================================
+    // FALL DAMAGE (VMaNGOS Player.cpp, 0.018 confirmed inline @ 0x0040665A)
+    // Formula: dmgPct = COEFF * (zDiff - safeFall) - OFFSET
+    // =========================================================================
+    constexpr float FALL_SAFE_DISTANCE  = 14.57f;  // Min fall distance for damage
+    constexpr float FALL_SAFE_TIME_MS   = 1229.0f; // Fall time from safe distance
+    constexpr float FALL_DAMAGE_COEFF   = 0.018f;  // % max HP per yard
+    constexpr float FALL_DAMAGE_OFFSET  = 0.2426f; // Damage formula intercept
 
     // =========================================================================
     // GROUND DETECTION
     // =========================================================================
     constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f;
-    constexpr float STEP_HEIGHT = 2.125f;       // max upward auto-step (vanilla ~2.1-2.2)
+
+    // Client: 2.125 @ 0x008060CE (index 8 in a 15-entry step height table
+    // ranging from 7.875 to 0.921875, indexed by model size).
+    constexpr float STEP_HEIGHT = 2.125f;
+
     constexpr float STEP_DOWN_HEIGHT = 4.0f;    // max downward snap while grounded
 
     // =========================================================================
@@ -52,14 +88,13 @@ namespace PhysicsConstants
     constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
 
     // =========================================================================
-    // SLOPE WALKABILITY
+    // SLOPE WALKABILITY (client trig table near 0x0080DFC0)
     // =========================================================================
 
-    // cos(50°) ≈ 0.6428 per WoW 1.12.1 client memory at 0x0080DFFC.
-    // Slopes steeper than 50° are non-walkable for players.
+    // cos(50) = 0.642788 @ 0x0080DFFC. Slopes steeper than 50 deg non-walkable.
     constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
 
-    // tan(50°) ≈ 1.1918 — max Z-drop per unit horizontal distance on walkable slope.
+    // tan(50) = 1.191754 @ 0x0080E008. Also -tan(50) @ 0x0080E010.
     // Used for cliff detection: if ground drops faster than this, enter freefall.
     constexpr float WALKABLE_TAN_MAX_SLOPE = 1.1918f;
 
@@ -79,6 +114,39 @@ namespace PhysicsConstants
 
     // Max Z above pre-step position for step-up candidate promotion
     constexpr float MAX_STEP_UP_ABOVE_PRE_STEP = 1.5f;
+
+    // =========================================================================
+    // NUMERICAL EPSILONS
+    // =========================================================================
+
+    // General-purpose vector magnitude / sweep distance epsilon.
+    // Used throughout for "is this vector effectively zero?" checks.
+    constexpr float VECTOR_EPSILON = 1e-6f;
+
+    // Slightly larger epsilon for ground snap / candidate sorting where
+    // floating-point noise is higher (multi-ray probes, height comparisons).
+    constexpr float GROUND_SNAP_EPSILON = 1e-4f;
+
+    // =========================================================================
+    // COLLISION GEOMETRY
+    // =========================================================================
+
+    // Overlap normal Z filter — ignore overlaps whose normal Z exceeds this
+    // (they're floor/ceiling contacts, not walls).
+    constexpr float OVERLAP_NORMAL_Z_FILTER = 0.7f;
+
+    // Max deferred depenetration applied per physics tick (prevents teleporting).
+    constexpr float MAX_DEFERRED_DEPEN_PER_TICK = 0.05f;
+
+    // Max overlap recovery iterations per tick.
+    constexpr int MAX_OVERLAP_RECOVER_ITERATIONS = 4;
+
+    // =========================================================================
+    // WATER TRANSITION
+    // =========================================================================
+
+    // Velocity damping factor when entering water (halves horizontal + vertical).
+    constexpr float WATER_ENTRY_VELOCITY_DAMP = 0.5f;
 }
 
 class PhysicsEngine

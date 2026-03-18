@@ -19,9 +19,10 @@ public static class PhysicsTestConstants
     public const float Gravity = 19.2911f;
 
     /// <summary>
-    /// Initial vertical velocity when jumping (yards/second)
+    /// Initial vertical velocity when jumping (yards/second).
+    /// Computed inline in client as sqrt(2*g*maxJumpHeight), NOT a static constant.
     /// </summary>
-    public const float JumpVelocity = 7.95577f;
+    public const float JumpVelocity = 7.9535f;
 
     /// <summary>
     /// Water surface detection offset
@@ -39,6 +40,39 @@ public static class PhysicsTestConstants
     /// Address 0x0087D894 in 1.12.1.
     /// </summary>
     public const float TerminalVelocity = 60.148f;
+
+    /// <summary>
+    /// Terminal velocity with Safe Fall effect active.
+    /// Address 0x0087D898 (adjacent to TerminalVelocity).
+    /// </summary>
+    public const float SafeFallTerminalVelocity = 7.0f;
+
+    // ==========================================================================
+    // BASE MOVEMENT SPEEDS (VMaNGOS baseMoveSpeed[])
+    // ==========================================================================
+
+    public const float BaseWalkSpeed = 2.5f;
+    public const float BaseRunSpeed = 7.0f;
+    public const float BaseRunBackSpeed = 4.5f;
+    public const float BaseSwimSpeed = 4.722222f;    // server-side only
+    public const float BaseSwimBackSpeed = 2.5f;
+    public const float BaseTurnRate = 3.141594f;      // π rad/s
+
+    // ==========================================================================
+    // FALL DAMAGE
+    // ==========================================================================
+
+    /// <summary>Safe fall distance before damage starts (yards)</summary>
+    public const float FallSafeDistance = 14.57f;
+
+    /// <summary>Minimum fall time before damage (ms)</summary>
+    public const float FallSafeTimeMs = 1229.0f;
+
+    /// <summary>Fall damage coefficient: dmgPct = coeff * (zDiff - safeFall) - offset</summary>
+    public const float FallDamageCoeff = 0.018f;
+
+    /// <summary>Fall damage offset constant</summary>
+    public const float FallDamageOffset = 0.2426f;
 
     // ==========================================================================
     // GROUND DETECTION
@@ -167,12 +201,12 @@ public static class PhysicsTestConstants
     // ==========================================================================
 
     /// <summary>
-    /// Epsilon for numerical comparisons
+    /// Epsilon for numerical comparisons (VECTOR_EPSILON in C++)
     /// </summary>
     public const float Epsilon = 1e-6f;
 
     /// <summary>
-    /// Larger epsilon for less precise comparisons
+    /// Larger epsilon for ground snap / candidate sorting (GROUND_SNAP_EPSILON in C++)
     /// </summary>
     public const float LargeEpsilon = 1e-4f;
 
@@ -180,4 +214,32 @@ public static class PhysicsTestConstants
     /// Touch epsilon for contact detection
     /// </summary>
     public const float TouchEpsilon = 1e-3f;
+
+    // ==========================================================================
+    // COLLISION GEOMETRY
+    // ==========================================================================
+
+    /// <summary>
+    /// Overlap normal Z filter — ignore overlaps whose normal Z exceeds this
+    /// </summary>
+    public const float OverlapNormalZFilter = 0.7f;
+
+    /// <summary>
+    /// Max deferred depenetration applied per physics tick
+    /// </summary>
+    public const float MaxDeferredDepenPerTick = 0.05f;
+
+    /// <summary>
+    /// Max overlap recovery iterations per tick
+    /// </summary>
+    public const int MaxOverlapRecoverIterations = 4;
+
+    // ==========================================================================
+    // WATER TRANSITION
+    // ==========================================================================
+
+    /// <summary>
+    /// Velocity damping factor when entering water
+    /// </summary>
+    public const float WaterEntryVelocityDamp = 0.5f;
 }

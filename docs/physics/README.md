@@ -67,16 +67,31 @@ From `Exports/Navigation/PhysicsEngine.h` (`PhysicsConstants` namespace):
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `GRAVITY` | 19.2911f | WoW gravity (yards/s²) |
-| `JUMP_VELOCITY` | 7.95577f | Initial jump velocity (yards/s) |
-| `TERMINAL_VELOCITY` | 60.148f | Max fall speed (0x0087D894) |
+| `GRAVITY` | 19.2911f | WoW gravity (yards/s²), client @ 0x0081DA58 |
+| `JUMP_VELOCITY` | 7.9535f | sqrt(2*g*maxJumpHeight), computed inline in client |
+| `TERMINAL_VELOCITY` | 60.148f | Max fall speed, client @ 0x0087D894 |
+| `SAFE_FALL_TERMINAL_VELOCITY` | 7.0f | Terminal velocity with Safe Fall, client @ 0x0087D898 |
 | `FALL_START_VELOCITY` | -0.1f | Initial downward nudge entering freefall |
-| `STEP_HEIGHT` | 2.125f | Max height for auto-stepping (~2.1y) |
+| `STEP_HEIGHT` | 2.125f | Index 8 in 15-entry step table, client @ 0x008060CE |
 | `STEP_DOWN_HEIGHT` | 4.0f | Max downward snap while grounded |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428f | cos(50°), max walkable slope |
-| `WALKABLE_TAN_MAX_SLOPE` | 1.1918f | tan(50°), cliff detection threshold |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428f | cos(50°), client @ 0x0080DFFC |
+| `WALKABLE_TAN_MAX_SLOPE` | 1.1918f | tan(50°), client @ 0x0080E008 |
 | `NORMAL_PROBE_OFFSET` | 0.3f | Finite-difference terrain normal offset |
 | `WATER_LEVEL_DELTA` | 2.0f | Swim threshold below water surface |
+| `BASE_WALK_SPEED` | 2.5f | VMaNGOS baseMoveSpeed[] |
+| `BASE_RUN_SPEED` | 7.0f | VMaNGOS baseMoveSpeed[] |
+| `BASE_RUN_BACK_SPEED` | 4.5f | VMaNGOS baseMoveSpeed[] |
+| `BASE_SWIM_SPEED` | 4.722222f | Server-side only (not in client binary) |
+| `BASE_TURN_RATE` | π (3.141594f) | VMaNGOS baseMoveSpeed[] |
+| `FALL_SAFE_DISTANCE` | 14.57f | Min fall distance before damage |
+| `FALL_DAMAGE_COEFF` | 0.018f | VMaNGOS Player::HandleFall() |
+| `FALL_DAMAGE_OFFSET` | 0.2426f | VMaNGOS Player::HandleFall() |
+| `VECTOR_EPSILON` | 1e-6f | General vector magnitude / sweep distance epsilon |
+| `GROUND_SNAP_EPSILON` | 1e-4f | Ground snap / candidate sorting epsilon |
+| `OVERLAP_NORMAL_Z_FILTER` | 0.7f | Ignore overlaps with normal Z above this |
+| `MAX_DEFERRED_DEPEN_PER_TICK` | 0.05f | Max depenetration per physics tick |
+| `MAX_OVERLAP_RECOVER_ITERATIONS` | 4 | Max overlap recovery iterations per tick |
+| `WATER_ENTRY_VELOCITY_DAMP` | 0.5f | Velocity damping on water entry |
 
 ## Source Code Locations
 
