@@ -92,7 +92,7 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 110)
+- **Last updated:** 2026-03-18 (session 110, continued)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
   - Archived P1 (all 11 tasks) and Navmesh (all 7 tasks) to ARCHIVE.md
@@ -100,6 +100,11 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
   - Renumbered P7 tasks (was 7.4/7.7/7.8/7.9 → now 7.1-7.4)
   - C.1: Deleted dead PhysicsThreePass.cpp (727 lines) + .h (148 lines) — not even in vcxproj
   - C.2: Extracted ~30 magic numbers to named constants (VECTOR_EPSILON 25x, GROUND_SNAP_EPSILON 4x, TERMINAL_VELOCITY, OVERLAP_NORMAL_Z_FILTER, MAX_DEFERRED_DEPEN_PER_TICK, MAX_OVERLAP_RECOVER_ITERATIONS, WATER_ENTRY_VELOCITY_DAMP)
+  - Updated JUMP_VELOCITY 7.95577→7.9535 from WoW 1.12.1 binary scan (computed inline, not static)
+  - Added SafeFallTerminalVelocity, base movement speeds, fall damage constants to PhysicsEngine.h + PhysicsTestConstants.cs
+  - Updated docs/physics/README.md with client binary addresses for all constants
+  - Verified: C++ build clean, 136/137 physics tests pass (unchanged baseline)
+  - Confirmed collision-aware path following plan is fully implemented (L1 LOS lookahead, L2 wall deflection, L3 repath)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Test baseline:** 136/137 physics tests pass, 1267 WoWSharpClient tests pass
 - **Next:**
