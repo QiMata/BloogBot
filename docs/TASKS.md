@@ -73,9 +73,9 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
   - BG-FRAMES-001: Null guard all UI frame sequences (Gossip, Trainer, Taxi, Quest, Talent, Craft)
   - BG-PET-001: Full pet system — discovery + Attack/Follow/Cast + SMSG_PET_SPELLS handler
   - Prior session: P7 complete (4 tasks), D.1 data centralization shipped
-- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit, 1266/1266 WoWSharpClient (all pass)
+- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit, 1266/1266 WoWSharpClient, 11/57 live validation pass (2 pre-existing fails, 44 skip)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
+- **Live test known failures:** BuffAndConsumableTests (FG snapshot timing), CombatLoopTests (bot enter-world after restart)
 - **Next:**
-  1. P3/P4: FG packet capture tests (fishing parity, teleport flags)
-  2. Collision-aware path following (already implemented, verify live)
-  3. Archive completed BG/FG parity items to docs/ARCHIVE.md
+  1. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot
+  2. Collision-aware path following — already implemented, needs live verification
