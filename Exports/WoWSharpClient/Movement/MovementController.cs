@@ -654,8 +654,14 @@ namespace WoWSharpClient.Movement
             // Update velocity
             _velocity = new Vector3(output.NewVelX, output.NewVelY, output.NewVelZ);
 
-            // Update fall time
-            _fallTimeMs = (uint)MathF.Max(0, output.FallTime);
+            // Update fall time — zero it when physics reports grounded (no falling flags).
+            // The C++ physics engine may accumulate fall time even after ground contact
+            // is re-established; trusting that stale value causes packets with non-zero
+            // FallTime while grounded, which confuses the server.
+            if (isFalling)
+                _fallTimeMs = (uint)MathF.Max(0, output.FallTime);
+            else
+                _fallTimeMs = 0;
 
             // Persist StepV2 continuity outputs for next tick.
             // Mark ground contact established once physics confirms grounded with valid geometry.
@@ -735,41 +741,47 @@ namespace WoWSharpClient.Movement
 
                 if (closeToGround)
                 {
-                    // FFS engages: suppress FALLINGFAR and use path-guided descent.
+                    // FFS engages: suppress FALLINGFAR flag and zero fall state.
                     // The physics engine's DOWN pass sometimes fails to find ground on
-                    // moderately steep terrain (~30-45°) where FG stays grounded. Instead
-                    // of clamping to a fixed Z (which causes BG to float above the terrain),
-                    // project Z downward toward the path waypoint at the movement speed rate.
-                    // This matches FG behavior: smooth grounded descent at walk speed.
+                    // moderately steep terrain (~30-45°) where FG stays grounded.
+                    // We suppress the flag to prevent server rubber-banding, but allow
+                    // physics Z to descend naturally — never clamp Z upward.
                     _falseFreefallCount++;
 
-                    // Path-guided descent: when physics loses ground on slopes,
-                    // descend at the max walkable slope rate toward the path waypoint Z.
-                    // This matches FG behavior (smooth grounded descent at walk speed).
-                    float ffsZ = _prevGroundZ;
+                    // Path-guided descent ceiling: track a maximum Z that descends
+                    // toward the waypoint at walkable slope rate. Physics Z is used
+                    // when it's lower (natural terrain following), but if physics
+                    // bounces upward we cap at the descent ceiling.
+                    if (float.IsNaN(_ffsStartZ))
+                        _ffsStartZ = _player.Position.Z;
+                    float ffsZ = _ffsStartZ;
                     if (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
                     {
                         float wpZ = _currentPath[_currentWaypointIndex].Z;
-                        if (wpZ < _prevGroundZ)
+                        if (wpZ < _ffsStartZ)
                         {
-                            // Descend toward waypoint Z at max walkable slope rate.
-                            // At 7 y/s horizontal, max vertical drop per frame on steepest
-                            // walkable slope (60°): speed * dt * tan(60°) = 7 * 0.05 * 1.732 = 0.606y
                             float maxDropPerFrame = _player.RunSpeed * deltaSec * 1.732f;
-                            float desiredDrop = _prevGroundZ - wpZ;
+                            float desiredDrop = _ffsStartZ - wpZ;
                             float drop = MathF.Min(maxDropPerFrame, desiredDrop);
-                            ffsZ = _prevGroundZ - drop;
+                            ffsZ = _ffsStartZ - drop;
                         }
                     }
+                    _ffsStartZ = ffsZ;
+
+                    // Use the lower of path-guided descent and physics output.
+                    // This ensures FFS never clamps Z upward — physics terrain
+                    // following takes priority when it finds lower ground.
+                    float finalZ = MathF.Min(ffsZ, output.NewPosZ);
 
                     if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
-                        Log.Information("[MovementController] FFS (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, ffsZ={FfsZ:F2}, gap={Gap:F2}",
-                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, ffsZ, gapFromGround);
+                        Log.Information("[MovementController] FFS (x{Count}): physZ={PhysZ:F2}, ffsZ={FfsZ:F2}, finalZ={FinalZ:F2}, gap={Gap:F2}",
+                            _falseFreefallCount, output.NewPosZ, ffsZ, finalZ, gapFromGround);
                     newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    _player.Position = new Position(output.NewPosX, output.NewPosY, ffsZ);
+                    _player.Position = new Position(output.NewPosX, output.NewPosY, finalZ);
                     _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
                     _fallTimeMs = 0;
                     falseFreefallSuppressed = true;
+                    _prevGroundZ = finalZ;
                 }
                 else
                 {
