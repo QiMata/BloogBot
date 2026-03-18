@@ -89,6 +89,20 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void CorridorDestroy(uint handle);
 
+
+        // ── Spatial Queries P/Invoke ──
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsPointOnNavmesh")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool IsPointOnNavmeshNative(
+            uint mapId, float x, float y, float z, float searchRadius,
+            out float nearestX, out float nearestY, out float nearestZ);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "FindNearestWalkablePoint")]
+        private static extern uint FindNearestWalkablePointNative(
+            uint mapId, float x, float y, float z, float searchRadius,
+            out float outX, out float outY, out float outZ);
+
         // ── Segment Validation P/Invoke ──
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
@@ -335,6 +349,42 @@ namespace PathfindingService.Repository
             {
                 if (pathPtr != IntPtr.Zero)
                     PathArrFree(pathPtr);
+            }
+        }
+
+
+        /// <summary>
+        /// Check if a point is on or near the navmesh (within searchRadius).
+        /// </summary>
+        public (bool onNavmesh, XYZ nearestPoint) IsPointOnNavmesh(uint mapId, XYZ position, float searchRadius = 4.0f)
+        {
+            try
+            {
+                bool result = IsPointOnNavmeshNative(mapId, position.X, position.Y, position.Z,
+                    searchRadius, out float nx, out float ny, out float nz);
+                return (result, new XYZ(nx, ny, nz));
+            }
+            catch
+            {
+                return (false, position);
+            }
+        }
+
+        /// <summary>
+        /// Find the nearest walkable point within searchRadius.
+        /// Returns the navmesh area type (0=not found, 1=ground, 3=steep_slope, 6=water).
+        /// </summary>
+        public (uint areaType, XYZ nearestPoint) FindNearestWalkablePoint(uint mapId, XYZ position, float searchRadius = 8.0f)
+        {
+            try
+            {
+                uint area = FindNearestWalkablePointNative(mapId, position.X, position.Y, position.Z,
+                    searchRadius, out float ox, out float oy, out float oz);
+                return (area, new XYZ(ox, oy, oz));
+            }
+            catch
+            {
+                return (0, position);
             }
         }
 

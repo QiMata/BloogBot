@@ -15,6 +15,8 @@ message PathfindingRequest {
         GetGroundZRequest ground_z = 5;
         BatchGroundZRequest batch_ground_z = 6;
         SegmentDynCheckRequest segment_dyn_check = 7;
+        NavmeshPointRequest navmesh_point = 8;
+        NearestWalkableRequest nearest_walkable = 9;
     }
 }
 
@@ -28,6 +30,8 @@ message PathfindingResponse {
         GetGroundZResponse ground_z = 5;
         BatchGroundZResponse batch_ground_z = 6;
         SegmentDynCheckResponse segment_dyn_check = 7;
+        NavmeshPointResponse navmesh_point = 8;
+        NearestWalkableResponse nearest_walkable = 9;
         Error error = 99;
     }
 }
@@ -270,4 +274,28 @@ message SegmentDynCheckRequest {
 
 message SegmentDynCheckResponse {
     bool intersects = 1;    // true if any dynamic-object triangle intersects the segment
+}
+
+// Navmesh point query — check if a position is on or near the navmesh
+message NavmeshPointRequest {
+    uint32 map_id = 1;
+    game.Position position = 2;
+    float search_radius = 3;   // XZ search radius (0 defaults to 4.0)
+}
+
+message NavmeshPointResponse {
+    bool on_navmesh = 1;           // true if a walkable polygon was found within search radius
+    game.Position nearest_point = 2;  // closest point on the navmesh surface
+}
+
+// Nearest walkable point query — find closest walkable surface and its area type
+message NearestWalkableRequest {
+    uint32 map_id = 1;
+    game.Position position = 2;
+    float search_radius = 3;   // XZ search radius (0 defaults to 8.0)
+}
+
+message NearestWalkableResponse {
+    uint32 area_type = 1;          // VMaNGOS NavMeshArea (0=not found, 1=ground, 3=steep, 6=water)
+    game.Position nearest_point = 2;
 }

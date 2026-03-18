@@ -846,6 +846,107 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
 }
 
 // ===============================
+// SPATIAL QUERIES
+// ===============================
+
+// Check if a point is on the navmesh (within searchRadius XZ, 200y vertical).
+// Returns true if a walkable polygon is found near the given position.
+// nearestX/Y/Z receive the closest point on the navmesh surface.
+extern "C" __declspec(dllexport) bool IsPointOnNavmesh(
+    uint32_t mapId,
+    float x, float y, float z,
+    float searchRadius,
+    float* nearestX, float* nearestY, float* nearestZ)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    auto* nav = Navigation::GetInstance();
+    const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
+    if (!query) return false;
+
+    float pos[3] = { y, z, x };  // WoW→Detour axis swap
+    float ext[3] = { searchRadius, 200.0f, searchRadius };
+    float nearest[3] = { 0.f, 0.f, 0.f };
+    dtPolyRef polyRef = 0;
+
+    dtQueryFilter filter;
+    filter.setIncludeFlags(0x01);  // NAV_GROUND
+    filter.setExcludeFlags(0);
+
+    dtStatus st = query->findNearestPoly(pos, ext, &filter, &polyRef, nearest);
+    if (dtStatusFailed(st) || polyRef == 0)
+        return false;
+
+    // Check the 2D distance from query point to nearest — must be within searchRadius
+    float dx = nearest[0] - pos[0];
+    float dz = nearest[2] - pos[2];
+    if (dx * dx + dz * dz > searchRadius * searchRadius)
+        return false;
+
+    if (nearestX) *nearestX = nearest[2];  // Detour→WoW axis swap
+    if (nearestY) *nearestY = nearest[0];
+    if (nearestZ) *nearestZ = nearest[1];
+    return true;
+}
+
+// Find the nearest walkable point within a search radius.
+// Returns the area type of the found polygon (0=none/not found).
+// area values match VMaNGOS NavMeshAreas: 1=ground, 2=ground_model,
+// 3=steep_slope, 5=water_transition, 6=water, etc.
+extern "C" __declspec(dllexport) uint32_t FindNearestWalkablePoint(
+    uint32_t mapId,
+    float x, float y, float z,
+    float searchRadius,
+    float* outX, float* outY, float* outZ)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    auto* nav = Navigation::GetInstance();
+    const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
+    if (!query) return 0;
+
+    float pos[3] = { y, z, x };  // WoW→Detour axis swap
+    float ext[3] = { searchRadius, 200.0f, searchRadius };
+    float nearest[3] = { 0.f, 0.f, 0.f };
+    dtPolyRef polyRef = 0;
+
+    dtQueryFilter filter;
+    filter.setIncludeFlags(0x01);  // NAV_GROUND
+    filter.setExcludeFlags(0);
+
+    dtStatus st = query->findNearestPoly(pos, ext, &filter, &polyRef, nearest);
+    if (dtStatusFailed(st) || polyRef == 0)
+        return 0;
+
+    float dx = nearest[0] - pos[0];
+    float dz = nearest[2] - pos[2];
+    if (dx * dx + dz * dz > searchRadius * searchRadius)
+        return 0;
+
+    if (outX) *outX = nearest[2];  // Detour→WoW axis swap
+    if (outY) *outY = nearest[0];
+    if (outZ) *outZ = nearest[1];
+
+    // Get the area type of the polygon
+    const dtNavMesh* navMesh = nullptr;
+    // Access the mesh from the query — Detour stores it as m_nav
+    // Use getAttachedNavMesh helper
+    unsigned char area = 0;
+    navMesh = query->getAttachedNavMesh();
+    if (navMesh)
+    {
+        const dtMeshTile* tile = nullptr;
+        const dtPoly* poly = nullptr;
+        if (dtStatusSucceed(navMesh->getTileAndPolyByRef(polyRef, &tile, &poly)))
+            area = poly->getArea();
+    }
+
+    return static_cast<uint32_t>(area);
+}
+
+// ===============================
 // PATH CORRIDOR API
 // ===============================
 // Incremental, collision-aware path following using Detour's dtPathCorridor.

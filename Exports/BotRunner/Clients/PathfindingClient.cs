@@ -275,6 +275,66 @@ namespace BotRunner.Clients
             }
         }
 
+        /// <summary>
+        /// Check if a position is on or near the navmesh within searchRadius.
+        /// Returns (onNavmesh, nearestPoint on the navmesh surface).
+        /// </summary>
+        public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
+        {
+            try
+            {
+                var request = new PathfindingRequest
+                {
+                    NavmeshPoint = new NavmeshPointRequest
+                    {
+                        MapId = mapId,
+                        Position = ToProto(position),
+                        SearchRadius = searchRadius
+                    }
+                };
+                var response = SendRequest(request, _queryTimeoutMs);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    return (false, position);
+                var r = response.NavmeshPoint;
+                return (r.OnNavmesh, new Position(r.NearestPoint.X, r.NearestPoint.Y, r.NearestPoint.Z));
+            }
+            catch
+            {
+                return (false, position);
+            }
+        }
+
+        /// <summary>
+        /// Find the nearest walkable point within searchRadius.
+        /// Returns (areaType, nearestPoint). areaType: 0=not found, 1=ground, 3=steep_slope, 6=water.
+        /// </summary>
+        public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
+        {
+            try
+            {
+                var request = new PathfindingRequest
+                {
+                    NearestWalkable = new NearestWalkableRequest
+                    {
+                        MapId = mapId,
+                        Position = ToProto(position),
+                        SearchRadius = searchRadius
+                    }
+                };
+                var response = SendRequest(request, _queryTimeoutMs);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    return (0, position);
+                var r = response.NearestWalkable;
+                return (r.AreaType, new Position(r.NearestPoint.X, r.NearestPoint.Y, r.NearestPoint.Z));
+            }
+            catch
+            {
+                return (0, position);
+            }
+        }
+
         protected virtual PathfindingResponse SendRequest(PathfindingRequest request) => SendMessage(request);
 
         protected virtual PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)

@@ -195,6 +195,8 @@ namespace PathfindingService
                     PathfindingRequest.PayloadOneofCase.GroundZ => HandleGroundZ(request.GroundZ),
                     PathfindingRequest.PayloadOneofCase.BatchGroundZ => HandleBatchGroundZ(request.BatchGroundZ),
                     PathfindingRequest.PayloadOneofCase.SegmentDynCheck => HandleSegmentDynCheck(request.SegmentDynCheck),
+                    PathfindingRequest.PayloadOneofCase.NavmeshPoint => HandleNavmeshPoint(request.NavmeshPoint),
+                    PathfindingRequest.PayloadOneofCase.NearestWalkable => HandleNearestWalkable(request.NearestWalkable),
                     _ => ErrorResponse("Unknown or unset request type.")
                 };
             }
@@ -605,6 +607,44 @@ namespace PathfindingService
             => float.IsFinite(point.X)
                 && float.IsFinite(point.Y)
                 && float.IsFinite(point.Z);
+
+        private PathfindingResponse HandleNavmeshPoint(NavmeshPointRequest req)
+        {
+            if (req.Position == null || !IsFinitePosition(req.Position))
+                return ErrorResponse("Invalid position for navmesh point query.");
+
+            var pos = new XYZ(req.Position.X, req.Position.Y, req.Position.Z);
+            var radius = req.SearchRadius > 0 ? req.SearchRadius : 4.0f;
+            var (onNavmesh, nearest) = _navigation.IsPointOnNavmesh(req.MapId, pos, radius);
+
+            return new PathfindingResponse
+            {
+                NavmeshPoint = new NavmeshPointResponse
+                {
+                    OnNavmesh = onNavmesh,
+                    NearestPoint = new Game.Position { X = nearest.X, Y = nearest.Y, Z = nearest.Z }
+                }
+            };
+        }
+
+        private PathfindingResponse HandleNearestWalkable(NearestWalkableRequest req)
+        {
+            if (req.Position == null || !IsFinitePosition(req.Position))
+                return ErrorResponse("Invalid position for nearest walkable query.");
+
+            var pos = new XYZ(req.Position.X, req.Position.Y, req.Position.Z);
+            var radius = req.SearchRadius > 0 ? req.SearchRadius : 8.0f;
+            var (areaType, nearest) = _navigation.FindNearestWalkablePoint(req.MapId, pos, radius);
+
+            return new PathfindingResponse
+            {
+                NearestWalkable = new NearestWalkableResponse
+                {
+                    AreaType = areaType,
+                    NearestPoint = new Game.Position { X = nearest.X, Y = nearest.Y, Z = nearest.Z }
+                }
+            };
+        }
 
         private static PathfindingResponse ErrorResponse(string msg)
         {
