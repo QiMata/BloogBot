@@ -127,6 +127,9 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnSetTimeSpeed += EventEmitter_OnSetTimeSpeed;
             WoWSharpEventEmitter.Instance.OnSpellGo += EventEmitter_OnSpellGo;
 
+            // Restore player control when server-driven spline completes
+            Splines.Instance.OnSplineCompleted += OnSplineCompleted;
+
             _loginScreen = new(_woWClient);
             _realmScreen = new(_woWClient);
             _characterSelectScreen = new(_woWClient);

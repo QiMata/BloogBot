@@ -208,6 +208,19 @@ namespace WoWSharpClient
             );
         }
 
+        /// <summary>
+        /// Called when SplineController finishes or removes a spline.
+        /// If it's the local player, restore physics control.
+        /// </summary>
+        private void OnSplineCompleted(ulong guid)
+        {
+            if (Player != null && Player.Guid == guid && !_isInControl)
+            {
+                _isInControl = true;
+                Log.Information("[SplineLockout] Spline completed for local player — restoring control");
+            }
+        }
+
 
         private void EventEmitter_OnForceRunBackSpeedChange(
             object? sender,

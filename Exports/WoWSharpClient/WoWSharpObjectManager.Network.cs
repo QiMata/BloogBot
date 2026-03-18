@@ -295,6 +295,9 @@ namespace WoWSharpClient
                                         bool allowPositionWrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
                                         ApplyMovementData((WoWUnit)obj, movementData, allowPositionWrite);
 
+                                        // Wire spline data to SplineController for server-driven movement
+                                        TryActivateSpline(update.Guid, movementData, isLocalPlayer);
+
                                         Log.Verbose("[Movement-Update] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}{Local}",
                                             update.Guid, movementData.X, movementData.Y,
                                             movementData.Z, (uint)movementData.MovementFlags,
@@ -539,6 +542,60 @@ namespace WoWSharpClient
 
             var gossip = factory.GossipAgent;
             await gossip.GreetNpcAsync(npcGuid, ct);
+        }
+
+        /// <summary>
+        /// Creates a Spline from SMSG_MONSTER_MOVE data and feeds it to the SplineController.
+        /// For the local player, this also suppresses physics (spline lockout) until the spline completes.
+        /// </summary>
+        private void TryActivateSpline(ulong guid, MovementInfoUpdate moveData, bool isLocalPlayer)
+        {
+            var block = moveData.MovementBlockUpdate;
+            if (block == null) return;
+
+            // SplineType.Stop means the server cancelled the spline
+            if (block.SplineType == SplineType.Stop)
+            {
+                Splines.Instance.Remove(guid);
+                if (isLocalPlayer && !_isInControl)
+                {
+                    _isInControl = true;
+                    Log.Information("[SplineLockout] Spline stopped for local player — restoring control");
+                }
+                return;
+            }
+
+            // Need spline points and duration to create a meaningful spline
+            if (block.SplinePoints == null || block.SplinePoints.Count == 0)
+                return;
+            if (block.SplineTimestamp == 0)
+                return;
+
+            // Build point list: start position (from monster move header) + waypoints
+            var points = new List<Position>(block.SplinePoints.Count + 1)
+            {
+                new(moveData.X, moveData.Y, moveData.Z)
+            };
+            points.AddRange(block.SplinePoints);
+
+            var spline = new Spline(
+                owner: guid,
+                id: block.SplineId ?? 0,
+                t0: (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                flags: block.SplineFlags ?? SplineFlags.None,
+                pts: points,
+                durationMs: block.SplineTimestamp
+            );
+
+            Splines.Instance.AddOrUpdate(spline);
+
+            // For local player: suppress physics while server controls movement
+            if (isLocalPlayer)
+            {
+                _isInControl = false;
+                Log.Information("[SplineLockout] Local player spline active — suppressing physics ({Points} pts, {Duration}ms)",
+                    points.Count, block.SplineTimestamp);
+            }
         }
     }
 }

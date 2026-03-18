@@ -1,5 +1,7 @@
-﻿using GameData.Core.Enums;
+using GameData.Core.Enums;
 using GameData.Core.Models;
+using Serilog;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using WoWSharpClient.Models;
@@ -20,13 +22,12 @@ namespace WoWSharpClient.Movement
         internal float SegmentMs => (Points.Count <= 1) ? 0 : DurationMs / (float)(Points.Count - 1);
     }
 
-    /// <summary>Per-tick state machine that walks along the spline.</summary>
     /// <summary>Per-tick state machine that walks along one spline.</summary>
     internal sealed class ActiveSpline(Spline s)
     {
         public Spline Spline { get; } = s;
-        private float _elapsed;   // ms since server timestamp
-        private int _seg;       // current segment index
+        private float _elapsed;   // ms since spline start
+        private int _seg;         // current segment index
 
         /// <summary>Advance <paramref name="dtMs"/> and return the new position.</summary>
         public Position Step(float dtMs)
@@ -44,7 +45,6 @@ namespace WoWSharpClient.Movement
             var a = Spline.Points[_seg];
             var b = Spline.Points[_seg + 1];
 
-            // manual lerp (no MathF.Lerp before .NET 8)
             float x = a.X + (b.X - a.X) * u;
             float y = a.Y + (b.Y - a.Y) * u;
             float z = a.Z + (b.Z - a.Z) * u;
@@ -59,17 +59,48 @@ namespace WoWSharpClient.Movement
     {
         private readonly Dictionary<ulong, ActiveSpline> _active = [];
 
-        public void AddOrUpdate(Spline s) => _active[s.OwnerGuid] = new ActiveSpline(s);
+        /// <summary>Fired when a spline for the given GUID completes or is removed.</summary>
+        public event Action<ulong>? OnSplineCompleted;
 
-        public void Remove(ulong guid) => _active.Remove(guid);
+        public void AddOrUpdate(Spline s)
+        {
+            _active[s.OwnerGuid] = new ActiveSpline(s);
+            Log.Information("[SplineController] Added spline for {Guid:X}: {Points} pts, {Duration}ms, flags=0x{Flags:X}",
+                s.OwnerGuid, s.Points.Count, s.DurationMs, (uint)s.Flags);
+        }
+
+        public void Remove(ulong guid)
+        {
+            if (_active.Remove(guid))
+            {
+                Log.Information("[SplineController] Removed spline for {Guid:X}", guid);
+                OnSplineCompleted?.Invoke(guid);
+            }
+        }
+
+        /// <summary>Returns true if the given GUID has an active (non-finished) spline.</summary>
+        public bool HasActiveSpline(ulong guid) => _active.ContainsKey(guid);
 
         public void Update(float dtMs)
         {
             foreach (var (guid, active) in _active.ToArray())
             {
-                if (active.Finished) { _active.Remove(guid); continue; }
+                if (active.Finished)
+                {
+                    _active.Remove(guid);
+                    Log.Information("[SplineController] Spline finished for {Guid:X}", guid);
+                    OnSplineCompleted?.Invoke(guid);
+                    continue;
+                }
 
-                WoWUnit? woWUnit = WoWSharpObjectManager.Instance.Objects.OfType<WoWUnit>().FirstOrDefault(x => x.Guid == guid);
+                // Look up the unit — check Player first (not in Objects collection), then Objects
+                WoWUnit? woWUnit = null;
+                var player = WoWSharpObjectManager.Instance.Player;
+                if (player != null && player.Guid == guid)
+                    woWUnit = (WoWUnit)player;
+                else
+                    woWUnit = WoWSharpObjectManager.Instance.Objects.OfType<WoWUnit>().FirstOrDefault(x => x.Guid == guid);
+
                 if (woWUnit != null)
                     woWUnit.Position = active.Step(dtMs);
                 else
