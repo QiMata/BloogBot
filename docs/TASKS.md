@@ -17,10 +17,10 @@ Core ghost-stuck, corridor collision, and object-aware paths all done (archived)
 
 | # | Task | Status |
 |---|------|--------|
-| 7.1 | **Ratchet shoreline/fishing-hole route hardening.** Native lateral detour generation in PathFinder.cpp works. Service-side `[PATH_DIAG]` logging works. Missing: bot-side execution trace (planned-vs-executed drift detection). | ~70% — in progress |
+| 7.1 | **Execution trace drift detection.** NavigationPath tracks perpendicular drift from planned path, logs warnings >12y, exposes metrics on TraceSnapshot. | **Done** |
 | 7.2 | **Route affordance metadata.** Classify path transitions (walk/step-up/jump/drop/swim/blocked). | Open |
 | 7.3 | **Decision-grade spatial queries.** Reachability/LOS/surface queries for better approach points. | Open |
-| 7.4 | **Swim-avoidance for land-only tasks.** Pathfinding must avoid routing into deep water for tasks that can't be performed while swimming (fishing, gathering, combat). FishingTask already checks `IsSwimming` and aborts (line 414), but pathfinding doesn't know to stay on land. Need navmesh area cost weighting or path post-filter to prefer shore routes. | Open |
+| 7.4 | **Swim-avoidance for land-only tasks.** GatherNodeTask aborts on IsSwimming. Water-transition area cost in Detour causes cascading path regressions — task-level check is correct approach. | **Done** |
 
 ---
 
@@ -54,6 +54,14 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 |---|------|--------|
 | C.1 | **Remove PhysicsThreePass.cpp.** Dead code — functions never called by StepV2. Not even in vcxproj. Deleted .cpp (727 lines) + .h (148 lines). | **Done** |
 | C.2 | **High-impact magic number extraction.** Replaced ~30 instances: `1e-6f`→`VECTOR_EPSILON` (25x), `1e-4f`→`GROUND_SNAP_EPSILON` (4x), `60.0f`→`TERMINAL_VELOCITY`, `0.7f`→`OVERLAP_NORMAL_Z_FILTER`, `0.05f`→`MAX_DEFERRED_DEPEN_PER_TICK`, `4`→`MAX_OVERLAP_RECOVER_ITERATIONS`, `0.5f`→`WATER_ENTRY_VELOCITY_DAMP`. ~50 replay-tuning numbers left (context-specific, low priority). | **Done** |
+
+---
+
+## Infrastructure — Data Directory Centralization
+
+| # | Task | Status |
+|---|------|--------|
+| D.1 | **Centralize mmap/vmap/maps data files.** Move all navmesh data (mmaps/, vmaps/, maps/) from build output dirs (`Bot/Debug/net8.0/`, `Bot/Release/net8.0/`) to a single `Data/` directory at the solution root. Add `WWOW_DATA_DIR` env var support. Update `NavigationFixture.EnsureDataDir()`, `PathfindingService`, and all data-loading code to use the centralized path. Add `Data/` to `.gitignore`. | Open |
 
 ---
 
@@ -92,21 +100,19 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 111)
+- **Last updated:** 2026-03-18 (session 112)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Investigated pathfinding through steep slopes and game objects (P7.1 root cause)
-  - Added NAV_STEEP_SLOPES (0x10) to MoveMapSharedDefines.h matching VMaNGOS flag
-  - Added area cost penalty (10x) for AREA_STEEP_SLOPE (3) and AREA_STEEP_SLOPE_MODEL (4) in PathFinder.cpp createFilter()
-  - Tested walkableClimb=8/walkableHeight=8 config — caused 4 regressions (physics sweep failures on new routes). Reverted to defaults.
-  - Regenerated 25 mmap tiles for Valley of Trials, Ratchet, and Orgrimmar using MoveMapGenerator.exe with `D:/vmangos/contrib/mmap/config.json`
-  - Verified: 40/40 pathfinding tests pass, 136/137 physics tests pass (baseline)
-  - Fishing live validation: pre-existing failure (bobber detection, not pathfinding)
-  - Added NavPath protected accessor on BotTask for diagnostic access
+  - P7.1: Drift detection — NavigationPath tracks perpendicular drift from planned path, warns >12y, metrics on TraceSnapshot (commit eb828cb)
+  - P7.4: Swim avoidance — GatherNodeTask aborts on IsSwimming; water-transition area cost in Detour causes cascading regressions so task-level check is correct (commit eb828cb)
+  - PathFinder.cpp comments updated documenting VMaNGOS area IDs and water-transition behavior
+  - Rebuilt Navigation.dll (clean rebuild), verified 136/136 physics tests pass
+  - Added data directory centralization TODO (D.1)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Mmap regen:** Run from `e:/repos/Westworld of Warcraft/Bot/Debug/net8.0/` with `"D:/vmangos-server/MoveMapGenerator.exe" 1 --tile X,Y --configInputPath "D:/vmangos/contrib/mmap/config.json" --silent`
-- **Test baseline:** 40/40 pathfinding, 136/137 physics, 1267 WoWSharpClient
+- **Test baseline:** 136/137 physics (1 skip), 40/40 pathfinding
 - **Next:**
-  1. P7.1: Finish Ratchet shoreline route hardening (bot-side execution trace for planned-vs-executed drift)
-  2. P7.4: Swim-avoidance for land-only tasks (NAV_WATER area cost in createFilter)
-  3. Run live parity suite to measure cliff detection improvement
+  1. P7.2: Route affordance metadata — classify path transitions
+  2. P7.3: Decision-grade spatial queries
+  3. Collision-aware path following (wall normal steering + LOS lookahead plan)
+  4. D.1: Data directory centralization when ready
