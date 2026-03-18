@@ -21,7 +21,7 @@ BG bot rubber-bands, stands in air, and fails to clamp to slopes. Movement flags
 | 1.2 | **Airborne horizontal velocity lock (C++).** Added `input.fallTime == 0` guard in StepV2 — horizontal velocity set only on first airborne frame. Prevents mid-air steering. | **Done** (5b4a1c5) |
 | 1.3 | **False-freefall guard hardening (C#).** Added `_hasPhysicsGroundContact` tracking. Guard requires confirmed ground contact before engaging, preventing elevated-spawn hover. Retains `_currentPath != null` for production safety. | **Done** (5b4a1c5) |
 | 1.4 | **Spline movement lockout.** SMSG_MONSTER_MOVE now wired to SplineController. Server-driven splines (fear, knockback, charge) suppress `_isInControl` → physics/MovementController paused. SplineController interpolates position along waypoints. Control restored on spline completion or Stop. | **Done** (8a612d3) |
-| 1.5 | **Post-teleport settle.** After teleport, ensure movement flags reset to MOVEFLAG_NONE and first heartbeat has correct ground-clamped Z before allowing any new movement. | Open |
+| 1.5 | **Post-teleport settle.** Already implemented: `NotifyTeleportIncoming` resets flags to MOVEFLAG_NONE, `_isBeingTeleported` suppresses physics (except NeedsGroundSnap), stale MOVEFLAG_FORWARD stripped from queued packets, stop packet sent after ground snap, 500ms fallback clears flag + forces physics frame. | **Done** (existing) |
 | 1.6 | **BG bot Z bouncing.** Walkable slope updated to cos(50°)=0.6428 (WoW client value at 0x0080DFFC). DOWN pass ray-cast fallback for steep terrain where capsule sweep misses ground. SteepDescent spatial Z: 2.22→0.66y max (70%), 0.61→0.15y avg (75%). Zero airborne frames on steep terrain. Terminal velocity constant added (60.148). | **Done** (8b7a77e) |
 | 1.7 | **Collision-aware path following.** L1 LOS lookahead + L2 wall-normal deflection + L3 repath fallback. Wall normal from physics exposed through WoWSharpObjectManager to NavigationPath. | **Done** (d0196c8) |
 | 1.8 | **Physics frame recording parity system.** Per-frame capture of position, groundZ, velocity, fall state, and all guard decisions. Controlled via START/STOP_PHYSICS_RECORDING actions. CSV output to `%LOCALAPPDATA%/WWoW/PhysicsRecordings/`. MovementParityTests enhanced with deep Z-trace analysis. | **Done** |
@@ -129,7 +129,7 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Test baseline:** 136/137 physics tests pass, 1259 WoWSharpClient tests pass
 - **Next:**
-  1. P1.5: Post-teleport settle
-  2. P7.4: Ratchet shoreline route hardening
-  3. Run full parity suite to measure cliff detection improvement on LedgeDrop/SteepDescent
-  4. Continue examining PhysicsEngine.cpp — dead PhysicsThreePass code, probe grid constants
+  1. P7.4: Ratchet shoreline route hardening
+  2. Run live parity suite to measure cliff detection improvement on LedgeDrop/SteepDescent
+  3. Continue examining PhysicsEngine.cpp — dead PhysicsThreePass code, probe grid constants
+  4. P1 fully complete (1.1-1.11 all Done) — consider archiving to ARCHIVE.md
