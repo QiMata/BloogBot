@@ -60,14 +60,14 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 | # | Task | Status |
 |---|------|--------|
-| 5.1 | Create MaNGOS accounts (RFCBOT2–RFCBOT10) + level 8 characters via SOAP | Open |
-| 5.2 | Create `RagefireChasm.settings.json` — 10-bot StateManager config with dungeoneering mode | Open |
-| 5.3 | Restore `DungeoneeringTask` from commit `0e7e0bf` — adapt to current BotRunner architecture (IBotTask, behavior trees, NavigationPath) | Open |
+| 5.1 | Create MaNGOS accounts (RFCBOT2–RFCBOT10) + GM level 6 via SOAP. Characters auto-created on first bot login, then leveled via `.character level` | **Done** (SOAP) |
+| 5.2 | Create `RagefireChasm.settings.json` — 10-bot StateManager config with dungeoneering mode | **Done** (eb3fddd) |
+| 5.3 | Restore `DungeoneeringTask` from commit `0e7e0bf` — adapt to current BotRunner architecture (IBotTask, behavior trees, NavigationPath) | **Done** (541a941) |
 | 5.4 | Add dungeoneering coordinator to StateManager — group formation, raid conversion, ready check, dungeon entry at RFC portal (1811, -4410, -18) on Kalimdor | Open |
 | 5.5 | Implement role-aware combat sequences — tank (hold aggro, skull mark), healer (lowest-HP party member), DPS (assist skull target), off-tank (pickup adds) | Open |
-| 5.6 | Add rest/buff coordination — CanProceed check (all members HP>85%, mana>80%) before pulls | Open |
-| 5.7 | Create `RagefireChasmTests.cs` — test fixture launches StateManager with RFC config, asserts: group formed, dungeon entered (map=389), mobs killed, forward progress | Open |
-| 5.8 | Add dungeon waypoint data for RFC map 389 — encounter positions from `creature` table for mapId=389 | Open |
+| 5.6 | Add rest/buff coordination — CanProceed check (all members HP>85%, mana>80%) before pulls | **Done** (541a941, built into DungeoneeringTask) |
+| 5.7 | Create `RagefireChasmTests.cs` — test fixture launches StateManager with RFC config, asserts: group formed, dungeon entered (map=389), mobs killed, forward progress | **Done** (eb3fddd) |
+| 5.8 | Add dungeon waypoint data for RFC map 389 — encounter positions from `creature` table for mapId=389 | **Done** (541a941, DungeonWaypoints.cs) |
 
 ### Key Architecture
 
@@ -120,18 +120,19 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 113)
+- **Last updated:** 2026-03-18 (session 114)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - BG-MERCHANT-001: Guard legacy MerchantFrame sequences against NullRef on BG bot (commit 75039ed)
-  - FISH-UNIT-001: Fix 7 pre-existing FishingData/FishingTask unit test failures (commit facd3e7)
-    - 1315/1315 BotRunner unit tests now pass (was 1308/1315)
-  - BG-FRAMES-001: Null guard all UI frame sequences (Gossip, Trainer, Taxi, Quest, Talent, Craft)
-  - BG-PET-001: Full pet system — discovery + Attack/Follow/Cast + SMSG_PET_SPELLS handler
-  - Prior session: P7 complete (4 tasks), D.1 data centralization shipped
-- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit, 1266/1266 WoWSharpClient, 11/57 live validation pass (2 pre-existing fails, 44 skip)
+  - P5.2: Created `RagefireChasm.settings.json` — 10-bot StateManager config (eb3fddd)
+  - P5.3: Restored `DungeoneeringTask` from old commit, adapted to current BotTask architecture (541a941)
+  - P5.6: CanProceed rest/buff check built into DungeoneeringTask (541a941)
+  - P5.7: Created `RagefireChasmTests.cs` — 4 test methods (enter world, form raid, teleport, full run placeholder) (eb3fddd)
+  - P5.8: Added RFC waypoint data in `DungeonWaypoints.cs` (541a941)
+  - Added `START_DUNGEONEERING` action type through full pipeline (proto → CharacterAction → ActionMapping → ActionDispatch → Task)
+- **Test baseline:** 1266/1266 WoWSharpClient, BotRunner builds clean (0 errors)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **Live test known failures:** BuffAndConsumableTests (FG snapshot timing), CombatLoopTests (bot enter-world after restart)
 - **Next:**
-  1. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot
-  2. Collision-aware path following — already implemented, needs live verification
+  1. P5.1: Create MaNGOS accounts (RFCBOT2–RFCBOT10) + level 8 characters via SOAP
+  2. P5.4: Dungeoneering coordinator in StateManager — group formation, raid conversion, dungeon entry
+  3. P5.5: Role-aware combat sequences (tank/heal/DPS/off-tank)
+  4. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot
