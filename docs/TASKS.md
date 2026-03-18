@@ -18,8 +18,8 @@ Core ghost-stuck, corridor collision, and object-aware paths all done (archived)
 | # | Task | Status |
 |---|------|--------|
 | 7.1 | **Execution trace drift detection.** NavigationPath tracks perpendicular drift from planned path, logs warnings >12y, exposes metrics on TraceSnapshot. | **Done** |
-| 7.2 | **Route affordance metadata.** Classify path transitions (walk/step-up/jump/drop/swim/blocked). | Open |
-| 7.3 | **Decision-grade spatial queries.** Reachability/LOS/surface queries for better approach points. | Open |
+| 7.2 | **Route affordance metadata.** SegmentAffordance enum classifies path segments (Walk/StepUp/SteepClimb/Drop/Cliff/Vertical). PathAffordanceInfo on TraceSnapshot. Unit tested. | **Done** |
+| 7.3 | **Decision-grade spatial queries.** IsPointOnNavmesh + FindNearestWalkablePoint full-stack: C++ DllMain → P/Invoke → gRPC → PathfindingClient. Returns area type and nearest walkable point. | **Done** |
 | 7.4 | **Swim-avoidance for land-only tasks.** GatherNodeTask aborts on IsSwimming. Water-transition area cost in Detour causes cascading path regressions — task-level check is correct approach. | **Done** |
 
 ---
@@ -100,19 +100,20 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 112)
+- **Last updated:** 2026-03-18 (session 112, continued)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - P7.1: Drift detection — NavigationPath tracks perpendicular drift from planned path, warns >12y, metrics on TraceSnapshot (commit eb828cb)
-  - P7.4: Swim avoidance — GatherNodeTask aborts on IsSwimming; water-transition area cost in Detour causes cascading regressions so task-level check is correct (commit eb828cb)
-  - PathFinder.cpp comments updated documenting VMaNGOS area IDs and water-transition behavior
-  - Rebuilt Navigation.dll (clean rebuild), verified 136/136 physics tests pass
-  - Added data directory centralization TODO (D.1)
-- **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **Mmap regen:** Run from `e:/repos/Westworld of Warcraft/Bot/Debug/net8.0/` with `"D:/vmangos-server/MoveMapGenerator.exe" 1 --tile X,Y --configInputPath "D:/vmangos/contrib/mmap/config.json" --silent`
-- **Test baseline:** 136/137 physics (1 skip), 40/40 pathfinding
+  - P7.1: Drift detection (commit eb828cb)
+  - P7.2: Route affordance metadata — SegmentAffordance enum, PathAffordanceInfo on TraceSnapshot (commit 826e690)
+  - P7.3: Spatial queries — IsPointOnNavmesh + FindNearestWalkablePoint full-stack C++→P/Invoke→gRPC→Client (commit ec761b1)
+  - P7.4: Swim avoidance — GatherNodeTask IsSwimming check (commit eb828cb)
+  - Collision-aware path following (wall normal steering + LOS lookahead) verified already implemented
+  - Navigation.dll rebuilt with new spatial query exports, 136/136 physics tests pass
+  - Data directory centralization TODO added (D.1)
+- **P7 complete.** All 4 tasks done. Phase can be archived.
+- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
+- **Test baseline:** 136/137 physics (1 skip)
 - **Next:**
-  1. P7.2: Route affordance metadata — classify path transitions
-  2. P7.3: Decision-grade spatial queries
-  3. Collision-aware path following (wall normal steering + LOS lookahead plan)
-  4. D.1: Data directory centralization when ready
+  1. Move P7 completed items to ARCHIVE.md
+  2. Continue broader TASKS.md work — P3 fishing parity, P4 movement flags, D.1 data centralization
+  3. Work toward full BG/FG parity per user request
