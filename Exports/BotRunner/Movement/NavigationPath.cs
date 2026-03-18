@@ -142,6 +142,7 @@ public sealed record NavigationTraceSnapshot(
     Position? RequestedDestination,
     Position[] ServiceWaypoints,
     Position[] PlannedWaypoints,
+    PathAffordanceInfo Affordances,
     Position? ActiveWaypoint,
     int CurrentWaypointIndex,
     int PlanVersion,
@@ -241,6 +242,111 @@ internal readonly record struct ValidatedPathResult(
     bool UsedNearbyObjectOverlay,
     int NearbyObjectCount,
     bool SmoothPath);
+
+/// <summary>
+/// Classifies the traversal type of a path segment between two consecutive waypoints.
+/// Used for decision-making (e.g., "can the bot safely walk this path?") and diagnostics.
+/// </summary>
+public enum SegmentAffordance : byte
+{
+    /// <summary>Roughly flat ground (slope &lt; 15°, |Z delta| &lt; 1y).</summary>
+    Walk = 0,
+    /// <summary>Upward slope or step (Z gain 1-3y, slope 15-45°).</summary>
+    StepUp = 1,
+    /// <summary>Steep upward climb (Z gain or slope > 45°).</summary>
+    SteepClimb = 2,
+    /// <summary>Moderate drop (Z loss 2-6y).</summary>
+    Drop = 3,
+    /// <summary>Large drop/cliff (Z loss > 6y).</summary>
+    Cliff = 4,
+    /// <summary>Near-vertical transition (2D distance &lt; 0.5y, Z delta > 2y) — likely elevator/portal.</summary>
+    Vertical = 5,
+}
+
+/// <summary>
+/// Affordance metadata for each segment in a planned path.
+/// Segment i describes the transition from waypoint[i] to waypoint[i+1].
+/// </summary>
+public readonly record struct PathAffordanceInfo(
+    SegmentAffordance[] Segments,
+    int StepUpCount,
+    int DropCount,
+    int CliffCount,
+    int VerticalCount,
+    float TotalZGain,
+    float TotalZLoss,
+    float MaxSlopeAngleDeg)
+{
+    public static PathAffordanceInfo Empty => new([], 0, 0, 0, 0, 0f, 0f, 0f);
+
+    public static PathAffordanceInfo Classify(Position[] waypoints)
+    {
+        if (waypoints.Length < 2)
+            return Empty;
+
+        var segments = new SegmentAffordance[waypoints.Length - 1];
+        int stepUpCount = 0, dropCount = 0, cliffCount = 0, verticalCount = 0;
+        float totalZGain = 0f, totalZLoss = 0f, maxSlopeDeg = 0f;
+
+        for (int i = 0; i < waypoints.Length - 1; i++)
+        {
+            var a = waypoints[i];
+            var b = waypoints[i + 1];
+            var dx = b.X - a.X;
+            var dy = b.Y - a.Y;
+            var dz = b.Z - a.Z;
+            var dist2D = MathF.Sqrt(dx * dx + dy * dy);
+            var absDz = MathF.Abs(dz);
+
+            // Track total elevation change
+            if (dz > 0) totalZGain += dz;
+            else totalZLoss += -dz;
+
+            // Slope angle in degrees
+            float slopeDeg = dist2D > 0.01f
+                ? MathF.Atan2(absDz, dist2D) * (180f / MathF.PI)
+                : (absDz > 0.5f ? 90f : 0f);
+            if (slopeDeg > maxSlopeDeg) maxSlopeDeg = slopeDeg;
+
+            // Classify
+            SegmentAffordance affordance;
+            if (dist2D < 0.5f && absDz > 2f)
+            {
+                affordance = SegmentAffordance.Vertical;
+                verticalCount++;
+            }
+            else if (dz < -6f)
+            {
+                affordance = SegmentAffordance.Cliff;
+                cliffCount++;
+            }
+            else if (dz < -2f)
+            {
+                affordance = SegmentAffordance.Drop;
+                dropCount++;
+            }
+            else if (slopeDeg > 45f && dz > 0)
+            {
+                affordance = SegmentAffordance.SteepClimb;
+                stepUpCount++;
+            }
+            else if (dz > 1f || (slopeDeg > 15f && dz > 0))
+            {
+                affordance = SegmentAffordance.StepUp;
+                stepUpCount++;
+            }
+            else
+            {
+                affordance = SegmentAffordance.Walk;
+            }
+
+            segments[i] = affordance;
+        }
+
+        return new(segments, stepUpCount, dropCount, cliffCount, verticalCount,
+            totalZGain, totalZLoss, maxSlopeDeg);
+    }
+}
 
 /// <summary>
 /// Manages a path of waypoints from the pathfinding service.
@@ -354,6 +460,7 @@ public class NavigationPath(
     private readonly List<NavigationExecutionSample> _executionSamples = [];
     private Position[] _traceServiceWaypoints = [];
     private Position[] _tracePlannedWaypoints = [];
+    private PathAffordanceInfo _traceAffordances = PathAffordanceInfo.Empty;
     private Position? _traceRequestedStart;
     private Position? _traceRequestedDestination;
     private uint _traceMapId;
@@ -377,6 +484,7 @@ public class NavigationPath(
         ClonePosition(_traceRequestedDestination),
         ClonePositions(_traceServiceWaypoints),
         ClonePositions(_tracePlannedWaypoints),
+        _traceAffordances,
         _currentIndex < _waypoints.Length ? ClonePosition(_waypoints[_currentIndex]) : null,
         _currentIndex,
         _tracePlanVersion,
@@ -935,6 +1043,7 @@ public class NavigationPath(
         _traceRequestedDestination = ClonePosition(end);
         _traceServiceWaypoints = ClonePositions(path.RawPath);
         _tracePlannedWaypoints = ClonePositions(_waypoints);
+        _traceAffordances = PathAffordanceInfo.Classify(_waypoints);
         _tracePlanVersion++;
         _traceLastReplanReason = reason;
         _traceLastResolution = null;
@@ -2101,6 +2210,7 @@ public class NavigationPath(
         _losSkipCacheTick = 0;
         _traceServiceWaypoints = [];
         _tracePlannedWaypoints = [];
+        _traceAffordances = PathAffordanceInfo.Empty;
         _traceRequestedStart = null;
         _traceRequestedDestination = null;
         _traceMapId = 0;

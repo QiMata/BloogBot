@@ -1051,6 +1051,7 @@ public class RetrieveCorpseTaskTests
                 new Position(36f, 12f, 0f),
                 new Position(48f, 18f, 0f)
             ],
+            Affordances: PathAffordanceInfo.Empty,
             ActiveWaypoint: new Position(24f, 7f, 0f),
             CurrentWaypointIndex: 2,
             PlanVersion: 3,
@@ -1082,6 +1083,42 @@ public class RetrieveCorpseTaskTests
         Assert.Contains("planned=[(0.0,0.0,0.0), (12.0,1.0,0.0), (24.0,7.0,0.0), (36.0,12.0,0.0), +1 more]", summary);
         Assert.Contains("samples=[+1 earlier", summary);
         Assert.Contains("p3:waypoint:idx3:(23.0,6.0,0.0)->(36.0,12.0,0.0)", summary);
+    }
+
+    [Fact]
+    public void PathAffordanceInfo_Classify_LabelsSegmentsCorrectly()
+    {
+        var waypoints = new Position[]
+        {
+            new(0f, 0f, 0f),      // start
+            new(10f, 0f, 0.3f),   // walk (flat, <1y Z)
+            new(20f, 0f, 2.5f),   // step-up (Z gain 2.2y)
+            new(20.1f, 0f, 8f),   // vertical (2D < 0.5y, Z > 2y)
+            new(30f, 0f, 5f),     // drop (Z loss 3y)
+            new(40f, 0f, -3f),    // cliff (Z loss 8y)
+        };
+
+        var info = PathAffordanceInfo.Classify(waypoints);
+
+        Assert.Equal(5, info.Segments.Length);
+        Assert.Equal(SegmentAffordance.Walk, info.Segments[0]);
+        Assert.Equal(SegmentAffordance.StepUp, info.Segments[1]);
+        Assert.Equal(SegmentAffordance.Vertical, info.Segments[2]);
+        Assert.Equal(SegmentAffordance.Drop, info.Segments[3]);
+        Assert.Equal(SegmentAffordance.Cliff, info.Segments[4]);
+        Assert.Equal(1, info.VerticalCount);
+        Assert.Equal(1, info.DropCount);
+        Assert.Equal(1, info.CliffCount);
+        Assert.True(info.TotalZGain > 0f);
+        Assert.True(info.TotalZLoss > 0f);
+    }
+
+    [Fact]
+    public void PathAffordanceInfo_Classify_EmptyPath_ReturnsEmpty()
+    {
+        var info = PathAffordanceInfo.Classify([]);
+        Assert.Empty(info.Segments);
+        Assert.Equal(0, info.StepUpCount);
     }
 
     private static void ForceRunbackSampleReady(RetrieveCorpseTask task)
