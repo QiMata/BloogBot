@@ -98,6 +98,7 @@ namespace WoWSharpClient
         {
             WoWSharpEventEmitter.Instance.Reset();
             lock (_objectsLock) _objects.Clear();
+            _activePet = null;
             _pendingUpdates.Clear();
 
             _logger = logger;
@@ -315,7 +316,29 @@ namespace WoWSharpClient
             new WoWLocalPlayer(new HighGuid(new byte[4], new byte[4]));
 
 
-        public IWoWLocalPet Pet => null;
+        private WoWLocalPet _activePet;
+
+        public IWoWLocalPet Pet => _activePet;
+
+        /// <summary>
+        /// Sends a CMSG_PET_ACTION packet. Called by WoWLocalPet methods.
+        /// </summary>
+        internal void SendPetAction(byte[] payload)
+        {
+            if (_woWClient == null)
+            {
+                Log.Warning("[PET] Cannot send CMSG_PET_ACTION — no world client connected");
+                return;
+            }
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_PET_ACTION, payload)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Log.Error(t.Exception, "[PET] Failed to send CMSG_PET_ACTION");
+                    else
+                        Log.Debug("[PET] CMSG_PET_ACTION sent ({Len} bytes)", payload.Length);
+                });
+        }
 
         public ILoginScreen LoginScreen => _loginScreen;
 
@@ -352,6 +375,7 @@ namespace WoWSharpClient
             {
                 _objects.Clear();
             }
+            _activePet = null;
 
             if (!preservePlayerGuid)
             {

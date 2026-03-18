@@ -248,6 +248,23 @@ namespace WoWSharpClient
                                         }
                                     }
 
+                                    // Pet discovery: promote unit to WoWLocalPet if summoned by player
+                                    if (newObject is WoWUnit addedUnit && addedUnit is not WoWLocalPet
+                                        && addedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
+                                        && PlayerGuid.FullGuid != 0)
+                                    {
+                                        var pet = new WoWLocalPet(addedUnit.HighGuid, addedUnit.ObjectType);
+                                        pet.CopyFrom(addedUnit);
+                                        lock (_objectsLock)
+                                        {
+                                            var petIdx = _objects.FindIndex(o => o.Guid == pet.Guid);
+                                            if (petIdx >= 0) _objects[petIdx] = pet;
+                                        }
+                                        _activePet = pet;
+                                        Log.Information("[PET] Discovered pet Guid=0x{Guid:X} (summoned by player 0x{PlayerGuid:X})",
+                                            pet.Guid, PlayerGuid.FullGuid);
+                                    }
+
                                     break;
                                 }
 
@@ -304,10 +321,28 @@ namespace WoWSharpClient
                                             obj is WoWLocalPlayer ? " [LOCAL]" : "");
                                     }
 
-                                    if (index >= 0)
+                                    // Pet discovery on field update (SummonedBy may arrive in a later update)
+                                    if (obj is WoWUnit updatedUnit && updatedUnit is not WoWLocalPet
+                                        && updatedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
+                                        && PlayerGuid.FullGuid != 0)
+                                    {
+                                        var pet = new WoWLocalPet(updatedUnit.HighGuid, updatedUnit.ObjectType);
+                                        pet.CopyFrom(updatedUnit);
+                                        if (index >= 0) { lock (_objectsLock) _objects[index] = pet; }
+                                        _activePet = pet;
+                                        Log.Information("[PET] Promoted unit 0x{Guid:X} to pet on update", pet.Guid);
+                                    }
+                                    else if (index >= 0)
                                     {
                                         lock (_objectsLock) _objects[index] = obj;
                                     }
+
+                                    // Keep active pet state in sync with field diffs
+                                    if (_activePet != null && update.Guid == _activePet.Guid && obj is WoWUnit petUnit)
+                                    {
+                                        _activePet.CopyFrom(petUnit);
+                                    }
+
                                     break;
                                 }
 
@@ -316,6 +351,13 @@ namespace WoWSharpClient
                                     int removed;
                                     lock (_objectsLock) removed = _objects.RemoveAll(x => x.Guid == update.Guid);
                                     Log.Verbose("[Remove] Guid={Guid:X} (removed {Count})", update.Guid, removed);
+
+                                    // Clear pet reference when pet is removed from world
+                                    if (_activePet != null && update.Guid == _activePet.Guid)
+                                    {
+                                        Log.Information("[PET] Pet 0x{Guid:X} removed from world", update.Guid);
+                                        _activePet = null;
+                                    }
                                     break;
                                 }
                             }

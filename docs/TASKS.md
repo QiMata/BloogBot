@@ -47,7 +47,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | ID | Issue | Priority | Status |
 |----|-------|----------|--------|
 | `BG-MERCHANT-001` | Legacy MerchantFrame sequences guarded against NullRef | CRITICAL | **Done** (commit 75039ed) |
-| `BG-PET-001` | BG pet support — `Pet` returns null. Hunter/Warlock won't work. | CRITICAL | Open |
+| `BG-PET-001` | BG pet discovery + Attack/Follow commands wired via CMSG_PET_ACTION | CRITICAL | **Done** — Cast() pending pet action bar |
 | `BG-FRAMES-001` | GossipFrame, TrainerFrame, TaxiFrame, QuestFrame, TalentFrame, CraftFrame null-guarded on BG | HIGH | **Done** |
 | `FISH-UNIT-001` | 7 FishingData/FishingTask unit tests failing (pre-existing, not regression) | MEDIUM | **Done** (commit facd3e7) |
 
@@ -80,10 +80,11 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
   - FISH-UNIT-001: Fix 7 pre-existing FishingData/FishingTask unit test failures (commit facd3e7)
     - 1315/1315 BotRunner unit tests now pass (was 1308/1315)
   - BG-FRAMES-001: Null guard all UI frame sequences (Gossip, Trainer, Taxi, Quest, Talent, Craft)
+  - BG-PET-001: Pet discovery from SMSG_UPDATE_OBJECT + Attack/Follow via CMSG_PET_ACTION
   - Prior session: P7 complete (4 tasks), D.1 data centralization shipped
-- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit tests (all pass)
+- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit, 1266/1266 WoWSharpClient (all pass)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Next:**
-  1. BG-PET-001: Implement pet support for Hunter/Warlock
+  1. Wire pet Cast() via SMSG_PET_SPELLS action bar parsing
   2. P3/P4: FG packet capture tests (fishing parity, teleport flags)
-  3. Collision-aware path following (wall normal steering + LOS lookahead)
+  3. Collision-aware path following (already implemented, verify live)
