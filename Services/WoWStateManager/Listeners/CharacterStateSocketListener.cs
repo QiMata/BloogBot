@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 
@@ -43,6 +44,7 @@ namespace WoWStateManager.Listeners
 
         private readonly List<CharacterSettings> _characterSettings;
         private CombatCoordinator? _combatCoordinator;
+        private DungeoneeringCoordinator? _dungeoneeringCoordinator;
         private readonly bool _coordinatorDisabled;
 
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
@@ -291,6 +293,39 @@ namespace WoWStateManager.Listeners
                 return;
             }
 
+            // Use DungeoneeringCoordinator for 3+ bots, CombatCoordinator for exactly 2
+            if (_characterSettings.Count > 2)
+            {
+                InjectDungeoneeringActions(accountName, response);
+            }
+            else
+            {
+                InjectCombatActions(accountName, response);
+            }
+        }
+
+        private void InjectDungeoneeringActions(string accountName, WoWActivitySnapshot response)
+        {
+            if (_dungeoneeringCoordinator == null)
+            {
+                // Leader = first Foreground account, or first account if no FG
+                var leaderAccount = _characterSettings
+                    .FirstOrDefault(cs => cs.RunnerType == Settings.BotRunnerType.Foreground)?.AccountName
+                    ?? _characterSettings.First().AccountName;
+                var allAccounts = _characterSettings.Select(cs => cs.AccountName);
+
+                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _logger);
+            }
+
+            var action = _dungeoneeringCoordinator.GetAction(accountName, CurrentActivityMemberList);
+            if (action != null)
+            {
+                response.CurrentAction = action;
+            }
+        }
+
+        private void InjectCombatActions(string accountName, WoWActivitySnapshot response)
+        {
             // Lazy-init the coordinator once we can resolve roles
             if (_combatCoordinator == null)
             {
