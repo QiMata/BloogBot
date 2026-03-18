@@ -1919,3 +1919,19 @@ Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor. Regenera
 | N.5 | BG undermap fall on downhill — path-based underground snap | 5a73465 |
 | N.6 | FG rock collision — walkableRadius=2 in config.json, mmaps regenerated | config.json |
 | N.7 | Wall-stuck repath suppression — consecutive wall hit tracking (15 threshold) | shipped |
+
+## P7 — Pathfinding Hardening (completed 2026-03-18)
+
+| # | Task | Commit |
+|---|------|--------|
+| P7.1 | Execution trace drift detection — perpendicular drift from planned path, warns >12y, metrics on TraceSnapshot | eb828cb |
+| P7.2 | Route affordance metadata — SegmentAffordance enum (Walk/StepUp/SteepClimb/Drop/Cliff/Vertical), PathAffordanceInfo on TraceSnapshot | 826e690 |
+| P7.3 | Decision-grade spatial queries — IsPointOnNavmesh + FindNearestWalkablePoint full-stack C++→P/Invoke→gRPC→Client | ec761b1 |
+| P7.4 | Swim-avoidance for land-only tasks — GatherNodeTask aborts on IsSwimming, task-level (Detour area cost causes regressions) | eb828cb |
+
+## Cleanup — PhysicsEngine Dead Code (completed 2026-03-18)
+
+| # | Task | Details |
+|---|------|---------|
+| C.1 | Remove PhysicsThreePass.cpp — 727+148 lines dead code | Done |
+| C.2 | Magic number extraction — ~30 constants extracted (VECTOR_EPSILON, TERMINAL_VELOCITY, etc.) | Done |

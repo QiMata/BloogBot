@@ -11,19 +11,6 @@
 
 ---
 
-## P7 - Pathfinding Hardening (ACTIVE)
-
-Core ghost-stuck, corridor collision, and object-aware paths all done (archived). Remaining: shoreline routes, route metadata, spatial queries, swim avoidance.
-
-| # | Task | Status |
-|---|------|--------|
-| 7.1 | **Execution trace drift detection.** NavigationPath tracks perpendicular drift from planned path, logs warnings >12y, exposes metrics on TraceSnapshot. | **Done** |
-| 7.2 | **Route affordance metadata.** SegmentAffordance enum classifies path segments (Walk/StepUp/SteepClimb/Drop/Cliff/Vertical). PathAffordanceInfo on TraceSnapshot. Unit tested. | **Done** |
-| 7.3 | **Decision-grade spatial queries.** IsPointOnNavmesh + FindNearestWalkablePoint full-stack: C++ DllMain → P/Invoke → gRPC → PathfindingClient. Returns area type and nearest walkable point. | **Done** |
-| 7.4 | **Swim-avoidance for land-only tasks.** GatherNodeTask aborts on IsSwimming. Water-transition area cost in Detour causes cascading path regressions — task-level check is correct approach. | **Done** |
-
----
-
 ## P3 - Fishing Parity (Low Priority)
 
 **FishingTask is implemented and passing live validation for both BG and FG.** Remaining work is packet-level optimization, not core mechanics.
@@ -47,13 +34,6 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | 4.3 | Fix any remaining MovementController flag issues found | Blocked on 4.2 |
 
 ---
-
-## Cleanup — PhysicsEngine Dead Code
-
-| # | Task | Status |
-|---|------|--------|
-| C.1 | **Remove PhysicsThreePass.cpp.** Dead code — functions never called by StepV2. Not even in vcxproj. Deleted .cpp (727 lines) + .h (148 lines). | **Done** |
-| C.2 | **High-impact magic number extraction.** Replaced ~30 instances: `1e-6f`→`VECTOR_EPSILON` (25x), `1e-4f`→`GROUND_SNAP_EPSILON` (4x), `60.0f`→`TERMINAL_VELOCITY`, `0.7f`→`OVERLAP_NORMAL_Z_FILTER`, `0.05f`→`MAX_DEFERRED_DEPEN_PER_TICK`, `4`→`MAX_OVERLAP_RECOVER_ITERATIONS`, `0.5f`→`WATER_ENTRY_VELOCITY_DAMP`. ~50 replay-tuning numbers left (context-specific, low priority). | **Done** |
 
 ---
 
