@@ -14,7 +14,7 @@ public static class PhysicsTestConstants
     // ==========================================================================
 
     /// <summary>
-    /// WoW gravity in yards/second² (19.2911 is the authentic vanilla value)
+    /// WoW gravity in yards/secondï¿½ (19.2911 is the authentic vanilla value)
     /// </summary>
     public const float Gravity = 19.2911f;
 
@@ -73,14 +73,14 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Minimum Z component of surface normal to be considered walkable.
-    /// cos(60°) = 0.5, meaning slopes steeper than 60° are not walkable.
+    /// cos(50Â°) = 0.6428, per WoW 1.12.1 client (0x0080DFFC). Slopes steeper than 50Â° are non-walkable.
     /// </summary>
-    public const float WalkableMinNormalZ = 0.5f;
+    public const float WalkableMinNormalZ = 0.6428f;
 
     /// <summary>
-    /// Maximum walkable slope angle in degrees (60°)
+    /// Maximum walkable slope angle in degrees (50Â° per WoW client)
     /// </summary>
-    public const float MaxWalkableSlopeDegrees = 60.0f;
+    public const float MaxWalkableSlopeDegrees = 50.0f;
 
     // ==========================================================================
     // CAPSULE DIMENSIONS (Standard WoW Character)
@@ -117,7 +117,7 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Normal Z threshold for ceiling surfaces (downward-facing)
-    /// cos(120°) = -0.5
+    /// cos(120ï¿½) = -0.5
     /// </summary>
     public const float CeilingNormalZThreshold = -0.5f;
 

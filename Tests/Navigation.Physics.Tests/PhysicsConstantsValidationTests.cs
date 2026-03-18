@@ -105,11 +105,11 @@ public class PhysicsConstantsValidationTests(PhysicsEngineFixture fixture)
     [Fact]
     public void PhysicsConstants_WalkableThresholdMatchesSlopeAngle()
     {
-        // cos(60�) should equal WalkableMinNormalZ
-        float cos60 = MathF.Cos(60.0f * MathF.PI / 180.0f);
+        // cos(50°) should equal WalkableMinNormalZ (WoW client value at 0x0080DFFC)
+        float cos50 = MathF.Cos(50.0f * MathF.PI / 180.0f);
 
-        Assert.True(MathF.Abs(cos60 - PhysicsTestConstants.WalkableMinNormalZ) < 0.01f,
-            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(60�) ({cos60})");
+        Assert.True(MathF.Abs(cos50 - PhysicsTestConstants.WalkableMinNormalZ) < 0.01f,
+            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(50°) ({cos50})");
     }
 
     [Fact]

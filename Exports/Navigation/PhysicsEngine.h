@@ -49,10 +49,15 @@ namespace PhysicsConstants
     constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
     constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
 
-    // Slope walkability threshold: cos(60°) = 0.5 per CMaNGOS walkableSlopeAngle default
-    // 50-60° = NAV_AREA_GROUND_STEEP (walkable for mobs, not players in navmesh)
-    // Recordings confirm: sustained walking at ~53°, airborne transitions at ~64°
-    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.5f;
+    // Slope walkability threshold: cos(50°) ≈ 0.6428 per WoW 1.12.1 client memory
+    // Address 0x0080DFFC ("WallClimb" / mountain climb angle). Slopes steeper than
+    // 50° are non-walkable for players. CMaNGOS navmesh uses 0.5 (cos 60°) for mob
+    // pathability, but the client physics engine enforces the stricter 50° limit.
+    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
+
+    // Terminal fall velocity (max vertical speed during free-fall)
+    // Address 0x0087D894 in 1.12.1, 0x00BC4AF8 in 2.4.3
+    constexpr float TERMINAL_VELOCITY = 60.148f;
 }
 
 class PhysicsEngine

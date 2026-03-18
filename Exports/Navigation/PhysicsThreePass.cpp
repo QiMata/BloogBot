@@ -54,7 +54,7 @@ ClimbingSensorConfig GetDefaultClimbingSensorConfig(float radius)
     // Forward sensor distance: slightly more than radius to detect obstacles ahead
     config.sensorDistance = radius * 2.0f;
     // Maximum climbable angle (matches walkable slope threshold)
-    config.maxClimbAngle = 60.0f; // cos(60) = 0.5 = DEFAULT_WALKABLE_MIN_NORMAL_Z
+    config.maxClimbAngle = 50.0f; // cos(50) ≈ 0.6428 = DEFAULT_WALKABLE_MIN_NORMAL_Z (WoW client value)
     return config;
 }
 

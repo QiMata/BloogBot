@@ -603,7 +603,7 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
                 for (int h = 0; h < hitCount && h < 10; h++)
                 {
                     var hit = hits[h];
-                    string walkable = hit.NormalZ >= 0.57f ? "WALKABLE" : "wall";
+                    string walkable = hit.NormalZ >= PhysicsTestConstants.WalkableMinNormalZ ? "WALKABLE" : "wall";
                     string pen = hit.StartPenetrating ? "PEN" : "   ";
                     _output.WriteLine($"    [{h}] {pen} dist={hit.Distance:F3} pt=({hit.PointX:F2},{hit.PointY:F2},{hit.PointZ:F2}) " +
                         $"nrm=({hit.NormalX:F3},{hit.NormalY:F3},{hit.NormalZ:F3}) inst={hit.InstanceId} {walkable}");

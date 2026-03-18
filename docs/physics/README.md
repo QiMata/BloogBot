@@ -71,7 +71,7 @@ From `Exports/Navigation/PhysicsEngine.h` (`PhysicsConstants` namespace):
 | `STEP_DOWN_HEIGHT` | 4.0f | Max downward snap while grounded |
 | `GRAVITY` | 19.2911f | WoW gravity (yards/s�) |
 | `JUMP_VELOCITY` | 7.95577f | Initial jump velocity (yards/s) |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5f | ~60� max walkable slope |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428f | ~50� max walkable slope |
 | `WATER_LEVEL_DELTA` | 2.0f | Swim threshold below water surface |
 
 ## Source Code Locations

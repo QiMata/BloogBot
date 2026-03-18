@@ -10,7 +10,7 @@
 //
 // PhysX CCT reference (docs/physics/PHYSX_CCT_RULES.md):
 //   - 3-pass movement: UP → SIDE → DOWN
-//   - Walkable slope: cos(angle) ≥ slopeLimit (WoW: 0.5 = cos(60°))
+//   - Walkable slope: cos(angle) ≥ slopeLimit (WoW: 0.6428 = cos(50°))
 //   - Step-down snap: grounded characters snap down up to StepDownHeight (4.0y)
 //   - Auto-step: obstacles ≤ StepHeight (2.125y) are automatically climbed
 
