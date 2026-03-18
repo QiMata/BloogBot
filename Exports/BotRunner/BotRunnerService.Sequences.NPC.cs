@@ -1,3 +1,4 @@
+using Serilog;
 using System.Linq;
 using Xas.FluentBehaviourTree;
 
@@ -155,6 +156,12 @@ namespace BotRunner
             .Build();
         private IBehaviourTreeNode BuildBuyItemSequence(int slotId, int quantity) => new BehaviourTreeBuilder()
                 .Sequence("BuyItem Sequence")
+                    .Condition("MerchantFrame Available", time =>
+                    {
+                        if (_objectManager.MerchantFrame != null) return true;
+                        Log.Warning("[BOT RUNNER] MerchantFrame is null — use vendorGuid-based BuyItem for BG bot");
+                        return false;
+                    })
                     .Do("Buy Item", time =>
                     {
                         _objectManager.MerchantFrame.BuyItem(slotId, quantity);
@@ -164,7 +171,13 @@ namespace BotRunner
                 .Build();
         private IBehaviourTreeNode BuildBuybackItemSequence(int slotId, int quantity) => new BehaviourTreeBuilder()
                 .Sequence("BuybackItem Sequence")
-                    .Do("Buy Item", time =>
+                    .Condition("MerchantFrame Available", time =>
+                    {
+                        if (_objectManager.MerchantFrame != null) return true;
+                        Log.Warning("[BOT RUNNER] MerchantFrame is null — buyback requires FG bot or vendorGuid path");
+                        return false;
+                    })
+                    .Do("Buyback Item", time =>
                     {
                         _objectManager.MerchantFrame.BuybackItem(slotId, quantity);
                         return BehaviourTreeStatus.Success;
@@ -173,6 +186,12 @@ namespace BotRunner
                 .Build();
         private IBehaviourTreeNode BuildSellItemSequence(int bagId, int slotId, int quantity) => new BehaviourTreeBuilder()
                 .Sequence("SellItem Sequence")
+                    .Condition("MerchantFrame Available", time =>
+                    {
+                        if (_objectManager.MerchantFrame != null) return true;
+                        Log.Warning("[BOT RUNNER] MerchantFrame is null — use vendorGuid-based SellItem for BG bot");
+                        return false;
+                    })
                     .Do("Sell Item", time =>
                     {
                         _objectManager.MerchantFrame.SellItem(bagId, slotId, quantity);

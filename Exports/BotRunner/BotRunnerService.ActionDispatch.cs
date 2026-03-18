@@ -350,7 +350,25 @@ namespace BotRunner
                         }
                         break;
                     case CharacterAction.RepairItem:
-                        builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
+                        // With vendorGuid: [0]=vendorGuid, [1]=repairSlot — packet-based
+                        // Without: [0]=repairSlot — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var repairItemVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var repairSlot = (int)actionEntry.Item2[1];
+                            builder.Do($"Repair slot {repairSlot} at vendor {repairItemVendorGuid:X}", time =>
+                            {
+                                // Use RepairAllItems as the packet path — individual slot repair
+                                // is not supported by the packet API; repair-all is the server norm.
+                                _objectManager.RepairAllItemsAsync(repairItemVendorGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
                     case CharacterAction.RepairAllItems:
                         // With vendorGuid: [0]=vendorGuid — packet-based

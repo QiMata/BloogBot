@@ -239,10 +239,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages repairing the item.</returns>
         private IBehaviourTreeNode BuildRepairItemSequence(int repairSlot) => new BehaviourTreeBuilder()
             .Sequence("Repair Item Sequence")
-                // Ensure the bot has enough money to repair the item
+                .Condition("MerchantFrame Available", time =>
+                {
+                    if (_objectManager.MerchantFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] MerchantFrame is null — use vendorGuid-based RepairItem for BG bot");
+                    return false;
+                })
                 .Condition("Can Afford Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.RepairCost((EquipSlot)repairSlot))
-
-                // Repair the item in the specified slot
                 .Do("Repair Item", time =>
                 {
                     _objectManager.MerchantFrame.RepairByEquipSlot((EquipSlot)repairSlot);
@@ -256,10 +259,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages repairing all items.</returns>
         private IBehaviourTreeNode RepairAllItemsSequence => new BehaviourTreeBuilder()
             .Sequence("Repair All Items Sequence")
-                // Ensure the bot has enough money to repair all items
+                .Condition("MerchantFrame Available", time =>
+                {
+                    if (_objectManager.MerchantFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] MerchantFrame is null — use vendorGuid-based RepairAllItems for BG bot");
+                    return false;
+                })
                 .Condition("Can Afford Full Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.TotalRepairCost)
-
-                // Repair all damaged items
                 .Do("Repair All Items", time =>
                 {
                     _objectManager.MerchantFrame.RepairAll();
