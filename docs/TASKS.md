@@ -92,21 +92,21 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 110, continued)
+- **Last updated:** 2026-03-18 (session 111)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Archived P1 (all 11 tasks) and Navmesh (all 7 tasks) to ARCHIVE.md
-  - Added 7 SplineController unit tests (HasActiveSpline, OnSplineCompleted event, Remove isolation)
-  - Renumbered P7 tasks (was 7.4/7.7/7.8/7.9 → now 7.1-7.4)
-  - C.1: Deleted dead PhysicsThreePass.cpp (727 lines) + .h (148 lines) — not even in vcxproj
-  - C.2: Extracted ~30 magic numbers to named constants (VECTOR_EPSILON 25x, GROUND_SNAP_EPSILON 4x, TERMINAL_VELOCITY, OVERLAP_NORMAL_Z_FILTER, MAX_DEFERRED_DEPEN_PER_TICK, MAX_OVERLAP_RECOVER_ITERATIONS, WATER_ENTRY_VELOCITY_DAMP)
-  - Updated JUMP_VELOCITY 7.95577→7.9535 from WoW 1.12.1 binary scan (computed inline, not static)
-  - Added SafeFallTerminalVelocity, base movement speeds, fall damage constants to PhysicsEngine.h + PhysicsTestConstants.cs
-  - Updated docs/physics/README.md with client binary addresses for all constants
-  - Verified: C++ build clean, 136/137 physics tests pass (unchanged baseline)
-  - Confirmed collision-aware path following plan is fully implemented (L1 LOS lookahead, L2 wall deflection, L3 repath)
+  - Investigated pathfinding through steep slopes and game objects (P7.1 root cause)
+  - Added NAV_STEEP_SLOPES (0x10) to MoveMapSharedDefines.h matching VMaNGOS flag
+  - Added area cost penalty (10x) for AREA_STEEP_SLOPE (3) and AREA_STEEP_SLOPE_MODEL (4) in PathFinder.cpp createFilter()
+  - Tested walkableClimb=8/walkableHeight=8 config — caused 4 regressions (physics sweep failures on new routes). Reverted to defaults.
+  - Regenerated 25 mmap tiles for Valley of Trials, Ratchet, and Orgrimmar using MoveMapGenerator.exe with `D:/vmangos/contrib/mmap/config.json`
+  - Verified: 40/40 pathfinding tests pass, 136/137 physics tests pass (baseline)
+  - Fishing live validation: pre-existing failure (bobber detection, not pathfinding)
+  - Added NavPath protected accessor on BotTask for diagnostic access
 - **Data dirs:** Server reads from `D:/MaNGOS/data/` (DataDir in mangosd.conf). VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **Test baseline:** 136/137 physics tests pass, 1267 WoWSharpClient tests pass
+- **Mmap regen:** Run from `e:/repos/Westworld of Warcraft/Bot/Debug/net8.0/` with `"D:/vmangos-server/MoveMapGenerator.exe" 1 --tile X,Y --configInputPath "D:/vmangos/contrib/mmap/config.json" --silent`
+- **Test baseline:** 40/40 pathfinding, 136/137 physics, 1267 WoWSharpClient
 - **Next:**
-  1. P7.1: Finish Ratchet shoreline route hardening (bot-side execution trace)
-  2. Run live parity suite to measure cliff detection improvement on LedgeDrop/SteepDescent
+  1. P7.1: Finish Ratchet shoreline route hardening (bot-side execution trace for planned-vs-executed drift)
+  2. P7.4: Swim-avoidance for land-only tasks (NAV_WATER area cost in createFilter)
+  3. Run live parity suite to measure cliff detection improvement
