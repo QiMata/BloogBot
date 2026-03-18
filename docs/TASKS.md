@@ -37,12 +37,6 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 ---
 
-## Infrastructure — Data Directory Centralization
-
-| # | Task | Status |
-|---|------|--------|
-| D.1 | **Centralize mmap/vmap/maps data files.** Move all navmesh data (mmaps/, vmaps/, maps/) from build output dirs (`Bot/Debug/net8.0/`, `Bot/Release/net8.0/`) to a single `Data/` directory at the solution root. Add `WWOW_DATA_DIR` env var support. Update `NavigationFixture.EnsureDataDir()`, `PathfindingService`, and all data-loading code to use the centralized path. Add `Data/` to `.gitignore`. | Open |
-
 ---
 
 ## Blocked - Storage Stubs (Needs NuGet)
@@ -90,7 +84,8 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
   - Collision-aware path following (wall normal steering + LOS lookahead) verified already implemented
   - Navigation.dll rebuilt with new spatial query exports, 136/136 physics tests pass
   - Data directory centralization TODO added (D.1)
-- **P7 complete.** All 4 tasks done. Phase can be archived.
+- **P7 complete.** All 4 tasks done. Archived.
+  - D.1: Data directory centralization shipped (commit b31a048). `Data/` at repo root, gitignored, auto-discovered.
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
 - **Test baseline:** 136/137 physics (1 skip)
 - **Next:**
