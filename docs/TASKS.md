@@ -35,10 +35,6 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 ---
 
----
-
----
-
 ## Blocked - Storage Stubs (Needs NuGet)
 
 | ID | Task | Blocker |
