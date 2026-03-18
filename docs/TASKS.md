@@ -42,11 +42,14 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | `RTS-MISS-001` | S3 ops in `RecordedTests.Shared` | Requires `AWSSDK.S3` |
 | `RTS-MISS-002` | Azure ops in `RecordedTests.Shared` | Requires `Azure.Storage.Blobs` |
 
-## Capability Gaps (Low Priority)
+## BG/FG Parity Gaps
 
-| ID | Issue | Status |
-|----|-------|--------|
-| `BG-PET-001` | BG pet support — `Pet` returns null. Hunter/Warlock won't work. | Open |
+| ID | Issue | Priority | Status |
+|----|-------|----------|--------|
+| `BG-MERCHANT-001` | Legacy MerchantFrame sequences guarded against NullRef | CRITICAL | **Done** (commit 75039ed) |
+| `BG-PET-001` | BG pet support — `Pet` returns null. Hunter/Warlock won't work. | CRITICAL | Open |
+| `BG-FRAMES-001` | GossipFrame, TrainerFrame, TaxiFrame, QuestFrame, TalentFrame, CraftFrame null-guarded on BG | HIGH | **Done** |
+| `FISH-UNIT-001` | 7 FishingData/FishingTask unit tests failing (pre-existing, not regression) | MEDIUM | **Done** (commit facd3e7) |
 
 ---
 
@@ -70,21 +73,17 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 112, continued)
+- **Last updated:** 2026-03-18 (session 113)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - P7.1: Drift detection (commit eb828cb)
-  - P7.2: Route affordance metadata — SegmentAffordance enum, PathAffordanceInfo on TraceSnapshot (commit 826e690)
-  - P7.3: Spatial queries — IsPointOnNavmesh + FindNearestWalkablePoint full-stack C++→P/Invoke→gRPC→Client (commit ec761b1)
-  - P7.4: Swim avoidance — GatherNodeTask IsSwimming check (commit eb828cb)
-  - Collision-aware path following (wall normal steering + LOS lookahead) verified already implemented
-  - Navigation.dll rebuilt with new spatial query exports, 136/136 physics tests pass
-  - Data directory centralization TODO added (D.1)
-- **P7 complete.** All 4 tasks done. Archived.
-  - D.1: Data directory centralization shipped (commit b31a048). `Data/` at repo root, gitignored, auto-discovered.
+  - BG-MERCHANT-001: Guard legacy MerchantFrame sequences against NullRef on BG bot (commit 75039ed)
+  - FISH-UNIT-001: Fix 7 pre-existing FishingData/FishingTask unit test failures (commit facd3e7)
+    - 1315/1315 BotRunner unit tests now pass (was 1308/1315)
+  - BG-FRAMES-001: Null guard all UI frame sequences (Gossip, Trainer, Taxi, Quest, Talent, Craft)
+  - Prior session: P7 complete (4 tasks), D.1 data centralization shipped
+- **Test baseline:** 136/137 physics (1 skip), 1327/1327 BotRunner unit tests (all pass)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **Test baseline:** 136/137 physics (1 skip)
 - **Next:**
-  1. Move P7 completed items to ARCHIVE.md
-  2. Continue broader TASKS.md work — P3 fishing parity, P4 movement flags, D.1 data centralization
-  3. Work toward full BG/FG parity per user request
+  1. BG-PET-001: Implement pet support for Hunter/Warlock
+  2. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  3. Collision-aware path following (wall normal steering + LOS lookahead)

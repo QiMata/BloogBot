@@ -13,6 +13,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages selecting a gossip option.</returns>
         private IBehaviourTreeNode BuildSelectGossipSequence(int selection) => new BehaviourTreeBuilder()
             .Sequence("Select Gossip Sequence")
+                // Ensure GossipFrame is available (null on BG bot)
+                .Condition("GossipFrame Available", time =>
+                {
+                    if (_objectManager.GossipFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] GossipFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot has a valid target with gossip options
                 .Condition("Has Valid Gossip Target", time => _objectManager.GossipFrame.IsOpen
                                                             && _objectManager.GossipFrame.Options.Count > 0)
@@ -32,6 +39,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages selecting the taxi node.</returns>
         private IBehaviourTreeNode BuildSelectTaxiNodeSequence(int nodeId) => new BehaviourTreeBuilder()
             .Sequence("Select Taxi Node Sequence")
+                // Ensure TaxiFrame is available (null on BG bot)
+                .Condition("TaxiFrame Available", time =>
+                {
+                    if (_objectManager.TaxiFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TaxiFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot has access to the selected taxi node
                 .Condition("Has Taxi Node Unlocked", time => _objectManager.TaxiFrame.HasNodeUnlocked(nodeId))
 
@@ -52,6 +66,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages accepting the quest.</returns>
         private IBehaviourTreeNode AcceptQuestSequence => new BehaviourTreeBuilder()
             .Sequence("Accept Quest Sequence")
+                // Ensure QuestFrame is available (null on BG bot)
+                .Condition("QuestFrame Available", time =>
+                {
+                    if (_objectManager.QuestFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] QuestFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot can accept the quest (e.g., meets level requirements)
                 .Condition("Can Accept Quest", time => _objectManager.QuestFrame.IsOpen)
 
@@ -69,6 +90,12 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages declining the quest.</returns>
         private IBehaviourTreeNode DeclineQuestSequence => new BehaviourTreeBuilder()
             .Sequence("Decline Quest Sequence")
+                .Condition("QuestFrame Available", time =>
+                {
+                    if (_objectManager.QuestFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] QuestFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot can decline the quest
                 .Condition("Can Decline Quest", time => _objectManager.QuestFrame.IsOpen)
 
@@ -87,6 +114,12 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages selecting the quest reward.</returns>
         private IBehaviourTreeNode BuildSelectRewardSequence(int rewardIndex) => new BehaviourTreeBuilder()
             .Sequence("Select Reward Sequence")
+                .Condition("QuestFrame Available", time =>
+                {
+                    if (_objectManager.QuestFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] QuestFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot is able to select a reward
                 .Condition("Can Select Reward", time => _objectManager.QuestFrame.IsOpen)
 
@@ -104,6 +137,12 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages completing the quest.</returns>
         private IBehaviourTreeNode CompleteQuestSequence => new BehaviourTreeBuilder()
             .Sequence("Complete Quest Sequence")
+                .Condition("QuestFrame Available", time =>
+                {
+                    if (_objectManager.QuestFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] QuestFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot can complete the quest
                 .Condition("Can Complete Quest", time => _objectManager.QuestFrame.IsOpen)
 
@@ -122,6 +161,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages training the skill.</returns>
         private IBehaviourTreeNode BuildTrainSkillSequence(int spellIndex) => new BehaviourTreeBuilder()
             .Sequence("Train Skill Sequence")
+                // Ensure TrainerFrame is available (null on BG bot)
+                .Condition("TrainerFrame Available", time =>
+                {
+                    if (_objectManager.TrainerFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TrainerFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot is at a trainer NPC
                 .Condition("Is At Trainer", time => _objectManager.TrainerFrame.IsOpen)
 
@@ -143,6 +189,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages training the talent.</returns>
         private IBehaviourTreeNode BuildLearnTalentSequence(int talentSpellId) => new BehaviourTreeBuilder()
             .Sequence("Train Talent Sequence")
+                // Ensure TalentFrame is available (null on BG bot)
+                .Condition("TalentFrame Available", time =>
+                {
+                    if (_objectManager.TalentFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TalentFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot is eligible to train the talent
                 .Condition("Can Train Talent", time => _objectManager.TalentFrame.TalentPointsAvailable > 1)
 

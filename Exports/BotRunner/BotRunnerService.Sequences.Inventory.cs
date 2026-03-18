@@ -298,6 +298,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages crafting the item.</returns>
         private IBehaviourTreeNode BuildCraftSequence(int craftSlotId) => new BehaviourTreeBuilder()
             .Sequence("Craft Sequence")
+                // Ensure CraftFrame is available (null on BG bot)
+                .Condition("CraftFrame Available", time =>
+                {
+                    if (_objectManager.CraftFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] CraftFrame is null — requires FG bot or packet-based path");
+                    return false;
+                })
                 // Ensure the bot can craft the item
                 .Condition("Can Craft Item", time => _objectManager.CraftFrame.HasMaterialsNeeded(craftSlotId))
 
