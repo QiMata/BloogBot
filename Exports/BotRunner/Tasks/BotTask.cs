@@ -50,6 +50,12 @@ public abstract class BotTask(IBotContext botContext)
     private NavigationPath? _navPath;
 
     /// <summary>
+    /// Exposes the cached NavigationPath for trace/diagnostic access in subclasses.
+    /// Returns null if no navigation has been attempted yet.
+    /// </summary>
+    protected NavigationPath? NavPath => _navPath;
+
+    /// <summary>
     /// Move toward a destination using cached pathfinding. Only re-queries the pathfinding
     /// service when the destination changes significantly or a cooldown expires.
     /// Call ClearNavigation() when switching targets.

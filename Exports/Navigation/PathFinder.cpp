@@ -872,9 +872,20 @@ void PathFinder::createFilter()
 	unsigned short includeFlags = 0;
 	unsigned short excludeFlags = 0;
 	includeFlags |= (NAV_GROUND);
-	
+	// NAV_STEEP_SLOPES polygons (>52°) are included via NAV_GROUND but penalized
+	// with high area cost below so pathfinding avoids them when alternatives exist.
+
 	m_filter.setIncludeFlags(includeFlags);
 	m_filter.setExcludeFlags(excludeFlags);
+
+	// Penalize steep slope polygons so paths prefer walkable terrain.
+	// Detour area costs multiply the traversal cost for polygons with that area type.
+	// VMaNGOS area IDs (GridMapDefines.h): AREA_NONE=0, AREA_GROUND=1,
+	// AREA_GROUND_MODEL=2, AREA_STEEP_SLOPE=3, AREA_STEEP_SLOPE_MODEL=4.
+	// Cost of 10x makes the pathfinder strongly prefer flat ground but still route
+	// through steep areas when no alternative exists (e.g., narrow canyon approaches).
+	m_filter.setAreaCost(3, 10.0f);  // AREA_STEEP_SLOPE
+	m_filter.setAreaCost(4, 10.0f);  // AREA_STEEP_SLOPE_MODEL
 
 	// TODO
 	updateFilter(false, 0, 0, 0);
