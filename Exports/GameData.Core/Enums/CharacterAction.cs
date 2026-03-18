@@ -86,4 +86,5 @@ public enum CharacterAction
     StartFishing,       // Queue FishingTask to resolve fishing rank and wait for the fishing cycle.
     StartGatheringRoute,// Queue GatheringRouteTask to walk natural node coordinates and gather the first visible match.
     CheckMail,          // Open nearby mailbox, list mail, and take money/items from all pending mail.
+    StartDungeoneering, // Queue DungeoneeringTask to navigate dungeon waypoints, pull encounters, and clear the dungeon.
 }

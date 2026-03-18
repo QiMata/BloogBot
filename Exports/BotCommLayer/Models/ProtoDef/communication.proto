@@ -107,6 +107,7 @@ enum ActionType {
     CHECK_MAIL = 69;
     START_PHYSICS_RECORDING = 70;
     STOP_PHYSICS_RECORDING = 71;
+    START_DUNGEONEERING = 72;
 }
 
 message ActionMap {

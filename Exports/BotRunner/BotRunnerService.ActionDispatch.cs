@@ -611,6 +611,32 @@ namespace BotRunner
                         break;
                     }
 
+                    case CharacterAction.StartDungeoneering:
+                    {
+                        // Params: [0] = isLeader (int, 1=leader 0=follower)
+                        // Optional: [1..N] = float waypoints (x,y,z triples)
+                        // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
+                        bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
+                        var waypointPositions = actionEntry.Item2.Count > 1
+                            ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(1))
+                            : null;
+
+                        builder.Do("Queue Dungeoneering Task", time =>
+                        {
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.Dungeoneering.DungeoneeringTask)
+                            {
+                                // If no explicit waypoints, try map-based defaults
+                                var waypoints = waypointPositions?.Count > 0
+                                    ? waypointPositions
+                                    : Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(_objectManager.Player?.MapId ?? 0) as System.Collections.Generic.List<GameData.Core.Models.Position>;
+
+                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints));
+                            }
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
                     default:
                         break;
                 }
