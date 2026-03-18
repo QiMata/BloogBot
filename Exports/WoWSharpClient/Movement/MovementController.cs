@@ -750,10 +750,9 @@ namespace WoWSharpClient.Movement
                     // physics Z to descend naturally — never clamp Z upward.
                     _falseFreefallCount++;
 
-                    // Path-guided descent ceiling: track a maximum Z that descends
-                    // toward the waypoint at walkable slope rate. Physics Z is used
-                    // when it's lower (natural terrain following), but if physics
-                    // bounces upward we cap at the descent ceiling.
+                    // FFS descent ceiling: descend toward the waypoint Z at max walkable
+                    // slope rate. Only descend when waypoint is below current position.
+                    // Physics Z takes priority when lower (natural terrain following).
                     if (float.IsNaN(_ffsStartZ))
                         _ffsStartZ = _player.Position.Z;
                     float ffsZ = _ffsStartZ;
@@ -770,7 +769,7 @@ namespace WoWSharpClient.Movement
                     }
                     _ffsStartZ = ffsZ;
 
-                    // Use the lower of path-guided descent and physics output.
+                    // Use the lower of FFS descent ceiling and physics output.
                     // This ensures FFS never clamps Z upward — physics terrain
                     // following takes priority when it finds lower ground.
                     float finalZ = MathF.Min(ffsZ, output.NewPosZ);
