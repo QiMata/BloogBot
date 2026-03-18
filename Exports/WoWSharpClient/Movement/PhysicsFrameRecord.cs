@@ -56,5 +56,15 @@ namespace WoWSharpClient.Movement
 
         // Computed: Z delta from previous frame
         public float ZDeltaFromPrev { get; init; }
+
+        // Ground normal (from physics output)
+        public float PrevGroundNx { get; init; }
+        public float PrevGroundNy { get; init; }
+        public float PrevGroundNz { get; init; }
+
+        // Movement packet sent this frame (0 = none, otherwise opcode value)
+        public uint PacketOpcode { get; init; }
+        public uint PacketFlags { get; init; }
+        public float PacketFacing { get; init; }
     }
 }

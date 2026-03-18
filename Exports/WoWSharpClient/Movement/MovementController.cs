@@ -356,6 +356,12 @@ namespace WoWSharpClient.Movement
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
+        // Per-frame packet tracking for recording — set by SendMovementPacket,
+        // captured by the recording in the NEXT frame's physics tick, then reset.
+        private uint _frameSentOpcode = 0;
+        private uint _frameSentFlags = 0;
+        private float _frameSentFacing = 0;
+        private bool _frameSentPending = false;
 
         private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
         {
@@ -727,40 +733,41 @@ namespace WoWSharpClient.Movement
                     && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
                     && gapFromGround < 3.0f;
 
-                // Cumulative drift check: FFS is designed for transient capsule sweep
-                // misses on flat terrain, where the bot stays at approximately the same Z.
-                // On slopes, each FFS frame clamps position but Z keeps dropping. If the
-                // cumulative Z drift since FFS started exceeds a threshold, the bot is
-                // clearly descending a slope and should be allowed to fall.
-                // A transient miss on flat terrain drifts < 0.5y. Slope descent drifts > 2y.
-                const float MAX_FFS_DRIFT = 1.5f;
-                if (float.IsNaN(_ffsStartZ))
-                    _ffsStartZ = _prevGroundZ;
-                float ffsDrift = MathF.Abs(_prevGroundZ - _ffsStartZ);
-                bool driftedTooFar = ffsDrift > MAX_FFS_DRIFT;
-
-                if (closeToGround && !driftedTooFar)
+                if (closeToGround)
                 {
-                    // Transient sweep miss: suppress FALLINGFAR, hold at last known ground Z.
+                    // FFS engages: suppress FALLINGFAR and use path-guided descent.
+                    // The physics engine's DOWN pass sometimes fails to find ground on
+                    // moderately steep terrain (~30-45°) where FG stays grounded. Instead
+                    // of clamping to a fixed Z (which causes BG to float above the terrain),
+                    // project Z downward toward the path waypoint at the movement speed rate.
+                    // This matches FG behavior: smooth grounded descent at walk speed.
                     _falseFreefallCount++;
+
+                    // Calculate descent toward path waypoint
+                    float ffsZ = _prevGroundZ;
+                    if (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
+                    {
+                        float wpZ = _currentPath[_currentWaypointIndex].Z;
+                        if (wpZ < _prevGroundZ)
+                        {
+                            // Descend toward waypoint Z at a max rate based on movement speed.
+                            // At 7 y/s horizontal, max vertical drop per frame on steepest
+                            // walkable slope (60°): speed * dt * tan(60°) = 7 * 0.05 * 1.732 = 0.606y
+                            float maxDropPerFrame = _player.RunSpeed * deltaSec * 1.732f;
+                            float desiredDrop = _prevGroundZ - wpZ;
+                            float drop = MathF.Min(maxDropPerFrame, desiredDrop);
+                            ffsZ = _prevGroundZ - drop;
+                        }
+                    }
+
                     if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
-                        Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, gap={Gap:F2}, drift={Drift:F2}",
-                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, gapFromGround, ffsDrift);
+                        Log.Information("[MovementController] FFS (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, ffsZ={FfsZ:F2}, gap={Gap:F2}",
+                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, ffsZ, gapFromGround);
                     newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
+                    _player.Position = new Position(output.NewPosX, output.NewPosY, ffsZ);
                     _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
                     _fallTimeMs = 0;
                     falseFreefallSuppressed = true;
-                }
-                else if (closeToGround && driftedTooFar)
-                {
-                    // Slope descent: FFS has been engaged too long and position has drifted.
-                    // Allow the fall through so BG matches FG behavior on slopes.
-                    if (_falseFreefallCount > 0)
-                        Log.Information("[MovementController] FFS released: slope drift {Drift:F2}y exceeds {Max:F1}y after {Count} frames. physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
-                            ffsDrift, MAX_FFS_DRIFT, _falseFreefallCount, output.NewPosZ, _prevGroundZ);
-                    _falseFreefallCount = 0;
-                    _ffsStartZ = float.NaN;
                 }
                 else
                 {
@@ -818,7 +825,14 @@ namespace WoWSharpClient.Movement
                     PathWaypointZ = pathWpZ,
                     PathWaypointIndex = pathWpIdx,
                     ZDeltaFromPrev = _player.Position.Z - prevZ,
+                    PrevGroundNx = _prevGroundNormal.X,
+                    PrevGroundNy = _prevGroundNormal.Y,
+                    PrevGroundNz = _prevGroundNormal.Z,
+                    PacketOpcode = _frameSentPending ? _frameSentOpcode : 0,
+                    PacketFlags = _frameSentPending ? _frameSentFlags : 0,
+                    PacketFacing = _frameSentPending ? _frameSentFacing : 0,
                 });
+                _frameSentPending = false;
             }
         }
 
@@ -857,6 +871,12 @@ namespace WoWSharpClient.Movement
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
             _ = _client.SendMovementOpcodeAsync(opcode, buffer);
 
+            // Track for recording (captured in NEXT frame's physics recording)
+            _frameSentOpcode = (uint)opcode;
+            _frameSentFlags = (uint)_player.MovementFlags;
+            _frameSentFacing = _player.Facing;
+            _frameSentPending = true;
+
             // Diagnostic: log position delta between packets
             _movementDiagCounter++;
             var curPos = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
@@ -888,6 +908,12 @@ namespace WoWSharpClient.Movement
             var opcode = DetermineOpcode(_player.MovementFlags, _lastSentFlags);
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
             _ = _client.SendMovementOpcodeAsync(opcode, buffer);
+
+            // Track for recording
+            _frameSentOpcode = (uint)opcode;
+            _frameSentFlags = (uint)_player.MovementFlags;
+            _frameSentFacing = _player.Facing;
+            _frameSentPending = true;
 
             _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
             _lastPacketTime = gameTimeMs;

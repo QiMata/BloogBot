@@ -97,7 +97,8 @@ namespace BotRunner
             sb.AppendLine("Frame,GameTimeMs,DeltaSec,PosX,PosY,PosZ,RawPosZ,PhysicsGroundZ,PrevGroundZ," +
                 "HasGroundContact,VelX,VelY,VelZ,FallTimeMs,IsFalling,MoveFlags," +
                 "SlopeGuard,PathGuard,FalseFreefallSup,TeleportClamp,UndergroundSnap," +
-                "HitWall,WallNX,WallNY,BlockedFrac,PathWpZ,PathWpIdx,ZDelta");
+                "HitWall,WallNX,WallNY,BlockedFrac,PathWpZ,PathWpIdx,ZDelta," +
+                "GroundNx,GroundNy,GroundNz,PktOpcode,PktFlags,PktFacing");
 
             foreach (var f in frames)
             {
@@ -128,7 +129,13 @@ namespace BotRunner
                 sb.Append(f.BlockedFraction.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
                 sb.Append(float.IsNaN(f.PathWaypointZ) ? "NaN" : f.PathWaypointZ.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
                 sb.Append(f.PathWaypointIndex).Append(',');
-                sb.AppendLine(f.ZDeltaFromPrev.ToString("F4", CultureInfo.InvariantCulture));
+                sb.Append(f.ZDeltaFromPrev.ToString("F4", CultureInfo.InvariantCulture)).Append(',');
+                sb.Append(f.PrevGroundNx.ToString("F4", CultureInfo.InvariantCulture)).Append(',');
+                sb.Append(f.PrevGroundNy.ToString("F4", CultureInfo.InvariantCulture)).Append(',');
+                sb.Append(f.PrevGroundNz.ToString("F4", CultureInfo.InvariantCulture)).Append(',');
+                sb.Append(f.PacketOpcode == 0 ? "" : $"0x{f.PacketOpcode:X}").Append(',');
+                sb.Append(f.PacketOpcode == 0 ? "" : $"0x{f.PacketFlags:X}").Append(',');
+                sb.AppendLine(f.PacketOpcode == 0 ? "" : f.PacketFacing.ToString("F4", CultureInfo.InvariantCulture));
             }
 
             File.WriteAllText(filePath, sb.ToString());
