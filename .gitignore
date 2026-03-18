@@ -324,3 +324,6 @@ tools/scan_durotar_*.ps1
 # Test output logs
 TestResults/
 **/LiveLogs/
+
+# Centralized navmesh/vmap/map data directory (large binary files)
+Data/

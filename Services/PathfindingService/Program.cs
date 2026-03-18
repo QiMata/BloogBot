@@ -98,6 +98,7 @@ namespace PathfindingService
                 return;
 
             AddCandidate(candidates, root);
+            AddCandidate(candidates, Path.Combine(root, "Data"));  // Centralized data dir at repo root
             AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "net8.0"));
             AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "x64"));
             AddCandidate(candidates, Path.Combine(root, "Bot", "Release", "net8.0"));

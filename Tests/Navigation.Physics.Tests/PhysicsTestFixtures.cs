@@ -101,13 +101,18 @@ public class PhysicsEngineFixture : IDisposable
         var baseDir = AppContext.BaseDirectory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        // Build candidate list: test output dir, then Bot output dirs relative to repo root.
-        var candidates = new[] { baseDir };
-
-        // Walk up from test output to find repo root, then check Bot/ output dirs.
+        // Walk up from test output to find repo root, then check candidate directories.
         var dir = baseDir;
         while (!string.IsNullOrEmpty(dir))
         {
+            // Highest priority: centralized Data/ directory at repo root
+            var dataDir = Path.Combine(dir, "Data");
+            if (Directory.Exists(Path.Combine(dataDir, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dataDir);
+                return;
+            }
+
             var botDebug = Path.Combine(dir, "Bot", "Debug", "net8.0");
             var botRelease = Path.Combine(dir, "Bot", "Release", "net8.0");
             if (Directory.Exists(Path.Combine(botDebug, "mmaps")))
