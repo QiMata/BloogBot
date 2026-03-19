@@ -46,7 +46,7 @@ public class DungeoneeringCoordinator
     private readonly string _leaderAccount;
     private readonly List<string> _memberAccounts;
     private readonly List<CharacterSettings> _allSettings;
-    private readonly Dictionary<string, string> _accountToCharName = new();
+    private readonly ConcurrentDictionary<string, string> _accountToCharName = new();
 
     private CoordState _state = CoordState.WaitingForBots;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
@@ -54,10 +54,10 @@ public class DungeoneeringCoordinator
     private int _inviteIndex;
     private int _acceptIndex;
 
-    // Prep tracking
-    private readonly HashSet<string> _preparedAccounts = new();
-    private readonly HashSet<string> _teleportedToOrg = new();
-    private readonly HashSet<string> _teleportedToRFC = new();
+    // Prep tracking — concurrent because multiple bot threads call GetAction()
+    private readonly ConcurrentDictionary<string, byte> _preparedAccounts = new();
+    private readonly ConcurrentDictionary<string, byte> _teleportedToOrg = new();
+    private readonly ConcurrentDictionary<string, byte> _teleportedToRFC = new();
     private int _prepIndex;
 
     // Orgrimmar safe zone
@@ -71,15 +71,15 @@ public class DungeoneeringCoordinator
     private const float RfcStartY = -11f;
     private const float RfcStartZ = -15f; // Z+3 from waypoint at -18
 
-    // Throttle follow/heal actions per account
-    private readonly Dictionary<string, DateTime> _lastActionSent = new();
+    // Throttle follow/heal actions per account — concurrent for multi-thread safety
+    private readonly ConcurrentDictionary<string, DateTime> _lastActionSent = new();
     private const double ACTION_COOLDOWN_SEC = 3.0;
     private const float HEAL_THRESHOLD = 0.50f;
 
-    // Cached healer spell IDs
-    private readonly Dictionary<string, uint> _healSpells = new();
-    private readonly Dictionary<string, uint> _damageSpells = new();
-    private readonly HashSet<string> _spellsResolved = new();
+    // Cached healer spell IDs — concurrent for multi-thread safety
+    private readonly ConcurrentDictionary<string, uint> _healSpells = new();
+    private readonly ConcurrentDictionary<string, uint> _damageSpells = new();
+    private readonly ConcurrentDictionary<string, byte> _spellsResolved = new();
 
     public CoordState State => _state;
 
@@ -207,7 +207,7 @@ public class DungeoneeringCoordinator
             var account = allAccounts[_prepIndex];
             _prepIndex++;
 
-            if (_preparedAccounts.Contains(account))
+            if (_preparedAccounts.ContainsKey(account))
                 continue;
 
             if (!_accountToCharName.TryGetValue(account, out var charName))
@@ -218,13 +218,13 @@ public class DungeoneeringCoordinator
 
             // Fire SOAP commands for this character (async, don't await)
             _ = PrepareCharacterAsync(account, charName);
-            _preparedAccounts.Add(account);
+            _preparedAccounts.TryAdd(account, 0);
             return null; // One account per tick
         }
 
         // All accounts prepared
         _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared. Teleporting to Orgrimmar.",
-            _preparedAccounts.Count);
+            _preparedAccounts.Count);  // ConcurrentDictionary.Count is safe
         TransitionTo(CoordState.TeleportToOrgrimmar);
         return null;
     }
@@ -336,9 +336,8 @@ public class DungeoneeringCoordinator
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot types .go xyz to teleport to Orgrimmar
-        if (!_teleportedToOrg.Contains(requestingAccount))
+        if (_teleportedToOrg.TryAdd(requestingAccount, 0))
         {
-            _teleportedToOrg.Add(requestingAccount);
             _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to Orgrimmar", requestingAccount);
             return MakeSendChatAction($".go xyz {OrgX:0.#} {OrgY:0.#} {OrgZ:0.#} 1");
         }
@@ -346,7 +345,7 @@ public class DungeoneeringCoordinator
         // Check if all bots have been teleported
         var allAccounts = new List<string> { _leaderAccount };
         allAccounts.AddRange(_memberAccounts);
-        var allTeleported = allAccounts.All(a => _teleportedToOrg.Contains(a));
+        var allTeleported = allAccounts.All(a => _teleportedToOrg.ContainsKey(a));
 
         if (allTeleported)
         {
@@ -460,9 +459,8 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleTeleportToRFC(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        if (!_teleportedToRFC.Contains(requestingAccount))
+        if (_teleportedToRFC.TryAdd(requestingAccount, 0))
         {
-            _teleportedToRFC.Add(requestingAccount);
             _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map})",
                 requestingAccount, RfcMapId);
             return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
@@ -470,7 +468,7 @@ public class DungeoneeringCoordinator
 
         var allAccounts = new List<string> { _leaderAccount };
         allAccounts.AddRange(_memberAccounts);
-        if (allAccounts.All(a => _teleportedToRFC.Contains(a)))
+        if (allAccounts.All(a => _teleportedToRFC.ContainsKey(a)))
         {
             _logger.LogInformation("DUNGEON_COORD: All bots teleported to RFC. Waiting to settle.");
             TransitionTo(CoordState.WaitForRFCSettle);
@@ -511,7 +509,7 @@ public class DungeoneeringCoordinator
         if (!snapshots.TryGetValue(requestingAccount, out var mySnap))
             return null;
 
-        if (!_spellsResolved.Contains(requestingAccount))
+        if (!_spellsResolved.ContainsKey(requestingAccount))
             ResolveSpells(requestingAccount, mySnap);
 
         if (!IsInCombat(leaderSnap))
@@ -600,7 +598,7 @@ public class DungeoneeringCoordinator
             }
         }
 
-        _spellsResolved.Add(account);
+        _spellsResolved.TryAdd(account, 0);
         _logger.LogInformation("DUNGEON_COORD: Resolved spells for {Account}: heal={Heal}, dps={Dps}",
             account, _healSpells.GetValueOrDefault(account), _damageSpells.GetValueOrDefault(account));
     }

@@ -13,6 +13,7 @@
     "logIntervalSeconds": 15
   },
   "assertions": {
-    "groupFormed": true
+    "groupFormed": true,
+    "minBotsOnMap": { "mapId": 389, "count": 3 }
   }
 }

@@ -209,10 +209,11 @@ public class TestScenarioRunner
             await Task.Delay(observe.PollIntervalMs);
             await _bot.RefreshSnapshotsAsync();
 
-            // Track observed state
+            // Track observed state — collect per-cycle map counts
+            var cycleMapCounts = new Dictionary<int, int>();
             foreach (var snap in _bot.AllBots)
             {
-                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                var mapId = (int)(snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0);
 
                 if (snap.PartyLeaderGuid != 0)
                     result.GroupFormed = true;
@@ -226,8 +227,9 @@ public class TestScenarioRunner
                 if (snap.PreviousAction != null)
                     result.ActionTypesSeen.Add(snap.PreviousAction.ActionType.ToString());
 
-                result.TrackMapPresence((int)mapId);
+                cycleMapCounts[mapId] = cycleMapCounts.GetValueOrDefault(mapId, 0) + 1;
             }
+            result.TrackMapPresenceCycle(cycleMapCounts);
 
             // Log progress periodically
             if (sw.Elapsed - lastLogTime >= TimeSpan.FromSeconds(observe.LogIntervalSeconds))
@@ -428,19 +430,28 @@ public class ScenarioResult
     public HashSet<string> ActionTypesSeen { get; } = new();
     public List<string> Failures { get; } = new();
 
-    private readonly Dictionary<int, int> _mapPresence = new();
+    // Peak concurrent bots observed on each map in any single poll cycle
+    private readonly Dictionary<int, int> _peakMapPresence = new();
 
     public ScenarioResult(TestScenario scenario)
     {
         Scenario = scenario;
     }
 
-    public void TrackMapPresence(int mapId)
+    /// <summary>
+    /// Call once per poll cycle with the count of bots on each map during that cycle.
+    /// Tracks the peak concurrent count seen for each map.
+    /// </summary>
+    public void TrackMapPresenceCycle(Dictionary<int, int> mapCounts)
     {
-        _mapPresence[mapId] = _mapPresence.GetValueOrDefault(mapId, 0) + 1;
+        foreach (var (mapId, count) in mapCounts)
+        {
+            if (!_peakMapPresence.TryGetValue(mapId, out var peak) || count > peak)
+                _peakMapPresence[mapId] = count;
+        }
     }
 
-    public int GetMapCount(int mapId) => _mapPresence.GetValueOrDefault(mapId, 0);
+    public int GetMapCount(int mapId) => _peakMapPresence.GetValueOrDefault(mapId, 0);
 
     /// <summary>
     /// Assert all conditions passed. Throws Xunit assertion failure if any failed.
