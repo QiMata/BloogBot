@@ -67,11 +67,24 @@ public class DungeoneeringTask : BotTask, IBotTask
             _isLeader, _waypoints.Count);
     }
 
+    private int _updateCount;
+
     public void Update()
     {
         var player = ObjectManager.Player;
         if (player?.Position == null)
             return;
+
+        _updateCount++;
+        if (_updateCount % 50 == 1) // Log every ~25s (500ms tick assumed)
+        {
+            Log.Information("[DUNGEONEERING] Tick #{Count}: state={State}, leader={IsLeader}, wp={WpIdx}/{WpCount}, " +
+                "pos=({X:F0},{Y:F0},{Z:F0}), hostiles={Hostiles}, aggressors={Aggressors}, partyLeader={PartyLeader}",
+                _updateCount, _state, _isLeader, _waypointIndex, _waypoints.Count,
+                player.Position.X, player.Position.Y, player.Position.Z,
+                ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(),
+                ObjectManager.PartyLeader != null ? "yes" : "null");
+        }
 
         // Combat interrupts everything — push combat rotation task
         if (ObjectManager.Aggressors.Any())
@@ -237,6 +250,9 @@ public class DungeoneeringTask : BotTask, IBotTask
         var leader = ObjectManager.PartyLeader;
         if (leader?.Position == null)
         {
+            if (_updateCount % 50 == 2)
+                Log.Warning("[DUNGEONEERING] Follower has no party leader — cannot follow. PartyMembers={Count}",
+                    ObjectManager.PartyMembers.Count());
             ObjectManager.StopAllMovement();
             return;
         }
@@ -280,11 +296,29 @@ public class DungeoneeringTask : BotTask, IBotTask
     }
 
     /// <summary>
-    /// All party members have sufficient HP and mana to proceed with pulls.
+    /// All party members have sufficient HP to proceed with pulls.
+    /// Mana check is only applied to the local player (not the whole party),
+    /// since we can't force others to drink and blocking the entire group
+    /// on one caster's mana causes deadlocks when food/drink isn't available.
     /// </summary>
-    private bool CanProceed => ObjectManager.PartyMembers.All(
-        m => m.HealthPercent > RestHealthPercent
-          && (m.ManaPercent < 0 || m.ManaPercent > RestManaPercent));
+    private bool CanProceed
+    {
+        get
+        {
+            var player = ObjectManager.Player;
+            if (player == null) return false;
+
+            // All party members must be above HP threshold
+            if (!ObjectManager.PartyMembers.All(m => m.HealthPercent > RestHealthPercent))
+                return false;
+
+            // Only check local player's mana (warriors/rogues have ManaPercent < 0)
+            if (player.ManaPercent >= 0 && player.ManaPercent < RestManaPercent)
+                return false;
+
+            return true;
+        }
+    }
 
     private void TransitionTo(DungeonState newState)
     {

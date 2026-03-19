@@ -316,9 +316,10 @@ namespace WoWStateManager.Listeners
         {
             if (_dungeoneeringCoordinator == null)
             {
-                // Leader = first Foreground account, or first account if no FG
+                // Leader = first Background bot (BG bots can enter dungeon instances).
+                // FG bots can't handle cross-map instance transfers reliably.
                 var leaderAccount = _characterSettings
-                    .FirstOrDefault(cs => cs.RunnerType == Settings.BotRunnerType.Foreground)?.AccountName
+                    .FirstOrDefault(cs => cs.RunnerType == Settings.BotRunnerType.Background)?.AccountName
                     ?? _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
 

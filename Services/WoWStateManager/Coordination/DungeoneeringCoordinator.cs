@@ -14,10 +14,11 @@ namespace WoWStateManager.Coordination;
 /// Coordinates N bots for dungeon crawling with full raid preparation.
 ///
 /// Pipeline:
-///   WaitingForBots → PrepareCharacters → TeleportToOrgrimmar → FormGroup →
+///   WaitingForBots → PrepareCharacters → EquipGear → TeleportToOrgrimmar → FormGroup →
 ///   TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
-/// PrepareCharacters: SOAP-based level set, .learn all_myclass, class-specific setup
+/// PrepareCharacters: SOAP-based level set, .learn all_myclass, class-specific setup + .additem
+/// EquipGear: Send EquipItem actions so bots auto-equip gear from backpack
 /// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
 /// FormGroup: Leader invites, members accept, verify
 /// TeleportToRFC: Bot chat .go xyz into RFC interior (map 389)
@@ -30,6 +31,7 @@ public class DungeoneeringCoordinator
     {
         WaitingForBots,
         PrepareCharacters,
+        EquipGear,
         TeleportToOrgrimmar,
         WaitForTeleportSettle,
         FormGroup_LeaveOldGroups,   // All bots leave any stale group from prior runs
@@ -72,6 +74,9 @@ public class DungeoneeringCoordinator
     private DateTime _lastRfcTeleportAt = DateTime.MinValue;
     private const double RFC_TELEPORT_STAGGER_SEC = 3.0; // Seconds between each bot's teleport (3s to avoid DESTROY_OBJECT storms)
     private int _prepIndex;
+
+    // Equip tracking — each bot needs EquipItem actions for each gear piece
+    private readonly ConcurrentDictionary<string, int> _equipItemIndex = new(); // account → next item index to equip
 
     // Orgrimmar safe zone
     private const float OrgX = 1629.4f;
@@ -162,6 +167,7 @@ public class DungeoneeringCoordinator
         {
             CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
             CoordState.PrepareCharacters => HandlePrepareCharacters(requestingAccount, snapshots),
+            CoordState.EquipGear => HandleEquipGear(requestingAccount, snapshots),
             CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
             CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_LeaveOldGroups, 1),
             CoordState.FormGroup_LeaveOldGroups => HandleLeaveOldGroups(requestingAccount, snapshots),
@@ -224,7 +230,7 @@ public class DungeoneeringCoordinator
     {
         if (_soapClient == null)
         {
-            TransitionTo(CoordState.TeleportToOrgrimmar);
+            TransitionTo(CoordState.EquipGear);
             return null;
         }
 
@@ -257,10 +263,10 @@ public class DungeoneeringCoordinator
             return null; // One account per tick
         }
 
-        // All accounts prepared
-        _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared. Teleporting to Orgrimmar.",
+        // All accounts prepared — now equip the gear that was added to backpacks
+        _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared. Equipping gear.",
             _preparedAccounts.Count);  // ConcurrentDictionary.Count is safe
-        TransitionTo(CoordState.TeleportToOrgrimmar);
+        TransitionTo(CoordState.EquipGear);
         return null;
     }
 
@@ -487,6 +493,63 @@ public class DungeoneeringCoordinator
             else
                 await _soapClient.ExecuteGMCommandAsync($".additem {charName} {itemId}");
         }
+    }
+
+    private ActionMessage? HandleEquipGear(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Each bot gets one EquipItem action per tick for each gear piece.
+        // The bot's BuildEquipItemByIdSequence sends CMSG_AUTOEQUIP_ITEM for all backpack slots.
+        var settings = _allSettings.FirstOrDefault(s =>
+            s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase));
+        var charClass = settings?.CharacterClass ?? "Warrior";
+
+        if (!Level8Gear.TryGetValue(charClass, out var gearList))
+        {
+            _equipItemIndex.TryAdd(requestingAccount, gearList?.Length ?? 0);
+        }
+        else
+        {
+            var idx = _equipItemIndex.GetOrAdd(requestingAccount, 0);
+            if (idx < gearList.Length)
+            {
+                var (itemId, name) = gearList[idx];
+                _equipItemIndex[requestingAccount] = idx + 1;
+
+                // Skip ammo (arrows/bullets) — they don't need equipping
+                if (itemId == 2512) // Rough Arrow
+                    return null;
+
+                _logger.LogInformation("DUNGEON_COORD: {Account} equipping {Item} ({ItemId}) [{Idx}/{Total}]",
+                    requestingAccount, name, itemId, idx + 1, gearList.Length);
+
+                var action = new ActionMessage { ActionType = ActionType.EquipItem };
+                action.Parameters.Add(new RequestParameter { IntParam = (int)itemId });
+                return action;
+            }
+        }
+
+        // Check if all accounts have finished equipping
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+
+        var allEquipped = allAccounts.All(a =>
+        {
+            if (!_equipItemIndex.TryGetValue(a, out var idx)) return false;
+            var aSettings = _allSettings.FirstOrDefault(s =>
+                s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase));
+            var aClass = aSettings?.CharacterClass ?? "Warrior";
+            if (!Level8Gear.TryGetValue(aClass, out var aGear)) return true;
+            return idx >= aGear.Length;
+        });
+
+        if (allEquipped)
+        {
+            _logger.LogInformation("DUNGEON_COORD: All bots equipped. Teleporting to Orgrimmar.");
+            TransitionTo(CoordState.TeleportToOrgrimmar);
+        }
+
+        return null;
     }
 
     private ActionMessage? HandleTeleportToOrgrimmar(string requestingAccount,
@@ -957,13 +1020,20 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleTeleportToRFC(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Build teleport order: BG bots first, FG (leader) LAST.
-        // Defense-in-depth: even with hooks disabled, FG-last avoids DESTROY_OBJECT
-        // storms during the FG bot's cross-map transfer window.
+        // Build teleport order: LEADER FIRST (creates the instance), then members.
+        // FG bots go last since they can't reliably handle cross-map instance transfers.
         if (_rfcTeleportOrder.Count == 0)
         {
-            _rfcTeleportOrder.AddRange(_memberAccounts);
-            _rfcTeleportOrder.Add(_leaderAccount); // FG bot last
+            _rfcTeleportOrder.Add(_leaderAccount); // Leader first — creates the instance
+            // BG members before FG members
+            var bgMembers = _memberAccounts.Where(a => !_allSettings.Any(s =>
+                s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase)
+                && s.RunnerType == Settings.BotRunnerType.Foreground));
+            var fgMembers = _memberAccounts.Where(a => _allSettings.Any(s =>
+                s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase)
+                && s.RunnerType == Settings.BotRunnerType.Foreground));
+            _rfcTeleportOrder.AddRange(bgMembers);
+            _rfcTeleportOrder.AddRange(fgMembers); // FG bots last
             _rfcTeleportIndex = 0;
         }
 
@@ -991,6 +1061,23 @@ public class DungeoneeringCoordinator
 
         _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map}) [{Idx}/{Total}]",
             requestingAccount, RfcMapId, _rfcTeleportIndex, _rfcTeleportOrder.Count);
+
+        // FG bots: use SOAP .tele to avoid FG client cross-map transfer issues.
+        // BG bots: use bot chat .go xyz (faster, no SOAP roundtrip needed).
+        var isFgBot = _allSettings.Any(s =>
+            s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase)
+            && s.RunnerType == Settings.BotRunnerType.Foreground);
+        if (isFgBot && _soapClient != null)
+        {
+            _accountToCharName.TryGetValue(requestingAccount, out var charName);
+            if (charName != null)
+            {
+                _logger.LogInformation("DUNGEON_COORD: Using SOAP .tele for FG bot '{Char}'", charName);
+                _ = _soapClient.ExecuteGMCommandAsync($".tele name {charName} rfc");
+                return null; // SOAP handles the teleport server-side; no action needed from the bot
+            }
+        }
+
         return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
     }
 
@@ -1024,10 +1111,12 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // --- Leader failover: if leader drops (FG crash), promote first available BG bot ---
+        // --- Leader failover: if leader drops, disconnects, or can't enter the dungeon map ---
         bool leaderAlive = snapshots.TryGetValue(_leaderAccount, out var leaderSnap)
                            && leaderSnap.ScreenState == "InWorld";
-        if (leaderAlive)
+        bool leaderOnDungeonMap = leaderAlive
+                           && (leaderSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId;
+        if (leaderOnDungeonMap)
         {
             _leaderLastSeen = DateTime.UtcNow;
         }
@@ -1040,8 +1129,9 @@ public class DungeoneeringCoordinator
                 && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
             if (newLeader != null)
             {
-                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' lost (no snapshot for {Timeout}s). Promoting '{NewLeader}' to leader.",
-                    _leaderAccount, LEADER_FAILOVER_TIMEOUT_SEC, newLeader);
+                var reason = leaderAlive ? "not on dungeon map" : "no snapshot";
+                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' lost ({Reason} for {Timeout}s). Promoting '{NewLeader}' to leader.",
+                    _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC, newLeader);
                 _leaderAccount = newLeader;
                 _leaderFailoverTriggered = true;
                 _leaderLastSeen = DateTime.UtcNow;
@@ -1084,12 +1174,12 @@ public class DungeoneeringCoordinator
         if (_healSpells.TryGetValue(requestingAccount, out var healSpell) && healSpell != 0)
         {
             var lowestHpAccount = FindLowestHpMember(snapshots);
-            if (lowestHpAccount != null)
+            if (lowestHpAccount != null && snapshots.TryGetValue(lowestHpAccount, out var lowestHpSnap))
             {
-                var hpRatio = GetHealthRatio(snapshots[lowestHpAccount]);
+                var hpRatio = GetHealthRatio(lowestHpSnap);
                 if (hpRatio < HEAL_THRESHOLD)
                 {
-                    var targetGuid = GetPlayerGuid(snapshots[lowestHpAccount]);
+                    var targetGuid = GetPlayerGuid(lowestHpSnap);
                     _logger.LogInformation("DUNGEON_COORD: {Account} healing {Target} (HP={Hp:P0})",
                         requestingAccount, lowestHpAccount, hpRatio);
                     _lastActionSent[requestingAccount] = DateTime.UtcNow;

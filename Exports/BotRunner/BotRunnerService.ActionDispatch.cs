@@ -647,9 +647,10 @@ namespace BotRunner
                             if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.Dungeoneering.DungeoneeringTask)
                             {
                                 // If no explicit waypoints, try map-based defaults
-                                var waypoints = waypointPositions?.Count > 0
+                                var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(_objectManager.Player?.MapId ?? 0);
+                                IReadOnlyList<GameData.Core.Models.Position>? waypoints = waypointPositions?.Count > 0
                                     ? waypointPositions
-                                    : Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(_objectManager.Player?.MapId ?? 0) as System.Collections.Generic.List<GameData.Core.Models.Position>;
+                                    : mapWaypoints;
 
                                 _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints));
                             }

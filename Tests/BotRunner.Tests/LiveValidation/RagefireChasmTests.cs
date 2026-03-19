@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using BotRunner.Tests.LiveValidation.Scenarios;
 using Communication;
@@ -33,8 +34,12 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Trope: physical classes = Female, magic classes = Male.
 ///
+/// Uses snapshot-based progress assertions: each polling phase tracks a state
+/// fingerprint and fails fast if snapshots stop changing (stale timeout), rather
+/// than waiting the full absolute timeout. This catches stuck states early.
+///
 /// Run:
-///   dotnet test --filter "FullyQualifiedName~RagefireChasmTests" --configuration Release -v n --blame-hang --blame-hang-timeout 30m
+///   dotnet test --filter "FullyQualifiedName~RagefireChasmTests" --configuration Release -v n --blame-hang --blame-hang-timeout 25m
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class RagefireChasmTests
@@ -73,6 +78,73 @@ public class RagefireChasmTests
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
+    /// <summary>
+    /// Snapshot-based progress poller. Tracks a state fingerprint each tick.
+    /// Fails fast if fingerprint stops changing (stale), rather than waiting
+    /// the full maxTimeout. Returns the result from the evaluate function
+    /// when it signals done=true.
+    /// </summary>
+    /// <param name="phaseName">Name for diagnostic output.</param>
+    /// <param name="maxTimeout">Absolute maximum time to wait.</param>
+    /// <param name="staleTimeout">If fingerprint unchanged for this long, fail.</param>
+    /// <param name="pollInterval">How often to poll snapshots.</param>
+    /// <param name="evaluate">
+    /// Given current snapshots, returns:
+    ///   done: true to stop polling and return result,
+    ///   result: the value to return on done,
+    ///   fingerprint: string representing relevant state — when this changes, progress is happening.
+    /// </param>
+    private async Task<TResult> WaitForProgressAsync<TResult>(
+        string phaseName,
+        TimeSpan maxTimeout,
+        TimeSpan staleTimeout,
+        TimeSpan pollInterval,
+        Func<IReadOnlyList<WoWActivitySnapshot>, (bool done, TResult result, string fingerprint)> evaluate)
+    {
+        var sw = Stopwatch.StartNew();
+        var lastFingerprint = "";
+        var lastFingerprintChange = sw.Elapsed;
+        TResult lastResult = default!;
+
+        while (sw.Elapsed < maxTimeout)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snapshots = _bot.AllBots;
+            var (done, result, fingerprint) = evaluate(snapshots);
+            lastResult = result;
+
+            if (done)
+            {
+                _output.WriteLine($"[{phaseName}] Complete at {sw.Elapsed.TotalSeconds:F0}s");
+                return result;
+            }
+
+            if (fingerprint != lastFingerprint)
+            {
+                _output.WriteLine($"[{phaseName}] Progress at {sw.Elapsed.TotalSeconds:F0}s: {fingerprint}");
+                lastFingerprint = fingerprint;
+                lastFingerprintChange = sw.Elapsed;
+            }
+
+            var staleDuration = sw.Elapsed - lastFingerprintChange;
+            if (staleDuration > staleTimeout)
+            {
+                Assert.Fail(
+                    $"[{phaseName}] STALE — no snapshot progress for {staleDuration.TotalSeconds:F0}s " +
+                    $"(stale limit: {staleTimeout.TotalSeconds:F0}s). " +
+                    $"Last fingerprint: {lastFingerprint}. " +
+                    $"Elapsed: {sw.Elapsed.TotalSeconds:F0}s/{maxTimeout.TotalSeconds:F0}s max.");
+            }
+
+            await Task.Delay(pollInterval);
+        }
+
+        Assert.Fail(
+            $"[{phaseName}] TIMEOUT — {maxTimeout.TotalSeconds:F0}s elapsed without completion. " +
+            $"Last fingerprint: {lastFingerprint}");
+        return lastResult; // unreachable but satisfies compiler
+    }
+
     private static string ResolveTestSettingsPath(string settingsFileName)
     {
         var outputPath = Path.Combine(AppContext.BaseDirectory, "LiveValidation", "Settings", settingsFileName);
@@ -93,6 +165,7 @@ public class RagefireChasmTests
 
     /// <summary>
     /// Phase 1: Restart StateManager with RFC config and verify all 10 bots enter world.
+    /// Stale timeout: if bot count stops increasing for 30s, something is stuck.
     /// </summary>
     [SkippableFact]
     public async Task RFC_AllBotsEnterWorld()
@@ -102,34 +175,27 @@ public class RagefireChasmTests
         await _bot.RestartWithSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart with RFC config");
 
-        // The fixture breaks early after finding FG + first BG. Poll until more bots enter world.
-        // 10 BG bots need to authenticate + create/load characters — give them up to 90s.
-        var sw = Stopwatch.StartNew();
-        var bestCount = 0;
-        while (sw.Elapsed < TimeSpan.FromSeconds(90))
-        {
-            await _bot.RefreshSnapshotsAsync();
-            if (_bot.AllBots.Count > bestCount)
+        var botCount = await WaitForProgressAsync(
+            phaseName: "BotsEnterWorld",
+            maxTimeout: TimeSpan.FromSeconds(90),
+            staleTimeout: TimeSpan.FromSeconds(30),
+            pollInterval: TimeSpan.FromSeconds(2),
+            evaluate: snapshots =>
             {
-                bestCount = _bot.AllBots.Count;
-                _output.WriteLine($"[{sw.Elapsed.TotalSeconds:F0}s] Bots in world: {bestCount}/{ExpectedBotCount}");
-            }
-            if (bestCount >= ExpectedBotCount)
-                break;
-            await Task.Delay(2000);
-        }
+                var count = snapshots.Count;
+                var fingerprint = $"bots={count}";
+                return (count >= ExpectedBotCount, count, fingerprint);
+            });
 
-        var allBots = _bot.AllBots;
-        _output.WriteLine($"Final bots in world: {allBots.Count}/{ExpectedBotCount}");
-        foreach (var snap in allBots)
+        foreach (var snap in _bot.AllBots)
         {
             var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
             var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
             _output.WriteLine($"  {snap.AccountName}: {snap.CharacterName} (map={mapId}, pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}))");
         }
 
-        Assert.True(allBots.Count >= 2,
-            $"At least 2 bots must enter world for RFC test (got {allBots.Count}/{ExpectedBotCount}). " +
+        Assert.True(botCount >= 2,
+            $"At least 2 bots must enter world for RFC test (got {botCount}/{ExpectedBotCount}). " +
             "Ensure RFCBOT2-10 accounts exist in MaNGOS with level 8+ characters.");
     }
 
@@ -250,33 +316,28 @@ public class RagefireChasmTests
             await Task.Delay(1000);
         }
 
-        // Poll until at least one bot reports being near the RFC entrance.
-        // Teleport takes time to propagate through the snapshot pipeline.
-        var sw2 = Stopwatch.StartNew();
-        var nearEntrance = 0;
-        while (sw2.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            await Task.Delay(2000);
-            await _bot.RefreshSnapshotsAsync();
-
-            nearEntrance = 0;
-            foreach (var snap in _bot.AllBots)
+        // Wait for teleport to propagate through snapshots — stale if no position changes in 15s
+        var nearEntrance = await WaitForProgressAsync<int>(
+            phaseName: "TeleportToEntrance",
+            maxTimeout: TimeSpan.FromSeconds(30),
+            staleTimeout: TimeSpan.FromSeconds(15),
+            pollInterval: TimeSpan.FromSeconds(2),
+            evaluate: snapshots =>
             {
-                var pos = snap.Player?.Unit?.GameObject?.Base?.Position ?? snap.MovementData?.Position;
-                var px = pos?.X ?? 0;
-                var py = pos?.Y ?? 0;
-                var dist = MathF.Sqrt((px - RfcEntranceX) * (px - RfcEntranceX) + (py - RfcEntranceY) * (py - RfcEntranceY));
-                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                var near = 0;
+                foreach (var snap in snapshots)
+                {
+                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position ?? snap.MovementData?.Position;
+                    var px = pos?.X ?? 0;
+                    var py = pos?.Y ?? 0;
+                    var dist = MathF.Sqrt((px - RfcEntranceX) * (px - RfcEntranceX) + (py - RfcEntranceY) * (py - RfcEntranceY));
+                    var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    if ((mapId == KalimdorMap && dist < 50f) || mapId == RfcMap)
+                        near++;
+                }
+                return (near >= 1, near, $"near={near}");
+            });
 
-                if ((mapId == KalimdorMap && dist < 50f) || mapId == RfcMap)
-                    nearEntrance++;
-            }
-
-            if (nearEntrance >= 1)
-                break;
-        }
-
-        // Log final state
         foreach (var snap in _bot.AllBots)
         {
             var pos = snap.Player?.Unit?.GameObject?.Base?.Position ?? snap.MovementData?.Position;
@@ -287,7 +348,6 @@ public class RagefireChasmTests
             _output.WriteLine($"  {snap.AccountName}: map={mapId}, pos=({px:F0},{py:F0}), dist={dist:F0}y from entrance");
         }
 
-        _output.WriteLine($"\nBots near RFC entrance or inside: {nearEntrance}/{_bot.AllBots.Count}");
         Assert.True(nearEntrance >= 1, $"At least 1 bot should be near RFC entrance (got {nearEntrance}).");
     }
 
@@ -298,65 +358,63 @@ public class RagefireChasmTests
     ///   - Each bot has class-appropriate gear items
     ///   - The raid is formed with all bots grouped
     ///   - Duplicate classes (3 warriors) are in different subgroups
+    ///
+    /// Uses snapshot-based progress assertions throughout — each phase tracks
+    /// a fingerprint (bot count, group state, map IDs, positions, combat indicators)
+    /// and fails fast if no progress is detected within the stale timeout.
     /// </summary>
     [SkippableFact]
     public async Task RFC_PrepareAndOrganizeRaid()
     {
         var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-        _output.WriteLine($"Restarting StateManager with RFC config (coordinator enabled): {settingsPath}");
+
+        // Enable the coordinator and restart with RFC 10-bot config
+        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
+        _output.WriteLine($"Restarting with RFC config + coordinator enabled: {settingsPath}");
         await _bot.RestartWithSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
-        // Wait for bots to enter world (coordinator will start automatically)
-        var sw = Stopwatch.StartNew();
-        var bestCount = 0;
-        while (sw.Elapsed < TimeSpan.FromSeconds(90))
-        {
-            await _bot.RefreshSnapshotsAsync();
-            if (_bot.AllBots.Count > bestCount)
+        // ===== Phase: Bots enter world =====
+        // Fingerprint: bot count. Stale if count stops increasing for 30s.
+        await WaitForProgressAsync<int>(
+            phaseName: "BotsEnterWorld",
+            maxTimeout: TimeSpan.FromMinutes(2),
+            staleTimeout: TimeSpan.FromSeconds(30),
+            pollInterval: TimeSpan.FromSeconds(3),
+            evaluate: snapshots =>
             {
-                bestCount = _bot.AllBots.Count;
-                _output.WriteLine($"[{sw.Elapsed.TotalSeconds:F0}s] Bots in world: {bestCount}/{ExpectedBotCount}");
-            }
-            if (bestCount >= ExpectedBotCount)
-                break;
-            await Task.Delay(2000);
-        }
+                var count = snapshots.Count;
+                return (count >= ExpectedBotCount, count, $"bots={count}");
+            });
         Assert.True(_bot.AllBots.Count >= 2, $"Need at least 2 bots for RFC test (got {_bot.AllBots.Count})");
 
-        // Wait for the coordinator to progress through PrepareCharacters → FormGroup → OrganizeRaidSubgroups.
-        // The coordinator runs automatically — we just need to poll until we see grouped + prepared bots.
-        // Total budget: 180s for prep (SOAP) + group formation + subgroup organization.
-        var prepSw = Stopwatch.StartNew();
-        var allGrouped = false;
-        while (prepSw.Elapsed < TimeSpan.FromSeconds(180))
-        {
-            await Task.Delay(5000);
-            await _bot.RefreshSnapshotsAsync();
-
-            var grouped = _bot.AllBots.Count(s => s.PartyLeaderGuid != 0);
-            if (grouped >= 2 && !allGrouped)
+        // ===== Phase: Coordinator prep pipeline =====
+        // PrepareCharacters → EquipGear → TeleportToOrgrimmar → FormGroup → OrganizeRaidSubgroups → TeleportToRFC
+        // Fingerprint: grouped count + total spells + total items + map IDs + positions (rounded).
+        // This captures all coordinator state transitions. Stale if nothing changes for 45s.
+        var botsOnRfcMap = await WaitForProgressAsync<int>(
+            phaseName: "CoordinatorPrep",
+            maxTimeout: TimeSpan.FromMinutes(5),
+            staleTimeout: TimeSpan.FromSeconds(45),
+            pollInterval: TimeSpan.FromSeconds(5),
+            evaluate: snapshots =>
             {
-                allGrouped = true;
-                _output.WriteLine($"[{prepSw.Elapsed.TotalSeconds:F0}s] Raid formed: {grouped}/{_bot.AllBots.Count} grouped");
-            }
+                var grouped = snapshots.Count(s => s.PartyLeaderGuid != 0);
+                var onRfc = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
+                var totalSpells = snapshots.Sum(s => s.Player?.SpellList?.Count ?? 0);
+                var totalItems = snapshots.Sum(s => s.Player?.BagContents?.Count ?? 0);
 
-            // We're done waiting when at least 2 are grouped AND the coordinator has moved past OrganizeRaidSubgroups.
-            // Check: are bots on the RFC map (389) or at Orgrimmar? If on RFC map, coordinator has progressed.
-            var onRfcMap = _bot.AllBots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
-            if (onRfcMap >= 2)
-            {
-                _output.WriteLine($"[{prepSw.Elapsed.TotalSeconds:F0}s] {onRfcMap} bots on RFC map — coordinator progressed past group phase");
-                break;
-            }
+                // Position hash — round to integers to avoid noise from micro-movement
+                var posHash = string.Join("|", snapshots.Select(s =>
+                {
+                    var p = s.Player?.Unit?.GameObject?.Base?.Position;
+                    var m = s.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    return $"{m}:{p?.X:F0},{p?.Y:F0}";
+                }));
 
-            // Also accept: all grouped + enough time for subgroup phase to have fired
-            if (allGrouped && prepSw.Elapsed.TotalSeconds > 90)
-            {
-                _output.WriteLine($"[{prepSw.Elapsed.TotalSeconds:F0}s] Group formed, continuing to assertions");
-                break;
-            }
-        }
+                var fingerprint = $"grp={grouped},rfc={onRfc},spells={totalSpells},items={totalItems},pos={posHash.GetHashCode():X8}";
+                return (onRfc >= 2, onRfc, fingerprint);
+            });
 
         await _bot.RefreshSnapshotsAsync();
         var finalBots = _bot.AllBots;
@@ -466,17 +524,128 @@ public class RagefireChasmTests
         _output.WriteLine($"Warriors: {string.Join(", ", warriorAccounts)} — should be in separate subgroups");
         _output.WriteLine("(Subgroup assignment verified through coordinator logs — CMSG_GROUP_CHANGE_SUB_GROUP sent)");
 
-        // ===== Cleanup: all bots leave group =====
-        foreach (var snap in finalBots)
+        // ===== Phase 5: Dungeon Combat — wait for bots inside RFC =====
+        _output.WriteLine("\n=== DUNGEON COMBAT PHASE ===");
+
+        // If bots aren't on RFC map yet, wait with progress tracking
+        if (botsOnRfcMap < 2)
         {
-            if (snap.PartyLeaderGuid != 0)
-            {
-                await _bot.SendActionAsync(snap.AccountName, new ActionMessage
+            botsOnRfcMap = await WaitForProgressAsync<int>(
+                phaseName: "RFCEntry",
+                maxTimeout: TimeSpan.FromMinutes(5),
+                staleTimeout: TimeSpan.FromSeconds(30),
+                pollInterval: TimeSpan.FromSeconds(5),
+                evaluate: snapshots =>
                 {
-                    ActionType = ActionType.LeaveGroup
+                    var onRfc = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
+                    return (onRfc >= 2, onRfc, $"onRFC={onRfc}");
                 });
-            }
         }
+        Assert.True(botsOnRfcMap >= 2, $"At least 2 bots must be on RFC map for dungeon combat (got {botsOnRfcMap})");
+
+        // ===== Combat observation with progress tracking =====
+        // Fingerprint: positions (movement), target GUIDs (pulling), health values (taking/dealing damage).
+        // Stale if ALL of these stop changing for 60s — means bots are stuck.
+        _output.WriteLine("\n=== COMBAT OBSERVATION ===");
+        var combatEngagements = 0;
+        var bossesKilled = new HashSet<string>();
+        var rfcBosses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Oggleflint", "Taragaman the Hungerer", "Jergosh the Invoker", "Bazzalan"
+        };
+
+        await WaitForProgressAsync<int>(
+            phaseName: "DungeonCombat",
+            maxTimeout: TimeSpan.FromMinutes(10),
+            staleTimeout: TimeSpan.FromSeconds(60),
+            pollInterval: TimeSpan.FromSeconds(5),
+            evaluate: snapshots =>
+            {
+                var rfcBots = snapshots
+                    .Where(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap)
+                    .ToList();
+
+                var botsInCombat = 0;
+                var fpParts = new StringBuilder();
+
+                // Include ALL bots in fingerprint (not just RFC) to diagnose missing bots
+                foreach (var snap in snapshots)
+                {
+                    var m = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    if (m != RfcMap)
+                    {
+                        var p = snap.Player?.Unit?.GameObject?.Base?.Position;
+                        fpParts.Append($"{snap.AccountName}:map{m}@{p?.X:F0},{p?.Y:F0}|");
+                    }
+                }
+
+                foreach (var snap in rfcBots)
+                {
+                    var health = snap.Player?.Unit?.Health ?? 0;
+                    var maxHealth = snap.Player?.Unit?.MaxHealth ?? 1;
+                    var hp = (int)(health * 100f / maxHealth);
+                    var playerGuid = snap.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
+                    var targetGuid = snap.Player?.Unit?.TargetGuid ?? 0;
+                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                    var aggressorCount = snap.NearbyUnits?.Count(u => u.TargetGuid == playerGuid && u.Health > 0) ?? 0;
+
+                    if (aggressorCount > 0 || targetGuid != 0)
+                        botsInCombat++;
+
+                    // Include position (rounded), health, and target in fingerprint
+                    fpParts.Append($"{snap.AccountName}:hp{hp}t{targetGuid:X4}p{pos?.X:F0},{pos?.Y:F0}|");
+
+                    // Boss tracking
+                    if (targetGuid != 0 && snap.NearbyUnits != null)
+                    {
+                        foreach (var nu in snap.NearbyUnits)
+                        {
+                            var nuGuid = nu.GameObject?.Base?.Guid ?? 0;
+                            if (nuGuid == targetGuid)
+                            {
+                                var targetName = nu.GameObject?.Name;
+                                if (!string.IsNullOrEmpty(targetName) && rfcBosses.Contains(targetName))
+                                    bossesKilled.Add(targetName);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (botsInCombat > 0)
+                    combatEngagements++;
+
+                // Wipe detection
+                if (rfcBots.Count > 0 && rfcBots.All(s => (s.Player?.Unit?.Health ?? 0) <= 0))
+                    return (true, combatEngagements, $"WIPE|{fpParts}");
+
+                // Dungeon clear detection
+                if (combatEngagements > 5 && botsInCombat == 0 &&
+                    !rfcBots.Any(s => s.Player?.Unit?.TargetGuid != 0))
+                    return (true, combatEngagements, $"CLEAR|{fpParts}");
+
+                var fingerprint = $"combat={botsInCombat},engagements={combatEngagements}," +
+                    $"bosses={bossesKilled.Count}|{fpParts}";
+                return (false, combatEngagements, fingerprint);
+            });
+
+        // ===== Final Report =====
+        _output.WriteLine("\n=== DUNGEON RUN SUMMARY ===");
+        _output.WriteLine($"Combat engagements (5s ticks with active combat): {combatEngagements}");
+        _output.WriteLine($"Bosses engaged: [{string.Join(", ", bossesKilled)}]");
+
+        await _bot.RefreshSnapshotsAsync();
+        foreach (var snap in _bot.AllBots)
+        {
+            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            var health = snap.Player?.Unit?.Health ?? 0;
+            var maxHealth = snap.Player?.Unit?.MaxHealth ?? 1;
+            var hpPct = health * 100f / maxHealth;
+            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+            _output.WriteLine($"  {snap.AccountName}: map={mapId}, HP={hpPct:F0}%, pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
+        }
+
+        Assert.True(combatEngagements > 0, "Bots should have engaged in combat inside RFC");
     }
 
     /// <summary>
