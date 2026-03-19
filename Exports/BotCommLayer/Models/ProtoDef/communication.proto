@@ -109,6 +109,7 @@ enum ActionType {
     STOP_PHYSICS_RECORDING = 71;
     START_DUNGEONEERING = 72;
     CONVERT_TO_RAID = 73;
+    CHANGE_RAID_SUBGROUP = 74;
 }
 
 message ActionMap {

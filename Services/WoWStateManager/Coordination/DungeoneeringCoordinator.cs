@@ -39,6 +39,7 @@ public class DungeoneeringCoordinator
         FormGroup_InvitingRest,     // Invite remaining members
         FormGroup_AcceptingRest,    // Remaining members accept
         FormGroup_Verify,
+        OrganizeRaidSubgroups,  // Spread duplicate classes across subgroups for buff coverage
         TeleportToRFC,
         WaitForRFCSettle,
         DispatchDungeoneering,
@@ -98,6 +99,11 @@ public class DungeoneeringCoordinator
     private readonly ConcurrentDictionary<string, uint> _damageSpells = new();
     private readonly ConcurrentDictionary<string, byte> _spellsResolved = new();
 
+    // Raid subgroup organization
+    private readonly ConcurrentDictionary<string, byte> _subgroupAssignments = new(); // charName → subgroup (0-7)
+    private int _subgroupAssignIndex;
+    private bool _subgroupsComputed;
+
     // Leader failover — promote a BG bot if FG leader drops
     private DateTime _leaderLastSeen = DateTime.UtcNow;
     private const double LEADER_FAILOVER_TIMEOUT_SEC = 15.0;
@@ -145,7 +151,7 @@ public class DungeoneeringCoordinator
         if (_state is CoordState.FormGroup_LeaveOldGroups or CoordState.FormGroup_Inviting
             or CoordState.FormGroup_Accepting or CoordState.FormGroup_ConvertToRaid
             or CoordState.FormGroup_InvitingRest or CoordState.FormGroup_AcceptingRest
-            or CoordState.FormGroup_Verify
+            or CoordState.FormGroup_Verify or CoordState.OrganizeRaidSubgroups
             && elapsed > 60)
         {
             _logger.LogWarning("DUNGEON_COORD: State {State} timed out after {Elapsed:F0}s, advancing", _state, elapsed);
@@ -165,6 +171,7 @@ public class DungeoneeringCoordinator
             CoordState.FormGroup_InvitingRest => HandleInvitingRest(requestingAccount, snapshots),
             CoordState.FormGroup_AcceptingRest => HandleAcceptingRest(requestingAccount, snapshots),
             CoordState.FormGroup_Verify => HandleVerify(requestingAccount, snapshots),
+            CoordState.OrganizeRaidSubgroups => HandleOrganizeRaidSubgroups(requestingAccount, snapshots),
             CoordState.TeleportToRFC => HandleTeleportToRFC(requestingAccount, snapshots),
             CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, RfcMapId),
             CoordState.DispatchDungeoneering => HandleDispatchDungeoneering(requestingAccount, snapshots),
@@ -257,6 +264,148 @@ public class DungeoneeringCoordinator
         return null;
     }
 
+    // ===== Level 8 Class Configuration =====
+    // Spells available at level 8 in Vanilla WoW 1.12.1 (via .learn).
+    // .learn all_myclass teaches ALL trainer spells — these are the key ones per class for verification.
+    // Gear: green-quality dungeon-appropriate items for RFC (level 13-16 mobs).
+
+    /// <summary>Key spell IDs per class at level 8, used for verification after .learn all_myclass.</summary>
+    public static readonly Dictionary<string, uint[]> Level8KeySpells = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Warrior"] = [
+            78,    // Heroic Strike (Rank 1) — level 1
+            6673,  // Battle Shout (Rank 1) — level 1, PARTY-WIDE buff
+            100,   // Charge (Rank 1) — level 4
+            772,   // Rend (Rank 1) — level 4
+            6343,  // Thunder Clap (Rank 1) — level 6
+            34428, // Victory Rush — level 6
+            1715,  // Hamstring — level 8
+        ],
+        ["Shaman"] = [
+            403,   // Lightning Bolt (Rank 1) — level 1
+            8071,  // Stoneskin Totem (Rank 1) — level 4, PARTY-WIDE buff
+            332,   // Healing Wave (Rank 2) — level 6
+            529,   // Lightning Bolt (Rank 2) — level 8
+            8075,  // Strength of Earth Totem (Rank 1) — level 4, PARTY-WIDE buff
+            324,   // Lightning Shield (Rank 1) — level 8
+            8018,  // Rockbiter Weapon (Rank 1) — level 1
+        ],
+        ["Druid"] = [
+            5176,  // Wrath (Rank 1) — level 1
+            774,   // Rejuvenation (Rank 1) — level 4
+            5177,  // Wrath (Rank 2) — level 6
+            8921,  // Moonfire (Rank 1) — level 4
+            5186,  // Healing Touch (Rank 2) — level 4
+            1058,  // Rejuvenation (Rank 2) — level 8 (PARTY heal)
+            467,   // Thorns (Rank 1) — level 6
+        ],
+        ["Priest"] = [
+            585,   // Smite (Rank 1) — level 1
+            2050,  // Lesser Heal (Rank 1) — level 1
+            589,   // Shadow Word: Pain (Rank 1) — level 4
+            591,   // Smite (Rank 2) — level 6
+            17,    // Power Word: Shield (Rank 1) — level 6
+            1244,  // Power Word: Fortitude (Rank 1) — level 1, PARTY-WIDE buff
+            2052,  // Lesser Heal (Rank 2) — level 4
+            586,   // Fade (Rank 1) — level 8
+        ],
+        ["Warlock"] = [
+            686,   // Shadow Bolt (Rank 1) — level 1
+            687,   // Demon Skin (Rank 1) — level 1
+            172,   // Corruption (Rank 1) — level 4
+            702,   // Curse of Weakness (Rank 1) — level 4
+            695,   // Shadow Bolt (Rank 2) — level 6
+            1454,  // Life Tap (Rank 1) — level 6
+            980,   // Curse of Agony (Rank 1) — level 8
+            688,   // Summon Imp — level 1
+        ],
+        ["Hunter"] = [
+            75,    // Auto Shot — level 1
+            2973,  // Raptor Strike (Rank 1) — level 1
+            1978,  // Serpent Sting (Rank 1) — level 4
+            3044,  // Arcane Shot (Rank 1) — level 6
+            1130,  // Hunter's Mark (Rank 1) — level 6
+            14260, // Raptor Strike (Rank 2) — level 8
+        ],
+        ["Rogue"] = [
+            1752,  // Sinister Strike (Rank 1) — level 1
+            2098,  // Eviscerate (Rank 1) — level 1
+            1784,  // Stealth (Rank 1) — level 1
+            53,    // Backstab (Rank 1) — level 4
+            1776,  // Gouge (Rank 1) — level 6
+            6760,  // Eviscerate (Rank 2) — level 8
+        ],
+        ["Mage"] = [
+            133,   // Fireball (Rank 1) — level 1
+            168,   // Frost Armor (Rank 1) — level 1
+            116,   // Frostbolt (Rank 1) — level 4
+            143,   // Fireball (Rank 2) — level 6
+            587,   // Conjure Food (Rank 1) — level 6
+            5504,  // Conjure Water (Rank 1) — level 4
+            205,   // Frostbolt (Rank 2) — level 8
+        ],
+    };
+
+    /// <summary>Item IDs for level-8 dungeon-appropriate gear per class.</summary>
+    public static readonly Dictionary<string, (uint ItemId, string Name)[]> Level8Gear = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Warrior"] = [
+            (2385,  "Tarnished Chain Vest"),        // Mail chest
+            (2387,  "Tarnished Chain Leggings"),    // Mail legs
+            (2386,  "Tarnished Chain Gloves"),      // Mail hands
+            (2388,  "Tarnished Chain Boots"),       // Mail feet
+            (25,    "Worn Shortsword"),             // 1H Sword (main hand)
+            (2129,  "Large Round Shield"),          // Shield (off-hand)
+        ],
+        ["Shaman"] = [
+            (2385,  "Tarnished Chain Vest"),        // Mail chest
+            (2387,  "Tarnished Chain Leggings"),    // Mail legs
+            (2386,  "Tarnished Chain Gloves"),      // Mail hands
+            (36,    "Worn Mace"),                   // 1H Mace
+            (2129,  "Large Round Shield"),          // Shield
+            (5175,  "Earth Totem"),                 // Required for totem spells
+        ],
+        ["Druid"] = [
+            (6059,  "Nomad Vest"),                  // Leather chest
+            (1839,  "Rough Leather Pants"),         // Leather legs
+            (2122,  "Cracked Leather Gloves"),      // Leather hands
+            (2493,  "Wooden Mallet"),               // 2H Mace (staff alternative)
+        ],
+        ["Priest"] = [
+            (6096,  "Apprentice's Robe"),           // Cloth chest
+            (1395,  "Apprentice's Pants"),          // Cloth legs
+            (55,    "Apprentice's Boots"),          // Cloth feet
+            (955,   "Apprentice's Staff"),          // Staff (2H)
+        ],
+        ["Warlock"] = [
+            (6096,  "Apprentice's Robe"),           // Cloth chest
+            (1395,  "Apprentice's Pants"),          // Cloth legs
+            (55,    "Apprentice's Boots"),          // Cloth feet
+            (955,   "Apprentice's Staff"),          // Staff (2H)
+        ],
+        ["Hunter"] = [
+            (2385,  "Tarnished Chain Vest"),        // Mail chest
+            (2387,  "Tarnished Chain Leggings"),    // Mail legs
+            (2386,  "Tarnished Chain Gloves"),      // Mail hands
+            (2504,  "Worn Crossbow"),               // Ranged weapon
+            (2512,  "Rough Arrow"),                 // Ammo (quantity added separately)
+            (25,    "Worn Shortsword"),             // Melee backup
+        ],
+        ["Rogue"] = [
+            (2473,  "Reinforced Leather Vest"),     // Leather chest
+            (1839,  "Rough Leather Pants"),         // Leather legs
+            (2122,  "Cracked Leather Gloves"),      // Leather hands
+            (2092,  "Worn Dagger"),                 // Main hand dagger
+            (2092,  "Worn Dagger"),                 // Off-hand dagger
+        ],
+        ["Mage"] = [
+            (6096,  "Apprentice's Robe"),           // Cloth chest
+            (1395,  "Apprentice's Pants"),          // Cloth legs
+            (55,    "Apprentice's Boots"),          // Cloth feet
+            (955,   "Apprentice's Staff"),          // Staff (2H)
+        ],
+    };
+
     private async Task PrepareCharacterAsync(string account, string charName)
     {
         if (_soapClient == null) return;
@@ -267,7 +416,7 @@ public class DungeoneeringCoordinator
                 s.AccountName.Equals(account, StringComparison.OrdinalIgnoreCase));
             var charClass = settings?.CharacterClass ?? "Warrior";
 
-            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 8 + spells",
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 8 + spells + gear",
                 account, charName, charClass);
 
             // Clear instance binds so RFC can be reset freely
@@ -276,16 +425,21 @@ public class DungeoneeringCoordinator
             // Set level to 8
             await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
 
-            // Learn all class spells
+            // Learn all class spells up to level 8
             await _soapClient.ExecuteGMCommandAsync($".learn all_myclass {charName}");
 
-            // Class-specific setup (totems, pets, etc.)
+            // Learn specific spells that .learn all_myclass may miss
+            if (Level8KeySpells.TryGetValue(charClass, out var spells))
+            {
+                foreach (var spellId in spells)
+                    await _soapClient.ExecuteGMCommandAsync($".learn {spellId} {charName}");
+            }
+
+            // Class-specific quest items and abilities
             await PrepareClassSpecific(charName, charClass);
 
-            // Reset items to clean slate
+            // Reset items to clean slate, then equip class-appropriate gear
             await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
-
-            // Add class-appropriate starter gear
             await AddStarterGear(charName, charClass);
 
             _logger.LogInformation("DUNGEON_COORD: {Account} ({CharName}) preparation complete.", account, charName);
@@ -303,14 +457,17 @@ public class DungeoneeringCoordinator
         switch (charClass.ToLowerInvariant())
         {
             case "shaman":
-                // Earth Totem (quest item needed for totem quests)
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 5175"); // Earth Totem
+                // Earth Totem is a quest reward item required for totem spells
+                // (handled in gear table, but also .learn the totem quests just in case)
                 break;
             case "warlock":
-                // Imp summon spell (learned via .learn all_myclass)
+                // Summon Imp should be learned by .learn all_myclass
+                // Give Soul Shards for summoning
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6265 10"); // Soul Shard x10
                 break;
             case "hunter":
-                // Tame Beast learned at level 10, not available at 8
+                // Tame Beast is level 10 — not available at 8
+                // Hunters need ammo (handled in gear table)
                 break;
         }
     }
@@ -319,47 +476,16 @@ public class DungeoneeringCoordinator
     {
         if (_soapClient == null) return;
 
-        // Add basic weapons and armor appropriate for the class
-        // These are common low-level items from MaNGOS item tables
-        switch (charClass.ToLowerInvariant())
+        if (!Level8Gear.TryGetValue(charClass, out var gearList))
+            return;
+
+        foreach (var (itemId, name) in gearList)
         {
-            case "warrior":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2387"); // Tarnished Chain Leggings
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 25"); // Worn Shortsword
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2129"); // Large Round Shield
-                break;
-            case "shaman":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 36"); // Worn Mace
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2129"); // Large Round Shield
-                break;
-            case "druid":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6059"); // Nomad Vest (leather)
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2493"); // Wooden Mallet
-                break;
-            case "priest":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
-                break;
-            case "warlock":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
-                break;
-            case "hunter":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2504"); // Worn Crossbow
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2512 200"); // Rough Arrow x200
-                break;
-            case "rogue":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest (rogues can wear mail at low level? actually leather)
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2092"); // Worn Dagger
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2092"); // Worn Dagger (offhand)
-                break;
-            case "mage":
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
-                break;
+            // Hunter arrows get quantity 200
+            if (itemId == 2512) // Rough Arrow
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} {itemId} 200");
+            else
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} {itemId}");
         }
     }
 
@@ -690,8 +816,137 @@ public class DungeoneeringCoordinator
         _logger.LogInformation("DUNGEON_COORD: Group verify: {Grouped}/{Total} bots grouped.",
             grouped, snapshots.Count);
 
-        TransitionTo(CoordState.TeleportToRFC);
+        TransitionTo(CoordState.OrganizeRaidSubgroups);
         return null;
+    }
+
+    /// <summary>
+    /// Organize raid subgroups so duplicate classes are in separate groups.
+    /// This ensures party-wide buffs (Battle Shout, Power Word: Fortitude, etc.) cover more players.
+    /// Algorithm: round-robin classes across subgroups — each instance of a class goes to the next subgroup.
+    /// </summary>
+    private ActionMessage? HandleOrganizeRaidSubgroups(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Only the leader sends subgroup change commands
+        if (!requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Step 1: Compute subgroup assignments (once)
+        if (!_subgroupsComputed)
+        {
+            ComputeSubgroupAssignments(snapshots);
+            _subgroupsComputed = true;
+            _subgroupAssignIndex = 0;
+        }
+
+        // Step 2: Send one ChangeRaidSubgroup per tick (throttled)
+        _tickCount++;
+        if (_tickCount % 3 != 1) // ~1.5s between each move
+            return null;
+
+        var assignments = _subgroupAssignments.ToArray();
+        if (_subgroupAssignIndex >= assignments.Length)
+        {
+            _logger.LogInformation("DUNGEON_COORD: All {Count} subgroup assignments sent. Teleporting to RFC.",
+                assignments.Length);
+            TransitionTo(CoordState.TeleportToRFC);
+            return null;
+        }
+
+        var (charName, subgroup) = assignments[_subgroupAssignIndex];
+        _subgroupAssignIndex++;
+
+        _logger.LogInformation("DUNGEON_COORD: Moving '{CharName}' to subgroup {SubGroup} [{Idx}/{Total}]",
+            charName, subgroup, _subgroupAssignIndex, assignments.Length);
+
+        var action = new ActionMessage { ActionType = ActionType.ChangeRaidSubgroup };
+        action.Parameters.Add(new RequestParameter { StringParam = charName });
+        action.Parameters.Add(new RequestParameter { IntParam = subgroup });
+        return action;
+    }
+
+    /// <summary>
+    /// Compute optimal subgroup assignments. Strategy:
+    /// - Group classes that share party-wide buffs into different subgroups
+    /// - Warriors spread across groups (Battle Shout is party-only)
+    /// - Priests spread across groups (Power Word: Fortitude, Shadow Protection)
+    /// - Shamans spread across groups (totems are party-only)
+    /// - Healers spread across groups for healing coverage
+    /// - Fill subgroups round-robin by class to maximize buff diversity per group
+    /// </summary>
+    private void ComputeSubgroupAssignments(ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Build (charName, class) pairs from settings + snapshots
+        var members = new List<(string CharName, string Class, string Account)>();
+        foreach (var setting in _allSettings)
+        {
+            if (_accountToCharName.TryGetValue(setting.AccountName, out var charName)
+                && snapshots.TryGetValue(setting.AccountName, out var snap)
+                && snap.PartyLeaderGuid != 0) // Only grouped members
+            {
+                members.Add((charName, setting.CharacterClass, setting.AccountName));
+            }
+        }
+
+        if (members.Count <= 5)
+        {
+            _logger.LogInformation("DUNGEON_COORD: Only {Count} grouped members — single party, no subgroup changes needed.", members.Count);
+            return; // All in subgroup 0 by default
+        }
+
+        // Group by class, then round-robin each class instance across subgroups
+        var classBuckets = members.GroupBy(m => m.Class, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count()) // Spread most-duplicated classes first
+            .ToList();
+
+        // Track how many members are in each subgroup (max 5 per subgroup in a 40-man raid)
+        var subgroupCounts = new int[8];
+        const int MaxPerSubgroup = 5;
+        var numSubgroups = Math.Max(2, (int)Math.Ceiling(members.Count / 5.0));
+
+        foreach (var classGroup in classBuckets)
+        {
+            var classMembers = classGroup.ToList();
+            for (int i = 0; i < classMembers.Count; i++)
+            {
+                // Find the subgroup with fewest members that this class hasn't been placed in yet
+                var usedSubgroups = _subgroupAssignments
+                    .Where(kvp => classMembers.Any(cm => cm.CharName == kvp.Key))
+                    .Select(kvp => (int)kvp.Value)
+                    .ToHashSet();
+
+                byte bestSubgroup = 0;
+                int bestCount = int.MaxValue;
+                for (byte sg = 0; sg < numSubgroups; sg++)
+                {
+                    if (subgroupCounts[sg] < MaxPerSubgroup && subgroupCounts[sg] < bestCount
+                        && !usedSubgroups.Contains(sg))
+                    {
+                        bestSubgroup = sg;
+                        bestCount = subgroupCounts[sg];
+                    }
+                }
+                // Fallback: if all subgroups have this class, pick least-full
+                if (bestCount == int.MaxValue)
+                {
+                    for (byte sg = 0; sg < numSubgroups; sg++)
+                    {
+                        if (subgroupCounts[sg] < MaxPerSubgroup && subgroupCounts[sg] < bestCount)
+                        {
+                            bestSubgroup = sg;
+                            bestCount = subgroupCounts[sg];
+                        }
+                    }
+                }
+
+                _subgroupAssignments[classMembers[i].CharName] = bestSubgroup;
+                subgroupCounts[bestSubgroup]++;
+
+                _logger.LogInformation("DUNGEON_COORD: Subgroup plan: {CharName} ({Class}) → group {SubGroup}",
+                    classMembers[i].CharName, classMembers[i].Class, bestSubgroup);
+            }
+        }
     }
 
     /// <summary>

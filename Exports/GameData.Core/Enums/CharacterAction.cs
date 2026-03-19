@@ -88,4 +88,5 @@ public enum CharacterAction
     CheckMail,          // Open nearby mailbox, list mail, and take money/items from all pending mail.
     StartDungeoneering, // Queue DungeoneeringTask to navigate dungeon waypoints, pull encounters, and clear the dungeon.
     ConvertToRaid,      // Convert the current party to a raid group (leader only).
+    ChangeRaidSubgroup, // Move a player to a specific raid subgroup (0-7). Params: string playerName, int subGroup.
 }

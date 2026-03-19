@@ -619,6 +619,19 @@ namespace BotRunner
                         });
                         break;
 
+                    case CharacterAction.ChangeRaidSubgroup:
+                    {
+                        // Params: [0] = string playerName, [1] = int subGroup (0-7)
+                        var rsgName = actionEntry.Item2.Count > 0 ? (string)actionEntry.Item2[0] : "";
+                        var rsgGroup = actionEntry.Item2.Count > 1 ? (byte)(int)actionEntry.Item2[1] : (byte)0;
+                        builder.Do($"Change Raid Subgroup: {rsgName} → group {rsgGroup}", time =>
+                        {
+                            _objectManager.ChangeRaidSubgroup(rsgName, rsgGroup);
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
                     case CharacterAction.StartDungeoneering:
                     {
                         // Params: [0] = isLeader (int, 1=leader 0=follower)

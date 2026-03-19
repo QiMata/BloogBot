@@ -254,7 +254,14 @@ namespace ForegroundBotRunner.Statics
             MainThreadLuaCall("ConvertToRaid()");
         }
 
-
+        public void ChangeRaidSubgroup(string playerName, byte subGroup)
+        {
+            // Lua SetRaidSubgroup(raidIndex, subgroup) — subgroup is 1-based in WoW Lua
+            // We need the raid index for the player, so use a Lua snippet to find + move them.
+            var luaSubgroup = subGroup + 1; // WoW Lua uses 1-based subgroups
+            MainThreadLuaCall(
+                $"for i=1,40 do local n,_,sg=GetRaidRosterInfo(i);if n=='{playerName}' then SetRaidSubgroup(i,{luaSubgroup});break;end;end");
+        }
 
         public static void InviteToGroup(string characterName)
         {

@@ -146,6 +146,7 @@ namespace GameData.Core.Interfaces
         void LeaveGroup();
         void DisbandGroup();
         void ConvertToRaid();
+        void ChangeRaidSubgroup(string playerName, byte subGroup);
         bool HasPendingGroupInvite();
         bool HasLootRollWindow(int itemId);
         void LootPass(int itemId);

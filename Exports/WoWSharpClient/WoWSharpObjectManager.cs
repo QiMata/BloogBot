@@ -786,6 +786,12 @@ namespace WoWSharpClient
                 _ = factory.PartyAgent.ConvertToRaidAsync();
         }
 
+        public void ChangeRaidSubgroup(string playerName, byte subGroup)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.ChangeSubGroupAsync(playerName, subGroup);
+        }
 
         public bool HasPendingGroupInvite()
         {

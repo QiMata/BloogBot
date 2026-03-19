@@ -194,6 +194,7 @@ namespace Communication {
     [pbr::OriginalName("STOP_PHYSICS_RECORDING")] StopPhysicsRecording = 71,
     [pbr::OriginalName("START_DUNGEONEERING")] StartDungeoneering = 72,
     [pbr::OriginalName("CONVERT_TO_RAID")] ConvertToRaid = 73,
+    [pbr::OriginalName("CHANGE_RAID_SUBGROUP")] ChangeRaidSubgroup = 74,
   }
 
   public enum BotRunnerType {
