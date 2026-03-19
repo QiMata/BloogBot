@@ -80,8 +80,17 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// </summary>
     public bool IsPathfindingReady => _serviceFixture.PathfindingServiceReady;
 
-    /// <summary>Snapshot of the Background (headless) bot. Updated by calling <see cref="RefreshSnapshotsAsync"/>.</summary>
+    /// <summary>Per-service log manager. Null if no test name has been set.</summary>
+    public ServiceLogManager? ServiceLogs => _serviceFixture.ServiceLogs;
 
+    /// <summary>Initialize per-service logging for a specific test name.</summary>
+    public void SetTestName(string testName) => _serviceFixture.SetTestName(testName);
+
+    /// <summary>Whether any managed child process (StateManager, WoW.exe, PathfindingService) has crashed.</summary>
+    public bool ClientCrashed => _serviceFixture.ClientCrashed;
+
+    /// <summary>Descriptive crash message, if any.</summary>
+    public string? CrashMessage => _serviceFixture.CrashMessage;
 
     /// <summary>Snapshot of the Background (headless) bot. Updated by calling <see cref="RefreshSnapshotsAsync"/>.</summary>
     public WoWActivitySnapshot? BackgroundBot { get; private set; }

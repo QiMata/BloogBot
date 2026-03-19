@@ -30,6 +30,9 @@ public class TestScenarioRunner
         _output = output;
     }
 
+    /// <summary>Per-service log manager for snapshot dumps and service log routing.</summary>
+    private ServiceLogManager? Logs => _bot.ServiceLogs;
+
     /// <summary>
     /// Load and execute a scenario from a JSON file path (relative to test output dir).
     /// </summary>
@@ -47,6 +50,11 @@ public class TestScenarioRunner
     public async Task<ScenarioResult> ExecuteAsync(TestScenario scenario)
     {
         var result = new ScenarioResult(scenario);
+
+        // Initialize per-service logging for this scenario
+        _bot.SetTestName(scenario.Name);
+        Logs?.WriteSummary($"Scenario: {scenario.Name}");
+        Logs?.WriteSummary($"Description: {scenario.Description}");
 
         // Phase 0: Configure coordinator
         if (scenario.EnableCoordinator)
@@ -131,6 +139,17 @@ public class TestScenarioRunner
             // Phase 6: Validate assertions
             await _bot.RefreshSnapshotsAsync();
             ValidateAssertions(scenario, result);
+
+            // Write final result to summary log
+            if (result.Failures.Count == 0)
+                Logs?.WriteSummary("RESULT: PASS");
+            else
+            {
+                Logs?.WriteSummary($"RESULT: FAIL ({result.Failures.Count} failures)");
+                foreach (var f in result.Failures)
+                    Logs?.WriteSummary($"  - {f}");
+            }
+            _output.WriteLine($"  Log files: {Logs?.LogDirectory ?? "N/A"}");
         }
         finally
         {
@@ -203,14 +222,27 @@ public class TestScenarioRunner
         var sw = Stopwatch.StartNew();
         var lastLogTime = TimeSpan.Zero;
         var observe = scenario.Observe;
+        var pollIndex = 0;
 
         while (sw.Elapsed < TimeSpan.FromSeconds(observe.TimeoutSeconds))
         {
             await Task.Delay(observe.PollIntervalMs);
+
+            // Check for child process crashes — fail fast instead of timing out
+            if (_bot.ClientCrashed)
+            {
+                result.Failures.Add($"Child process crashed during observation: {_bot.CrashMessage}");
+                _output.WriteLine($"  CRASH DETECTED: {_bot.CrashMessage}");
+                Logs?.WriteSummary($"CRASH at {sw.Elapsed.TotalSeconds:F0}s: {_bot.CrashMessage}");
+                break;
+            }
+
             await _bot.RefreshSnapshotsAsync();
+            pollIndex++;
 
             // Track observed state — collect per-cycle map counts
             var cycleMapCounts = new Dictionary<int, int>();
+            var snapshotDumps = new List<(string account, object snapshot)>();
             foreach (var snap in _bot.AllBots)
             {
                 var mapId = (int)(snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0);
@@ -228,8 +260,14 @@ public class TestScenarioRunner
                     result.ActionTypesSeen.Add(snap.PreviousAction.ActionType.ToString());
 
                 cycleMapCounts[mapId] = cycleMapCounts.GetValueOrDefault(mapId, 0) + 1;
+
+                // Collect snapshot for dump
+                snapshotDumps.Add((snap.AccountName ?? "unknown", snap));
             }
             result.TrackMapPresenceCycle(cycleMapCounts);
+
+            // Dump snapshots to disk for offline analysis (every poll cycle)
+            Logs?.DumpPollCycle(pollIndex, snapshotDumps);
 
             // Log progress periodically
             if (sw.Elapsed - lastLogTime >= TimeSpan.FromSeconds(observe.LogIntervalSeconds))
@@ -252,14 +290,24 @@ public class TestScenarioRunner
             if (AreAssertionsMet(scenario, result))
             {
                 _output.WriteLine($"  All assertions met at {sw.Elapsed.TotalSeconds:F0}s — early exit");
+                Logs?.WriteSummary($"All assertions met at {sw.Elapsed.TotalSeconds:F0}s");
                 break;
             }
         }
+
+        // Write observation summary
+        Logs?.WriteSummary($"Observation complete: {pollIndex} polls over {sw.Elapsed.TotalSeconds:F0}s");
+        Logs?.WriteSummary($"  group={result.GroupFormed}, combat={result.CombatSeen}");
+        Logs?.WriteSummary($"  actions=[{string.Join(",", result.ActionTypesSeen)}]");
     }
 
     private void ValidateAssertions(TestScenario scenario, ScenarioResult result)
     {
         var a = scenario.Assertions;
+
+        // Crash detection — any child process crash is an automatic test failure
+        if (_bot.ClientCrashed)
+            result.Failures.Add($"Child process crashed: {_bot.CrashMessage}");
 
         if (a.GroupFormed == true && !result.GroupFormed)
             result.Failures.Add("Expected group to be formed, but no bots reported PartyLeaderGuid != 0");

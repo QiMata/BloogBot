@@ -43,6 +43,12 @@ public class BotServiceFixture : IAsyncLifetime
     private readonly List<int> _managedWoWPids = [];
 
     /// <summary>
+    /// Per-service log manager. Created when a test name is set via <see cref="SetTestName"/>.
+    /// Writes per-service log files to TestResults/ServiceLogs/{TestName}/.
+    /// </summary>
+    public ServiceLogManager? ServiceLogs { get; private set; }
+
+    /// <summary>
     /// Optional path to a custom StateManagerSettings.json file.
     /// When set, StateManager will load bot configuration from this file instead of the default.
     /// Set this before calling <see cref="InitializeAsync"/>.
@@ -125,6 +131,16 @@ public class BotServiceFixture : IAsyncLifetime
     /// Sets the test output helper for logging. Call from your test constructor.
     /// </summary>
     public void SetOutput(ITestOutputHelper output) => _output = output;
+
+    /// <summary>
+    /// Initialize per-service logging for a specific test. Call before InitializeAsync.
+    /// Log files are written to TestResults/ServiceLogs/{testName}/ and overwritten each run.
+    /// </summary>
+    public void SetTestName(string testName)
+    {
+        ServiceLogs?.Dispose();
+        ServiceLogs = new ServiceLogManager(testName);
+    }
 
     public async Task InitializeAsync()
     {
@@ -434,6 +450,12 @@ public class BotServiceFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        // Write crash summary to service logs before teardown
+        if (ClientCrashed && ServiceLogs != null)
+            ServiceLogs.WriteSummary($"CRASH DETECTED: {CrashMessage}");
+        ServiceLogs?.Dispose();
+        ServiceLogs = null;
+
         await TeardownProcessesAsync();
 
         // Always release the machine-wide mutex so the next test run can proceed
@@ -753,6 +775,9 @@ public class BotServiceFixture : IAsyncLifetime
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
+                    // Write ALL lines to per-service log files (no filtering)
+                    ServiceLogs?.ClassifyAndWrite(e.Data);
+
                     // Throttle verbose repetitive lines to reduce test host memory pressure.
                     // StateManager emits snapshot queries, equipment dumps, and skill snapshots
                     // at 350ms intervals — thousands of lines per minute. Only log important lines.
@@ -784,7 +809,10 @@ public class BotServiceFixture : IAsyncLifetime
             _stateManagerProcess.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrEmpty(e.Data))
+                {
+                    ServiceLogs?.WriteStateManagerError(e.Data);
                     Log($"  [StateManager-ERR] {e.Data}");
+                }
             };
             _stateManagerProcess.BeginOutputReadLine();
             _stateManagerProcess.BeginErrorReadLine();
