@@ -75,6 +75,7 @@ namespace WoWStateManager
                 StateManagerSettings.Instance.CharacterSettings,
                 configuration["CharacterStateListener:IpAddress"],
                 int.Parse(configuration["CharacterStateListener:Port"]),
+                _mangosSOAPClient,
                 _loggerFactory.CreateLogger<CharacterStateSocketListener>()
             );
 

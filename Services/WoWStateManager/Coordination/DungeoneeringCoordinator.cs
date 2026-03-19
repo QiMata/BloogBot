@@ -4,36 +4,48 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using WoWStateManager.Clients;
 using WoWStateManager.Settings;
 
 namespace WoWStateManager.Coordination;
 
 /// <summary>
-/// Coordinates N bots for dungeon crawling. Handles group formation (leader
-/// invites all, members accept), then dispatches START_DUNGEONEERING to all
-/// bots once the group is formed.
+/// Coordinates N bots for dungeon crawling with full raid preparation.
 ///
-/// The leader bot gets isLeader=1 and navigates dungeon waypoints.
-/// All other bots get isLeader=0 and follow the party leader.
+/// Pipeline:
+///   WaitingForBots → PrepareCharacters → TeleportToOrgrimmar → FormGroup →
+///   TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
-/// After dispatching dungeoneering, the coordinator enters a monitoring
-/// state where it provides heal/DPS support based on party member snapshots.
+/// PrepareCharacters: SOAP-based level set, .learn all_myclass, class-specific setup
+/// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
+/// FormGroup: Leader invites, members accept, verify
+/// TeleportToRFC: Bot chat .go xyz into RFC interior (map 389)
+/// DispatchDungeoneering: START_DUNGEONEERING to all bots
+/// DungeonInProgress: Heal/DPS support overlay for members
 /// </summary>
 public class DungeoneeringCoordinator
 {
     public enum CoordState
     {
         WaitingForBots,
+        PrepareCharacters,
+        TeleportToOrgrimmar,
+        WaitForTeleportSettle,
         FormGroup_Inviting,
         FormGroup_Accepting,
         FormGroup_Verify,
+        TeleportToRFC,
+        WaitForRFCSettle,
         DispatchDungeoneering,
         DungeonInProgress,
     }
 
     private readonly ILogger _logger;
+    private readonly MangosSOAPClient? _soapClient;
     private readonly string _leaderAccount;
     private readonly List<string> _memberAccounts;
+    private readonly List<CharacterSettings> _allSettings;
     private readonly Dictionary<string, string> _accountToCharName = new();
 
     private CoordState _state = CoordState.WaitingForBots;
@@ -41,13 +53,27 @@ public class DungeoneeringCoordinator
     private int _tickCount;
     private int _inviteIndex;
     private int _acceptIndex;
-    private bool _dungeoneeringDispatched;
+
+    // Prep tracking
+    private readonly HashSet<string> _preparedAccounts = new();
+    private readonly HashSet<string> _teleportedToOrg = new();
+    private readonly HashSet<string> _teleportedToRFC = new();
+    private int _prepIndex;
+
+    // Orgrimmar safe zone
+    private const float OrgX = 1629.4f;
+    private const float OrgY = -4373.4f;
+    private const float OrgZ = 34.2f; // Z+3
+
+    // RFC interior start (first waypoint area)
+    private const int RfcMapId = 389;
+    private const float RfcStartX = 3f;
+    private const float RfcStartY = -11f;
+    private const float RfcStartZ = -15f; // Z+3 from waypoint at -18
 
     // Throttle follow/heal actions per account
     private readonly Dictionary<string, DateTime> _lastActionSent = new();
     private const double ACTION_COOLDOWN_SEC = 3.0;
-    private const double FOLLOW_COOLDOWN_SEC = 1.5;
-    private const float FOLLOW_DISTANCE = 15f;
     private const float HEAL_THRESHOLD = 0.50f;
 
     // Cached healer spell IDs
@@ -57,14 +83,23 @@ public class DungeoneeringCoordinator
 
     public CoordState State => _state;
 
-    public DungeoneeringCoordinator(string leaderAccount, IEnumerable<string> memberAccounts, ILogger logger)
+    public DungeoneeringCoordinator(
+        string leaderAccount,
+        IEnumerable<string> allAccounts,
+        List<CharacterSettings> allSettings,
+        MangosSOAPClient? soapClient,
+        ILogger logger)
     {
         _leaderAccount = leaderAccount;
-        _memberAccounts = memberAccounts.Where(a => !a.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase)).ToList();
+        _memberAccounts = allAccounts
+            .Where(a => !a.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        _allSettings = allSettings;
+        _soapClient = soapClient;
         _logger = logger;
 
-        _logger.LogInformation("DUNGEON_COORD: Initialized — Leader='{Leader}', Members=[{Members}]",
-            leaderAccount, string.Join(", ", _memberAccounts));
+        _logger.LogInformation("DUNGEON_COORD: Initialized — Leader='{Leader}', Members=[{Members}], SOAP={HasSoap}",
+            leaderAccount, string.Join(", ", _memberAccounts), soapClient != null);
     }
 
     public ActionMessage? GetAction(
@@ -83,21 +118,26 @@ public class DungeoneeringCoordinator
         if (inWorldCount < 2)
             return null;
 
-        // Timeout protection
+        // Timeout protection for group formation states
         var elapsed = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds;
         if (_state is CoordState.FormGroup_Inviting or CoordState.FormGroup_Accepting or CoordState.FormGroup_Verify
             && elapsed > 60)
         {
             _logger.LogWarning("DUNGEON_COORD: State {State} timed out after {Elapsed:F0}s, advancing", _state, elapsed);
-            TransitionTo(CoordState.DispatchDungeoneering);
+            TransitionTo(CoordState.TeleportToRFC);
         }
 
         return _state switch
         {
             CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
+            CoordState.PrepareCharacters => HandlePrepareCharacters(requestingAccount, snapshots),
+            CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
+            CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_Inviting, 1),
             CoordState.FormGroup_Inviting => HandleInviting(requestingAccount, snapshots),
             CoordState.FormGroup_Accepting => HandleAccepting(requestingAccount, snapshots),
             CoordState.FormGroup_Verify => HandleVerify(requestingAccount, snapshots),
+            CoordState.TeleportToRFC => HandleTeleportToRFC(requestingAccount, snapshots),
+            CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, RfcMapId),
             CoordState.DispatchDungeoneering => HandleDispatchDungeoneering(requestingAccount, snapshots),
             CoordState.DungeonInProgress => HandleDungeonInProgress(requestingAccount, snapshots),
             _ => null,
@@ -117,7 +157,6 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleWaitingForBots(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Wait until at least leader + 1 member are InWorld
         if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap) || leaderSnap.ScreenState != "InWorld")
             return null;
 
@@ -127,18 +166,224 @@ public class DungeoneeringCoordinator
         if (readyMembers < 1)
             return null;
 
-        // Check if already grouped
-        if (leaderSnap.PartyLeaderGuid != 0)
+        _logger.LogInformation("DUNGEON_COORD: {Count} members ready. Starting character preparation.",
+            readyMembers);
+
+        // If SOAP is available, do full prep; otherwise skip to group formation
+        if (_soapClient != null)
         {
-            _logger.LogInformation("DUNGEON_COORD: Leader already in group, skipping formation.");
-            TransitionTo(CoordState.DispatchDungeoneering);
+            _prepIndex = 0;
+            TransitionTo(CoordState.PrepareCharacters);
+        }
+        else
+        {
+            _logger.LogWarning("DUNGEON_COORD: No SOAP client — skipping character preparation.");
+            _inviteIndex = 0;
+            TransitionTo(CoordState.FormGroup_Inviting);
+        }
+        return null;
+    }
+
+    private ActionMessage? HandlePrepareCharacters(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (_soapClient == null)
+        {
+            TransitionTo(CoordState.TeleportToOrgrimmar);
             return null;
         }
 
-        _logger.LogInformation("DUNGEON_COORD: {Count} members ready. Starting group formation.",
-            readyMembers);
-        _inviteIndex = 0;
-        TransitionTo(CoordState.FormGroup_Inviting);
+        // Process one account per tick (SOAP is async, fire-and-forget from coordinator)
+        _tickCount++;
+        if (_tickCount % 3 != 1) // ~1.5s between preps
+            return null;
+
+        // Find next account to prepare
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+
+        while (_prepIndex < allAccounts.Count)
+        {
+            var account = allAccounts[_prepIndex];
+            _prepIndex++;
+
+            if (_preparedAccounts.Contains(account))
+                continue;
+
+            if (!_accountToCharName.TryGetValue(account, out var charName))
+                continue; // Not in world yet
+
+            if (!snapshots.TryGetValue(account, out var snap) || snap.ScreenState != "InWorld")
+                continue;
+
+            // Fire SOAP commands for this character (async, don't await)
+            _ = PrepareCharacterAsync(account, charName);
+            _preparedAccounts.Add(account);
+            return null; // One account per tick
+        }
+
+        // All accounts prepared
+        _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared. Teleporting to Orgrimmar.",
+            _preparedAccounts.Count);
+        TransitionTo(CoordState.TeleportToOrgrimmar);
+        return null;
+    }
+
+    private async Task PrepareCharacterAsync(string account, string charName)
+    {
+        if (_soapClient == null) return;
+
+        try
+        {
+            var settings = _allSettings.FirstOrDefault(s =>
+                s.AccountName.Equals(account, StringComparison.OrdinalIgnoreCase));
+            var charClass = settings?.CharacterClass ?? "Warrior";
+
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 8 + spells",
+                account, charName, charClass);
+
+            // Set level to 8
+            await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
+
+            // Learn all class spells
+            await _soapClient.ExecuteGMCommandAsync($".learn all_myclass {charName}");
+
+            // Class-specific setup (totems, pets, etc.)
+            await PrepareClassSpecific(charName, charClass);
+
+            // Reset items to clean slate
+            await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
+
+            // Add class-appropriate starter gear
+            await AddStarterGear(charName, charClass);
+
+            _logger.LogInformation("DUNGEON_COORD: {Account} ({CharName}) preparation complete.", account, charName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DUNGEON_COORD: Failed to prepare {Account}: {Error}", account, ex.Message);
+        }
+    }
+
+    private async Task PrepareClassSpecific(string charName, string charClass)
+    {
+        if (_soapClient == null) return;
+
+        switch (charClass.ToLowerInvariant())
+        {
+            case "shaman":
+                // Earth Totem (quest item needed for totem quests)
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 5175"); // Earth Totem
+                break;
+            case "warlock":
+                // Imp summon spell (learned via .learn all_myclass)
+                break;
+            case "hunter":
+                // Tame Beast learned at level 10, not available at 8
+                break;
+        }
+    }
+
+    private async Task AddStarterGear(string charName, string charClass)
+    {
+        if (_soapClient == null) return;
+
+        // Add basic weapons and armor appropriate for the class
+        // These are common low-level items from MaNGOS item tables
+        switch (charClass.ToLowerInvariant())
+        {
+            case "warrior":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2387"); // Tarnished Chain Leggings
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 25"); // Worn Shortsword
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2129"); // Large Round Shield
+                break;
+            case "shaman":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 36"); // Worn Mace
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2129"); // Large Round Shield
+                break;
+            case "druid":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6059"); // Nomad Vest (leather)
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2493"); // Wooden Mallet
+                break;
+            case "priest":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
+                break;
+            case "warlock":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
+                break;
+            case "hunter":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2504"); // Worn Crossbow
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2512 200"); // Rough Arrow x200
+                break;
+            case "rogue":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2385"); // Tarnished Chain Vest (rogues can wear mail at low level? actually leather)
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2092"); // Worn Dagger
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 2092"); // Worn Dagger (offhand)
+                break;
+            case "mage":
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6096"); // Apprentice's Robe
+                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 955"); // Apprentice's Staff
+                break;
+        }
+    }
+
+    private ActionMessage? HandleTeleportToOrgrimmar(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Each bot types .go xyz to teleport to Orgrimmar
+        if (!_teleportedToOrg.Contains(requestingAccount))
+        {
+            _teleportedToOrg.Add(requestingAccount);
+            _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to Orgrimmar", requestingAccount);
+            return MakeSendChatAction($".go xyz {OrgX:0.#} {OrgY:0.#} {OrgZ:0.#} 1");
+        }
+
+        // Check if all bots have been teleported
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+        var allTeleported = allAccounts.All(a => _teleportedToOrg.Contains(a));
+
+        if (allTeleported)
+        {
+            _logger.LogInformation("DUNGEON_COORD: All bots teleported to Orgrimmar. Waiting to settle.");
+            TransitionTo(CoordState.WaitForTeleportSettle);
+        }
+
+        return null;
+    }
+
+    private ActionMessage? HandleWaitForSettle(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
+        CoordState nextState, int expectedMapId)
+    {
+        _tickCount++;
+        // Wait ~5 seconds (10 ticks) for teleport to settle
+        if (_tickCount < 10)
+            return null;
+
+        // Verify at least some bots are on the expected map
+        var onMap = snapshots.Values.Count(s =>
+        {
+            var mapId = s.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            return mapId == expectedMapId;
+        });
+
+        _logger.LogInformation("DUNGEON_COORD: Settle check: {OnMap}/{Total} bots on map {Map}",
+            onMap, snapshots.Count, expectedMapId);
+
+        // Proceed even if not all are on target map (teleport might still be propagating)
+        if (_tickCount >= 20 || onMap >= 2)
+        {
+            if (nextState == CoordState.FormGroup_Inviting)
+                _inviteIndex = 0;
+            TransitionTo(nextState);
+        }
+
         return null;
     }
 
@@ -150,11 +395,9 @@ public class DungeoneeringCoordinator
             return null;
 
         _tickCount++;
-        // Space out invites: 1 invite every 3 ticks (~1.5s at 500ms poll)
         if (_tickCount % 3 != 1)
             return null;
 
-        // Find next member to invite
         while (_inviteIndex < _memberAccounts.Count)
         {
             var memberAccount = _memberAccounts[_inviteIndex];
@@ -170,7 +413,6 @@ public class DungeoneeringCoordinator
             }
         }
 
-        // All invites sent
         _logger.LogInformation("DUNGEON_COORD: All invites sent. Waiting for accepts.");
         _acceptIndex = 0;
         TransitionTo(CoordState.FormGroup_Accepting);
@@ -180,7 +422,6 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleAccepting(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Find a member that hasn't accepted yet
         if (_acceptIndex >= _memberAccounts.Count)
         {
             TransitionTo(CoordState.FormGroup_Verify);
@@ -193,7 +434,7 @@ public class DungeoneeringCoordinator
 
         _tickCount++;
         if (_tickCount < 3)
-            return null; // Small delay before accept
+            return null;
 
         _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite.", memberAccount);
         _acceptIndex++;
@@ -208,19 +449,39 @@ public class DungeoneeringCoordinator
         if (_tickCount < 10)
             return null;
 
-        // Check how many bots report a party leader
         var grouped = snapshots.Values.Count(s => s.PartyLeaderGuid != 0);
         _logger.LogInformation("DUNGEON_COORD: Group verify: {Grouped}/{Total} bots grouped.",
             grouped, snapshots.Count);
 
-        TransitionTo(CoordState.DispatchDungeoneering);
+        TransitionTo(CoordState.TeleportToRFC);
+        return null;
+    }
+
+    private ActionMessage? HandleTeleportToRFC(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (!_teleportedToRFC.Contains(requestingAccount))
+        {
+            _teleportedToRFC.Add(requestingAccount);
+            _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map})",
+                requestingAccount, RfcMapId);
+            return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+        }
+
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+        if (allAccounts.All(a => _teleportedToRFC.Contains(a)))
+        {
+            _logger.LogInformation("DUNGEON_COORD: All bots teleported to RFC. Waiting to settle.");
+            TransitionTo(CoordState.WaitForRFCSettle);
+        }
+
         return null;
     }
 
     private ActionMessage? HandleDispatchDungeoneering(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Send START_DUNGEONEERING to the requesting bot
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
         _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader})",
@@ -229,7 +490,6 @@ public class DungeoneeringCoordinator
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
 
-        // Track dispatches — once all bots have received the action, transition
         _tickCount++;
         if (_tickCount >= snapshots.Count * 2)
         {
@@ -242,7 +502,6 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Leader runs on its own via DungeoneeringTask — no coordinator overlay needed.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -252,11 +511,9 @@ public class DungeoneeringCoordinator
         if (!snapshots.TryGetValue(requestingAccount, out var mySnap))
             return null;
 
-        // Resolve spells for this account if not done
         if (!_spellsResolved.Contains(requestingAccount))
             ResolveSpells(requestingAccount, mySnap);
 
-        // Only overlay combat coordination when leader is in combat
         if (!IsInCombat(leaderSnap))
             return null;
 
@@ -304,16 +561,12 @@ public class DungeoneeringCoordinator
         var spellList = snap.Player?.SpellList;
         if (spellList == null || spellList.Count == 0) return;
 
-        // Try to find healing spells (any class)
         var healSpells = new Dictionary<string, uint[]>
         {
-            // Druid: Healing Touch, Rejuvenation
             ["HealingTouch"] = [5185, 5186, 5187, 5188, 5189],
             ["Rejuvenation"] = [774, 1058, 1430, 2090, 2091],
-            // Priest: Lesser Heal, Heal
             ["LesserHeal"] = [2050, 2052, 2053],
             ["Heal"] = [2054, 2055, 6063, 6064],
-            // Shaman: Healing Wave, Lesser Healing Wave
             ["HealingWave"] = [331, 332, 547, 913, 939],
             ["LesserHealingWave"] = [8004, 8008, 8010],
         };
@@ -328,7 +581,6 @@ public class DungeoneeringCoordinator
             }
         }
 
-        // DPS spells
         var dpsSpells = new Dictionary<string, uint[]>
         {
             ["LightningBolt"] = [403, 529, 548, 915, 943],
@@ -361,7 +613,7 @@ public class DungeoneeringCoordinator
         foreach (var kvp in snapshots)
         {
             var hp = GetHealthRatio(kvp.Value);
-            if (hp < lowestHp && hp > 0.01f) // Ignore dead members
+            if (hp < lowestHp && hp > 0.01f)
             {
                 lowestHp = hp;
                 lowest = kvp.Key;
@@ -402,6 +654,13 @@ public class DungeoneeringCoordinator
         var action = new ActionMessage { ActionType = actionType };
         if (stringParam != null)
             action.Parameters.Add(new RequestParameter { StringParam = stringParam });
+        return action;
+    }
+
+    private static ActionMessage MakeSendChatAction(string chatMessage)
+    {
+        var action = new ActionMessage { ActionType = ActionType.SendChat };
+        action.Parameters.Add(new RequestParameter { StringParam = chatMessage });
         return action;
     }
 

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using WoWStateManager.Clients;
 using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 
@@ -43,13 +44,15 @@ namespace WoWStateManager.Listeners
         private readonly int _coordinatorSuppressionSeconds;
 
         private readonly List<CharacterSettings> _characterSettings;
+        private readonly MangosSOAPClient? _soapClient;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
         private readonly bool _coordinatorDisabled;
 
-        public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
+        public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
+            _soapClient = soapClient;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
             _coordinatorDisabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
             if (_coordinatorDisabled)
@@ -314,7 +317,7 @@ namespace WoWStateManager.Listeners
                     ?? _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
 
-                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _logger);
+                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _characterSettings, _soapClient, _logger);
             }
 
             var action = _dungeoneeringCoordinator.GetAction(accountName, CurrentActivityMemberList);

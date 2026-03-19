@@ -250,7 +250,7 @@ public class ActionForwardingContractTests
     {
         var settings = accountNames.Select(a => new CharacterSettings { AccountName = a }).ToList();
         var logger = NullLoggerFactory.Instance.CreateLogger<CharacterStateSocketListener>();
-        return new CharacterStateSocketListener(settings, "127.0.0.1", 0, logger);
+        return new CharacterStateSocketListener(settings, "127.0.0.1", 0, null, logger);
     }
 
     [Fact]
