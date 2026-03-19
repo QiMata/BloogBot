@@ -196,6 +196,20 @@ namespace ForegroundBotRunner.Mem.Hooks
                     _lastStateChange = DateTime.UtcNow;
                     DiagLog($"STATE: {oldState} → {newState} (opcode=0x{opcode:X4} dir={direction})");
 
+                    // Cross-map transfer: pause ObjectManager IMMEDIATELY before WoW starts teardown.
+                    // ContinentId hasn't changed yet, so the polling loop's isContinentTransition check
+                    // won't catch it in time. PauseDuringTeleport is a volatile flag checked every poll.
+                    if (newState == State.Transferring)
+                    {
+                        Statics.ObjectManager.BeginTeleportPause();
+                        DiagLog("TRANSFER: ObjectManager paused (cross-map transfer)");
+                    }
+                    else if (oldState == State.Transferring && newState == State.InWorld)
+                    {
+                        Statics.ObjectManager.EndTeleportPause();
+                        DiagLog("TRANSFER: ObjectManager resumed (back in world)");
+                    }
+
                     try { OnStateChanged?.Invoke(oldState, newState); }
                     catch (Exception ex) { DiagLog($"OnStateChanged handler error: {ex.Message}"); }
                 }

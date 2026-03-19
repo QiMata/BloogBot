@@ -47,7 +47,7 @@ public class DungeoneeringCoordinator
 
     private readonly ILogger _logger;
     private readonly MangosSOAPClient? _soapClient;
-    private readonly string _leaderAccount;
+    private string _leaderAccount; // Mutable for leader failover
     private readonly List<string> _memberAccounts;
     private readonly List<CharacterSettings> _allSettings;
     private readonly ConcurrentDictionary<string, string> _accountToCharName = new();
@@ -93,6 +93,11 @@ public class DungeoneeringCoordinator
     private readonly ConcurrentDictionary<string, uint> _healSpells = new();
     private readonly ConcurrentDictionary<string, uint> _damageSpells = new();
     private readonly ConcurrentDictionary<string, byte> _spellsResolved = new();
+
+    // Leader failover — promote a BG bot if FG leader drops
+    private DateTime _leaderLastSeen = DateTime.UtcNow;
+    private const double LEADER_FAILOVER_TIMEOUT_SEC = 15.0;
+    private bool _leaderFailoverTriggered;
 
     public CoordState State => _state;
 
@@ -736,13 +741,40 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
+        // --- Leader failover: if leader drops (FG crash), promote first available BG bot ---
+        bool leaderAlive = snapshots.TryGetValue(_leaderAccount, out var leaderSnap)
+                           && leaderSnap.ScreenState == "InWorld";
+        if (leaderAlive)
+        {
+            _leaderLastSeen = DateTime.UtcNow;
+        }
+        else if (!_leaderFailoverTriggered
+                 && (DateTime.UtcNow - _leaderLastSeen).TotalSeconds > LEADER_FAILOVER_TIMEOUT_SEC)
+        {
+            // Find first BG bot that's alive and on the RFC map
+            var newLeader = _memberAccounts.FirstOrDefault(a =>
+                snapshots.TryGetValue(a, out var s) && s.ScreenState == "InWorld"
+                && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
+            if (newLeader != null)
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' lost (no snapshot for {Timeout}s). Promoting '{NewLeader}' to leader.",
+                    _leaderAccount, LEADER_FAILOVER_TIMEOUT_SEC, newLeader);
+                _leaderAccount = newLeader;
+                _leaderFailoverTriggered = true;
+                _leaderLastSeen = DateTime.UtcNow;
+                // Clear dispatch tracking so the new leader gets re-dispatched as leader
+                _dungeoneeringDispatched.TryRemove(newLeader, out _);
+            }
+        }
+
         // If the leader missed the DispatchDungeoneering window (FG bot polls slower),
-        // send them StartDungeoneering now on their first poll in DungeonInProgress.
+        // or was just promoted via failover, send them StartDungeoneering now.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
             if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
             {
-                _logger.LogInformation("DUNGEON_COORD: Late-dispatching START_DUNGEONEERING to leader '{Leader}'", _leaderAccount);
+                _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (failover={Failover})",
+                    _leaderAccount, _leaderFailoverTriggered);
                 var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
                 action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
                 return action;
@@ -750,7 +782,7 @@ public class DungeoneeringCoordinator
             return null; // Leader already dispatched — no heal/DPS overlay for leader
         }
 
-        if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap))
+        if (!snapshots.TryGetValue(_leaderAccount, out leaderSnap))
             return null;
 
         if (!snapshots.TryGetValue(requestingAccount, out var mySnap))

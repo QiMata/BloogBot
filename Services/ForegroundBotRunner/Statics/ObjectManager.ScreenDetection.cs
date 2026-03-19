@@ -60,24 +60,32 @@ namespace ForegroundBotRunner.Statics
         public static volatile bool PauseNativeCallsDuringWorldEntry = false;
 
         /// <summary>
-        /// Pause object enumeration during same-map teleports (MSG_MOVE_TELEPORT).
+        /// Pause object enumeration during teleports (same-map and cross-map).
         /// WoW reshuffles its internal object structures during teleport — reading memory is unsafe.
-        /// Set by ConnectionStateMachine when MSG_MOVE_TELEPORT is received, cleared on ACK.
+        /// Set by ConnectionStateMachine on:
+        ///   - MSG_MOVE_TELEPORT (same-map), cleared on ACK
+        ///   - SMSG_TRANSFER_PENDING (cross-map), cleared on SMSG_LOGIN_VERIFY_WORLD
         /// Auto-expires after TeleportPauseTimeoutMs as a safety net.
         /// </summary>
         private static long _teleportPauseUntilTicks = DateTime.MinValue.Ticks;
-        private const int TeleportPauseTimeoutMs = 3000;
+        private const int TeleportPauseTimeoutMs = 5000;
 
-        /// <summary>True when a same-map teleport is being processed and memory reads are unsafe.</summary>
+        /// <summary>True when a teleport is being processed and memory reads are unsafe.</summary>
         public static bool PauseDuringTeleport => DateTime.UtcNow.Ticks < Interlocked.Read(ref _teleportPauseUntilTicks);
 
-        /// <summary>Set by ConnectionStateMachine when MSG_MOVE_TELEPORT received.</summary>
+        /// <summary>
+        /// Called by ConnectionStateMachine when teleport begins (same-map or cross-map).
+        /// Blocks SimplePolling from calling EnumerateVisibleObjects.
+        /// </summary>
         public static void BeginTeleportPause()
         {
             Interlocked.Exchange(ref _teleportPauseUntilTicks, DateTime.UtcNow.AddMilliseconds(TeleportPauseTimeoutMs).Ticks);
         }
 
-        /// <summary>Set by ConnectionStateMachine when MSG_MOVE_TELEPORT_ACK sent.</summary>
+        /// <summary>
+        /// Called by ConnectionStateMachine when teleport completes
+        /// (MSG_MOVE_TELEPORT_ACK for same-map, SMSG_LOGIN_VERIFY_WORLD for cross-map).
+        /// </summary>
         public static void EndTeleportPause()
         {
             Interlocked.Exchange(ref _teleportPauseUntilTicks, DateTime.MinValue.Ticks);

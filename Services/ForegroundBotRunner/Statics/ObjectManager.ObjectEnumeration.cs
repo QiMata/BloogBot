@@ -125,6 +125,14 @@ namespace ForegroundBotRunner.Statics
             {
                 try
                 {
+                    // Double-check safety: if a cross-map transfer started between the
+                    // SimplePolling guard check and this delegate executing on the main thread,
+                    // bail out immediately to avoid ACCESS_VIOLATION during object teardown.
+                    if (PauseDuringTeleport || IsContinentTransition)
+                    {
+                        return;
+                    }
+
                     if (!IsLoggedIn)
                     {
                         return;
