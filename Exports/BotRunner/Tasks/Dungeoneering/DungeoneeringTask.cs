@@ -244,18 +244,40 @@ public class DungeoneeringTask : BotTask, IBotTask
         BotTasks.Push(Container.ClassContainer.CreateRestTask(BotContext));
     }
 
+    private int _leaderLostTicks;
+    private const int LeaderLostThreshold = 20; // ~10s at 500ms tick — then fall back to autonomous waypoints
+
     private void HandleFollowLeader(IWoWPlayer player)
     {
+        // Combat interrupts — check for nearby hostiles to pull
+        var pullTarget = FindPullTarget(player);
+        if (pullTarget != null)
+        {
+            TransitionTo(DungeonState.PullHostiles);
+            return;
+        }
+
         // Non-leader: follow party leader
         var leader = ObjectManager.PartyLeader;
         if (leader?.Position == null)
         {
+            _leaderLostTicks++;
+            if (_leaderLostTicks >= LeaderLostThreshold)
+            {
+                // Leader invisible too long — navigate waypoints autonomously
+                if (_updateCount % 50 == 2)
+                    Log.Warning("[DUNGEONEERING] Follower lost leader for {Ticks} ticks — navigating waypoints autonomously. PartyMembers={Count}",
+                        _leaderLostTicks, ObjectManager.PartyMembers.Count());
+                HandleNavigateToWaypoint(player);
+                return;
+            }
             if (_updateCount % 50 == 2)
-                Log.Warning("[DUNGEONEERING] Follower has no party leader — cannot follow. PartyMembers={Count}",
-                    ObjectManager.PartyMembers.Count());
-            ObjectManager.StopAllMovement();
+                Log.Warning("[DUNGEONEERING] Follower has no party leader — waiting ({Ticks}/{Threshold}). PartyMembers={Count}",
+                    _leaderLostTicks, LeaderLostThreshold, ObjectManager.PartyMembers.Count());
             return;
         }
+
+        _leaderLostTicks = 0; // Reset when leader is visible
 
         var dist = player.Position.DistanceTo(leader.Position);
 

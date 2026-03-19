@@ -116,7 +116,8 @@ namespace WoWSharpClient
         }
 
         /// <summary>
-        /// Units that are alive and actively threatening the player (targeting or in combat).
+        /// Units that are alive and have a hostile faction reaction (Hated/Hostile/Unfriendly/Neutral).
+        /// Matches ForegroundBotRunner ObjectManager.Combat.cs logic.
         /// UnitReaction is computed from FactionData when UNIT_FIELD_FACTIONTEMPLATE is received.
         /// </summary>
         public IEnumerable<IWoWUnit> Hostiles
@@ -127,7 +128,11 @@ namespace WoWSharpClient
                 if (playerGuid == 0) return [];
                 return Objects.OfType<IWoWUnit>()
                     .Where(u => u.Health > 0 && u.Guid != playerGuid)
-                    .Where(u => u.TargetGuid == playerGuid || u.IsInCombat);
+                    .Where(u =>
+                        u.UnitReaction == UnitReaction.Hated ||
+                        u.UnitReaction == UnitReaction.Hostile ||
+                        u.UnitReaction == UnitReaction.Unfriendly ||
+                        u.UnitReaction == UnitReaction.Neutral);
             }
         }
 
