@@ -105,6 +105,20 @@ namespace ForegroundBotRunner.Mem.Hooks
         /// <summary>Fired when state changes. Args: (oldState, newState).</summary>
         public event Action<State, State>? OnStateChanged;
 
+        /// <summary>
+        /// Callback invoked when teleport pause should begin.
+        /// Defaults to ObjectManager.BeginTeleportPause() in production.
+        /// Injectable for unit testing.
+        /// </summary>
+        public Action BeginTeleportPauseCallback { get; set; } = () => Statics.ObjectManager.BeginTeleportPause();
+
+        /// <summary>
+        /// Callback invoked when teleport pause should end.
+        /// Defaults to ObjectManager.EndTeleportPause() in production.
+        /// Injectable for unit testing.
+        /// </summary>
+        public Action EndTeleportPauseCallback { get; set; } = () => Statics.ObjectManager.EndTeleportPause();
+
         static ConnectionStateMachine()
         {
             string wowDir;
@@ -175,13 +189,13 @@ namespace ForegroundBotRunner.Mem.Hooks
             if (direction == PacketDirection.Recv && opcode == Opcodes.MSG_MOVE_TELEPORT)
             {
                 Interlocked.Exchange(ref _teleportCooldownUntilTicks, DateTime.UtcNow.AddMilliseconds(TeleportCooldownMs).Ticks);
-                Statics.ObjectManager.BeginTeleportPause();
+                BeginTeleportPauseCallback();
                 DiagLog($"TELEPORT: same-map teleport received, ObjectManager paused for {TeleportCooldownMs}ms");
             }
             else if (direction == PacketDirection.Send && opcode == Opcodes.MSG_MOVE_TELEPORT_ACK)
             {
                 Interlocked.Exchange(ref _teleportCooldownUntilTicks, DateTime.MinValue.Ticks);
-                Statics.ObjectManager.EndTeleportPause();
+                EndTeleportPauseCallback();
                 DiagLog("TELEPORT: ACK sent, ObjectManager resumed");
             }
 
@@ -201,12 +215,12 @@ namespace ForegroundBotRunner.Mem.Hooks
                     // won't catch it in time. PauseDuringTeleport is a volatile flag checked every poll.
                     if (newState == State.Transferring)
                     {
-                        Statics.ObjectManager.BeginTeleportPause();
+                        BeginTeleportPauseCallback();
                         DiagLog("TRANSFER: ObjectManager paused (cross-map transfer)");
                     }
                     else if (oldState == State.Transferring && newState == State.InWorld)
                     {
-                        Statics.ObjectManager.EndTeleportPause();
+                        EndTeleportPauseCallback();
                         DiagLog("TRANSFER: ObjectManager resumed (back in world)");
                     }
 
