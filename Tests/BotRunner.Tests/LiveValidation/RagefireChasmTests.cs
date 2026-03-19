@@ -291,16 +291,172 @@ public class RagefireChasmTests
     }
 
     /// <summary>
-    /// Full dungeon run: form group, teleport to entrance, enter RFC, clear encounters.
-    /// This is the comprehensive integration test — requires DungeoneeringTask to be implemented.
+    /// Full dungeon run: restart with RFC config, teleport all bots into RFC (map 389),
+    /// let DungeoneeringCoordinator handle group formation + START_DUNGEONEERING dispatch,
+    /// then observe forward progress through waypoints and combat engagement.
+    ///
+    /// The DungeoneeringCoordinator (3+ bot mode) auto-activates in StateManager and
+    /// drives: WaitingForBots → FormGroup → DispatchDungeoneering → DungeonInProgress.
     /// </summary>
     [SkippableFact]
     public async Task RFC_FullDungeonRun()
     {
-        // This test will be enabled once DungeoneeringTask (P5.3) is restored and
-        // the dungeoneering coordinator (P5.4) is implemented in StateManager.
-        global::Tests.Infrastructure.Skip.If(true,
-            "RFC full dungeon run requires DungeoneeringTask implementation (P5.3/P5.4). " +
-            "Run RFC_AllBotsEnterWorld, RFC_FormRaidGroup, and RFC_TeleportToEntrance for incremental validation.");
+        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
+        _output.WriteLine("Restarting StateManager with RFC config...");
+        await _bot.RestartWithSettingsAsync(settingsPath);
+        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+
+        // Wait for at least 3 bots to enter world (coordinator needs 3+)
+        var sw = Stopwatch.StartNew();
+        var bestCount = 0;
+        while (sw.Elapsed < TimeSpan.FromSeconds(90))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            if (_bot.AllBots.Count > bestCount)
+            {
+                bestCount = _bot.AllBots.Count;
+                _output.WriteLine($"[{sw.Elapsed.TotalSeconds:F0}s] Bots in world: {bestCount}/{ExpectedBotCount}");
+            }
+            if (bestCount >= 3)
+                break;
+            await Task.Delay(2000);
+        }
+        Assert.True(bestCount >= 3, $"Need at least 3 bots in world for dungeoneering (got {bestCount})");
+
+        // Teleport all bots directly into RFC interior (map 389)
+        // First waypoint is (3, -11, -18) — teleport slightly ahead at Z+3
+        const float rfcStartX = 3f;
+        const float rfcStartY = -11f;
+        const float rfcStartZ = -15f; // Z+3 from waypoint at -18
+        _output.WriteLine($"Teleporting {_bot.AllBots.Count} bots into RFC (map {RfcMap})...");
+        foreach (var snap in _bot.AllBots)
+        {
+            await _bot.BotTeleportAsync(snap.AccountName, RfcMap, rfcStartX, rfcStartY, rfcStartZ);
+            await Task.Delay(500);
+        }
+
+        // Wait for bots to arrive in RFC (map 389) — cross-map teleport takes time
+        var sw2 = Stopwatch.StartNew();
+        var insideRfc = 0;
+        while (sw2.Elapsed < TimeSpan.FromSeconds(45))
+        {
+            await Task.Delay(2000);
+            await _bot.RefreshSnapshotsAsync();
+            insideRfc = _bot.AllBots.Count(s =>
+                (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
+            _output.WriteLine($"[{sw2.Elapsed.TotalSeconds:F0}s] Bots inside RFC: {insideRfc}/{_bot.AllBots.Count}");
+            if (insideRfc >= 2)
+                break;
+        }
+        Assert.True(insideRfc >= 1, $"At least 1 bot should be inside RFC map 389 (got {insideRfc})");
+
+        // Now the DungeoneeringCoordinator auto-handles:
+        //   1. Group formation (invite/accept)
+        //   2. START_DUNGEONEERING dispatch
+        //   3. DungeonInProgress combat support
+        //
+        // Wait for group formation + dungeoneering to start, then observe progress.
+        // DungeoneeringTask leader navigates waypoints; followers follow within 15y.
+
+        // Phase 1: Wait for group to form (partyLeaderGuid != 0)
+        var groupFormed = false;
+        var sw3 = Stopwatch.StartNew();
+        while (sw3.Elapsed < TimeSpan.FromSeconds(60))
+        {
+            await Task.Delay(3000);
+            await _bot.RefreshSnapshotsAsync();
+            var grouped = _bot.AllBots.Count(s => s.PartyLeaderGuid != 0);
+            if (grouped >= 2 && !groupFormed)
+            {
+                groupFormed = true;
+                _output.WriteLine($"[{sw3.Elapsed.TotalSeconds:F0}s] Group formed: {grouped} bots grouped");
+            }
+            if (groupFormed)
+                break;
+        }
+        _output.WriteLine($"Group formed: {groupFormed}");
+
+        // Phase 2: Observe dungeon progress for up to 3 minutes.
+        // Track: position advancement (Y coordinate decreases through RFC waypoints),
+        // combat engagement (unit flags), and current action type.
+        var maxRunTime = TimeSpan.FromMinutes(3);
+        var sw4 = Stopwatch.StartNew();
+        var furthestY = float.MaxValue; // RFC waypoints go south (Y decreases)
+        var combatSeen = false;
+        var dungeoneeringActionSeen = false;
+        var lastLogTime = TimeSpan.Zero;
+
+        while (sw4.Elapsed < maxRunTime)
+        {
+            await Task.Delay(3000);
+            await _bot.RefreshSnapshotsAsync();
+
+            foreach (var snap in _bot.AllBots)
+            {
+                var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                if (mapId == RfcMap && pos != null && pos.Y < furthestY)
+                    furthestY = pos.Y;
+
+                // Check for combat (UNIT_FLAG_IN_COMBAT = 0x80000)
+                var unitFlags = snap.Player?.Unit?.UnitFlags ?? 0;
+                if ((unitFlags & 0x80000) != 0)
+                    combatSeen = true;
+
+                // Check for dungeoneering action
+                if (snap.CurrentAction?.ActionType == ActionType.StartDungeoneering)
+                    dungeoneeringActionSeen = true;
+            }
+
+            // Log progress every 15 seconds
+            if (sw4.Elapsed - lastLogTime >= TimeSpan.FromSeconds(15))
+            {
+                lastLogTime = sw4.Elapsed;
+                _output.WriteLine($"[{sw4.Elapsed.TotalSeconds:F0}s] Progress: furthestY={furthestY:F0}, " +
+                    $"combat={combatSeen}, dungeoneering={dungeoneeringActionSeen}");
+
+                foreach (var snap in _bot.AllBots)
+                {
+                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                    var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    var action = snap.CurrentAction?.ActionType.ToString() ?? "none";
+                    var prevAction = snap.PreviousAction?.ActionType.ToString() ?? "none";
+                    _output.WriteLine($"  {snap.AccountName}: map={mapId}, " +
+                        $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}), " +
+                        $"action={action}, prev={prevAction}");
+                }
+            }
+
+            // Early success: if a bot has progressed past Y=-100 (past first encounter area)
+            if (furthestY < -100f)
+            {
+                _output.WriteLine($"Significant forward progress detected (Y={furthestY:F0})");
+                break;
+            }
+        }
+
+        // Final state dump
+        _output.WriteLine("\n=== Final Dungeon State ===");
+        foreach (var snap in _bot.AllBots)
+        {
+            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            var hp = snap.Player?.Unit?.Health ?? 0;
+            var maxHp = snap.Player?.Unit?.MaxHealth ?? 0;
+            var unitFlags = snap.Player?.Unit?.UnitFlags ?? 0;
+            _output.WriteLine($"  {snap.AccountName}: map={mapId}, " +
+                $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}), " +
+                $"hp={hp}/{maxHp}, flags=0x{unitFlags:X}");
+        }
+        _output.WriteLine($"Group formed: {groupFormed}, Combat seen: {combatSeen}, " +
+            $"Dungeoneering dispatched: {dungeoneeringActionSeen}, " +
+            $"Furthest Y: {furthestY:F0}");
+
+        // Assertions:
+        // 1. At least 1 bot entered RFC
+        Assert.True(insideRfc >= 1, $"At least 1 bot should be inside RFC (got {insideRfc})");
+        // 2. Group was formed OR dungeoneering was dispatched
+        Assert.True(groupFormed || dungeoneeringActionSeen,
+            "DungeoneeringCoordinator should have formed a group or dispatched dungeoneering");
     }
 }
