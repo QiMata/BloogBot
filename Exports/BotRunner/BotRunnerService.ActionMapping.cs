@@ -88,6 +88,7 @@ namespace BotRunner
             Communication.ActionType.StartGatheringRoute => CharacterAction.StartGatheringRoute,
             Communication.ActionType.CheckMail => CharacterAction.CheckMail,
             Communication.ActionType.StartDungeoneering => CharacterAction.StartDungeoneering,
+            Communication.ActionType.ConvertToRaid => CharacterAction.ConvertToRaid,
             _ => null,
         };
 

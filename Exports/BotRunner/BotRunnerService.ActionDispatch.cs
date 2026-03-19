@@ -611,6 +611,14 @@ namespace BotRunner
                         break;
                     }
 
+                    case CharacterAction.ConvertToRaid:
+                        builder.Do("Convert Party to Raid", time =>
+                        {
+                            _objectManager.ConvertToRaid();
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
                     case CharacterAction.StartDungeoneering:
                     {
                         // Params: [0] = isLeader (int, 1=leader 0=follower)

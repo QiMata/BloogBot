@@ -32,8 +32,12 @@ public class DungeoneeringCoordinator
         PrepareCharacters,
         TeleportToOrgrimmar,
         WaitForTeleportSettle,
-        FormGroup_Inviting,
-        FormGroup_Accepting,
+        FormGroup_LeaveOldGroups,   // All bots leave any stale group from prior runs
+        FormGroup_Inviting,         // Invite first 4 (party cap = 5 incl leader)
+        FormGroup_Accepting,        // First 4 accept
+        FormGroup_ConvertToRaid,    // Leader converts party → raid
+        FormGroup_InvitingRest,     // Invite remaining members
+        FormGroup_AcceptingRest,    // Remaining members accept
         FormGroup_Verify,
         TeleportToRFC,
         WaitForRFCSettle,
@@ -50,6 +54,7 @@ public class DungeoneeringCoordinator
 
     private CoordState _state = CoordState.WaitingForBots;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
+    private DateTime _phaseStartedAt = DateTime.UtcNow;
     private int _tickCount;
     private int _inviteIndex;
     private int _acceptIndex;
@@ -73,6 +78,11 @@ public class DungeoneeringCoordinator
     private const float RfcStartX = 3f;
     private const float RfcStartY = -11f;
     private const float RfcStartZ = -15f; // Z+3 from waypoint at -18
+
+    // Vanilla WoW party limit: 5 members (including leader). Must convert to raid for 6+.
+    private const int PARTY_SIZE_LIMIT = 4; // 4 invites = 5 total with leader
+    private bool _raidConvertSent;
+    private readonly ConcurrentDictionary<string, byte> _leftOldGroup = new();
 
     // Throttle follow/heal actions per account — concurrent for multi-thread safety
     private readonly ConcurrentDictionary<string, DateTime> _lastActionSent = new();
@@ -123,7 +133,10 @@ public class DungeoneeringCoordinator
 
         // Timeout protection for group formation states
         var elapsed = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds;
-        if (_state is CoordState.FormGroup_Inviting or CoordState.FormGroup_Accepting or CoordState.FormGroup_Verify
+        if (_state is CoordState.FormGroup_LeaveOldGroups or CoordState.FormGroup_Inviting
+            or CoordState.FormGroup_Accepting or CoordState.FormGroup_ConvertToRaid
+            or CoordState.FormGroup_InvitingRest or CoordState.FormGroup_AcceptingRest
+            or CoordState.FormGroup_Verify
             && elapsed > 60)
         {
             _logger.LogWarning("DUNGEON_COORD: State {State} timed out after {Elapsed:F0}s, advancing", _state, elapsed);
@@ -135,9 +148,13 @@ public class DungeoneeringCoordinator
             CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
             CoordState.PrepareCharacters => HandlePrepareCharacters(requestingAccount, snapshots),
             CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
-            CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_Inviting, 1),
+            CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_LeaveOldGroups, 1),
+            CoordState.FormGroup_LeaveOldGroups => HandleLeaveOldGroups(requestingAccount, snapshots),
             CoordState.FormGroup_Inviting => HandleInviting(requestingAccount, snapshots),
             CoordState.FormGroup_Accepting => HandleAccepting(requestingAccount, snapshots),
+            CoordState.FormGroup_ConvertToRaid => HandleConvertToRaid(requestingAccount, snapshots),
+            CoordState.FormGroup_InvitingRest => HandleInvitingRest(requestingAccount, snapshots),
+            CoordState.FormGroup_AcceptingRest => HandleAcceptingRest(requestingAccount, snapshots),
             CoordState.FormGroup_Verify => HandleVerify(requestingAccount, snapshots),
             CoordState.TeleportToRFC => HandleTeleportToRFC(requestingAccount, snapshots),
             CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, RfcMapId),
@@ -181,8 +198,7 @@ public class DungeoneeringCoordinator
         else
         {
             _logger.LogWarning("DUNGEON_COORD: No SOAP client — skipping character preparation.");
-            _inviteIndex = 0;
-            TransitionTo(CoordState.FormGroup_Inviting);
+            TransitionTo(CoordState.FormGroup_LeaveOldGroups);
         }
         return null;
     }
@@ -392,59 +408,266 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleInviting(string requestingAccount,
+    private ActionMessage? HandleLeaveOldGroups(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Only act when leader polls
-        if (!requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        _tickCount++;
-        if (_tickCount % 3 != 1)
-            return null;
-
-        while (_inviteIndex < _memberAccounts.Count)
+        // Each bot leaves any stale group and declines pending invites
+        if (_leftOldGroup.TryAdd(requestingAccount, 0))
         {
-            var memberAccount = _memberAccounts[_inviteIndex];
-            _inviteIndex++;
-
-            if (_accountToCharName.TryGetValue(memberAccount, out var charName)
-                && snapshots.TryGetValue(memberAccount, out var snap)
-                && snap.ScreenState == "InWorld")
-            {
-                _logger.LogInformation("DUNGEON_COORD: Leader inviting '{CharName}' ({Account})",
-                    charName, memberAccount);
-                return MakeAction(ActionType.SendGroupInvite, charName);
-            }
+            _logger.LogInformation("DUNGEON_COORD: {Account} leaving old group + declining pending invites", requestingAccount);
+            // LeaveGroup is a no-op if not in a group; DeclineGroupInvite is a no-op if no pending invite
+            return MakeAction(ActionType.LeaveGroup);
         }
 
-        _logger.LogInformation("DUNGEON_COORD: All invites sent. Waiting for accepts.");
-        _acceptIndex = 0;
-        TransitionTo(CoordState.FormGroup_Accepting);
+        // Check if all bots have left
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+        if (!allAccounts.All(a => _leftOldGroup.ContainsKey(a)))
+            return null;
+
+        // Wait a few ticks for leave to propagate on the server
+        _tickCount++;
+        if (_tickCount < 6)
+            return null;
+
+        _logger.LogInformation("DUNGEON_COORD: All bots left old groups. Starting invite phase.");
+        _inviteIndex = 0;
+        TransitionTo(CoordState.FormGroup_Inviting);
         return null;
     }
 
+    /// <summary>
+    /// Invite+Accept one member at a time: leader invites → member accepts → verify grouped → next.
+    /// MaNGOS only allows one outstanding invite per group, so we must serialize.
+    /// Phase: _inviteIndex tracks which member we're working on. Within each member:
+    ///   _tickCount 0: send invite (leader action)
+    ///   _tickCount 1+: send accept (member action), then wait for PartyLeaderGuid
+    /// </summary>
+    private enum InvitePhase { SendInvite, SendAccept, WaitForGrouped }
+    private volatile int _currentInvitePhaseInt; // 0=SendInvite, 1=SendAccept, 2=WaitForGrouped
+    private InvitePhase CurrentInvitePhase
+    {
+        get => (InvitePhase)_currentInvitePhaseInt;
+        set => _currentInvitePhaseInt = (int)value;
+    }
+
+    private ActionMessage? HandleInviting(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        var inviteLimit = Math.Min(PARTY_SIZE_LIMIT, _memberAccounts.Count);
+        if (_inviteIndex >= inviteLimit)
+        {
+            // All batch 1 members processed — move to raid conversion or verify
+            if (_memberAccounts.Count > PARTY_SIZE_LIMIT)
+            {
+                var grouped = _memberAccounts.Take(inviteLimit).Count(m =>
+                    snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
+                _logger.LogInformation("DUNGEON_COORD: Batch 1 complete: {Grouped}/{Limit} grouped. Converting to raid.",
+                    grouped, inviteLimit);
+                TransitionTo(CoordState.FormGroup_ConvertToRaid);
+            }
+            else
+            {
+                TransitionTo(CoordState.FormGroup_Verify);
+            }
+            return null;
+        }
+
+        var memberAccount = _memberAccounts[_inviteIndex];
+
+        switch (CurrentInvitePhase)
+        {
+            case InvitePhase.SendInvite:
+                // Only leader sends invite
+                if (!requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                if (_accountToCharName.TryGetValue(memberAccount, out var charName)
+                    && snapshots.TryGetValue(memberAccount, out var snap)
+                    && snap.ScreenState == "InWorld")
+                {
+                    _logger.LogInformation("DUNGEON_COORD: Leader inviting '{CharName}' ({Account}) [{Idx}/{Limit}]",
+                        charName, memberAccount, _inviteIndex + 1, inviteLimit);
+                    CurrentInvitePhase = InvitePhase.SendAccept;
+                    _phaseStartedAt = DateTime.UtcNow;
+                    return MakeAction(ActionType.SendGroupInvite, charName);
+                }
+                // Skip if not in world
+                _inviteIndex++;
+                return null;
+
+            case InvitePhase.SendAccept:
+                // Wait 2s for invite to arrive at the member
+                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 2.0)
+                    return null;
+
+                // Only the target member can accept
+                if (!requestingAccount.Equals(memberAccount, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite.", memberAccount);
+                CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                _phaseStartedAt = DateTime.UtcNow;
+                return MakeAction(ActionType.AcceptGroupInvite);
+
+            case InvitePhase.WaitForGrouped:
+                // Atomic transition: only ONE thread advances the invite index
+                if (Interlocked.CompareExchange(ref _currentInvitePhaseInt,
+                        (int)InvitePhase.SendInvite, (int)InvitePhase.WaitForGrouped) != (int)InvitePhase.WaitForGrouped)
+                    return null; // Another thread already claimed this transition
+
+                var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
+                var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
+                if (isGrouped || waitElapsed > 5.0) // Wait up to 5s
+                {
+                    if (isGrouped)
+                        _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped.", memberAccount);
+                    else
+                        _logger.LogWarning("DUNGEON_COORD: '{Account}' not showing as grouped after timeout, continuing.", memberAccount);
+
+                    _inviteIndex++;
+                    _tickCount = 0;
+                    // Phase already set to SendInvite by CompareExchange above
+                }
+                else
+                {
+                    // Not ready yet — restore WaitForGrouped so we check again next tick
+                    CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                }
+                return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// HandleAccepting is no longer used — invite+accept is merged into HandleInviting.
+    /// Kept as a no-op redirect to FormGroup_Verify for safety.
+    /// </summary>
     private ActionMessage? HandleAccepting(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        if (_acceptIndex >= _memberAccounts.Count)
+        TransitionTo(CoordState.FormGroup_Verify);
+        return null;
+    }
+
+    private ActionMessage? HandleConvertToRaid(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Only leader can convert to raid
+        if (!requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!_raidConvertSent)
+        {
+            _raidConvertSent = true;
+            _logger.LogInformation("DUNGEON_COORD: Leader converting party to raid.");
+            return MakeAction(ActionType.ConvertToRaid);
+        }
+
+        // Wait for the conversion to take effect — verify batch 1 members still grouped
+        _tickCount++;
+        var grouped = _memberAccounts.Take(PARTY_SIZE_LIMIT).Count(m =>
+            snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
+
+        if (_tickCount < 15 && grouped < PARTY_SIZE_LIMIT)
+        {
+            if (_tickCount % 5 == 0)
+                _logger.LogInformation("DUNGEON_COORD: Waiting for raid conversion: {Grouped}/{Expected} batch 1 members still grouped",
+                    grouped, PARTY_SIZE_LIMIT);
+            return null;
+        }
+
+        _logger.LogInformation("DUNGEON_COORD: Raid conversion done ({Grouped}/{Expected} batch 1 grouped). Inviting remaining {Count} members.",
+            grouped, PARTY_SIZE_LIMIT, _memberAccounts.Count - PARTY_SIZE_LIMIT);
+        _inviteIndex = PARTY_SIZE_LIMIT; // Start from where we left off
+        TransitionTo(CoordState.FormGroup_InvitingRest);
+        return null;
+    }
+
+    /// <summary>
+    /// Invite+Accept remaining members (after raid conversion), one at a time.
+    /// Same serialized pattern as HandleInviting.
+    /// </summary>
+    private ActionMessage? HandleInvitingRest(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (_inviteIndex >= _memberAccounts.Count)
         {
             TransitionTo(CoordState.FormGroup_Verify);
             return null;
         }
 
-        var memberAccount = _memberAccounts[_acceptIndex];
-        if (!requestingAccount.Equals(memberAccount, StringComparison.OrdinalIgnoreCase))
-            return null;
+        var memberAccount = _memberAccounts[_inviteIndex];
 
-        _tickCount++;
-        if (_tickCount < 3)
-            return null;
+        switch (CurrentInvitePhase)
+        {
+            case InvitePhase.SendInvite:
+                if (!requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
+                    return null;
 
-        _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite.", memberAccount);
-        _acceptIndex++;
-        _tickCount = 0;
-        return MakeAction(ActionType.AcceptGroupInvite);
+                if (_accountToCharName.TryGetValue(memberAccount, out var charName)
+                    && snapshots.TryGetValue(memberAccount, out var snap)
+                    && snap.ScreenState == "InWorld")
+                {
+                    _logger.LogInformation("DUNGEON_COORD: Leader inviting '{CharName}' ({Account}) [batch 2, {Idx}/{Total}]",
+                        charName, memberAccount, _inviteIndex - PARTY_SIZE_LIMIT + 1, _memberAccounts.Count - PARTY_SIZE_LIMIT);
+                    CurrentInvitePhase = InvitePhase.SendAccept;
+                    _phaseStartedAt = DateTime.UtcNow;
+                    return MakeAction(ActionType.SendGroupInvite, charName);
+                }
+                _inviteIndex++;
+                return null;
+
+            case InvitePhase.SendAccept:
+                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 2.0)
+                    return null;
+
+                if (!requestingAccount.Equals(memberAccount, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite [batch 2].", memberAccount);
+                CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                _phaseStartedAt = DateTime.UtcNow;
+                return MakeAction(ActionType.AcceptGroupInvite);
+
+            case InvitePhase.WaitForGrouped:
+                // Atomic transition: only ONE thread advances the invite index
+                if (Interlocked.CompareExchange(ref _currentInvitePhaseInt,
+                        (int)InvitePhase.SendInvite, (int)InvitePhase.WaitForGrouped) != (int)InvitePhase.WaitForGrouped)
+                    return null; // Another thread already claimed this transition
+
+                var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
+                var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
+                if (isGrouped || waitElapsed > 5.0)
+                {
+                    if (isGrouped)
+                        _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped [batch 2].", memberAccount);
+                    else
+                        _logger.LogWarning("DUNGEON_COORD: '{Account}' not showing as grouped after {Elapsed:F1}s [batch 2], continuing.", memberAccount, waitElapsed);
+
+                    _inviteIndex++;
+                    // Phase already set to SendInvite by CompareExchange above
+                }
+                else
+                {
+                    // Not ready yet — restore WaitForGrouped so we check again next tick
+                    CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                }
+                return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// HandleAcceptingRest is no longer used — merged into HandleInvitingRest.
+    /// </summary>
+    private ActionMessage? HandleAcceptingRest(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        TransitionTo(CoordState.FormGroup_Verify);
+        return null;
     }
 
     private ActionMessage? HandleVerify(string requestingAccount,
