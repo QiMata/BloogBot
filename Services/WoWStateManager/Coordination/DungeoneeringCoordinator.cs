@@ -513,8 +513,19 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
+        // If the leader missed the DispatchDungeoneering window (FG bot polls slower),
+        // send them StartDungeoneering now on their first poll in DungeonInProgress.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
-            return null;
+        {
+            if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
+            {
+                _logger.LogInformation("DUNGEON_COORD: Late-dispatching START_DUNGEONEERING to leader '{Leader}'", _leaderAccount);
+                var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
+                action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
+                return action;
+            }
+            return null; // Leader already dispatched — no heal/DPS overlay for leader
+        }
 
         if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap))
             return null;
