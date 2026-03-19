@@ -277,10 +277,20 @@ namespace ForegroundBotRunner
                                 DiagLog($"Failed to suppress Lua errors: {ex.Message}");
                             }
 
+                            // Set WWOW_DISABLE_PACKET_HOOKS=1 to skip ALL hook installation (crash diagnostics)
+                            var disableHooks = Environment.GetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS");
+
                             try
                             {
-                                SignalEventManager.InitializeHooks();
-                                DiagLog("SignalEventManager hooks initialized");
+                                if (disableHooks == "1")
+                                {
+                                    DiagLog("SignalEventManager hooks SKIPPED (WWOW_DISABLE_PACKET_HOOKS=1)");
+                                }
+                                else
+                                {
+                                    SignalEventManager.InitializeHooks();
+                                    DiagLog("SignalEventManager hooks initialized");
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -292,7 +302,14 @@ namespace ForegroundBotRunner
                             {
                                 PacketLogger.OnPacketCaptured += _connectionState.ProcessPacket;
                                 PacketLogger.OnPacketCaptured += HandleCapturedPacket;
-                                PacketLogger.InitializeHooks();
+                                if (disableHooks == "1")
+                                {
+                                    DiagLog("PacketLogger hooks SKIPPED (WWOW_DISABLE_PACKET_HOOKS=1)");
+                                }
+                                else
+                                {
+                                    PacketLogger.InitializeHooks();
+                                }
                                 _connectionState.ForceState(
                                     ConnectionStateMachine.State.InWorld,
                                     "initial world entry detected via HasEnteredWorld");

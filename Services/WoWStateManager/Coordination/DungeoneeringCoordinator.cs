@@ -702,10 +702,9 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleTeleportToRFC(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Build teleport order once: BG bots first, FG (leader) LAST.
-        // FG bot's WoW.exe crashes from SMSG_DESTROY_OBJECT floods when other bots
-        // teleport away during the FG bot's cross-map transfer. By teleporting the FG
-        // bot last, all BG bots are already in the instance — no destroy storms.
+        // Build teleport order: BG bots first, FG (leader) LAST.
+        // Defense-in-depth: even with hooks disabled, FG-last avoids DESTROY_OBJECT
+        // storms during the FG bot's cross-map transfer window.
         if (_rfcTeleportOrder.Count == 0)
         {
             _rfcTeleportOrder.AddRange(_memberAccounts);

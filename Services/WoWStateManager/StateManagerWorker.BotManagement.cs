@@ -257,6 +257,18 @@ namespace WoWStateManager
                 Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", characterGender);
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
+            // Disable packet hooks for crash diagnostics: "Injection:DisablePacketHooks": "true"
+            var disableHooksFlag = _configuration["Injection:DisablePacketHooks"];
+            if (!string.IsNullOrEmpty(disableHooksFlag) && disableHooksFlag.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS", "1");
+                _logger.LogWarning("FG packet hooks DISABLED via Injection:DisablePacketHooks config");
+            }
+            else
+            {
+                Environment.SetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS", null);
+            }
+
             // Enable optional loader console + extra diagnostics (config flag or always on for now)
             // Add to appsettings.json if desired: "Injection:AllocateConsole": "true"
             var allocConsoleFlag = _configuration["Injection:AllocateConsole"];
