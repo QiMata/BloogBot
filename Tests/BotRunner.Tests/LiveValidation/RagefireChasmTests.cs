@@ -101,9 +101,25 @@ public class RagefireChasmTests
         await _bot.RestartWithSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart with RFC config");
 
-        await _bot.RefreshSnapshotsAsync();
+        // The fixture breaks early after finding FG + first BG. Poll until more bots enter world.
+        // 10 BG bots need to authenticate + create/load characters — give them up to 90s.
+        var sw = Stopwatch.StartNew();
+        var bestCount = 0;
+        while (sw.Elapsed < TimeSpan.FromSeconds(90))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            if (_bot.AllBots.Count > bestCount)
+            {
+                bestCount = _bot.AllBots.Count;
+                _output.WriteLine($"[{sw.Elapsed.TotalSeconds:F0}s] Bots in world: {bestCount}/{ExpectedBotCount}");
+            }
+            if (bestCount >= ExpectedBotCount)
+                break;
+            await Task.Delay(2000);
+        }
+
         var allBots = _bot.AllBots;
-        _output.WriteLine($"Bots in world: {allBots.Count}");
+        _output.WriteLine($"Final bots in world: {allBots.Count}/{ExpectedBotCount}");
         foreach (var snap in allBots)
         {
             var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
@@ -112,7 +128,7 @@ public class RagefireChasmTests
         }
 
         Assert.True(allBots.Count >= 2,
-            $"At least 2 bots must enter world for RFC test (got {allBots.Count}). " +
+            $"At least 2 bots must enter world for RFC test (got {allBots.Count}/{ExpectedBotCount}). " +
             "Ensure RFCBOT2-10 accounts exist in MaNGOS with level 8+ characters.");
     }
 
@@ -230,26 +246,44 @@ public class RagefireChasmTests
         {
             _output.WriteLine($"Teleporting {snap.AccountName} to RFC entrance...");
             await _bot.BotTeleportAsync(snap.AccountName, KalimdorMap, RfcEntranceX, RfcEntranceY, RfcEntranceZ);
-            await Task.Delay(500);
+            await Task.Delay(1000);
         }
 
-        // Wait for teleports to settle
-        await Task.Delay(3000);
-        await _bot.RefreshSnapshotsAsync();
-
+        // Poll until at least one bot reports being near the RFC entrance.
+        // Teleport takes time to propagate through the snapshot pipeline.
+        var sw2 = Stopwatch.StartNew();
         var nearEntrance = 0;
+        while (sw2.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await Task.Delay(2000);
+            await _bot.RefreshSnapshotsAsync();
+
+            nearEntrance = 0;
+            foreach (var snap in _bot.AllBots)
+            {
+                var pos = snap.Player?.Unit?.GameObject?.Base?.Position ?? snap.MovementData?.Position;
+                var px = pos?.X ?? 0;
+                var py = pos?.Y ?? 0;
+                var dist = MathF.Sqrt((px - RfcEntranceX) * (px - RfcEntranceX) + (py - RfcEntranceY) * (py - RfcEntranceY));
+                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+
+                if ((mapId == KalimdorMap && dist < 50f) || mapId == RfcMap)
+                    nearEntrance++;
+            }
+
+            if (nearEntrance >= 1)
+                break;
+        }
+
+        // Log final state
         foreach (var snap in _bot.AllBots)
         {
-            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+            var pos = snap.Player?.Unit?.GameObject?.Base?.Position ?? snap.MovementData?.Position;
             var px = pos?.X ?? 0;
             var py = pos?.Y ?? 0;
             var dist = MathF.Sqrt((px - RfcEntranceX) * (px - RfcEntranceX) + (py - RfcEntranceY) * (py - RfcEntranceY));
             var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            _output.WriteLine($"  {snap.AccountName}: map={mapId}, dist={dist:F0}y from entrance");
-
-            // Either near entrance on Kalimdor or already inside RFC
-            if ((mapId == KalimdorMap && dist < 50f) || mapId == RfcMap)
-                nearEntrance++;
+            _output.WriteLine($"  {snap.AccountName}: map={mapId}, pos=({px:F0},{py:F0}), dist={dist:F0}y from entrance");
         }
 
         _output.WriteLine($"\nBots near RFC entrance or inside: {nearEntrance}/{_bot.AllBots.Count}");

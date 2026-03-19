@@ -120,22 +120,23 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 114)
+- **Last updated:** 2026-03-18 (session 115)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - P5.1: Created RFCBOT2-10 MaNGOS accounts + GM level 6 via SOAP
-  - P5.2: Created `RagefireChasm.settings.json` — 10-bot StateManager config (eb3fddd)
-  - P5.3: Restored `DungeoneeringTask` from old commit, adapted to current BotTask architecture (541a941)
-  - P5.4: Created `DungeoneeringCoordinator` — N-bot group formation + dungeon dispatch (5a2ae0b)
-  - P5.5: Role-aware combat — healers heal lowest HP, DPS assist leader's target
-  - P5.6: CanProceed rest/buff check built into DungeoneeringTask (541a941)
-  - P5.7: Created `RagefireChasmTests.cs` — 4 test methods (enter world, form raid, teleport, full run placeholder) (eb3fddd)
-  - P5.8: Added RFC waypoint data in `DungeonWaypoints.cs` (541a941)
-  - Added `START_DUNGEONEERING` action type through full pipeline (proto → CharacterAction → ActionMapping → ActionDispatch → Task)
-- **Test baseline:** 1266/1266 WoWSharpClient, BotRunner + WoWStateManager build clean (0 errors)
+  - Fixed RFCBOT2-10 account passwords (all set to PASSWORD via SOAP `.account set password`)
+  - Leveled all RFC characters to 15 via SOAP `.character level`
+  - Verified collision-aware path following plan already fully implemented (L1/L2/L3 + call sites)
+  - RFC_AllBotsEnterWorld: PASS — 5+ bots enter world (all 10 launched by StateManager)
+  - RFC_FormRaidGroup: PASS — group formation with invite/accept works
+  - RFC_TeleportToEntrance: FAIL — snapshot position hydration issue (map=0, pos=null after teleport)
+  - Updated RagefireChasmTests.cs with polling loop for multi-bot wait + MovementData position fallback
+  - 136/136 Navigation.Physics.Tests pass
+- **Test baseline:** BotRunner + WoWStateManager build clean (0 errors)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** All 8 tasks complete. Ready for live RFC test when RFCBOT characters are created and leveled.
+- **P5 status:** All 8 implementation tasks done. RFC_AllBotsEnterWorld + RFC_FormRaidGroup pass live. RFC_TeleportToEntrance needs snapshot position fix.
+- **Known issue:** BG bot snapshot `Player.Unit.GameObject.Base.Position` and `MovementData.Position` both return null/zero in multi-bot RFC config. Single-bot config (DeathCorpseRunTests) works fine. Likely snapshot builder hydration gap for non-primary bots.
 - **Next:**
-  1. Run RFC_AllBotsEnterWorld to trigger character creation for RFCBOT2-10, then level them via SOAP
-  2. Run full RFC test suite to validate end-to-end dungeon run
-  3. P3/P4: FG packet capture tests (fishing parity, teleport flags) — requires live FG bot
+  1. Debug BG bot snapshot position hydration for multi-bot configs (why is position null after teleport?)
+  2. Fix RFC_TeleportToEntrance test once position is in snapshots
+  3. Implement RFC_FullDungeonRun (currently a skip placeholder)
+  4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
