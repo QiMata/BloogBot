@@ -249,15 +249,9 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     private void HandleFollowLeader(IWoWPlayer player)
     {
-        // Combat interrupts — check for nearby hostiles to pull
-        var pullTarget = FindPullTarget(player);
-        if (pullTarget != null)
-        {
-            TransitionTo(DungeonState.PullHostiles);
-            return;
-        }
-
         // Non-leader: follow party leader
+        // Note: DO NOT check for pull targets here — only the leader pulls.
+        // Aggressors (mobs that attack followers) are handled in Update() line 90-96.
         var leader = ObjectManager.PartyLeader;
         if (leader?.Position == null)
         {
@@ -318,10 +312,9 @@ public class DungeoneeringTask : BotTask, IBotTask
     }
 
     /// <summary>
-    /// All party members have sufficient HP to proceed with pulls.
-    /// Mana check is only applied to the local player (not the whole party),
-    /// since we can't force others to drink and blocking the entire group
-    /// on one caster's mana causes deadlocks when food/drink isn't available.
+    /// Whether the LOCAL player can proceed. Only checks the local player's HP and mana.
+    /// Previously checked all party members' HP, which caused deadlocks when the leader
+    /// took damage during combat — all followers would enter RestBeforePull indefinitely.
     /// </summary>
     private bool CanProceed
     {
@@ -330,8 +323,7 @@ public class DungeoneeringTask : BotTask, IBotTask
             var player = ObjectManager.Player;
             if (player == null) return false;
 
-            // All party members must be above HP threshold
-            if (!ObjectManager.PartyMembers.All(m => m.HealthPercent > RestHealthPercent))
+            if (player.HealthPercent <= RestHealthPercent)
                 return false;
 
             // Only check local player's mana (warriors/rogues have ManaPercent < 0)
