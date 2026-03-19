@@ -281,6 +281,7 @@ namespace BotRunner
 
             if (unit is IWoWPlayer wp)
             {
+                TryPopulate(() => player.Unit.GameObject.Base.MapId = wp.MapId, "MapId");
                 TryPopulate(() => player.PlayerFlags = (uint)wp.PlayerFlags, "PlayerFlags");
 
                 try
