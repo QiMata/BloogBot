@@ -257,6 +257,34 @@ namespace ForegroundBotRunner.Mem
         // NOTE: ClickToMove (CTM) is FORBIDDEN. CTM does not work for ghost players,
         // breaking corpse runs. Use SetFacing + SetControlBit(Front) for all movement.
 
+        // ====================================================================
+        // Crash diagnostics — enables visibility into silent AV catches
+        // ====================================================================
+
+        [DllImport("FastCall.dll", EntryPoint = "SetCrashDiagnosticMode")]
+        private static extern void SetCrashDiagnosticModeFunction(int mode);
+
+        [DllImport("FastCall.dll", EntryPoint = "GetCrashDiagnosticMode")]
+        private static extern int GetCrashDiagnosticModeFunction();
+
+        [DllImport("FastCall.dll", EntryPoint = "GetTotalAVCount")]
+        private static extern int GetTotalAVCountFunction();
+
+        /// <summary>
+        /// Enable diagnostic mode: all SEH exceptions are logged to WWoWLogs/fastcall_crash.log
+        /// with function name, faulting address, and instruction address.
+        /// When letCrash=true, exceptions propagate instead of being caught (for dump analysis).
+        /// </summary>
+        static public void EnableCrashDiagnostics(bool letCrash = false)
+        {
+            SetCrashDiagnosticModeFunction(letCrash ? 1 : 0);
+            Log.Information("[FG] FastCall crash diagnostics {Mode} (letCrash={LetCrash})",
+                letCrash ? "ENABLED" : "logging-only", letCrash);
+        }
+
+        /// <summary>Returns the total number of ACCESS_VIOLATION exceptions caught since DLL load.</summary>
+        static public int GetTotalAVCount() => GetTotalAVCountFunction();
+
         private static string GetRandomLuaVarName()
         {
             const string chars = "abcdefghijklmnopqrstuvwxyz";

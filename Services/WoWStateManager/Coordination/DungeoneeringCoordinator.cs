@@ -66,6 +66,10 @@ public class DungeoneeringCoordinator
     private readonly ConcurrentDictionary<string, byte> _preparedAccounts = new();
     private readonly ConcurrentDictionary<string, byte> _teleportedToOrg = new();
     private readonly ConcurrentDictionary<string, byte> _teleportedToRFC = new();
+    private readonly List<string> _rfcTeleportOrder = new(); // Built once: leader first, then members
+    private int _rfcTeleportIndex;
+    private DateTime _lastRfcTeleportAt = DateTime.MinValue;
+    private const double RFC_TELEPORT_STAGGER_SEC = 3.0; // Seconds between each bot's teleport (3s to avoid DESTROY_OBJECT storms)
     private int _prepIndex;
 
     // Orgrimmar safe zone
@@ -690,25 +694,50 @@ public class DungeoneeringCoordinator
         return null;
     }
 
+    /// <summary>
+    /// Staggered RFC teleport: leader first, then one BG bot every 2 seconds.
+    /// Prevents the FG WoW.exe crash caused by a flood of SMSG_DESTROY_OBJECT
+    /// packets when 9 bots teleport away simultaneously.
+    /// </summary>
     private ActionMessage? HandleTeleportToRFC(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        if (_teleportedToRFC.TryAdd(requestingAccount, 0))
+        // Build teleport order once: BG bots first, FG (leader) LAST.
+        // FG bot's WoW.exe crashes from SMSG_DESTROY_OBJECT floods when other bots
+        // teleport away during the FG bot's cross-map transfer. By teleporting the FG
+        // bot last, all BG bots are already in the instance — no destroy storms.
+        if (_rfcTeleportOrder.Count == 0)
         {
-            _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map})",
-                requestingAccount, RfcMapId);
-            return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            _rfcTeleportOrder.AddRange(_memberAccounts);
+            _rfcTeleportOrder.Add(_leaderAccount); // FG bot last
+            _rfcTeleportIndex = 0;
         }
 
-        var allAccounts = new List<string> { _leaderAccount };
-        allAccounts.AddRange(_memberAccounts);
-        if (allAccounts.All(a => _teleportedToRFC.ContainsKey(a)))
+        // All teleported?
+        if (_rfcTeleportIndex >= _rfcTeleportOrder.Count)
         {
             _logger.LogInformation("DUNGEON_COORD: All bots teleported to RFC. Waiting to settle.");
             TransitionTo(CoordState.WaitForRFCSettle);
+            return null;
         }
 
-        return null;
+        // Stagger: wait RFC_TELEPORT_STAGGER_SEC between each teleport
+        var sinceLast = (DateTime.UtcNow - _lastRfcTeleportAt).TotalSeconds;
+        if (sinceLast < RFC_TELEPORT_STAGGER_SEC)
+            return null;
+
+        // Only the next bot in the order gets teleported
+        var nextAccount = _rfcTeleportOrder[_rfcTeleportIndex];
+        if (!requestingAccount.Equals(nextAccount, StringComparison.OrdinalIgnoreCase))
+            return null; // Not this bot's turn
+
+        _teleportedToRFC.TryAdd(requestingAccount, 0);
+        _rfcTeleportIndex++;
+        _lastRfcTeleportAt = DateTime.UtcNow;
+
+        _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map}) [{Idx}/{Total}]",
+            requestingAccount, RfcMapId, _rfcTeleportIndex, _rfcTeleportOrder.Count);
+        return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
     }
 
     private ActionMessage? HandleDispatchDungeoneering(string requestingAccount,

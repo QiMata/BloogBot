@@ -65,6 +65,12 @@ public static class Program
             // Skip DisplayProcessInfo - it can crash with Access Denied
             File.AppendAllText(logPath, "STEP 1: Skipping DisplayProcessInfo\n");
 
+            // Enable FastCall crash diagnostics — logs all SEH exceptions to WWoWLogs/fastcall_crash.log
+            // In production mode (letCrash=false), AVs are still caught but now logged with faulting address
+            File.AppendAllText(logPath, "STEP 1.5: Enabling FastCall crash diagnostics\n");
+            try { Mem.Functions.EnableCrashDiagnostics(letCrash: false); }
+            catch (EntryPointNotFoundException ex) { File.AppendAllText(logPath, $"STEP 1.5: FastCall.dll missing diagnostic exports (old DLL?): {ex.Message}\n"); }
+
             // Build and run the host - this will block until shutdown
             File.AppendAllText(logPath, "STEP 2: About to call CreateHostBuilder().Build().Run()\n");
             CreateHostBuilder([]).Build().Run();
