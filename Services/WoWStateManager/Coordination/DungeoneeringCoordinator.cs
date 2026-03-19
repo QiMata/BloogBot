@@ -54,6 +54,9 @@ public class DungeoneeringCoordinator
     private int _inviteIndex;
     private int _acceptIndex;
 
+    // Dungeoneering dispatch tracking
+    private readonly ConcurrentDictionary<string, byte> _dungeoneeringDispatched = new();
+
     // Prep tracking — concurrent because multiple bot threads call GetAction()
     private readonly ConcurrentDictionary<string, byte> _preparedAccounts = new();
     private readonly ConcurrentDictionary<string, byte> _teleportedToOrg = new();
@@ -241,6 +244,9 @@ public class DungeoneeringCoordinator
 
             _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 8 + spells",
                 account, charName, charClass);
+
+            // Clear instance binds so RFC can be reset freely
+            await _soapClient.ExecuteGMCommandAsync($".instance unbind all {charName}");
 
             // Set level to 8
             await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
@@ -482,15 +488,22 @@ public class DungeoneeringCoordinator
     {
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
-        _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader})",
-            requestingAccount, isLeader);
+        _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
+        _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader}) [{Dispatched}/{Total}]",
+            requestingAccount, isLeader, _dungeoneeringDispatched.Count, snapshots.Count);
 
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
 
         _tickCount++;
-        if (_tickCount >= snapshots.Count * 2)
+        // Only transition when EVERY account (including leader) has been dispatched at least once.
+        // Fallback: if leader hasn't polled after 30 ticks, transition anyway to avoid deadlock.
+        var allDispatched = _dungeoneeringDispatched.Count >= snapshots.Count
+                            && _dungeoneeringDispatched.ContainsKey(_leaderAccount);
+        if (allDispatched || _tickCount > 30)
         {
+            if (!_dungeoneeringDispatched.ContainsKey(_leaderAccount))
+                _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' never polled during DispatchDungeoneering — forcing transition", _leaderAccount);
             TransitionTo(CoordState.DungeonInProgress);
         }
 
