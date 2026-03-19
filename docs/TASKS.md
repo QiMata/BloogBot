@@ -120,19 +120,20 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 117)
+- **Last updated:** 2026-03-19 (session 118)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Expanded DungeoneeringCoordinator from 6 to 11 states with full raid prep pipeline
-  - SOAP client plumbed: StateManagerWorker → CharacterStateSocketListener → DungeoneeringCoordinator
-  - Coordinator now handles: PrepareCharacters (SOAP level 8, .learn all_myclass, class gear) → TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
-  - RFC_FullDungeonRun test rewritten to observe coordinator pipeline (coordinator-enabled, not test-driven)
-  - Build: 0 .NET errors
-- **Commit:** `d9a10e8` — Coordinator-driven RFC raid pipeline
-- **Test baseline:** BotRunner + WoWStateManager build clean (0 errors)
+  - Fixed 10-bot raid formation: party→raid pipeline with ConvertToRaid action through full proto pipeline
+  - Restructured DungeoneeringCoordinator group formation: LeaveOldGroups → Batch1 (4 members) → ConvertToRaid → Batch2 (remaining) → Verify
+  - Serialized invite+accept per member to avoid MaNGOS one-outstanding-invite limitation
+  - Fixed race condition with Interlocked.CompareExchange on WaitForGrouped→SendInvite transition
+  - Result: 9/9 BG bots consistently form raid (FG crashes on map transition — FG-CRASH-001)
+  - RFC_FullDungeonRun test passes consistently
+- **Commit:** `7916f23` — Fix 10-bot raid formation
+- **Test baseline:** RFC_FullDungeonRun passes (Raid, Members: 9)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** Coordinator pipeline implemented. RFC_FullDungeonRun rewritten for coordinator-driven flow. Needs live run to validate end-to-end.
+- **P5 status:** Group formation complete. Coordinator transitions through TeleportToRFC → DispatchDungeoneering → DungeonInProgress. Need to verify bots actually enter RFC instance and begin clearing.
 - **Next:**
-  1. Run RFC_FullDungeonRun live to validate coordinator pipeline
-  2. Fix any issues found during live validation
+  1. Verify bots teleport into RFC (map 389) and begin dungeoneering
+  2. Debug any issues in the TeleportToRFC → DungeonInProgress pipeline
   3. P3/P4: FG packet capture tests (fishing parity, teleport flags)
