@@ -120,23 +120,17 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 115)
+- **Last updated:** 2026-03-18 (session 116)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Fixed RFCBOT2-10 account passwords (all set to PASSWORD via SOAP `.account set password`)
-  - Leveled all RFC characters to 15 via SOAP `.character level`
-  - Verified collision-aware path following plan already fully implemented (L1/L2/L3 + call sites)
-  - RFC_AllBotsEnterWorld: PASS — 5+ bots enter world (all 10 launched by StateManager)
+  - Fixed MapId not populated in BG bot snapshots (BuildPlayerProtobuf never set MapId on WoWObject)
+  - RFC_AllBotsEnterWorld: PASS — all 10 bots enter world
   - RFC_FormRaidGroup: PASS — group formation with invite/accept works
-  - RFC_TeleportToEntrance: FAIL — snapshot position hydration issue (map=0, pos=null after teleport)
-  - Updated RagefireChasmTests.cs with polling loop for multi-bot wait + MovementData position fallback
+  - RFC_TeleportToEntrance: PASS — all bots teleported to RFC entrance (1811, -4410, -18) on Kalimdor
   - 136/136 Navigation.Physics.Tests pass
 - **Test baseline:** BotRunner + WoWStateManager build clean (0 errors)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** All 8 implementation tasks done. RFC_AllBotsEnterWorld + RFC_FormRaidGroup pass live. RFC_TeleportToEntrance needs snapshot position fix.
-- **Known issue:** BG bot snapshot `Player.Unit.GameObject.Base.Position` and `MovementData.Position` both return null/zero in multi-bot RFC config. Single-bot config (DeathCorpseRunTests) works fine. Likely snapshot builder hydration gap for non-primary bots.
+- **P5 status:** All 8 implementation tasks done. RFC_AllBotsEnterWorld + RFC_FormRaidGroup + RFC_TeleportToEntrance all pass live. RFC_FullDungeonRun is a skip placeholder pending DungeoneeringTask integration.
 - **Next:**
-  1. Debug BG bot snapshot position hydration for multi-bot configs (why is position null after teleport?)
-  2. Fix RFC_TeleportToEntrance test once position is in snapshots
-  3. Implement RFC_FullDungeonRun (currently a skip placeholder)
-  4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  1. Implement RFC_FullDungeonRun — integrate DungeoneeringTask with StateManager coordinator
+  2. P3/P4: FG packet capture tests (fishing parity, teleport flags)
