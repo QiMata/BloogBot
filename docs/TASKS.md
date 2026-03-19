@@ -120,17 +120,19 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-18 (session 116)
+- **Last updated:** 2026-03-18 (session 117)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Fixed MapId not populated in BG bot snapshots (BuildPlayerProtobuf never set MapId on WoWObject)
-  - RFC_AllBotsEnterWorld: PASS — all 10 bots enter world
-  - RFC_FormRaidGroup: PASS — group formation with invite/accept works
-  - RFC_TeleportToEntrance: PASS — all bots teleported to RFC entrance (1811, -4410, -18) on Kalimdor
-  - 136/136 Navigation.Physics.Tests pass
+  - Expanded DungeoneeringCoordinator from 6 to 11 states with full raid prep pipeline
+  - SOAP client plumbed: StateManagerWorker → CharacterStateSocketListener → DungeoneeringCoordinator
+  - Coordinator now handles: PrepareCharacters (SOAP level 8, .learn all_myclass, class gear) → TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
+  - RFC_FullDungeonRun test rewritten to observe coordinator pipeline (coordinator-enabled, not test-driven)
+  - Build: 0 .NET errors
+- **Commit:** `d9a10e8` — Coordinator-driven RFC raid pipeline
 - **Test baseline:** BotRunner + WoWStateManager build clean (0 errors)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** All 8 implementation tasks done. RFC_AllBotsEnterWorld + RFC_FormRaidGroup + RFC_TeleportToEntrance all pass live. RFC_FullDungeonRun is a skip placeholder pending DungeoneeringTask integration.
+- **P5 status:** Coordinator pipeline implemented. RFC_FullDungeonRun rewritten for coordinator-driven flow. Needs live run to validate end-to-end.
 - **Next:**
-  1. Implement RFC_FullDungeonRun — integrate DungeoneeringTask with StateManager coordinator
-  2. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  1. Run RFC_FullDungeonRun live to validate coordinator pipeline
+  2. Fix any issues found during live validation
+  3. P3/P4: FG packet capture tests (fishing parity, teleport flags)

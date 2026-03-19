@@ -1,0 +1,36 @@
+{
+  "name": "Mining_BG_CopperVein",
+  "description": "BG bot mines copper ore in Valley of Trials using gathering route",
+  "settings": null,
+  "enableCoordinator": false,
+  "minBots": 1,
+  "botEntryTimeoutSeconds": 30,
+  "setup": [
+    {
+      "account": "$BG",
+      "cleanSlate": true,
+      "gmCommands": [".gm on"],
+      "learnSpells": [2575],
+      "addItems": [{ "id": 2901, "count": 1 }],
+      "setSkills": [{ "id": 186, "current": 1, "max": 300 }],
+      "teleport": { "mapId": 1, "x": -800, "y": -4500, "z": 34 }
+    }
+  ],
+  "action": {
+    "account": "$BG",
+    "type": "StartGatheringRoute",
+    "parameters": [
+      { "int": 2575 },
+      { "string": "1731" },
+      { "int": 1 }
+    ]
+  },
+  "observe": {
+    "timeoutSeconds": 120,
+    "pollIntervalMs": 3000,
+    "logIntervalSeconds": 15
+  },
+  "assertions": {
+    "actionTypeSeen": "StartGatheringRoute"
+  }
+}

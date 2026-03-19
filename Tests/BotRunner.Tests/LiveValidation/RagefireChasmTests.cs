@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BotRunner.Tests.LiveValidation.Scenarios;
 using Communication;
 using Tests.Infrastructure;
 using Xunit;
@@ -291,154 +292,15 @@ public class RagefireChasmTests
     }
 
     /// <summary>
-    /// Full coordinator-driven dungeon run. The test enables the DungeoneeringCoordinator
-    /// and then purely observes as it drives the entire pipeline:
-    ///   1. Log all bots in
-    ///   2. Prepare characters (level 8, spells, gear) via SOAP
-    ///   3. Teleport everyone to Orgrimmar
-    ///   4. Form raid group
-    ///   5. Teleport raid into RFC (map 389)
-    ///   6. Dispatch START_DUNGEONEERING to all bots
-    ///   7. Combat support overlay (heal/DPS)
-    ///
-    /// The test only starts StateManager with the RFC config and observes progress.
+    /// Full coordinator-driven dungeon run — loaded from scenario JSON.
+    /// The DungeoneeringCoordinator drives: PrepareCharacters → TeleportToOrgrimmar →
+    /// FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress.
     /// </summary>
     [SkippableFact]
     public async Task RFC_FullDungeonRun()
     {
-        // Enable the coordinator for this test (fixture disables it by default)
-        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
-        try
-        {
-            var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-            _output.WriteLine("Restarting StateManager with RFC config (coordinator ENABLED)...");
-            await _bot.RestartWithSettingsAsync(settingsPath);
-            Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
-
-            // Wait for at least 3 bots to enter world (coordinator needs 3+)
-            var sw = Stopwatch.StartNew();
-            var bestCount = 0;
-            while (sw.Elapsed < TimeSpan.FromSeconds(90))
-            {
-                await _bot.RefreshSnapshotsAsync();
-                if (_bot.AllBots.Count > bestCount)
-                {
-                    bestCount = _bot.AllBots.Count;
-                    _output.WriteLine($"[{sw.Elapsed.TotalSeconds:F0}s] Bots in world: {bestCount}/{ExpectedBotCount}");
-                }
-                if (bestCount >= 3)
-                    break;
-                await Task.Delay(2000);
-            }
-            Assert.True(bestCount >= 3, $"Need at least 3 bots in world for dungeoneering (got {bestCount})");
-            _output.WriteLine($"Sufficient bots in world ({bestCount}). Coordinator will drive the pipeline.");
-
-            // Observe coordinator-driven pipeline for up to 5 minutes.
-            // The coordinator handles: PrepareCharacters → TeleportToOrgrimmar →
-            // FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
-            var maxRunTime = TimeSpan.FromMinutes(5);
-            var sw2 = Stopwatch.StartNew();
-            var groupFormed = false;
-            var insideRfc = 0;
-            var dungeoneeringActionSeen = false;
-            var combatSeen = false;
-            var furthestY = float.MaxValue;
-            var lastLogTime = TimeSpan.Zero;
-            var orgrimmarSeen = false;
-
-            while (sw2.Elapsed < maxRunTime)
-            {
-                await Task.Delay(3000);
-                await _bot.RefreshSnapshotsAsync();
-
-                foreach (var snap in _bot.AllBots)
-                {
-                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-                    var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-
-                    // Track Orgrimmar arrival (map 1, near Org coords)
-                    if (mapId == KalimdorMap && pos != null)
-                    {
-                        var distToOrg = MathF.Sqrt(
-                            (pos.X - OrgX) * (pos.X - OrgX) + (pos.Y - OrgY) * (pos.Y - OrgY));
-                        if (distToOrg < 100f)
-                            orgrimmarSeen = true;
-                    }
-
-                    // Track RFC arrival
-                    if (mapId == RfcMap)
-                    {
-                        insideRfc++;
-                        if (pos != null && pos.Y < furthestY)
-                            furthestY = pos.Y;
-                    }
-
-                    // Track group formation
-                    if (snap.PartyLeaderGuid != 0)
-                        groupFormed = true;
-
-                    // Track combat
-                    var unitFlags = snap.Player?.Unit?.UnitFlags ?? 0;
-                    if ((unitFlags & 0x80000) != 0)
-                        combatSeen = true;
-
-                    // Track dungeoneering dispatch
-                    if (snap.CurrentAction?.ActionType == ActionType.StartDungeoneering)
-                        dungeoneeringActionSeen = true;
-                }
-
-                // Log progress every 15 seconds
-                if (sw2.Elapsed - lastLogTime >= TimeSpan.FromSeconds(15))
-                {
-                    lastLogTime = sw2.Elapsed;
-                    var rfcCount = _bot.AllBots.Count(s =>
-                        (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
-                    _output.WriteLine(
-                        $"[{sw2.Elapsed.TotalSeconds:F0}s] org={orgrimmarSeen}, group={groupFormed}, " +
-                        $"inRFC={rfcCount}, dungeoneering={dungeoneeringActionSeen}, " +
-                        $"combat={combatSeen}, furthestY={furthestY:F0}");
-
-                    foreach (var snap in _bot.AllBots)
-                    {
-                        var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-                        var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-                        var action = snap.CurrentAction?.ActionType.ToString() ?? "none";
-                        _output.WriteLine($"  {snap.AccountName}: map={mapId}, " +
-                            $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}), action={action}");
-                    }
-                }
-
-                // Early success: dungeoneering dispatched and a bot progressed into RFC
-                if (dungeoneeringActionSeen && insideRfc >= 1)
-                {
-                    _output.WriteLine("Dungeoneering dispatched and bots inside RFC — success.");
-                    break;
-                }
-            }
-
-            // Final state dump
-            _output.WriteLine("\n=== Final State ===");
-            foreach (var snap in _bot.AllBots)
-            {
-                var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-                var hp = snap.Player?.Unit?.Health ?? 0;
-                var maxHp = snap.Player?.Unit?.MaxHealth ?? 0;
-                _output.WriteLine($"  {snap.AccountName}: map={mapId}, " +
-                    $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}), hp={hp}/{maxHp}");
-            }
-            _output.WriteLine($"Orgrimmar: {orgrimmarSeen}, Group: {groupFormed}, " +
-                $"RFC entered: {insideRfc > 0}, Dungeoneering: {dungeoneeringActionSeen}, " +
-                $"Combat: {combatSeen}, FurthestY: {furthestY:F0}");
-
-            // Assertions — the coordinator should have driven through at least group formation
-            Assert.True(groupFormed || dungeoneeringActionSeen,
-                "DungeoneeringCoordinator should have formed a group or dispatched dungeoneering");
-        }
-        finally
-        {
-            // Restore coordinator-disabled for subsequent tests
-            Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
-        }
+        var runner = new TestScenarioRunner(_bot, _output);
+        var result = await runner.RunAsync("Scenarios/RFC_FullDungeonRun.scenario.json");
+        result.AssertAll();
     }
 }

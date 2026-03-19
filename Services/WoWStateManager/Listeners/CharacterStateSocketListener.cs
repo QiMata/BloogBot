@@ -47,16 +47,21 @@ namespace WoWStateManager.Listeners
         private readonly MangosSOAPClient? _soapClient;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
-        private readonly bool _coordinatorDisabled;
+
+        /// <summary>
+        /// Checked at use-time (not construction-time) so tests can toggle it
+        /// between StateManager restarts via Environment.SetEnvironmentVariable.
+        /// </summary>
+        private static bool IsCoordinatorDisabled =>
+            Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
 
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
             _soapClient = soapClient;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
-            _coordinatorDisabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
-            if (_coordinatorDisabled)
-                logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1");
+            if (IsCoordinatorDisabled)
+                logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1 (at startup)");
             characterSettings.ForEach(settings => CurrentActivityMemberList.TryAdd(settings.AccountName, new()));
         }
 
@@ -282,8 +287,8 @@ namespace WoWStateManager.Listeners
 
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
         {
-            // Fully disabled during test runs (WWOW_TEST_DISABLE_COORDINATOR=1)
-            if (_coordinatorDisabled)
+            // Checked at use-time so tests can toggle coordinator mid-session
+            if (IsCoordinatorDisabled)
                 return;
 
             // Skip if a forwarded action was recently delivered — let it complete without interference
