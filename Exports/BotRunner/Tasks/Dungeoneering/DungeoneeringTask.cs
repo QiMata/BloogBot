@@ -31,7 +31,8 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     // Configuration
     private const float WaypointReachDistance = 5f;
-    private const float HostilePullRange = 25f;
+    private const float HostilePullRange = 25f;       // Deliberate pull (standing still to clear area)
+    private const float AggroCheckRange = 12f;         // While navigating — only pull mobs this close
     private const float FollowDistance = 15f;
     private const float FollowStopDistance = 8f;
     private const int RestHealthPercent = 85;
@@ -120,9 +121,11 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     private void HandleNavigateToWaypoint(IWoWPlayer player)
     {
-        // Check for nearby hostiles in LOS first — pull them
-        var pullTarget = FindPullTarget(player);
-        if (pullTarget != null)
+        // While navigating, only pull mobs within close aggro range (12y).
+        // This prevents the infinite pull loop in dense corridors where
+        // the bot would pull everything within 25y and never advance.
+        var aggroTarget = FindPullTarget(player, AggroCheckRange);
+        if (aggroTarget != null)
         {
             TransitionTo(DungeonState.PullHostiles);
             return;
@@ -138,8 +141,8 @@ public class DungeoneeringTask : BotTask, IBotTask
         // All waypoints visited
         if (_waypointIndex >= _waypoints.Count)
         {
-            // Check if there are any remaining hostiles visible
-            if (ObjectManager.Hostiles.Any(h => h.Health > 0))
+            // Check if there are any remaining hostiles within pull range
+            if (FindPullTarget(player) != null)
             {
                 TransitionTo(DungeonState.PullHostiles);
                 return;
@@ -198,36 +201,52 @@ public class DungeoneeringTask : BotTask, IBotTask
             return;
         }
 
-        // Mark skull and engage
+        // Mark skull and target for the party
         ObjectManager.SetTarget(target.Guid);
         ObjectManager.SetRaidTarget(target, TargetMarker.Skull);
-        ObjectManager.StopAllMovement();
-        ClearNavigation();
 
-        Log.Information("[DUNGEONEERING] Pulling hostile: {Name} (0x{Guid:X}) at {Dist:F0}y",
-            target.Name, target.Guid, player.Position.DistanceTo(target.Position));
+        var dist = player.Position.DistanceTo(target.Position);
 
-        // Push combat — the PvE rotation task handles the actual fight
-        BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
-        _killCount++;
-        TransitionTo(DungeonState.WaitForCombatClear);
+        // If mob is already an aggressor (in combat), push combat rotation directly
+        if (ObjectManager.Aggressors.Any(a => a.Guid == target.Guid))
+        {
+            ObjectManager.StopAllMovement();
+            ClearNavigation();
+            Log.Information("[DUNGEONEERING] Engaging aggressor: {Name} (0x{Guid:X}) at {Dist:F0}y",
+                target.Name, target.Guid, dist);
+            BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            _killCount++;
+            TransitionTo(DungeonState.WaitForCombatClear);
+            return;
+        }
+
+        // Not an aggressor yet — navigate toward the mob to enter its aggro range.
+        // The aggressor check in Update() (line 90) will push combat when the mob aggros.
+        // This prevents the push-pop cycle where PvERotation pops immediately because
+        // EnsureTarget() finds no aggressors.
+        if (dist > 8f)
+        {
+            NavigateToward(target.Position);
+        }
+        else
+        {
+            // Very close but not agroed — try auto-attack to initiate combat
+            ObjectManager.StartMeleeAttack();
+            Log.Information("[DUNGEONEERING] Auto-attacking to pull: {Name} (0x{Guid:X}) at {Dist:F0}y",
+                target.Name, target.Guid, dist);
+        }
     }
 
     private void HandleWaitForCombatClear()
     {
         // Combat rotation task is on the stack — when it pops, we resume here.
-        // If no aggressors remain, go back to navigation or pull more.
+        // ALWAYS return to NavigateToWaypoint after combat clears.
+        // NavigateToWaypoint will check for close aggro targets (12y) while advancing.
+        // This prevents the infinite pull loop where the bot would re-check for
+        // hostiles within 25y after every kill and never advance past dense packs.
         if (!ObjectManager.Aggressors.Any())
         {
-            var player = ObjectManager.Player;
-            if (player != null && FindPullTarget(player) != null)
-            {
-                TransitionTo(DungeonState.PullHostiles);
-            }
-            else
-            {
-                TransitionTo(DungeonState.NavigateToWaypoint);
-            }
+            TransitionTo(DungeonState.NavigateToWaypoint);
         }
     }
 
@@ -301,12 +320,12 @@ public class DungeoneeringTask : BotTask, IBotTask
         PopTask("dungeon_clear");
     }
 
-    private IWoWUnit? FindPullTarget(IWoWPlayer player)
+    private IWoWUnit? FindPullTarget(IWoWPlayer player, float range = HostilePullRange)
     {
         return ObjectManager.Hostiles
             .Where(h => h.Health > 0
                 && h.Position != null
-                && player.Position.DistanceTo(h.Position) < HostilePullRange)
+                && player.Position.DistanceTo(h.Position) < range)
             .OrderBy(h => player.Position.DistanceTo(h.Position))
             .FirstOrDefault();
     }
