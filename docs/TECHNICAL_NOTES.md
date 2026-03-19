@@ -7,6 +7,8 @@
 
 ## Environment & Paths
 
+> **Environment Variables:** For the full list of `WWOW_*` environment variables (injection, services, testing), see [BUILD.md § Environment Variables](BUILD.md#environment-variables).
+
 | Item | Value |
 |------|-------|
 | Server | VMaNGOS (vanilla 1.12.1 build 5875), always running locally |
