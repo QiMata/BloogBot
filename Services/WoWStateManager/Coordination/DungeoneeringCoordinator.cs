@@ -14,15 +14,17 @@ namespace WoWStateManager.Coordination;
 /// Coordinates N bots for dungeon crawling with full raid preparation.
 ///
 /// Pipeline:
-///   WaitingForBots → PrepareCharacters → LearnSpellsViaChat → AddItemsViaChat → EquipGear →
-///   TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
+///   WaitingForBots → TeleportToOrgrimmar → WaitForOrgSettle → DisbandAndReset →
+///   PrepareCharacters → LearnSpellsViaChat → AddItemsViaChat → EquipGear →
+///   FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
+/// TeleportToOrgrimmar: FIRST move — all bots .go xyz to Orgrimmar safe zone
+/// DisbandAndReset: Leave old groups/raids, clean slate before prep
 /// PrepareCharacters: SOAP-based level set + instance unbind (charName-based commands only)
 /// LearnSpellsViaChat: Bot chat .targetself → .reset spells/talents/items → .learn <spellId> → .setskill
 /// AddItemsViaChat: Bot chat .additem <itemId> for each gear piece
 /// EquipGear: Send EquipItem actions so bots auto-equip gear from backpack
-/// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
-/// FormGroup: Leader invites, members accept, verify
+/// FormGroup: Leader invites, members accept, convert to raid, verify
 /// TeleportToRFC: Bot chat .go xyz into RFC interior (map 389)
 /// DispatchDungeoneering: START_DUNGEONEERING to all bots
 /// DungeonInProgress: Heal/DPS support overlay for members
@@ -32,20 +34,19 @@ public class DungeoneeringCoordinator
     public enum CoordState
     {
         WaitingForBots,
-        PrepareCharacters,
-        LearnSpellsViaChat,
-        AddItemsViaChat,
-        EquipGear,
-        TeleportToOrgrimmar,
-        WaitForTeleportSettle,
-        FormGroup_LeaveOldGroups,   // All bots leave any stale group from prior runs
+        TeleportToOrgrimmar,        // FIRST: get everyone to same zone
+        WaitForOrgSettle,           // Wait for Org teleports to complete
+        DisbandAndReset,            // Leave old groups/raids, clean slate
+        PrepareCharacters,          // SOAP: level set + instance unbind
+        LearnSpellsViaChat,         // .reset spells/talents/items + .learn
+        AddItemsViaChat,            // .additem for gear
+        EquipGear,                  // CMSG_AUTOEQUIP_ITEM
         FormGroup_Inviting,         // Invite first 4 (party cap = 5 incl leader)
-        FormGroup_Accepting,        // First 4 accept
+        FormGroup_Accepting,        // First 4 accept (unused — merged into Inviting)
         FormGroup_ConvertToRaid,    // Leader converts party → raid
         FormGroup_InvitingRest,     // Invite remaining members
-        FormGroup_AcceptingRest,    // Remaining members accept
+        FormGroup_AcceptingRest,    // Remaining members accept (unused — merged into InvitingRest)
         FormGroup_Verify,
-        OrganizeRaidSubgroups,  // Spread duplicate classes across subgroups for buff coverage
         TeleportToRFC,
         WaitForRFCSettle,
         DispatchDungeoneering,
@@ -165,10 +166,10 @@ public class DungeoneeringCoordinator
 
         // Timeout protection for group formation states
         var elapsed = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds;
-        if (_state is CoordState.FormGroup_LeaveOldGroups or CoordState.FormGroup_Inviting
+        if (_state is CoordState.FormGroup_Inviting
             or CoordState.FormGroup_Accepting or CoordState.FormGroup_ConvertToRaid
             or CoordState.FormGroup_InvitingRest or CoordState.FormGroup_AcceptingRest
-            or CoordState.FormGroup_Verify or CoordState.OrganizeRaidSubgroups
+            or CoordState.FormGroup_Verify
             && elapsed > 60)
         {
             _logger.LogWarning("DUNGEON_COORD: State {State} timed out after {Elapsed:F0}s, advancing", _state, elapsed);
@@ -178,20 +179,19 @@ public class DungeoneeringCoordinator
         return _state switch
         {
             CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
+            CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
+            CoordState.WaitForOrgSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DisbandAndReset, 1),
+            CoordState.DisbandAndReset => HandleDisbandAndReset(requestingAccount, snapshots),
             CoordState.PrepareCharacters => HandlePrepareCharacters(requestingAccount, snapshots),
             CoordState.LearnSpellsViaChat => HandleLearnSpellsViaChat(requestingAccount, snapshots),
             CoordState.AddItemsViaChat => HandleAddItemsViaChat(requestingAccount, snapshots),
             CoordState.EquipGear => HandleEquipGear(requestingAccount, snapshots),
-            CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
-            CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_LeaveOldGroups, 1),
-            CoordState.FormGroup_LeaveOldGroups => HandleLeaveOldGroups(requestingAccount, snapshots),
             CoordState.FormGroup_Inviting => HandleInviting(requestingAccount, snapshots),
             CoordState.FormGroup_Accepting => HandleAccepting(requestingAccount, snapshots),
             CoordState.FormGroup_ConvertToRaid => HandleConvertToRaid(requestingAccount, snapshots),
             CoordState.FormGroup_InvitingRest => HandleInvitingRest(requestingAccount, snapshots),
             CoordState.FormGroup_AcceptingRest => HandleAcceptingRest(requestingAccount, snapshots),
             CoordState.FormGroup_Verify => HandleVerify(requestingAccount, snapshots),
-            CoordState.OrganizeRaidSubgroups => HandleOrganizeRaidSubgroups(requestingAccount, snapshots),
             CoordState.TeleportToRFC => HandleTeleportToRFC(requestingAccount, snapshots),
             CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, RfcMapId),
             CoordState.DispatchDungeoneering => HandleDispatchDungeoneering(requestingAccount, snapshots),
@@ -241,16 +241,8 @@ public class DungeoneeringCoordinator
         _logger.LogInformation("DUNGEON_COORD: {Count}/{Total} members ready. Starting character preparation.",
             readyMembers, _memberAccounts.Count);
 
-        // If SOAP is available, do full prep; otherwise skip to group formation
-        if (_soapClient != null)
-        {
-            TransitionTo(CoordState.PrepareCharacters);
-        }
-        else
-        {
-            _logger.LogWarning("DUNGEON_COORD: No SOAP client — skipping character preparation.");
-            TransitionTo(CoordState.FormGroup_LeaveOldGroups);
-        }
+        // Step 1: Teleport everyone to Orgrimmar first (clean slate)
+        TransitionTo(CoordState.TeleportToOrgrimmar);
         return null;
     }
 
@@ -259,7 +251,7 @@ public class DungeoneeringCoordinator
     {
         if (_soapClient == null)
         {
-            TransitionTo(CoordState.EquipGear);
+            TransitionTo(CoordState.LearnSpellsViaChat);
             return null;
         }
 
@@ -686,8 +678,9 @@ public class DungeoneeringCoordinator
 
         if (allEquipped)
         {
-            _logger.LogInformation("DUNGEON_COORD: All bots equipped. Teleporting to Orgrimmar.");
-            TransitionTo(CoordState.TeleportToOrgrimmar);
+            _logger.LogInformation("DUNGEON_COORD: All bots equipped. Forming group.");
+            _inviteIndex = 0;
+            TransitionTo(CoordState.FormGroup_Inviting);
         }
 
         return null;
@@ -711,7 +704,7 @@ public class DungeoneeringCoordinator
         if (allTeleported)
         {
             _logger.LogInformation("DUNGEON_COORD: All bots teleported to Orgrimmar. Waiting to settle.");
-            TransitionTo(CoordState.WaitForTeleportSettle);
+            TransitionTo(CoordState.WaitForOrgSettle);
         }
 
         return null;
@@ -739,21 +732,19 @@ public class DungeoneeringCoordinator
         // Proceed even if not all are on target map (teleport might still be propagating)
         if (_tickCount >= 8 || onMap >= 2)
         {
-            if (nextState == CoordState.FormGroup_Inviting)
-                _inviteIndex = 0;
             TransitionTo(nextState);
         }
 
         return null;
     }
 
-    private ActionMessage? HandleLeaveOldGroups(string requestingAccount,
+    private ActionMessage? HandleDisbandAndReset(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Each bot leaves any stale group and declines pending invites
+        // Each bot leaves any stale group/raid and declines pending invites
         if (_leftOldGroup.TryAdd(requestingAccount, 0))
         {
-            _logger.LogInformation("DUNGEON_COORD: {Account} leaving old group + declining pending invites", requestingAccount);
+            _logger.LogInformation("DUNGEON_COORD: {Account} leaving old group/raid + declining pending invites", requestingAccount);
             // LeaveGroup is a no-op if not in a group; DeclineGroupInvite is a no-op if no pending invite
             return MakeAction(ActionType.LeaveGroup);
         }
@@ -766,12 +757,21 @@ public class DungeoneeringCoordinator
 
         // Wait a couple ticks for leave to propagate on the server
         _tickCount++;
-        if (_tickCount < 2)
+        if (_tickCount < 4)
             return null;
 
-        _logger.LogInformation("DUNGEON_COORD: All bots left old groups. Starting invite phase.");
-        _inviteIndex = 0;
-        TransitionTo(CoordState.FormGroup_Inviting);
+        _logger.LogInformation("DUNGEON_COORD: All bots disbanded. Starting character preparation.");
+
+        // If SOAP is available, do full prep (level set + instance unbind)
+        if (_soapClient != null)
+        {
+            TransitionTo(CoordState.PrepareCharacters);
+        }
+        else
+        {
+            _logger.LogWarning("DUNGEON_COORD: No SOAP client — skipping SOAP prep, going to spell learning.");
+            TransitionTo(CoordState.LearnSpellsViaChat);
+        }
         return null;
     }
 

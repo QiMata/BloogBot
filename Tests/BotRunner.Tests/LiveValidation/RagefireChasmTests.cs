@@ -188,7 +188,7 @@ public class RagefireChasmTests
 
     /// <summary>
     /// Coordinator-driven full preparation and dungeon entry.
-    /// Validates that after the coordinator's PrepareCharacters + FormGroup + OrganizeRaidSubgroups phases:
+    /// Validates that after the coordinator's TeleportToOrg + DisbandAndReset + PrepareCharacters + FormGroup phases:
     ///   - Each bot has key class spells learned
     ///   - Each bot has class-appropriate gear items
     ///   - The raid is formed with all bots grouped
@@ -221,7 +221,7 @@ public class RagefireChasmTests
         Assert.True(_bot.AllBots.Count >= 2, $"Need at least 2 bots for RFC test (got {_bot.AllBots.Count})");
 
         // ===== Phase: Coordinator prep pipeline =====
-        // PrepareCharacters → EquipGear → TeleportToOrgrimmar → FormGroup → OrganizeRaidSubgroups → TeleportToRFC
+        // TeleportToOrgrimmar → DisbandAndReset → PrepareCharacters → EquipGear → FormGroup → TeleportToRFC
         // Fingerprint: grouped count + total spells + total items + map IDs + positions (rounded).
         // This captures all coordinator state transitions. Stale if nothing changes for 45s.
         var botsOnRfcMap = await WaitForProgressAsync<int>(
@@ -515,8 +515,8 @@ public class RagefireChasmTests
 
     /// <summary>
     /// Full coordinator-driven dungeon run — loaded from scenario JSON.
-    /// The DungeoneeringCoordinator drives: PrepareCharacters → TeleportToOrgrimmar →
-    /// FormGroup → OrganizeRaidSubgroups → TeleportToRFC → DispatchDungeoneering → DungeonInProgress.
+    /// The DungeoneeringCoordinator drives: TeleportToOrgrimmar → DisbandAndReset →
+    /// PrepareCharacters → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress.
     /// </summary>
     [SkippableFact]
     public async Task RFC_FullDungeonRun()
