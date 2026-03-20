@@ -1639,8 +1639,10 @@ public class NavigationPath(
 
             RecordCalculatedTrace(mapId, start, end, selectedPath, reason);
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning("[NAV-DIAG] CalculatePath FAILED: map={MapId}, start=({SX:F1},{SY:F1},{SZ:F1}), end=({EX:F1},{EY:F1},{EZ:F1}): {Error}",
+                mapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, ex.Message);
             _waypoints = [];
             _waypointAcceptanceRadii = [];
             _currentIndex = 0;

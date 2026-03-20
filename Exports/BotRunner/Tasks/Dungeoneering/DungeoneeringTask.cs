@@ -199,7 +199,7 @@ public class DungeoneeringTask : BotTask, IBotTask
         }
         _lastPosition = player.Position;
 
-        NavigateToward(destination);
+        TryNavigateToward(destination, allowDirectFallback: true);
     }
 
     private void HandlePullHostiles(IWoWPlayer player)
@@ -243,7 +243,7 @@ public class DungeoneeringTask : BotTask, IBotTask
         // EnsureTarget() finds no aggressors.
         if (dist > 8f)
         {
-            NavigateToward(target.Position);
+            TryNavigateToward(target.Position, allowDirectFallback: true);
         }
         else
         {
@@ -334,7 +334,7 @@ public class DungeoneeringTask : BotTask, IBotTask
 
         if (dist > FollowDistance)
         {
-            NavigateToward(leader.Position);
+            TryNavigateToward(leader.Position, allowDirectFallback: true);
         }
         else if (dist < FollowStopDistance)
         {

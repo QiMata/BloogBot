@@ -66,7 +66,7 @@ public abstract class BotTask(IBotContext botContext)
     /// <summary>
     /// Move toward a destination using cached pathfinding and report whether a waypoint was found.
     /// </summary>
-    protected bool TryNavigateToward(Position destination)
+    protected bool TryNavigateToward(Position destination, bool allowDirectFallback = false)
     {
         var player = ObjectManager.Player;
         if (_navPath == null)
@@ -91,7 +91,7 @@ public abstract class BotTask(IBotContext botContext)
             player.Position,
             destination,
             player.MapId,
-            allowDirectFallback: false);
+            allowDirectFallback: allowDirectFallback);
 
         if (waypoint != null)
         {
