@@ -21,7 +21,7 @@ namespace BotCommLayer
         {
             _logger = logger;
             _server = new TcpListener(IPAddress.Parse(ipAddress), port);
-            _server.Start();
+            _server.Start(50); // Backlog of 50 — handles 10+ simultaneous bot reconnects
             _isRunning = true;
 
             Thread serverThread = new(Run)

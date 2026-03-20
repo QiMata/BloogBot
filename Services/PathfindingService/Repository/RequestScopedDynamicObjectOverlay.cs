@@ -123,85 +123,94 @@ public sealed class RequestScopedDynamicObjectOverlay : IDisposable
 
         // Has overlay objects — need exclusive write lock to mutate the registry
         _rwLock.EnterWriteLock();
-        try
-        {
-            var requestId = Interlocked.Increment(ref _nextRequestId);
-            var registeredGuids = new List<ulong>(nearbyObjects.Count);
-            var registeredDisplayIds = new List<uint>(nearbyObjects.Count);
-            var filteredCount = 0;
 
-            for (var i = 0; i < nearbyObjects.Count; i++)
+        var requestId = Interlocked.Increment(ref _nextRequestId);
+        var registeredGuids = new List<ulong>(nearbyObjects.Count);
+        var registeredDisplayIds = new List<uint>(nearbyObjects.Count);
+        var filteredCount = 0;
+
+        for (var i = 0; i < nearbyObjects.Count; i++)
+        {
+            if (!TryCreateRegistration(requestId, i, mapId, nearbyObjects[i], out var registration))
             {
-                if (!TryCreateRegistration(requestId, i, mapId, nearbyObjects[i], out var registration))
+                filteredCount++;
+                continue;
+            }
+
+            try
+            {
+                if (!_registry.RegisterObject(registration.Guid, 0, registration.DisplayId, registration.MapId, registration.Scale))
                 {
                     filteredCount++;
                     continue;
                 }
 
-                try
-                {
-                    if (!_registry.RegisterObject(registration.Guid, 0, registration.DisplayId, registration.MapId, registration.Scale))
-                    {
-                        filteredCount++;
-                        continue;
-                    }
+                _registry.UpdatePosition(
+                    registration.Guid,
+                    registration.X,
+                    registration.Y,
+                    registration.Z,
+                    registration.Orientation,
+                    registration.GoState);
 
-                    _registry.UpdatePosition(
-                        registration.Guid,
-                        registration.X,
-                        registration.Y,
-                        registration.Z,
-                        registration.Orientation,
-                        registration.GoState);
-
-                    registeredGuids.Add(registration.Guid);
-                    registeredDisplayIds.Add(registration.DisplayId);
-                }
-                catch
-                {
-                    filteredCount++;
-                }
+                registeredGuids.Add(registration.Guid);
+                registeredDisplayIds.Add(registration.DisplayId);
             }
-
-            var summary = new RequestScopedDynamicObjectOverlaySummary(
-                RequestedCount: nearbyObjects.Count,
-                RegisteredCount: registeredGuids.Count,
-                FilteredCount: filteredCount,
-                RegisteredDisplayIds: registeredDisplayIds.AsReadOnly());
-
-            if (summary.RequestedCount > 0)
+            catch
             {
-                logger?.LogDebug(
-                    "[DynOverlay] op={Operation} map={MapId} requested={Requested} registered={Registered} filtered={Filtered} displayIds=[{DisplayIds}]",
-                    operationName,
-                    mapId,
-                    summary.RequestedCount,
-                    summary.RegisteredCount,
-                    summary.FilteredCount,
-                    summary.RegisteredDisplayIds.Count > 0 ? string.Join(",", summary.RegisteredDisplayIds) : string.Empty);
+                filteredCount++;
             }
+        }
 
-            try
-            {
-                return new OverlayExecutionResult<T>(action(), summary);
-            }
-            finally
-            {
-                foreach (var guid in registeredGuids)
-                {
-                    try
-                    {
-                        _registry.UnregisterObject(guid);
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
+        // If ALL nearby objects were filtered (unknown displayId, etc.), no registry mutations
+        // were made. Downgrade to read lock so the pathfinding action runs concurrently with
+        // physics/LOS — prevents write-lock starvation when 9+ bots request paths simultaneously.
+        if (registeredGuids.Count == 0)
+        {
+            _rwLock.ExitWriteLock();
+            _rwLock.EnterReadLock();
+        }
+        var holdingWriteLock = registeredGuids.Count > 0;
+
+        var summary = new RequestScopedDynamicObjectOverlaySummary(
+            RequestedCount: nearbyObjects.Count,
+            RegisteredCount: registeredGuids.Count,
+            FilteredCount: filteredCount,
+            RegisteredDisplayIds: registeredDisplayIds.AsReadOnly());
+
+        if (summary.RequestedCount > 0)
+        {
+            logger?.LogDebug(
+                "[DynOverlay] op={Operation} map={MapId} requested={Requested} registered={Registered} filtered={Filtered} displayIds=[{DisplayIds}]",
+                operationName,
+                mapId,
+                summary.RequestedCount,
+                summary.RegisteredCount,
+                summary.FilteredCount,
+                summary.RegisteredDisplayIds.Count > 0 ? string.Join(",", summary.RegisteredDisplayIds) : string.Empty);
+        }
+
+        try
+        {
+            return new OverlayExecutionResult<T>(action(), summary);
         }
         finally
         {
-            _rwLock.ExitWriteLock();
+            foreach (var guid in registeredGuids)
+            {
+                try
+                {
+                    _registry.UnregisterObject(guid);
+                }
+                catch
+                {
+                }
+            }
+
+            if (holdingWriteLock)
+                _rwLock.ExitWriteLock();
+            else
+                _rwLock.ExitReadLock();
         }
     }
 
