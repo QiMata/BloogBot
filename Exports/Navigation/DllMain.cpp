@@ -25,6 +25,14 @@
 #include <csignal>
 #include <cstdlib>
 
+// Global mutex for ALL Navigation.dll operations.
+// The entire C++ layer (PhysicsEngine, VMapManager, dtNavMeshQuery, DynamicObjectRegistry,
+// SceneQuery) was designed for single-threaded use (one bot per process).
+// PathfindingService runs 10+ bots through one process, so we serialize all operations.
+// Each call takes microseconds-to-low-milliseconds, so contention is negligible.
+// Recursive because ValidateWalkableSegment calls PhysicsStepV2Inner internally.
+static std::recursive_mutex g_navigationMutex;
+
 // CRT invalid parameter handler — logs and continues instead of aborting
 static void NavigationInvalidParameterHandler(
     const wchar_t* expression,
@@ -192,6 +200,8 @@ extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ en
         if (!g_initialized)
             InitializeAllSystems();
 
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
         auto* navigation = Navigation::GetInstance();
         if (navigation)
             return navigation->CalculatePath(mapId, start, end, smoothPath, length);
@@ -242,6 +252,8 @@ static PhysicsOutput PhysicsStepV2Inner(const PhysicsInput& input)
     if (!g_initialized)
         InitializeAllSystems();
 
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
     if (auto* physics = PhysicsEngine::Instance())
         return physics->StepV2(input, input.deltaTime);
 
@@ -267,6 +279,8 @@ extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ 
 {
     if (!g_initialized)
         InitializeAllSystems();
+
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
     // Delegate to SceneQuery implementation
     return SceneQuery::LineOfSight(mapId, G3D::Vector3(from.X, from.Y, from.Z), G3D::Vector3(to.X, to.Y, to.Z));
@@ -632,6 +646,8 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
     if (!g_initialized)
         InitializeAllSystems();
 
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
     if (resolvedEndZ)
         *resolvedEndZ = start.Z;
 
@@ -819,6 +835,8 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
     if (!g_initialized)
         InitializeAllSystems();
 
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
     auto* reg = DynamicObjectRegistry::Instance();
     if (!reg || reg->Count() == 0) return false;
 
@@ -845,13 +863,6 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
     return false;
 }
 
-// Global mutex for ALL navmesh query operations (corridor, IsPointOnNavmesh, etc.).
-// dtNavMeshQuery is NOT thread-safe — it has internal mutable state (node pool,
-// open list). With 10 bots sharing one query per map, concurrent access causes
-// memory corruption and access violations (0xC0000005). Serializing all operations
-// is safe because each call takes microseconds.
-static std::mutex g_corridorMutex;
-
 // ===============================
 // SPATIAL QUERIES
 // ===============================
@@ -868,7 +879,7 @@ extern "C" __declspec(dllexport) bool IsPointOnNavmesh(
     if (!g_initialized)
         InitializeAllSystems();
 
-    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
     auto* nav = Navigation::GetInstance();
     const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
@@ -912,7 +923,7 @@ extern "C" __declspec(dllexport) uint32_t FindNearestWalkablePoint(
     if (!g_initialized)
         InitializeAllSystems();
 
-    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
     auto* nav = Navigation::GetInstance();
     const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
@@ -1053,7 +1064,7 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         // dtNavMeshQuery is NOT thread-safe — concurrent findPath/findNearestPoly
         // on the same query object corrupts internal state and causes access violations.
         // With 10 bots on the same map, all sharing one query, this is fatal.
-        std::lock_guard<std::mutex> lock(g_corridorMutex);
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }
@@ -1158,7 +1169,7 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         result.posZ = nearestStart[1]; // Detour[1] = WoW Z
 
         // Register corridor for future incremental updates
-        // (already under g_corridorMutex from top of function)
+        // (already under g_navigationMutex from top of function)
         uint32_t handle = g_nextCorridorHandle++;
         g_corridors[handle] = ci;
 
@@ -1189,7 +1200,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
         // Hold the corridor mutex for the ENTIRE operation to prevent:
         // 1. Use-after-free: another thread calling CorridorDestroy while we use ci
         // 2. dtNavMeshQuery corruption: concurrent access to shared query object
-        std::lock_guard<std::mutex> lock(g_corridorMutex);
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
         auto it = g_corridors.find(handle);
         if (it == g_corridors.end()) return result;
@@ -1240,7 +1251,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
 
     __try
     {
-        std::lock_guard<std::mutex> lock(g_corridorMutex);
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
         auto it = g_corridors.find(handle);
         if (it == g_corridors.end()) return result;
@@ -1268,7 +1279,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
 /// Check if the corridor is still valid (poly refs haven't been invalidated).
 extern "C" __declspec(dllexport) bool CorridorIsValid(uint32_t handle)
 {
-    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
     auto it = g_corridors.find(handle);
     if (it == g_corridors.end()) return false;
 
@@ -1284,7 +1295,7 @@ extern "C" __declspec(dllexport) bool CorridorIsValid(uint32_t handle)
 /// Destroy a corridor and free its resources.
 extern "C" __declspec(dllexport) void CorridorDestroy(uint32_t handle)
 {
-    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
     auto it = g_corridors.find(handle);
     if (it != g_corridors.end())
     {
