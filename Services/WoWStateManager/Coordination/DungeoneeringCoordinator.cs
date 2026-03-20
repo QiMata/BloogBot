@@ -18,7 +18,7 @@ namespace WoWStateManager.Coordination;
 ///   TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
 /// PrepareCharacters: SOAP-based level set, instance unbind, reset items (charName-based commands)
-/// LearnSpellsViaChat: Bot chat .targetself + .learn all_myclass + .learn <spellId> for each class spell
+/// LearnSpellsViaChat: Bot chat .targetself + .learn <spellId> for each level-appropriate spell + .setskill to max weapons/defense
 /// AddItemsViaChat: Bot chat .additem <itemId> for each gear piece
 /// EquipGear: Send EquipItem actions so bots auto-equip gear from backpack
 /// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
@@ -453,14 +453,14 @@ public class DungeoneeringCoordinator
 
         try
         {
-            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 15 + instance unbind + reset items",
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 8 + instance unbind + reset items",
                 account, charName);
 
             // Clear instance binds so RFC can be reset freely
             await _soapClient.ExecuteGMCommandAsync($".instance unbind all {charName}");
 
-            // Set level to 15 (RFC mobs are level 13-16)
-            await _soapClient.ExecuteGMCommandAsync($".character level {charName} 15");
+            // Set level to 8 — characters stay low-level; spells are explicitly learned
+            await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
 
             // Reset items to clean slate (works via SOAP when character is online)
             await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
@@ -478,20 +478,50 @@ public class DungeoneeringCoordinator
     }
 
     /// <summary>
-    /// Builds the sequence of chat commands a bot must type to learn all spells.
+    /// Builds the sequence of chat commands a bot must type to learn level-appropriate spells
+    /// and max out weapon/defense skills for level 8 (max skill = 40).
     /// First command is always ".targetself" so .learn targets the bot itself.
-    /// Then ".learn all_myclass" for bulk class spells, followed by specific spell IDs.
+    /// Does NOT use ".learn all_myclass" — that teaches every spell including level 60 talents.
     /// </summary>
     private List<string> BuildSpellChatCommands(string charClass)
     {
-        var commands = new List<string> { ".targetself", ".learn all_myclass" };
+        var commands = new List<string> { ".targetself" };
+
+        // Learn only level-appropriate spells (level 1-8)
         if (Level8KeySpells.TryGetValue(charClass, out var spells))
         {
             foreach (var spellId in spells)
                 commands.Add($".learn {spellId}");
         }
+
+        // Max out weapon and defense skills for level 8 (cap = 40)
+        // Skill IDs: Defense=95, 1H Swords=43, 1H Maces=54, 2H Maces=160,
+        //            Daggers=173, Staves=136, Crossbows=226, Unarmed=162
+        const int maxSkill = 40;
+        commands.Add($".setskill 95 {maxSkill} {maxSkill}");  // Defense
+        commands.Add($".setskill 162 {maxSkill} {maxSkill}"); // Unarmed
+
+        if (Level8WeaponSkills.TryGetValue(charClass, out var skillIds))
+        {
+            foreach (var skillId in skillIds)
+                commands.Add($".setskill {skillId} {maxSkill} {maxSkill}");
+        }
+
         return commands;
     }
+
+    /// <summary>Weapon skill IDs per class based on their equipped weapons.</summary>
+    private static readonly Dictionary<string, int[]> Level8WeaponSkills = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Warrior"] = [43, 433],   // 1H Swords, Shield
+        ["Shaman"] = [54, 433],    // 1H Maces, Shield
+        ["Druid"] = [160],         // 2H Maces
+        ["Priest"] = [136],        // Staves
+        ["Warlock"] = [136],       // Staves
+        ["Hunter"] = [226, 43],    // Crossbows, 1H Swords
+        ["Rogue"] = [173],         // Daggers
+        ["Mage"] = [136],          // Staves
+    };
 
     /// <summary>
     /// Builds the sequence of chat commands a bot must type to add all gear items.

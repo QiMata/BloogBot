@@ -115,6 +115,15 @@ public class RagefireChasmTests
 
         while (sw.Elapsed < maxTimeout)
         {
+            // Bail immediately if WoW.exe or StateManager crashed
+            if (_bot.ClientCrashed)
+            {
+                var msg = $"[{phaseName}] CRASHED — {_bot.CrashMessage ?? "child process exited unexpectedly"}. " +
+                    $"Elapsed: {sw.Elapsed.TotalSeconds:F0}s.";
+                Log(msg);
+                Assert.Fail(msg);
+            }
+
             await _bot.RefreshSnapshotsAsync();
             var snapshots = _bot.AllBots;
             var (done, result, fingerprint) = evaluate(snapshots);
