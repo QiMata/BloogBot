@@ -394,9 +394,9 @@ public class RagefireChasmTests
         // This captures all coordinator state transitions. Stale if nothing changes for 45s.
         var botsOnRfcMap = await WaitForProgressAsync<int>(
             phaseName: "CoordinatorPrep",
-            maxTimeout: TimeSpan.FromMinutes(5),
-            staleTimeout: TimeSpan.FromSeconds(45),
-            pollInterval: TimeSpan.FromSeconds(5),
+            maxTimeout: TimeSpan.FromMinutes(3),
+            staleTimeout: TimeSpan.FromSeconds(30),
+            pollInterval: TimeSpan.FromSeconds(3),
             evaluate: snapshots =>
             {
                 var grouped = snapshots.Count(s => s.PartyLeaderGuid != 0);

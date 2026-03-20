@@ -316,11 +316,9 @@ namespace WoWStateManager.Listeners
         {
             if (_dungeoneeringCoordinator == null)
             {
-                // Leader = first Background bot (BG bots can enter dungeon instances).
-                // FG bots can't handle cross-map instance transfers reliably.
-                var leaderAccount = _characterSettings
-                    .FirstOrDefault(cs => cs.RunnerType == Settings.BotRunnerType.Background)?.AccountName
-                    ?? _characterSettings.First().AccountName;
+                // Leader = first bot in settings (typically TESTBOT1 / FG Warrior).
+                // FG crash during map transitions is resolved (PostMessage fix + teleport stagger + SEH wrappers).
+                var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
 
                 _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _characterSettings, _soapClient, _logger);

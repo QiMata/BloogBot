@@ -72,8 +72,7 @@ public class DungeoneeringCoordinator
     private readonly List<string> _rfcTeleportOrder = new(); // Built once: leader first, then members
     private int _rfcTeleportIndex;
     private DateTime _lastRfcTeleportAt = DateTime.MinValue;
-    private const double RFC_TELEPORT_STAGGER_SEC = 3.0; // Seconds between each bot's teleport (3s to avoid DESTROY_OBJECT storms)
-    private int _prepIndex;
+    private const double RFC_TELEPORT_STAGGER_SEC = 1.0; // Seconds between each bot's teleport (FG crash fixed, 1s is safe)
 
     // Equip tracking — each bot needs EquipItem actions for each gear piece
     private readonly ConcurrentDictionary<string, int> _equipItemIndex = new(); // account → next item index to equip
@@ -96,7 +95,7 @@ public class DungeoneeringCoordinator
 
     // Throttle follow/heal actions per account — concurrent for multi-thread safety
     private readonly ConcurrentDictionary<string, DateTime> _lastActionSent = new();
-    private const double ACTION_COOLDOWN_SEC = 3.0;
+    private const double ACTION_COOLDOWN_SEC = 1.5;
     private const float HEAL_THRESHOLD = 0.50f;
 
     // Cached healer spell IDs — concurrent for multi-thread safety
@@ -214,7 +213,6 @@ public class DungeoneeringCoordinator
         // If SOAP is available, do full prep; otherwise skip to group formation
         if (_soapClient != null)
         {
-            _prepIndex = 0;
             TransitionTo(CoordState.PrepareCharacters);
         }
         else
@@ -234,20 +232,12 @@ public class DungeoneeringCoordinator
             return null;
         }
 
-        // Process one account per tick (SOAP is async, fire-and-forget from coordinator)
-        _tickCount++;
-        if (_tickCount % 3 != 1) // ~1.5s between preps
-            return null;
-
-        // Find next account to prepare
+        // Fire all SOAP prep commands in parallel (async, fire-and-forget)
         var allAccounts = new List<string> { _leaderAccount };
         allAccounts.AddRange(_memberAccounts);
 
-        while (_prepIndex < allAccounts.Count)
+        foreach (var account in allAccounts)
         {
-            var account = allAccounts[_prepIndex];
-            _prepIndex++;
-
             if (_preparedAccounts.ContainsKey(account))
                 continue;
 
@@ -257,10 +247,18 @@ public class DungeoneeringCoordinator
             if (!snapshots.TryGetValue(account, out var snap) || snap.ScreenState != "InWorld")
                 continue;
 
-            // Fire SOAP commands for this character (async, don't await)
             _ = PrepareCharacterAsync(account, charName);
             _preparedAccounts.TryAdd(account, 0);
-            return null; // One account per tick
+        }
+
+        // Wait for any unprepared accounts that weren't in world yet
+        var unprepared = allAccounts.Count(a => !_preparedAccounts.ContainsKey(a));
+        if (unprepared > 0)
+        {
+            _tickCount++;
+            if (_tickCount < 20) // Wait up to ~10s for stragglers
+                return null;
+            _logger.LogWarning("DUNGEON_COORD: {Unprepared} accounts never came InWorld, continuing.", unprepared);
         }
 
         // All accounts prepared — now equip the gear that was added to backpacks
@@ -581,8 +579,8 @@ public class DungeoneeringCoordinator
         CoordState nextState, int expectedMapId)
     {
         _tickCount++;
-        // Wait ~5 seconds (10 ticks) for teleport to settle
-        if (_tickCount < 10)
+        // Wait ~2 seconds (4 ticks) for teleport to settle
+        if (_tickCount < 4)
             return null;
 
         // Verify at least some bots are on the expected map
@@ -596,7 +594,7 @@ public class DungeoneeringCoordinator
             onMap, snapshots.Count, expectedMapId);
 
         // Proceed even if not all are on target map (teleport might still be propagating)
-        if (_tickCount >= 20 || onMap >= 2)
+        if (_tickCount >= 8 || onMap >= 2)
         {
             if (nextState == CoordState.FormGroup_Inviting)
                 _inviteIndex = 0;
@@ -623,9 +621,9 @@ public class DungeoneeringCoordinator
         if (!allAccounts.All(a => _leftOldGroup.ContainsKey(a)))
             return null;
 
-        // Wait a few ticks for leave to propagate on the server
+        // Wait a couple ticks for leave to propagate on the server
         _tickCount++;
-        if (_tickCount < 6)
+        if (_tickCount < 2)
             return null;
 
         _logger.LogInformation("DUNGEON_COORD: All bots left old groups. Starting invite phase.");
@@ -695,8 +693,8 @@ public class DungeoneeringCoordinator
                 return null;
 
             case InvitePhase.SendAccept:
-                // Wait 2s for invite to arrive at the member
-                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 2.0)
+                // Wait 0.8s for invite to arrive at the member
+                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 0.8)
                     return null;
 
                 // Only the target member can accept
@@ -716,7 +714,7 @@ public class DungeoneeringCoordinator
 
                 var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
-                if (isGrouped || waitElapsed > 5.0) // Wait up to 5s
+                if (isGrouped || waitElapsed > 3.0) // Wait up to 3s
                 {
                     if (isGrouped)
                         _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped.", memberAccount);
@@ -768,7 +766,7 @@ public class DungeoneeringCoordinator
         var grouped = _memberAccounts.Take(PARTY_SIZE_LIMIT).Count(m =>
             snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
 
-        if (_tickCount < 15 && grouped < PARTY_SIZE_LIMIT)
+        if (_tickCount < 5 && grouped < PARTY_SIZE_LIMIT)
         {
             if (_tickCount % 5 == 0)
                 _logger.LogInformation("DUNGEON_COORD: Waiting for raid conversion: {Grouped}/{Expected} batch 1 members still grouped",
@@ -818,7 +816,7 @@ public class DungeoneeringCoordinator
                 return null;
 
             case InvitePhase.SendAccept:
-                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 2.0)
+                if ((DateTime.UtcNow - _phaseStartedAt).TotalSeconds < 0.8)
                     return null;
 
                 if (!requestingAccount.Equals(memberAccount, StringComparison.OrdinalIgnoreCase))
@@ -837,7 +835,7 @@ public class DungeoneeringCoordinator
 
                 var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
-                if (isGrouped || waitElapsed > 5.0)
+                if (isGrouped || waitElapsed > 3.0)
                 {
                     if (isGrouped)
                         _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped [batch 2].", memberAccount);
@@ -872,7 +870,7 @@ public class DungeoneeringCoordinator
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         _tickCount++;
-        if (_tickCount < 10)
+        if (_tickCount < 3)
             return null;
 
         var grouped = snapshots.Values.Count(s => s.PartyLeaderGuid != 0);
@@ -903,10 +901,8 @@ public class DungeoneeringCoordinator
             _subgroupAssignIndex = 0;
         }
 
-        // Step 2: Send one ChangeRaidSubgroup per tick (throttled)
+        // Step 2: Send one ChangeRaidSubgroup per tick (no throttle — fast)
         _tickCount++;
-        if (_tickCount % 3 != 1) // ~1.5s between each move
-            return null;
 
         var assignments = _subgroupAssignments.ToArray();
         if (_subgroupAssignIndex >= assignments.Length)
