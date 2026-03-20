@@ -63,6 +63,12 @@ public partial class LiveBotFixture : IAsyncLifetime
     private string? _presetSettingsPath;
 
     /// <summary>
+    /// When true, <see cref="EnsureCleanCharacterStateAsync"/> skips group disbanding.
+    /// Derived fixtures (e.g. RfcBotFixture) set this when a coordinator owns group lifecycle.
+    /// </summary>
+    protected bool SkipGroupCleanup { get; set; }
+
+    /// <summary>
     /// Set custom settings path before InitializeAsync. Used by derived fixtures
     /// (e.g. RfcBotFixture) to launch with a specific config from the start.
     /// </summary>
@@ -917,12 +923,16 @@ public partial class LiveBotFixture : IAsyncLifetime
             }
 
             // Clear stale grouping only when snapshot indicates group state.
-            if (BgAccountName != null)
-                await EnsureNotGroupedAsync(BgAccountName, "BG");
-            if (FgAccountName != null)
-                await EnsureNotGroupedAsync(FgAccountName, "FG");
-            if (CombatTestAccountName != null)
-                await EnsureNotGroupedAsync(CombatTestAccountName, "COMBAT");
+            // Skip when a coordinator owns group lifecycle (e.g. RFC dungeoneering).
+            if (!SkipGroupCleanup)
+            {
+                if (BgAccountName != null)
+                    await EnsureNotGroupedAsync(BgAccountName, "BG");
+                if (FgAccountName != null)
+                    await EnsureNotGroupedAsync(FgAccountName, "FG");
+                if (CombatTestAccountName != null)
+                    await EnsureNotGroupedAsync(CombatTestAccountName, "COMBAT");
+            }
         }
         catch (Exception ex)
         {

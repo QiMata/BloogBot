@@ -13,8 +13,9 @@ public class RfcBotFixture : LiveBotFixture, IAsyncLifetime
 {
     async Task IAsyncLifetime.InitializeAsync()
     {
-        // Enable coordinator before any initialization
+        // Enable coordinator — it owns group lifecycle, so skip fixture group cleanup
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
+        SkipGroupCleanup = true;
 
         // Set RFC settings before launching StateManager
         var settingsPath = ResolveRfcSettingsPath();
