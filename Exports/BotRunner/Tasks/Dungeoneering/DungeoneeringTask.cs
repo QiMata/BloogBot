@@ -35,6 +35,7 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const float AggroCheckRange = 12f;         // While navigating — only pull mobs this close
     private const float FollowDistance = 15f;
     private const float FollowStopDistance = 8f;
+    private const float GroupPaceDistance = 30f;    // Leader waits if fewer than half the group is within this range
     private const int RestHealthPercent = 30;       // Low threshold — warriors can't eat without food
     private const int RestManaPercent = 30;        // Low threshold — proceed earlier in dungeons
     private const int StuckTimeoutMs = 10000;
@@ -144,6 +145,18 @@ public class DungeoneeringTask : BotTask, IBotTask
         if (!CanProceed)
         {
             TransitionTo(DungeonState.RestBeforePull);
+            return;
+        }
+
+        // Leader pacing: wait for followers to catch up before advancing.
+        // The MT should not run ahead alone — wait until at least half the
+        // raid is within GroupPaceDistance before continuing to the next waypoint.
+        if (_isLeader && !IsGroupNearby(player))
+        {
+            ObjectManager.StopAllMovement();
+            ClearNavigation();
+            if (_updateCount % 50 == 1)
+                Log.Information("[DUNGEONEERING] Leader waiting for group to catch up");
             return;
         }
 
@@ -321,6 +334,25 @@ public class DungeoneeringTask : BotTask, IBotTask
                 && player.Position.DistanceTo(h.Position) < range)
             .OrderBy(h => player.Position.DistanceTo(h.Position))
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Returns true if at least half the raid/party members are within GroupPaceDistance
+    /// of the leader. Prevents the MT from outrunning the group and dying solo.
+    /// </summary>
+    private bool IsGroupNearby(IWoWPlayer player)
+    {
+        var partyMembers = ObjectManager.PartyMembers.ToList();
+        if (partyMembers.Count == 0)
+            return true; // Solo — no one to wait for
+
+        int nearbyCount = partyMembers.Count(m =>
+            m.Position != null
+            && m.Health > 0
+            && player.Position.DistanceTo(m.Position) <= GroupPaceDistance);
+
+        int threshold = Math.Max(1, partyMembers.Count / 2);
+        return nearbyCount >= threshold;
     }
 
     /// <summary>
