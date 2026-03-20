@@ -1164,22 +1164,10 @@ public class DungeoneeringCoordinator
         _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map}) [{Idx}/{Total}]",
             requestingAccount, RfcMapId, _rfcTeleportIndex, _rfcTeleportOrder.Count);
 
-        // FG bots: use SOAP .tele to avoid FG client cross-map transfer issues.
-        // BG bots: use bot chat .go xyz (faster, no SOAP roundtrip needed).
-        var isFgBot = _allSettings.Any(s =>
-            s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase)
-            && s.RunnerType == Settings.BotRunnerType.Foreground);
-        if (isFgBot && _soapClient != null)
-        {
-            _accountToCharName.TryGetValue(requestingAccount, out var charName);
-            if (charName != null)
-            {
-                _logger.LogInformation("DUNGEON_COORD: Using SOAP .tele for FG bot '{Char}'", charName);
-                _ = _soapClient.ExecuteGMCommandAsync($".tele name {charName} rfc");
-                return null; // SOAP handles the teleport server-side; no action needed from the bot
-            }
-        }
-
+        // All bots (FG and BG) use bot chat .go xyz for cross-map teleport.
+        // .go xyz is a self-teleport GM command that triggers server-side transfer.
+        // Previously FG used SOAP `.tele name` which required a game_tele entry ("rfc")
+        // that may not exist, causing silent teleport failures.
         return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
     }
 
