@@ -172,7 +172,7 @@ public class RagefireChasmTests
     {
         var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
         _output.WriteLine($"Restarting StateManager with RFC config: {settingsPath}");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart with RFC config");
 
         var botCount = await WaitForProgressAsync(
@@ -207,7 +207,7 @@ public class RagefireChasmTests
     {
         var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
         _output.WriteLine($"Restarting StateManager with RFC config: {settingsPath}");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         await _bot.RefreshSnapshotsAsync();
@@ -302,7 +302,7 @@ public class RagefireChasmTests
     public async Task RFC_TeleportToEntrance()
     {
         var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         await _bot.RefreshSnapshotsAsync();
@@ -371,7 +371,7 @@ public class RagefireChasmTests
         // Enable the coordinator and restart with RFC 10-bot config
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
         _output.WriteLine($"Restarting with RFC config + coordinator enabled: {settingsPath}");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         // ===== Phase: Bots enter world =====
@@ -676,7 +676,7 @@ public class RagefireChasmTests
 
         // Coordinator stays disabled — we'll send actions directly
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         await _bot.RefreshSnapshotsAsync();

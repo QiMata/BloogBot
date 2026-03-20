@@ -61,6 +61,16 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private bool _fgResponsive = true;
 
+    /// <summary>
+    /// Tracks the normalized settings path that StateManager was last started with.
+    /// Used by <see cref="EnsureSettingsAsync"/> to skip redundant teardown/relaunch cycles.
+    /// </summary>
+    private string? _activeSettingsPath;
+
+    /// <summary>
+    /// Snapshot of coordinator env var at last init, to detect when it changes between tests.
+    /// </summary>
+    private string? _activeCoordinatorFlag;
 
     public bool IsReady { get; private set; }
 
@@ -490,6 +500,12 @@ public partial class LiveBotFixture : IAsyncLifetime
                 CombatTestCharacterName ?? "N/A",
                 CombatTestAccountName ?? "N/A");
             IsReady = true;
+
+            // Track active settings so EnsureSettingsAsync can skip redundant restarts
+            _activeSettingsPath = _serviceFixture.CustomSettingsPath != null
+                ? Path.GetFullPath(_serviceFixture.CustomSettingsPath)
+                : null;
+            _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
         }
         catch (Exception ex)
         {
@@ -498,6 +514,26 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
     }
 
+
+    /// <summary>
+    /// Ensures StateManager is running with the given settings. If already running
+    /// with identical settings and coordinator flag, this is a no-op — skipping the
+    /// expensive teardown + relaunch cycle that takes 30-120s.
+    /// </summary>
+    public async Task EnsureSettingsAsync(string settingsPath)
+    {
+        var normalized = Path.GetFullPath(settingsPath);
+        var coordFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+
+        if (IsReady && _activeSettingsPath == normalized && _activeCoordinatorFlag == coordFlag)
+        {
+            _logger.LogInformation("[FIXTURE] Reusing StateManager (settings={File}, coordinator={Flag})",
+                Path.GetFileName(settingsPath), coordFlag);
+            return;
+        }
+
+        await RestartWithSettingsAsync(settingsPath);
+    }
 
     /// <summary>
     /// Tears down the current StateManager and bots, then restarts with a different
@@ -603,6 +639,10 @@ public partial class LiveBotFixture : IAsyncLifetime
             FgCharacterName ?? "N/A", FgAccountName ?? "N/A",
             CombatTestCharacterName ?? "N/A", CombatTestAccountName ?? "N/A");
         IsReady = true;
+
+        // Track active settings so EnsureSettingsAsync can skip redundant restarts
+        _activeSettingsPath = Path.GetFullPath(settingsPath);
+        _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
     }
 
     private void IdentifyBots(List<WoWActivitySnapshot> inWorldBots)

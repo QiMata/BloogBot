@@ -54,6 +54,19 @@ public class BotServiceFixture : IAsyncLifetime
     /// Set this before calling <see cref="InitializeAsync"/>.
     /// </summary>
     public string? CustomSettingsPath { get; set; }
+
+    /// <summary>
+    /// The normalized settings path that StateManager was last successfully started with.
+    /// Used by <see cref="EnsureSettingsAsync"/> to skip redundant restarts.
+    /// null = default settings (no custom path).
+    /// </summary>
+    private string? _activeSettingsPath;
+
+    /// <summary>
+    /// Snapshot of coordinator env var at last init, so we detect when
+    /// WWOW_TEST_DISABLE_COORDINATOR changes between tests.
+    /// </summary>
+    private string? _activeCoordinatorFlag;
     private static readonly System.Text.RegularExpressions.Regex WoWPidRegex =
         new(@"WoW\.exe started.*Process ID: (\d+)", System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -218,7 +231,9 @@ public class BotServiceFixture : IAsyncLifetime
         if (smReady)
         {
             ServicesReady = true;
-            Log("All services are ready!");
+            _activeSettingsPath = CustomSettingsPath != null ? Path.GetFullPath(CustomSettingsPath) : null;
+            _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+            Log($"All services are ready! (settings={Path.GetFileName(CustomSettingsPath ?? "default")}, coordinator={_activeCoordinatorFlag})");
 
             // Check if PathfindingService is also available (StateManager launches it as a child process).
             // PathfindingService listens on port 5001 by default. If it's not running, tests that require
@@ -425,6 +440,25 @@ public class BotServiceFixture : IAsyncLifetime
             dir = dir.Parent;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Ensures StateManager is running with the given settings. If already running
+    /// with identical settings and coordinator flag, this is a no-op — avoiding
+    /// the expensive teardown + relaunch cycle.
+    /// </summary>
+    public async Task EnsureSettingsAsync(string settingsPath)
+    {
+        var normalized = Path.GetFullPath(settingsPath);
+        var coordFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+
+        if (ServicesReady && _activeSettingsPath == normalized && _activeCoordinatorFlag == coordFlag)
+        {
+            Log($"[EnsureSettings] Already running with {Path.GetFileName(settingsPath)} (coordinator={coordFlag}), skipping restart.");
+            return;
+        }
+
+        await RestartWithSettingsAsync(settingsPath);
     }
 
     /// <summary>

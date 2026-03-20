@@ -91,7 +91,7 @@ public class CombatLoopTests
     {
         var settingsPath = ResolveTestSettingsPath("CombatFg.settings.json");
         _output.WriteLine($"Restarting with FG combat settings: {settingsPath}");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         var combatAccount = _bot.CombatTestAccountName;
@@ -116,7 +116,7 @@ public class CombatLoopTests
     {
         var settingsPath = ResolveTestSettingsPath("CombatBg.settings.json");
         _output.WriteLine($"Restarting with BG combat settings: {settingsPath}");
-        await _bot.RestartWithSettingsAsync(settingsPath);
+        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         var combatAccount = _bot.CombatTestAccountName;

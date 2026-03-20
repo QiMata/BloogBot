@@ -70,7 +70,7 @@ public class TestScenarioRunner
             {
                 var settingsPath = ResolveSettingsPath(scenario.Settings);
                 _output.WriteLine($"  Restarting with settings: {scenario.Settings}");
-                await _bot.RestartWithSettingsAsync(settingsPath);
+                await _bot.EnsureSettingsAsync(settingsPath);
                 if (!_bot.IsReady)
                 {
                     result.SetupFailed = true;
