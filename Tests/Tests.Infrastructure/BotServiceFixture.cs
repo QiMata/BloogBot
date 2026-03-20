@@ -462,11 +462,10 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Tears down the current StateManager and all managed processes, then restarts
-    /// with a new settings file. Use this to reconfigure which accounts run as FG/BG
-    /// between test methods within a shared fixture.
+    /// Unconditionally tears down and relaunches StateManager with the given settings.
+    /// Internal implementation — callers should use <see cref="EnsureSettingsAsync"/>.
     /// </summary>
-    public async Task RestartWithSettingsAsync(string settingsPath)
+    private async Task RestartWithSettingsAsync(string settingsPath)
     {
         Log($"[Restart] Tearing down for reconfigure with: {settingsPath}");
         await TeardownProcessesAsync();

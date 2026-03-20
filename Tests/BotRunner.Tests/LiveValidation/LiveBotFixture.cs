@@ -532,16 +532,15 @@ public partial class LiveBotFixture : IAsyncLifetime
             return;
         }
 
-        await RestartWithSettingsAsync(settingsPath);
+        await RestartCoreAsync(settingsPath);
     }
 
     /// <summary>
-    /// Tears down the current StateManager and bots, then restarts with a different
-    /// <c>StateManagerSettings.json</c>. Use this when a test method needs a specific
-    /// bot configuration (e.g., COMBATTEST as FG vs BG).
+    /// Unconditionally tears down and relaunches StateManager with the given settings.
+    /// This is the internal implementation — callers should use <see cref="EnsureSettingsAsync"/>
+    /// which skips the restart when settings haven't changed.
     /// </summary>
-    /// <param name="settingsPath">Absolute path to a custom StateManagerSettings.json file.</param>
-    public async Task RestartWithSettingsAsync(string settingsPath)
+    private async Task RestartCoreAsync(string settingsPath)
     {
         _logger.LogInformation("[FIXTURE] Restarting with custom settings: {Path}", settingsPath);
 
@@ -562,7 +561,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         _stateManagerClient = null;
 
         // Restart BotServiceFixture with new settings
-        await _serviceFixture.RestartWithSettingsAsync(settingsPath);
+        await _serviceFixture.EnsureSettingsAsync(settingsPath);
 
         if (!_serviceFixture.ServicesReady)
         {
@@ -770,7 +769,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private string? ResolveStateManagerSettingsPath()
     {
-        // Prefer custom settings override (set via RestartWithSettingsAsync)
+        // Prefer custom settings override (set via EnsureSettingsAsync)
         if (!string.IsNullOrEmpty(_serviceFixture.CustomSettingsPath)
             && File.Exists(_serviceFixture.CustomSettingsPath))
             return _serviceFixture.CustomSettingsPath;
