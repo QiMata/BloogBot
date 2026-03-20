@@ -20,6 +20,12 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     private int _kiteStartTime;
     private int _kiteDurationMs;
 
+    // Chase timeout: when dead-reckoning diverges from server position, local
+    // distance calculations become unreliable. If we've been chasing an aggressor
+    // for too long, force auto-attack — the mob is hitting us so we're in range.
+    private int _chaseTickCount;
+    private const int CHASE_FORCE_ATTACK_TICKS = 30; // ~3s at 100ms tick
+
     /// <summary>
     /// Perform the combat rotation logic.
     /// </summary>
@@ -43,12 +49,29 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         var distance = ObjectManager.Player.Position.DistanceTo(target.Position);
         if (distance > attackDistance)
         {
+            _chaseTickCount++;
+
+            // Dead-reckoning fallback: when no physics collision data exists
+            // (dungeon maps without vmtile files), the bot's local position
+            // diverges from the server's position. The local distance calculation
+            // becomes unreliable. If the target is actively attacking us (it's an
+            // aggressor), the server considers us in melee range. Force auto-attack
+            // after a chase timeout to avoid perpetual chase with no attacks.
+            bool targetIsAggressor = target.IsInCombat && ObjectManager.Aggressors.Any(a => a.Guid == target.Guid);
+            if (targetIsAggressor && _chaseTickCount >= CHASE_FORCE_ATTACK_TICKS)
+            {
+                ObjectManager.Face(target.Position);
+                ObjectManager.StartMeleeAttack();
+                return false;
+            }
+
             // Chase: face and navigate toward the target
             ObjectManager.Face(target.Position);
             NavigateToward(target.Position);
             return true;
         }
 
+        _chaseTickCount = 0;
         // In range — ensure auto-attack is active
         ObjectManager.StartMeleeAttack();
         return false;

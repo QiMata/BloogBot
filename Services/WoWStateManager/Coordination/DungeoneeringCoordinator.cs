@@ -766,7 +766,10 @@ public class DungeoneeringCoordinator
         var grouped = _memberAccounts.Take(PARTY_SIZE_LIMIT).Count(m =>
             snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
 
-        if (_tickCount < 5 && grouped < PARTY_SIZE_LIMIT)
+        // Wait longer for the conversion to propagate — MaNGOS needs time to update
+        // all clients' group state. Without this, batch 2 invites are sent before
+        // the server fully transitions the group to raid mode, causing silent failures.
+        if (_tickCount < 10 && grouped < PARTY_SIZE_LIMIT)
         {
             if (_tickCount % 5 == 0)
                 _logger.LogInformation("DUNGEON_COORD: Waiting for raid conversion: {Grouped}/{Expected} batch 1 members still grouped",
