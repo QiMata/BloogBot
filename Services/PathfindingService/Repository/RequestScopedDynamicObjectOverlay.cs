@@ -3,6 +3,7 @@ using Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace PathfindingService.Repository;
 
@@ -58,28 +59,35 @@ public readonly record struct OverlayExecutionResult<T>(
     T Value,
     RequestScopedDynamicObjectOverlaySummary Summary);
 
-public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegistry registry)
+public sealed class RequestScopedDynamicObjectOverlay : IDisposable
 {
     private const ulong OverlayGuidPrefix = 0xA000000000000000UL;
 
-    private readonly IDynamicObjectOverlayRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-    private readonly object _registryGate = new();
-    private bool _operationActive;
-    private int _pendingPriorityOperations;
+    private readonly IDynamicObjectOverlayRegistry _registry;
+    // ReaderWriterLockSlim: read = shared operations (physics, LOS, groundZ, path without overlay)
+    //                       write = exclusive overlay mutation (path with dynamic objects)
+    // This prevents lock starvation: multiple physics calls run concurrently,
+    // only path requests WITH overlay objects need exclusive access.
+    private readonly ReaderWriterLockSlim _rwLock = new(LockRecursionPolicy.NoRecursion);
     private long _nextRequestId;
+
+    public RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegistry registry)
+    {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+    }
 
     public T ExecuteExclusive<T>(Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        EnterSharedOperation();
+        _rwLock.EnterReadLock();
         try
         {
             return action();
         }
         finally
         {
-            ExitOperation();
+            _rwLock.ExitReadLock();
         }
     }
 
@@ -93,10 +101,11 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
         ArgumentNullException.ThrowIfNull(nearbyObjects);
         ArgumentNullException.ThrowIfNull(action);
 
-        EnterPriorityOperation();
-        try
+        if (nearbyObjects.Count == 0)
         {
-            if (nearbyObjects.Count == 0)
+            // No overlay objects — use read lock (concurrent with physics/LOS)
+            _rwLock.EnterReadLock();
+            try
             {
                 return new OverlayExecutionResult<T>(
                     action(),
@@ -106,6 +115,16 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
                         FilteredCount: 0,
                         RegisteredDisplayIds: Array.Empty<uint>()));
             }
+            finally
+            {
+                _rwLock.ExitReadLock();
+            }
+        }
+
+        // Has overlay objects — need exclusive write lock to mutate the registry
+        _rwLock.EnterWriteLock();
+        try
+        {
             var requestId = Interlocked.Increment(ref _nextRequestId);
             var registeredGuids = new List<ulong>(nearbyObjects.Count);
             var registeredDisplayIds = new List<uint>(nearbyObjects.Count);
@@ -182,51 +201,13 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
         }
         finally
         {
-            ExitOperation();
+            _rwLock.ExitWriteLock();
         }
     }
 
-    private void EnterSharedOperation()
+    public void Dispose()
     {
-        lock (_registryGate)
-        {
-            while (_operationActive || _pendingPriorityOperations > 0)
-            {
-                Monitor.Wait(_registryGate, 1000);
-            }
-
-            _operationActive = true;
-        }
-    }
-
-    private void EnterPriorityOperation()
-    {
-        lock (_registryGate)
-        {
-            _pendingPriorityOperations++;
-            try
-            {
-                while (_operationActive)
-                {
-                    Monitor.Wait(_registryGate, 1000); // Timeout to avoid infinite wait
-                }
-
-                _operationActive = true;
-            }
-            finally
-            {
-                _pendingPriorityOperations--;
-            }
-        }
-    }
-
-    private void ExitOperation()
-    {
-        lock (_registryGate)
-        {
-            _operationActive = false;
-            Monitor.PulseAll(_registryGate);
-        }
+        _rwLock.Dispose();
     }
 
     private static bool TryCreateRegistration(

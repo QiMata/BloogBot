@@ -172,8 +172,10 @@ public class RequestScopedDynamicObjectOverlayTests
     }
 
     [Fact]
-    public async Task ExecuteWithOverlay_WithoutObjects_StillSerializesNativeAccess()
+    public async Task ExecuteWithOverlay_WithoutObjects_RunsConcurrentlyWithSharedCalls()
     {
+        // Empty overlay uses read lock — should NOT block shared (read) operations.
+        // This is critical: path requests without dynamic objects must not starve physics.
         var registry = new FakeDynamicObjectOverlayRegistry();
         var overlay = new RequestScopedDynamicObjectOverlay(registry);
 
@@ -201,7 +203,8 @@ public class RequestScopedDynamicObjectOverlayTests
                 return 456;
             }));
 
-        Assert.False(sharedEntered.Wait(TimeSpan.FromMilliseconds(200)));
+        // Shared call should proceed concurrently (both are read locks)
+        Assert.True(sharedEntered.Wait(TimeSpan.FromSeconds(5)));
 
         releaseEmptyOverlay.Set();
 
@@ -211,68 +214,105 @@ public class RequestScopedDynamicObjectOverlayTests
         Assert.Equal("empty", emptyOverlayResult.Value);
         Assert.Equal(0, emptyOverlayResult.Summary.RequestedCount);
         Assert.Equal(456, sharedResult);
-        Assert.True(sharedEntered.IsSet);
         Assert.Empty(registry.Registered);
         Assert.Empty(registry.Unregistered);
     }
 
     [Fact]
-    public async Task ExecuteWithOverlay_PendingPathRequest_BlocksLaterSharedCalls()
+    public async Task ExecuteWithOverlay_WithObjects_BlocksSharedCalls()
     {
+        // Overlay WITH dynamic objects uses write lock — MUST block shared (read) operations.
+        // This ensures registry mutations are exclusive.
         var registry = new FakeDynamicObjectOverlayRegistry();
         var overlay = new RequestScopedDynamicObjectOverlay(registry);
-
-        using var firstSharedEntered = new ManualResetEventSlim(false);
-        using var releaseFirstShared = new ManualResetEventSlim(false);
-        using var pathEntered = new ManualResetEventSlim(false);
-        using var releasePath = new ManualResetEventSlim(false);
-        using var secondSharedEntered = new ManualResetEventSlim(false);
-
-        var firstSharedTask = Task.Run(() =>
-            overlay.ExecuteExclusive(() =>
+        var nearbyObjects = new[]
+        {
+            new DynamicObjectProto
             {
-                firstSharedEntered.Set();
-                releaseFirstShared.Wait(TimeSpan.FromSeconds(5));
-                return 1;
-            }));
+                Guid = 0x5001,
+                DisplayId = 99,
+                X = 1f,
+                Y = 2f,
+                Z = 3f,
+                Orientation = 0.5f,
+                Scale = 1f,
+                GoState = 0,
+            }
+        };
 
-        Assert.True(firstSharedEntered.Wait(TimeSpan.FromSeconds(5)));
+        using var overlayEntered = new ManualResetEventSlim(false);
+        using var releaseOverlay = new ManualResetEventSlim(false);
+        using var sharedEntered = new ManualResetEventSlim(false);
 
-        var pathTask = Task.Run(() =>
+        var overlayTask = Task.Run(() =>
             overlay.ExecuteWithOverlay(
                 1,
-                Array.Empty<DynamicObjectProto>(),
+                nearbyObjects,
                 () =>
                 {
-                    pathEntered.Set();
-                    releasePath.Wait(TimeSpan.FromSeconds(5));
+                    overlayEntered.Set();
+                    releaseOverlay.Wait(TimeSpan.FromSeconds(5));
                     return "path";
                 }));
 
-        await Task.Delay(100);
+        Assert.True(overlayEntered.Wait(TimeSpan.FromSeconds(5)));
 
-        var secondSharedTask = Task.Run(() =>
+        var sharedTask = Task.Run(() =>
             overlay.ExecuteExclusive(() =>
             {
-                secondSharedEntered.Set();
+                sharedEntered.Set();
                 return 2;
             }));
 
-        releaseFirstShared.Set();
+        // Shared call should be blocked by write lock
+        Assert.False(sharedEntered.Wait(TimeSpan.FromMilliseconds(200)));
 
-        Assert.True(pathEntered.Wait(TimeSpan.FromSeconds(5)));
-        Assert.False(secondSharedEntered.Wait(TimeSpan.FromMilliseconds(200)));
+        releaseOverlay.Set();
 
-        releasePath.Set();
+        var overlayResult = await overlayTask;
+        var sharedResult = await sharedTask;
 
-        var firstSharedResult = await firstSharedTask;
-        var pathResult = await pathTask;
-        var secondSharedResult = await secondSharedTask;
+        Assert.Equal("path", overlayResult.Value);
+        Assert.Equal(2, sharedResult);
+        Assert.True(sharedEntered.IsSet);
+    }
 
-        Assert.Equal(1, firstSharedResult);
-        Assert.Equal("path", pathResult.Value);
-        Assert.Equal(2, secondSharedResult);
-        Assert.True(secondSharedEntered.IsSet);
+    [Fact]
+    public async Task MultipleSharedCalls_RunConcurrently()
+    {
+        // Multiple physics/LOS calls must run concurrently — this is the fix for
+        // lock starvation where 9 bots' path requests starved physics.
+        var registry = new FakeDynamicObjectOverlayRegistry();
+        var overlay = new RequestScopedDynamicObjectOverlay(registry);
+
+        using var shared1Entered = new ManualResetEventSlim(false);
+        using var shared2Entered = new ManualResetEventSlim(false);
+        using var releaseAll = new ManualResetEventSlim(false);
+
+        var task1 = Task.Run(() =>
+            overlay.ExecuteExclusive(() =>
+            {
+                shared1Entered.Set();
+                releaseAll.Wait(TimeSpan.FromSeconds(5));
+                return 1;
+            }));
+
+        var task2 = Task.Run(() =>
+            overlay.ExecuteExclusive(() =>
+            {
+                shared2Entered.Set();
+                releaseAll.Wait(TimeSpan.FromSeconds(5));
+                return 2;
+            }));
+
+        // Both should enter concurrently (both are read locks)
+        Assert.True(shared1Entered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(shared2Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        releaseAll.Set();
+
+        Assert.Equal(1, await task1);
+        Assert.Equal(2, await task2);
     }
 
     private sealed class FakeDynamicObjectOverlayRegistry : IDynamicObjectOverlayRegistry
