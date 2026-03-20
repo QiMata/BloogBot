@@ -377,6 +377,12 @@ public class NavigationPath(
     private readonly Gender _gender = gender;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
+
+    /// <summary>
+    /// Exposes the current waypoint array for passing to MovementController's dead-reckoning.
+    /// Returns empty array if no path has been calculated.
+    /// </summary>
+    public Position[] CurrentWaypoints => _waypoints;
     private int _currentIndex;
     private Position? _destination;
     private long _lastCalculationTick;

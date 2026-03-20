@@ -479,8 +479,10 @@ namespace WoWSharpClient.Movement
                     float drDist = MathF.Sqrt(drDx * drDx + drDy * drDy);
                     if (drDist > 0.5f)
                     {
-                        // Walk speed = 2.5 y/s * dt (typically 0.033s for 30fps)
-                        float drSpeed = 2.5f * deltaSec;
+                        // Use player's actual run speed for dead-reckoning.
+                        // Previously hardcoded at 2.5 y/s (~36% of normal 7 y/s),
+                        // causing BG bots to move far too slowly in dungeons.
+                        float drSpeed = _player.RunSpeed * deltaSec;
                         output.NewPosX += (drDx / drDist) * drSpeed;
                         output.NewPosY += (drDy / drDist) * drSpeed;
                     }

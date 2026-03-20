@@ -1187,6 +1187,30 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDispatchDungeoneering(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
+        _tickCount++;
+
+        // If the designated leader (FG bot) hasn't polled and all members have been dispatched,
+        // promote the first available BG bot as leader immediately rather than waiting for the
+        // 15s failover timeout in DungeonInProgress. The FG bot takes time to launch WoW.exe
+        // and may miss the entire dispatch window.
+        bool leaderHasPolled = _dungeoneeringDispatched.ContainsKey(_leaderAccount);
+        bool allMembersDispatched = _memberAccounts.All(m => _dungeoneeringDispatched.ContainsKey(m));
+        if (!leaderHasPolled && allMembersDispatched && _tickCount > 10)
+        {
+            var newLeader = _memberAccounts.FirstOrDefault(m =>
+                snapshots.TryGetValue(m, out var s) && s.ScreenState == "InWorld"
+                && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
+            if (newLeader != null)
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' absent during dispatch. Promoting '{NewLeader}' immediately.",
+                    _leaderAccount, newLeader);
+                _leaderAccount = newLeader;
+                _leaderFailoverTriggered = true;
+                // Clear dispatch tracking so the new leader gets re-dispatched as leader
+                _dungeoneeringDispatched.TryRemove(newLeader, out _);
+            }
+        }
+
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
         _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
@@ -1196,14 +1220,11 @@ public class DungeoneeringCoordinator
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
 
-        _tickCount++;
-        // Only transition when EVERY account (including leader) has been dispatched at least once.
-        // Fallback: if leader hasn't polled after 30 ticks, transition anyway to avoid deadlock.
-        var allDispatched = _dungeoneeringDispatched.Count >= snapshots.Count
-                            && _dungeoneeringDispatched.ContainsKey(_leaderAccount);
-        if (allDispatched || _tickCount > 30)
+        // Transition when leader has been dispatched, or after timeout
+        var leaderDispatched = _dungeoneeringDispatched.ContainsKey(_leaderAccount);
+        if ((leaderDispatched && allMembersDispatched) || _tickCount > 30)
         {
-            if (!_dungeoneeringDispatched.ContainsKey(_leaderAccount))
+            if (!leaderDispatched)
                 _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' never polled during DispatchDungeoneering — forcing transition", _leaderAccount);
             TransitionTo(CoordState.DungeonInProgress);
         }

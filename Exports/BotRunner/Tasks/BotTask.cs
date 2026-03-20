@@ -95,7 +95,17 @@ public abstract class BotTask(IBotContext botContext)
 
         if (waypoint != null)
         {
+            // MoveToward first — sets facing + starts movement + calls SetTargetWaypoint
             ObjectManager.MoveToward(waypoint);
+
+            // Then pass the full path to the MovementController for dead-reckoning.
+            // This MUST come after MoveToward because MoveToward calls SetTargetWaypoint
+            // which overwrites _currentPath with a single-waypoint path. We need the full
+            // path for XY dead-reckoning in dungeons without vmtile collision data.
+            var currentWaypoints = _navPath.CurrentWaypoints;
+            if (currentWaypoints.Length > 0)
+                ObjectManager.SetNavigationPath(currentWaypoints);
+
             return true;
         }
 

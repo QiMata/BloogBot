@@ -305,71 +305,19 @@ public class DungeoneeringTask : BotTask, IBotTask
     }
 
     private int _leaderLostTicks;
-    private const int LeaderLostThreshold = 20; // ~10s at 500ms tick — then fall back to autonomous waypoints
+    private const int LeaderLostThreshold = 3; // ~1.5s — in dungeons, catch up via waypoints quickly
 
     private void HandleFollowLeader(IWoWPlayer player)
     {
-        // Non-leader: follow party leader
-        // Note: DO NOT check for pull targets here — only the leader pulls.
-        // Aggressors (mobs that attack followers) are handled in Update() line 90-96.
-        var leader = ObjectManager.PartyLeader;
-        if (leader?.Position == null)
-        {
-            _leaderLostTicks++;
-            if (_leaderLostTicks >= LeaderLostThreshold)
-            {
-                // Leader invisible too long — navigate waypoints autonomously
-                if (_updateCount % 50 == 2)
-                {
-                    Log.Warning("[DUNGEONEERING] Follower lost leader for {Ticks} ticks — navigating waypoints autonomously. " +
-                        "PartyMembers={Count}, PartyLeaderGuid=0x{LeaderGuid:X}, map={Map}",
-                        _leaderLostTicks, ObjectManager.PartyMembers.Count(),
-                        ObjectManager.PartyLeaderGuid, player.MapId);
-                }
-                HandleNavigateToWaypoint(player);
-                return;
-            }
-            if (_updateCount % 50 == 2)
-                Log.Warning("[DUNGEONEERING] Follower has no party leader — waiting ({Ticks}/{Threshold}). " +
-                    "PartyMembers={Count}, PartyLeaderGuid=0x{LeaderGuid:X}",
-                    _leaderLostTicks, LeaderLostThreshold, ObjectManager.PartyMembers.Count(),
-                    ObjectManager.PartyLeaderGuid);
-            return;
-        }
-
-        _leaderLostTicks = 0; // Reset when leader is visible
-
-        var dist = player.Position.DistanceTo(leader.Position);
-
-        if (_updateCount % 50 == 2)
-        {
-            Log.Information("[DUNGEONEERING] FollowLeader: dist={Dist:F1}y to leader at ({LX:F0},{LY:F0},{LZ:F0}), " +
-                "flags=0x{Flags:X}, moveResult={Band}",
-                dist, leader.Position.X, leader.Position.Y, leader.Position.Z,
-                (uint)player.MovementFlags,
-                dist > FollowDistance ? "FOLLOW" : dist < FollowStopDistance ? "STOP" : "BAND");
-        }
-
-        if (dist > FollowDistance)
-        {
-            TryNavigateToward(leader.Position, allowDirectFallback: true);
-        }
-        else if (dist < FollowStopDistance)
-        {
-            ObjectManager.StopAllMovement();
-            ClearNavigation();
-        }
-        else
-        {
-            // In follow band (8-15y) — keep moving toward leader to stay close
-            TryNavigateToward(leader.Position, allowDirectFallback: true);
-        }
-
-        // Check rest
-        if (!CanProceed)
-        {
-            TransitionTo(DungeonState.RestBeforePull);
-        }
+        // Followers navigate the same waypoint path as the leader.
+        // Previous approach: follow PartyLeader by GUID. This fails because:
+        //   - Coordinator may promote a BG bot as dungeoneering leader, but the
+        //     game's raid leader GUID (PartyLeader) is still the FG bot (TESTBOT1)
+        //   - All followers see TESTBOT1 at the entrance and STOP next to it
+        //   - The actual dungeoneering leader (RFCBOT2) advances alone
+        // Fix: followers navigate waypoints autonomously. The coordinator handles
+        // combat overlay (heal/DPS) via separate actions.
+        HandleNavigateToWaypoint(player);
     }
 
     private void HandleComplete()
