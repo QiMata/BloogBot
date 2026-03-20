@@ -120,18 +120,24 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-19 (session 119)
+- **Last updated:** 2026-03-20 (session 120)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **ROOT CAUSE FOUND: RFC waypoints used wrong coordinate axis.** DungeonWaypoints.RagefireChasm had Y going from -11 to -420, but the actual dungeon extends along X (-15 to -413). Waypoints past Y=-109 were outside WMO collision bounds → bots fell through world.
-  - Fixed DungeonWaypoints.cs: 15 new waypoints derived from actual DB creature spawns covering all 4 bosses (Oggleflint → Taragaman → Jergosh → Bazzalan). All 14/15 have valid VMAP ground coverage.
-  - Updated RFC_GroundZ_Diagnostic test to validate new waypoints.
-  - Deep investigation of VMAP data: parsed 389.vmtree (148 spawns, 12 WMO groups), verified Lavadungeon.wmo.vmo covers bounds (-416,-109,-66)→(103,275,59) in world coords. BIH tree and group models are correctly loaded. The collision gap was NOT data corruption — just wrong waypoint coordinates.
-- **Commits:** `7c5748a` → `2d9738e` (waypoint fix)
-- **Test baseline:** 137/137 physics tests pass. RFC_FullDungeonRun needs re-run with corrected waypoints.
+  - **ROOT CAUSE FOUND: BG bots stuck at RFC entrance.** Physics engine returns FALLINGFAR when no vmtile data exists (RFC map 389). This blocks StartMovement(ControlBits.Front) via IsPlayerAirborne(), preventing MOVEFLAG_FORWARD and dead-reckoning. Fix: strip FALLINGFAR in `!physicsHasGround` block.
+  - **Z interpolation during dead-reckoning.** When physics has no ground geometry, Z was frozen at teleport height while dungeon floor slopes → server position desync → mob evade. Fix: lerp Z toward navmesh waypoint Z.
+  - **Chase timeout for position desync.** Dead-reckoning makes local distance calculations unreliable. Bots perpetually chase mobs they think are out of range while mobs are hitting them. Fix: after 30 chase ticks targeting an active aggressor, force auto-attack.
+  - **ConvertToRaid timing.** Batch 2 invites race the server-side raid state transition. Increased wait from 5 to 10 ticks.
+  - **Test results after fixes:** Bots now MOVE through RFC (positions change from entrance). Some bots take damage from mobs (hp100→hp0). Still 0 kills / ~107 engagements due to mob evade and position desync.
+- **Commits:** `d12ae06` (FALLINGFAR + Z interp + combat logging) → `4ec3157` (chase timeout + raid conversion)
+- **Test baseline:** 137/137 physics tests pass. RFC test still fails (0 kills, timeout) but bots navigate and engage.
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** Waypoints fixed. Need to re-run the RFC 10-man test to verify bots can navigate the dungeon without falling through. FG bot still crashes on map transition (FG-CRASH-001).
+- **P5 status:** Movement is unblocked. Combat is partially working (bots auto-attack, take/deal damage). Remaining issues:
+  1. **TESTBOT1 + RFCBOT2 not in raid** — invite timing issue, need investigation
+  2. **Instance teleport loop** — ungrouped bots bounce between map 389 and map 1
+  3. **Mob evade (CANCEL_COMBAT)** — 50 evade events. Position desync from dead-reckoning makes server think bot is at wrong position
+  4. **0 kills despite 769 attack events** — bots deal low damage (1-16 per hit), many misses. Mobs evade before dying
 - **Next:**
-  1. Re-run RFC_PrepareAndOrganizeRaid to verify bots navigate with corrected waypoints
-  2. Investigate FG-CRASH-001 (FG bot map transition crash)
-  3. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  1. Analyze test run #2 (with chase timeout) for kill progress
+  2. Fix TESTBOT1/RFCBOT2 raid membership (first invite timing)
+  3. Investigate if mob evade is caused by Z desync or position drift
+  4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
