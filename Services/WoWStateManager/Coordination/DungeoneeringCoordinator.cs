@@ -1017,7 +1017,9 @@ public class DungeoneeringCoordinator
         _logger.LogInformation("DUNGEON_COORD: Group verify: {Grouped}/{Total} bots grouped.",
             grouped, snapshots.Count);
 
-        TransitionTo(CoordState.OrganizeRaidSubgroups);
+        // Skip subgroup organization — it can desync raid membership in Vanilla.
+        // All bots stay in default subgroup 0. Buff coverage is less optimal but raid stays intact.
+        TransitionTo(CoordState.TeleportToRFC);
         return null;
     }
 
@@ -1025,6 +1027,7 @@ public class DungeoneeringCoordinator
     /// Organize raid subgroups so duplicate classes are in separate groups.
     /// This ensures party-wide buffs (Battle Shout, Power Word: Fortitude, etc.) cover more players.
     /// Algorithm: round-robin classes across subgroups — each instance of a class goes to the next subgroup.
+    /// NOTE: Currently bypassed — subgroup changes can desync raid membership in Vanilla 1.12.1.
     /// </summary>
     private ActionMessage? HandleOrganizeRaidSubgroups(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
@@ -1231,13 +1234,23 @@ public class DungeoneeringCoordinator
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
 
-        // Transition when leader has been dispatched, or after timeout
+        // Transition ONLY when the LEADER has been dispatched. Never skip the leader.
+        // BG bots get re-dispatched on subsequent polls if they arrive before the leader.
         var leaderDispatched = _dungeoneeringDispatched.ContainsKey(_leaderAccount);
-        if ((leaderDispatched && allMembersDispatched) || _tickCount > 30)
+        if (leaderDispatched && allMembersDispatched)
         {
-            if (!leaderDispatched)
-                _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' never polled during DispatchDungeoneering — forcing transition", _leaderAccount);
             TransitionTo(CoordState.DungeonInProgress);
+        }
+        else if (_tickCount > 100)
+        {
+            _logger.LogWarning("DUNGEON_COORD: Dispatch timeout (tick {Tick}). Leader dispatched={LeaderOk}. Forcing transition.",
+                _tickCount, leaderDispatched);
+            TransitionTo(CoordState.DungeonInProgress);
+        }
+        else if (!leaderDispatched && _tickCount % 10 == 0)
+        {
+            _logger.LogInformation("DUNGEON_COORD: Still waiting for leader '{Leader}' dispatch (tick {Tick})",
+                _leaderAccount, _tickCount);
         }
 
         return action;
@@ -1247,8 +1260,13 @@ public class DungeoneeringCoordinator
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // --- Leader failover: if leader drops, disconnects, dies, or can't enter the dungeon map ---
-        bool leaderAlive = snapshots.TryGetValue(_leaderAccount, out var leaderSnap)
-                           && leaderSnap.ScreenState == "InWorld";
+        bool leaderInSnapshots = snapshots.TryGetValue(_leaderAccount, out var leaderSnap);
+        bool leaderAlive = leaderInSnapshots && leaderSnap!.ScreenState == "InWorld";
+        if (!leaderInSnapshots && _tickCount % 20 == 0)
+        {
+            _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' NOT in snapshots (keys=[{Keys}])",
+                _leaderAccount, string.Join(",", snapshots.Keys.Take(12)));
+        }
         bool leaderOnDungeonMap = leaderAlive
                            && (leaderSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId;
         bool leaderDead = leaderOnDungeonMap
