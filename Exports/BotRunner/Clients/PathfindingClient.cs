@@ -10,7 +10,7 @@ namespace BotRunner.Clients
 {
     public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
     {
-        internal const int DefaultPathRequestTimeoutMs = 5_000;
+        internal const int DefaultPathRequestTimeoutMs = 30_000;
         internal const int DefaultQueryTimeoutMs = 10_000;
         internal const int DefaultPhysicsTimeoutMs = 5_000;
 

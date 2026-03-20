@@ -416,6 +416,10 @@ namespace WoWStateManager
                     // Avoid default Windows EventLog provider dependency in test/runtime environments.
                     logging.ClearProviders();
                     logging.AddConsole();
+                    // Ensure all categories (including CharacterStateSocketListener / DungeoneeringCoordinator)
+                    // log at Information level. Without this, ClearProviders + AddConsole defaults to Warning
+                    // for some provider-category combos, hiding coordinator state transitions from test output.
+                    logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Information);
                 })
                 .ConfigureServices((hostContext, services) =>
                 {

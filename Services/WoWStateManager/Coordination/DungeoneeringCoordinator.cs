@@ -17,8 +17,8 @@ namespace WoWStateManager.Coordination;
 ///   WaitingForBots → PrepareCharacters → LearnSpellsViaChat → AddItemsViaChat → EquipGear →
 ///   TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
-/// PrepareCharacters: SOAP-based level set, instance unbind, reset items (charName-based commands)
-/// LearnSpellsViaChat: Bot chat .targetself + .learn <spellId> for each level-appropriate spell + .setskill to max weapons/defense
+/// PrepareCharacters: SOAP-based level set + instance unbind (charName-based commands only)
+/// LearnSpellsViaChat: Bot chat .targetself → .reset spells/talents/items → .learn <spellId> → .setskill
 /// AddItemsViaChat: Bot chat .additem <itemId> for each gear piece
 /// EquipGear: Send EquipItem actions so bots auto-equip gear from backpack
 /// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
@@ -197,7 +197,9 @@ public class DungeoneeringCoordinator
 
     private void TransitionTo(CoordState newState)
     {
-        _logger.LogInformation("DUNGEON_COORD: {Old} → {New}", _state, newState);
+        // Use LogWarning so state transitions always appear in test output
+        // (CharacterStateSocketListener category filters Info on some console providers)
+        _logger.LogWarning("DUNGEON_COORD: {Old} → {New}", _state, newState);
         _state = newState;
         _stateEnteredAt = DateTime.UtcNow;
         _tickCount = 0;
@@ -271,9 +273,12 @@ public class DungeoneeringCoordinator
             if (!snapshots.TryGetValue(account, out var snap) || snap.ScreenState != "InWorld")
                 continue;
 
+            // Mark as launched BEFORE starting the task to prevent duplicate launches
+            // from concurrent GetAction calls (multiple bot threads enter HandlePrepareCharacters)
+            if (!_preparedAccounts.TryAdd(account, 0))
+                continue;
             var task = PrepareCharacterAsync(account, charName);
             _prepTasks.TryAdd(account, task);
-            _preparedAccounts.TryAdd(account, 0);
         }
 
         // Wait for any unprepared accounts that weren't in world yet
@@ -287,15 +292,16 @@ public class DungeoneeringCoordinator
         }
 
         // Wait for ALL SOAP tasks to complete before proceeding.
-        // .character level can reset spells, so it must finish before .learn via chat.
+        // .character level resets spells, so it MUST finish before .learn via chat.
+        // Do NOT skip on timeout — out-of-order execution teaches spells that get reset.
         var pendingTasks = _prepTasks.Values.Where(t => !t.IsCompleted).ToList();
         if (pendingTasks.Count > 0)
         {
             _tickCount++;
-            if (_tickCount < 40) // Wait up to ~20s for SOAP commands to complete
-                return null;
-            _logger.LogWarning("DUNGEON_COORD: {Count} SOAP prep tasks still running after timeout, continuing.",
-                pendingTasks.Count);
+            if (_tickCount % 20 == 1)
+                _logger.LogInformation("DUNGEON_COORD: Waiting for {Count} SOAP prep tasks to complete (tick {Tick})...",
+                    pendingTasks.Count, _tickCount);
+            return null; // Never skip — SOAP must finish before spell learning
         }
 
         // All accounts prepared via SOAP — now learn spells via bot chat
@@ -453,25 +459,13 @@ public class DungeoneeringCoordinator
 
         try
         {
-            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 8 + instance unbind + reset items",
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 8 + instance unbind",
                 account, charName);
 
-            // Clear instance binds so RFC can be reset freely
+            // Only SOAP commands that accept a player name directly (no target selection needed).
+            // .reset spells/talents/items require a selected target → moved to bot chat phase.
             await _soapClient.ExecuteGMCommandAsync($".instance unbind all {charName}");
-
-            // Set level to 8 — characters stay low-level; spells are explicitly learned
             await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
-
-            // Reset spells, talents, and items to clean slate.
-            // .reset spells clears all learned spells (removes leftover .learn all_myclass from prior runs).
-            // .reset talents clears talent points (removes level 60 talents from prior runs).
-            await _soapClient.ExecuteGMCommandAsync($".reset spells {charName}");
-            await _soapClient.ExecuteGMCommandAsync($".reset talents {charName}");
-            await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
-
-            // NOTE: .learn and .additem require a selected player target in VMaNGOS.
-            // SOAP has no selection context, so these commands fail silently.
-            // Spells and items are now handled via bot chat in LearnSpellsViaChat / AddItemsViaChat phases.
 
             _logger.LogInformation("DUNGEON_COORD: {Account} ({CharName}) SOAP preparation complete.", account, charName);
         }
@@ -490,6 +484,13 @@ public class DungeoneeringCoordinator
     private List<string> BuildSpellChatCommands(string charClass)
     {
         var commands = new List<string> { ".targetself" };
+
+        // Reset spells/talents/items BEFORE learning. These commands need a selected target
+        // (.targetself above), so they go through bot chat instead of SOAP.
+        // Order: reset first → learn second. Otherwise .reset spells wipes what was just learned.
+        commands.Add(".reset spells");
+        commands.Add(".reset talents");
+        commands.Add(".reset items");
 
         // Learn only level-appropriate spells (level 1-8)
         if (Level8KeySpells.TryGetValue(charClass, out var spells))
@@ -1228,7 +1229,7 @@ public class DungeoneeringCoordinator
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
         _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
-        _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader}) [{Dispatched}/{Total}]",
+        _logger.LogWarning("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader}) [{Dispatched}/{Total}]",
             requestingAccount, isLeader, _dungeoneeringDispatched.Count, snapshots.Count);
 
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
