@@ -223,6 +223,11 @@ namespace WoWSharpClient.Movement
                 Log.Warning("[MovementController] Position changed outside physics by {Dist:F3} units", physicsPosDiff.Length());
             }
 
+            if (physicsResult == null)
+            {
+                Log.Warning("[MovementController] Physics returned null — skipping frame {Frame}", _frameCounter);
+                return;
+            }
             ApplyPhysicsResult(physicsResult, deltaSec);
             var newPhysicsPos = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
             var frameDelta = (newPhysicsPos - _lastPhysicsPosition).Length();

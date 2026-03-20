@@ -203,7 +203,35 @@ namespace BotRunner.Clients
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
-                return response.Step;
+                // Guard against empty/unexpected response (oneof not set → Step is null)
+                var result = response.Step ?? throw new Exception("PathfindingService returned empty Step response");
+
+                // Detect zero-delta with active movement flags — physics engine lacks collision data
+                // (e.g., dungeon maps missing vmtile files). Fall back to dead reckoning.
+                var flags = (MovementFlags)physicsInput.MovementFlags;
+                bool wantsMove = flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD) ||
+                                 flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD) ||
+                                 flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) ||
+                                 flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+                if (wantsMove)
+                {
+                    float dx = MathF.Abs(result.NewPosX - physicsInput.PosX);
+                    float dy = MathF.Abs(result.NewPosY - physicsInput.PosY);
+                    if (dx < 0.001f && dy < 0.001f)
+                    {
+                        _zeroPhysicsCount++;
+                        if (_zeroPhysicsCount == 5)
+                            _logger?.LogWarning("Physics returning zero-delta with movement flags on map {MapId} — using dead reckoning fallback", physicsInput.MapId);
+                        if (_zeroPhysicsCount >= 5)
+                            return DeadReckon(physicsInput);
+                    }
+                    else
+                    {
+                        _zeroPhysicsCount = 0;
+                    }
+                }
+
+                return result;
             }
             catch (Exception ex)
             {
@@ -213,36 +241,57 @@ namespace BotRunner.Clients
                 else if (_consecutiveFailures == 4)
                     _logger?.LogError("PathfindingService unreachable, using dead reckoning. Suppressing further warnings.");
 
-                // Dead reckoning: apply simple forward/backward movement + gravity
-                float dx = 0, dy = 0;
-                var flags = (MovementFlags)physicsInput.MovementFlags;
-                float facing = physicsInput.Facing;
-
-                if (flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
-                {
-                    dx += MathF.Cos(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-                    dy += MathF.Sin(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-                }
-                if (flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD))
-                {
-                    dx -= MathF.Cos(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
-                    dy -= MathF.Sin(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
-                }
-
-                return new PhysicsOutput
-                {
-                    NewPosX = physicsInput.PosX + dx,
-                    NewPosY = physicsInput.PosY + dy,
-                    NewPosZ = physicsInput.PosZ,
-                    NewVelX = physicsInput.VelX,
-                    NewVelY = physicsInput.VelY,
-                    NewVelZ = physicsInput.VelZ - 19.2911f * physicsInput.DeltaTime,
-                    MovementFlags = physicsInput.MovementFlags,
-                    Orientation = physicsInput.Facing,
-                    Pitch = physicsInput.SwimPitch,
-                    FallTime = physicsInput.FallTime + physicsInput.DeltaTime * 1000f,
-                };
+                return DeadReckon(physicsInput);
             }
+        }
+
+        private int _zeroPhysicsCount;
+
+        /// <summary>
+        /// Dead reckoning: apply simple forward/backward movement + gravity.
+        /// Used when the physics engine can't resolve collision (missing vmtile data)
+        /// or when the PathfindingService is unreachable.
+        /// </summary>
+        private static PhysicsOutput DeadReckon(PhysicsInput physicsInput)
+        {
+            float dx = 0, dy = 0;
+            var flags = (MovementFlags)physicsInput.MovementFlags;
+            float facing = physicsInput.Facing;
+
+            if (flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
+            {
+                dx += MathF.Cos(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+                dy += MathF.Sin(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+            }
+            if (flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD))
+            {
+                dx -= MathF.Cos(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
+                dy -= MathF.Sin(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
+            }
+            if (flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT))
+            {
+                dx += MathF.Cos(facing + MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+                dy += MathF.Sin(facing + MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+            }
+            if (flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT))
+            {
+                dx += MathF.Cos(facing - MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+                dy += MathF.Sin(facing - MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
+            }
+
+            return new PhysicsOutput
+            {
+                NewPosX = physicsInput.PosX + dx,
+                NewPosY = physicsInput.PosY + dy,
+                NewPosZ = physicsInput.PosZ,
+                NewVelX = physicsInput.VelX,
+                NewVelY = physicsInput.VelY,
+                NewVelZ = physicsInput.VelZ - 19.2911f * physicsInput.DeltaTime,
+                MovementFlags = physicsInput.MovementFlags,
+                Orientation = physicsInput.Facing,
+                Pitch = physicsInput.SwimPitch,
+                FallTime = physicsInput.FallTime + physicsInput.DeltaTime * 1000f,
+            };
         }
         /// <summary>
         /// Check whether the segment (from → to) intersects any registered dynamic object
