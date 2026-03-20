@@ -449,6 +449,19 @@ public class DungeoneeringCoordinator
     {
         if (_soapClient == null) return;
 
+        // NEVER send SOAP mutations to FG (WoW.exe) characters while the client is live.
+        // .character level modifies server-side state and pushes packets the real WoW client
+        // can't handle gracefully (level reset mid-session → crash). FG bots use chat commands
+        // in the LearnSpellsViaChat phase (.targetself → .character level 8) instead.
+        var settings = _allSettings.FirstOrDefault(s =>
+            s.AccountName.Equals(account, StringComparison.OrdinalIgnoreCase));
+        if (settings?.RunnerType == Settings.BotRunnerType.Foreground)
+        {
+            _logger.LogInformation("DUNGEON_COORD: Skipping SOAP prep for FG bot {Account} ({CharName}) — will use chat commands",
+                account, charName);
+            return;
+        }
+
         try
         {
             _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 8 + instance unbind",
@@ -472,10 +485,18 @@ public class DungeoneeringCoordinator
     /// and max out weapon/defense skills for level 8 (max skill = 40).
     /// First command is always ".targetself" so .learn targets the bot itself.
     /// Does NOT use ".learn all_myclass" — that teaches every spell including level 60 talents.
+    /// FG bots also get .character level 8 here (SOAP mutations crash WoW.exe).
     /// </summary>
-    private List<string> BuildSpellChatCommands(string charClass)
+    private List<string> BuildSpellChatCommands(string charClass, bool isForeground = false)
     {
         var commands = new List<string> { ".targetself" };
+
+        // FG bots: SOAP mutations crash the real WoW client, so level/unbind go through chat.
+        // .character level targets the selected player (.targetself above).
+        if (isForeground)
+        {
+            commands.Add(".character level 8");
+        }
 
         // Reset spells/talents/items BEFORE learning. These commands need a selected target
         // (.targetself above), so they go through bot chat instead of SOAP.
@@ -550,7 +571,8 @@ public class DungeoneeringCoordinator
         var settings = _allSettings.FirstOrDefault(s =>
             s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase));
         var charClass = settings?.CharacterClass ?? "Warrior";
-        var commands = BuildSpellChatCommands(charClass);
+        var isFg = settings?.RunnerType == Settings.BotRunnerType.Foreground;
+        var commands = BuildSpellChatCommands(charClass, isFg);
 
         var idx = _chatSpellIndex.GetOrAdd(requestingAccount, 0);
         if (idx < commands.Count)
@@ -572,7 +594,8 @@ public class DungeoneeringCoordinator
             var aSettings = _allSettings.FirstOrDefault(s =>
                 s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase));
             var aClass = aSettings?.CharacterClass ?? "Warrior";
-            return i >= BuildSpellChatCommands(aClass).Count;
+            var aIsFg = aSettings?.RunnerType == Settings.BotRunnerType.Foreground;
+            return i >= BuildSpellChatCommands(aClass, aIsFg).Count;
         });
 
         if (allDone)

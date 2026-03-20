@@ -333,18 +333,24 @@ namespace ForegroundBotRunner
                             || workerContId == 0xFFFFFFFF || workerContId == 0xFF;
 
                         // Infer inbound packets from ContinentId changes for the state machine.
-                        // This is a safety net until we have a direct receive hook.
+                        // This is a safety net when the recv hook misses opcodes (e.g., SMSG_LOGIN_VERIFY_WORLD
+                        // is not captured by the FG recv hook during instance transitions).
                         if (_hooksInitialized && workerContId != _lastObservedContinentId)
                         {
-                            if (workerContId == 0xFF)
+                            bool wasInTransition = _lastObservedContinentId == 0xFF || _lastObservedContinentId == 0xFFFFFFFF;
+                            bool nowValid = workerContId < 0xFF;
+                            bool nowInTransition = workerContId == 0xFF || workerContId == 0xFFFFFFFF;
+
+                            if (nowInTransition && !wasInTransition)
                             {
-                                // Loading screen = SMSG_TRANSFER_PENDING received
+                                // Entering loading screen = SMSG_TRANSFER_PENDING received
                                 PacketLogger.RecordInboundPacket(0x003F); // SMSG_TRANSFER_PENDING
-                                DiagLog($"ContinentId→0xFF: inferred SMSG_TRANSFER_PENDING");
+                                DiagLog($"ContinentId→0x{workerContId:X}: inferred SMSG_TRANSFER_PENDING");
                             }
-                            else if (_lastObservedContinentId == 0xFF && workerContId < 0xFF)
+                            else if (wasInTransition && nowValid)
                             {
                                 // Loading complete, new map = SMSG_LOGIN_VERIFY_WORLD
+                                // Cross-map: 0xFFFFFFFF → valid. Same-continent: 0xFF → valid.
                                 PacketLogger.RecordInboundPacket(0x0236); // SMSG_LOGIN_VERIFY_WORLD
                                 DiagLog($"ContinentId→0x{workerContId:X}: inferred SMSG_LOGIN_VERIFY_WORLD (map transition complete)");
                             }
