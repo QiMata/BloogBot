@@ -1288,15 +1288,21 @@ public class DungeoneeringCoordinator
                     $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
             }
 
-            if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
+            // Re-dispatch StartDungeoneering to leader every few seconds until acknowledged.
+            // The BotRunner drops actions when playerWorldReady=false (map still loading),
+            // but the coordinator already marked it as dispatched. Without re-dispatch,
+            // the leader sits idle forever. The BotRunner's ActionDispatch handles
+            // duplicate StartDungeoneering gracefully (checks for existing task, skips).
+            // Rate-limit to once per 3 seconds to avoid behavior tree rebuild spam.
+            _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
+            if (CanAct(requestingAccount, 3.0))
             {
-                _logger.LogWarning("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (late join)",
-                    _leaderAccount);
-                var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
-                action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
-                return action;
+                _lastActionSent[requestingAccount] = DateTime.UtcNow;
+                var leaderAction = new ActionMessage { ActionType = ActionType.StartDungeoneering };
+                leaderAction.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
+                return leaderAction;
             }
-            return null; // Leader already dispatched — no heal/DPS overlay for leader
+            return null;
         }
 
         if (!snapshots.TryGetValue(_leaderAccount, out leaderSnap))
