@@ -368,8 +368,11 @@ public partial class LiveBotFixture : IAsyncLifetime
             // Disable BotRunner auto-release so death setup remains deterministic.
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK", "1");
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK", "1");
-            Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
-            _logger.LogInformation("[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, WWOW_TEST_DISABLE_COORDINATOR=1 for live validation run.");
+            // Only disable coordinator if not already set by a derived fixture (e.g. RfcBotFixture enables it)
+            if (Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == null)
+                Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
+            _logger.LogInformation("[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, WWOW_TEST_DISABLE_COORDINATOR={CoordFlag} for live validation run.",
+                Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR"));
 
             // 1. Start StateManager (which launches all configured bots)
             _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager)...");

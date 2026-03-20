@@ -462,7 +462,11 @@ public class DungeoneeringCoordinator
             // Set level to 8 — characters stay low-level; spells are explicitly learned
             await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
 
-            // Reset items to clean slate (works via SOAP when character is online)
+            // Reset spells, talents, and items to clean slate.
+            // .reset spells clears all learned spells (removes leftover .learn all_myclass from prior runs).
+            // .reset talents clears talent points (removes level 60 talents from prior runs).
+            await _soapClient.ExecuteGMCommandAsync($".reset spells {charName}");
+            await _soapClient.ExecuteGMCommandAsync($".reset talents {charName}");
             await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
 
             // NOTE: .learn and .additem require a selected player target in VMaNGOS.

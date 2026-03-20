@@ -275,9 +275,20 @@ namespace WoWStateManager.Listeners
             if (IsCoordinatorDisabled)
                 return;
 
-            // Skip if a forwarded action was recently delivered — let it complete without interference
+            // Skip if a forwarded action was recently delivered — let it complete without interference.
+            // Exception: never suppress during dungeoneering dispatch/in-progress — the leader MUST
+            // receive START_DUNGEONEERING even if a pending action (e.g. DisbandGroup from fixture
+            // cleanup) was recently delivered. Without this, the FG bot misses the dispatch window
+            // and all bots start as follower=False with no leader.
             if (_coordinatorSuppressedUntil.TryGetValue(accountName, out var until) && DateTime.UtcNow < until)
-                return;
+            {
+                var isDungeonDispatch = _dungeoneeringCoordinator != null
+                    && (_dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.DispatchDungeoneering
+                     || _dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.DungeonInProgress
+                     || _dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.WaitForRFCSettle);
+                if (!isDungeonDispatch)
+                    return;
+            }
 
             if (CurrentActivityMemberList.Count < 2)
             {
