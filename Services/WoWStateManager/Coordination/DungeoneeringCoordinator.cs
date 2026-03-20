@@ -268,12 +268,12 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    // ===== Level 8 Class Configuration =====
-    // Spells available at level 8 in Vanilla WoW 1.12.1 (via .learn).
-    // .learn all_myclass teaches ALL trainer spells — these are the key ones per class for verification.
-    // Gear: green-quality dungeon-appropriate items for RFC (level 13-16 mobs).
+    // ===== Level 15 Class Configuration =====
+    // Level 15 matches RFC mob range (13-16). .learn all_myclass teaches all trainer spells.
+    // These are key spells per class for verification.
+    // Gear: green-quality dungeon-appropriate items for RFC.
 
-    /// <summary>Key spell IDs per class at level 8, used for verification after .learn all_myclass.</summary>
+    /// <summary>Key spell IDs per class at level 15, used for verification after .learn all_myclass.</summary>
     public static readonly Dictionary<string, uint[]> Level8KeySpells = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Warrior"] = [
@@ -350,7 +350,7 @@ public class DungeoneeringCoordinator
         ],
     };
 
-    /// <summary>Item IDs for level-8 dungeon-appropriate gear per class.</summary>
+    /// <summary>Item IDs for dungeon-appropriate gear per class.</summary>
     public static readonly Dictionary<string, (uint ItemId, string Name)[]> Level8Gear = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Warrior"] = [
@@ -420,14 +420,14 @@ public class DungeoneeringCoordinator
                 s.AccountName.Equals(account, StringComparison.OrdinalIgnoreCase));
             var charClass = settings?.CharacterClass ?? "Warrior";
 
-            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 8 + spells + gear",
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 15 + spells + gear",
                 account, charName, charClass);
 
             // Clear instance binds so RFC can be reset freely
             await _soapClient.ExecuteGMCommandAsync($".instance unbind all {charName}");
 
-            // Set level to 8
-            await _soapClient.ExecuteGMCommandAsync($".character level {charName} 8");
+            // Set level to 15 (RFC mobs are level 13-16)
+            await _soapClient.ExecuteGMCommandAsync($".character level {charName} 15");
 
             // Learn all class spells up to level 8
             await _soapClient.ExecuteGMCommandAsync($".learn all_myclass {charName}");

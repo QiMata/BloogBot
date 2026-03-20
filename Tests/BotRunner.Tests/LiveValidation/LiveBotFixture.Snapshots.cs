@@ -38,11 +38,13 @@ public partial class LiveBotFixture
         await _refreshLock.WaitAsync();
         try
         {
-            // Determine how many bots we expect based on previously known account names.
-            int expectedCount = (BgAccountName != null ? 1 : 0) + (FgAccountName != null ? 1 : 0);
+            // Minimum expected: FG + BG (the fixture's "required roles"). Used to trigger
+            // a brief retry if InWorld count drops transiently (CharacterSelect flicker).
+            // But we always capture ALL InWorld bots — this floor only gates the retry loop.
+            int minExpected = (BgAccountName != null ? 1 : 0) + (FgAccountName != null ? 1 : 0);
 
             List<WoWActivitySnapshot> inWorld;
-            // Brief retry: if InWorld count drops below expected (transient CharacterSelect flicker),
+            // Brief retry: if InWorld count drops below minimum expected (transient flicker),
             // poll up to 3 times with 500ms intervals before accepting the reduced list.
             for (int attempt = 0; attempt < 3; attempt++)
             {
@@ -51,7 +53,7 @@ public partial class LiveBotFixture
                     NormalizeSnapshotCharacterName(snapshot);
                 inWorld = snapshots.Where(IsHydratedInWorldSnapshot).ToList();
 
-                if (inWorld.Count >= expectedCount || expectedCount == 0)
+                if (inWorld.Count >= minExpected || minExpected == 0)
                 {
                     AllBots = inWorld;
                     IdentifyBots(inWorld);

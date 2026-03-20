@@ -39,7 +39,7 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const int RestManaPercent = 30;        // Low threshold — proceed earlier in dungeons
     private const int StuckTimeoutMs = 10000;
 
-    private readonly bool _isLeader;
+    private bool _isLeader;
     private readonly List<Position> _waypoints;
     private DungeonState _state;
     private int _waypointIndex;
@@ -68,6 +68,19 @@ public class DungeoneeringTask : BotTask, IBotTask
             _isLeader, _waypoints.Count);
     }
 
+    /// <summary>
+    /// Promote this follower to leader. Called when coordinator performs leader failover.
+    /// Transitions from FollowLeader to NavigateToWaypoint.
+    /// </summary>
+    public void PromoteToLeader()
+    {
+        if (_isLeader) return;
+        _isLeader = true;
+        _state = DungeonState.NavigateToWaypoint;
+        _leaderLostTicks = 0;
+        Log.Information("[DUNGEONEERING] Promoted to leader! waypoints={Count}, wp={WpIdx}", _waypoints.Count, _waypointIndex);
+    }
+
     private int _updateCount;
 
     public void Update()
@@ -86,12 +99,17 @@ public class DungeoneeringTask : BotTask, IBotTask
                 player.HealthPercent, ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count());
         }
 
-        // Combat interrupts everything — push combat rotation task
+        // Combat interrupts everything — push combat rotation task (only if not already fighting)
         if (ObjectManager.Aggressors.Any())
         {
-            ObjectManager.StopAllMovement();
-            ClearNavigation();
-            BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            // Only push a new PvERotation if one isn't already on the stack.
+            // Without this guard, a new task is pushed every tick (stack grows unbounded)
+            // and the constant StopAllMovement() prevents chase movement.
+            if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
+            {
+                ClearNavigation();
+                BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            }
             return;
         }
 

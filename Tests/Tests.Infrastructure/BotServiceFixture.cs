@@ -804,6 +804,10 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] WARNING: CustomSettingsPath set but file not found: {CustomSettingsPath}");
             }
 
+            // Reduce log level to Warning to prevent stdout pipe saturation with 10+ bots.
+            // .NET Host reads Logging__LogLevel__Default from environment (double underscore = : separator).
+            psi.Environment["Logging__LogLevel__Default"] = "Warning";
+
             // Explicitly forward coordinator toggle so restarts inherit the test's intent
             var coordDisable = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR");
             if (coordDisable != null)
@@ -1193,13 +1197,24 @@ public class BotServiceFixture : IAsyncLifetime
             || line.Contains("INVENTORY_CHANGE_FAILURE")
             || line.Contains("[WorldClient] INVENTORY_CHANGE_FAILURE")
             || line.Contains("[BOT RUNNER] Inventory changed:")
+            // High-frequency per-tick lines that saturate stdout with 10+ bots
+            || line.Contains("[DIAG] DeathRecovery:")
+            || line.Contains("HandleUpdateObject")
+            || line.Contains("ParseCreateObject")
+            || line.Contains("[DIAG] [TICK#")
+            || line.Contains("SMSG_COMPRESSED_UPDATE_OBJECT")
+            || line.Contains("StateChangeResponse dispatched")
             // Action delivery logs temporarily unfiltered for GOTO debugging
             // || line.Contains("QUEUED ACTION for")
             // || line.Contains("Action forward: queued")
             // || line.Contains("INJECTING PENDING ACTION")
             // || line.Contains("DELIVERING ACTION")
             || line.Contains("Detected terminated bot process")
-            || line.Contains("attempting re-launch"))
+            || line.Contains("attempting re-launch")
+            // Packet hex dump spam from Console.WriteLine in PacketPipeline
+            || line.Contains("[RX]")
+            || line.Contains("[TX]")
+            || line.Contains("payload:"))
             return true;
 
         // Filter orphaned .NET logger prefix lines (no content, just the logger category)

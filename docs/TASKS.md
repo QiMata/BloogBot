@@ -120,20 +120,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-19 (session 118)
+- **Last updated:** 2026-03-19 (session 119)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - Fixed 10-bot raid formation: party→raid pipeline with ConvertToRaid action through full proto pipeline
-  - Restructured DungeoneeringCoordinator group formation: LeaveOldGroups → Batch1 (4 members) → ConvertToRaid → Batch2 (remaining) → Verify
-  - Serialized invite+accept per member to avoid MaNGOS one-outstanding-invite limitation
-  - Fixed race condition with Interlocked.CompareExchange on WaitForGrouped→SendInvite transition
-  - Result: 9/9 BG bots consistently form raid (FG crashes on map transition — FG-CRASH-001)
-  - RFC_FullDungeonRun test passes consistently
-- **Commit:** `7916f23` — Fix 10-bot raid formation
-- **Test baseline:** RFC_FullDungeonRun passes (Raid, Members: 9)
+  - **ROOT CAUSE FOUND: RFC waypoints used wrong coordinate axis.** DungeonWaypoints.RagefireChasm had Y going from -11 to -420, but the actual dungeon extends along X (-15 to -413). Waypoints past Y=-109 were outside WMO collision bounds → bots fell through world.
+  - Fixed DungeonWaypoints.cs: 15 new waypoints derived from actual DB creature spawns covering all 4 bosses (Oggleflint → Taragaman → Jergosh → Bazzalan). All 14/15 have valid VMAP ground coverage.
+  - Updated RFC_GroundZ_Diagnostic test to validate new waypoints.
+  - Deep investigation of VMAP data: parsed 389.vmtree (148 spawns, 12 WMO groups), verified Lavadungeon.wmo.vmo covers bounds (-416,-109,-66)→(103,275,59) in world coords. BIH tree and group models are correctly loaded. The collision gap was NOT data corruption — just wrong waypoint coordinates.
+- **Commits:** `7c5748a` → `2d9738e` (waypoint fix)
+- **Test baseline:** 137/137 physics tests pass. RFC_FullDungeonRun needs re-run with corrected waypoints.
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** Group formation complete. Coordinator transitions through TeleportToRFC → DispatchDungeoneering → DungeonInProgress. Need to verify bots actually enter RFC instance and begin clearing.
+- **P5 status:** Waypoints fixed. Need to re-run the RFC 10-man test to verify bots can navigate the dungeon without falling through. FG bot still crashes on map transition (FG-CRASH-001).
 - **Next:**
-  1. Verify bots teleport into RFC (map 389) and begin dungeoneering
-  2. Debug any issues in the TeleportToRFC → DungeonInProgress pipeline
+  1. Re-run RFC_PrepareAndOrganizeRaid to verify bots navigate with corrected waypoints
+  2. Investigate FG-CRASH-001 (FG bot map transition crash)
   3. P3/P4: FG packet capture tests (fishing parity, teleport flags)

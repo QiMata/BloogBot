@@ -539,7 +539,7 @@ namespace BotRunner
                 return;
 
             _lastKnownAlivePosition = new Position(pos!.X, pos.Y, pos.Z);
-            DiagLog($"DeathRecovery: update last alive pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
+            // DiagLog removed: fires every tick per bot, saturates stdout pipe with 10+ bots
         }
 
         private void InitializeTaskSequence()

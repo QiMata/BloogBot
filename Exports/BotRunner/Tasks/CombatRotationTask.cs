@@ -43,10 +43,14 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         var distance = ObjectManager.Player.Position.DistanceTo(target.Position);
         if (distance > attackDistance)
         {
-            // Move toward target
+            // Chase: face and navigate toward the target
+            ObjectManager.Face(target.Position);
+            NavigateToward(target.Position);
             return true;
         }
 
+        // In range — ensure auto-attack is active
+        ObjectManager.StartMeleeAttack();
         return false;
     }
 

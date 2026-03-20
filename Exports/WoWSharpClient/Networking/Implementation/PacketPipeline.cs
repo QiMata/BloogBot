@@ -230,15 +230,7 @@ namespace WoWSharpClient.Networking.Implementation
                     {
                         var opcodeStr2 = opcode.ToString();
 
-                        // Always log spell/loot/cast opcodes (critical for gathering debug)
-                        if (opcodeStr2.Contains("SPELL") || opcodeStr2.Contains("CAST") ||
-                            opcodeStr2.Contains("LOOT") || opcodeStr2.Contains("DESTROY"))
-                        {
-                            Console.WriteLine($"[RX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr2} size={size} payload={payload.Length}b");
-                            if (payload.Length <= 256)
-                                Console.WriteLine($"[RX]   payload: {BitConverter.ToString(payload.ToArray())}");
-                        }
-                        else if (DiagnosticOpcodeLogging || DateTime.UtcNow < _logReceiveUntil)
+                        if (DiagnosticOpcodeLogging || DateTime.UtcNow < _logReceiveUntil)
                         {
                             Console.WriteLine($"[RX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr2} size={size} payload={payload.Length}b");
                         }

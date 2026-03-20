@@ -27,7 +27,7 @@ namespace WoWStateManager
 
         private void OnWorldStateUpdate(AsyncRequest dataMessage)
         {
-            _logger.LogInformation($"Received world state update message with ID {dataMessage.Id}, Case={dataMessage.ParameterCase}.");
+            _logger.LogDebug($"Received world state update message with ID {dataMessage.Id}, Case={dataMessage.ParameterCase}.");
 
             var response = new StateChangeResponse();
 
@@ -86,9 +86,7 @@ namespace WoWStateManager
                 if (snapshots.TryGetValue(query.AccountName, out var snapshot))
                 {
                     response.Snapshots.Add(snapshot);
-                    var invCount = snapshot.Player?.Inventory?.Count ?? -1;
-                    var bagCount = snapshot.Player?.BagContents?.Count ?? -1;
-                    _logger.LogInformation($"Snapshot query: returning snapshot for '{query.AccountName}' (Inventory={invCount}, BagContents={bagCount})");
+                    _logger.LogDebug($"Snapshot query: returning snapshot for '{query.AccountName}'");
                 }
                 else
                 {
@@ -100,14 +98,8 @@ namespace WoWStateManager
             {
                 // Unfiltered: return all snapshots
                 foreach (var kvp in snapshots)
-                {
                     response.Snapshots.Add(kvp.Value);
-                    var invCount = kvp.Value.Player?.Inventory?.Count ?? -1;
-                    var errCount = kvp.Value.RecentErrors?.Count ?? -1;
-                    var chatCount = kvp.Value.RecentChatMessages?.Count ?? -1;
-                    _logger.LogInformation($"Snapshot query: '{kvp.Key}' Inventory={invCount}, RecentErrors={errCount}, RecentChat={chatCount}");
-                }
-                _logger.LogInformation($"Snapshot query: returning {response.Snapshots.Count} snapshots");
+                _logger.LogDebug($"Snapshot query: returning {response.Snapshots.Count} snapshots");
             }
 
             if (response.Response != ResponseResult.Failure)

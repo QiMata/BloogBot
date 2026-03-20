@@ -135,10 +135,24 @@ public class StateManagerTestClient : IDisposable
         if (_stream == null)
             throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
 
-        await _requestGate.WaitAsync(ct);
+        // Per-request timeout: prevent indefinite hangs when StateManager is overloaded
+        // (e.g. 10 BG bots hammering port 5002 while we query port 8088).
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        var linked = timeoutCts.Token;
+
+        await _requestGate.WaitAsync(linked);
         try
         {
-            return await SendRequestCoreAsync(request, ct);
+            return await SendRequestCoreAsync(request, linked);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Per-request timeout hit — reconnect and retry once
+            await ReconnectAsync(ct);
+            using var retryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            retryCts.CancelAfter(TimeSpan.FromSeconds(30));
+            return await SendRequestCoreAsync(request, retryCts.Token);
         }
         catch (IOException) when (!ct.IsCancellationRequested)
         {

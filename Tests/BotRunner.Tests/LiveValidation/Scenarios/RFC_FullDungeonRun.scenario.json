@@ -14,6 +14,7 @@
   },
   "assertions": {
     "groupFormed": true,
+    "dungeoneeringDispatched": true,
     "minBotsOnMap": { "mapId": 389, "count": 3 }
   }
 }

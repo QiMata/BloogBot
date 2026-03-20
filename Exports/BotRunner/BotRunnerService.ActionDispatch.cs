@@ -644,7 +644,14 @@ namespace BotRunner
 
                         builder.Do("Queue Dungeoneering Task", time =>
                         {
-                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.Dungeoneering.DungeoneeringTask)
+                            var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
+                            if (existingTask != null)
+                            {
+                                // Task already running — promote to leader if coordinator says so (failover)
+                                if (isLeader)
+                                    existingTask.PromoteToLeader();
+                            }
+                            else
                             {
                                 // If no explicit waypoints, try map-based defaults
                                 var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(_objectManager.Player?.MapId ?? 0);

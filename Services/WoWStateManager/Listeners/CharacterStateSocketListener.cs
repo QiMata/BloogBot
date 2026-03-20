@@ -84,12 +84,13 @@ namespace WoWStateManager.Listeners
             _logger.LogDebug($"Incoming state update for account '{accountName}', ScreenState='{screenState}'");
 
             // Log snapshot with screen state info (used by integration tests and monitoring)
+            // Reduced to Debug to prevent stdout pipe saturation with 10+ bots polling
             if (!string.IsNullOrEmpty(screenState))
             {
                 var charInfo = !string.IsNullOrEmpty(characterName) ? $", Character='{characterName}'" : "";
                 var errCount = request.RecentErrors?.Count ?? 0;
                 var errSuffix = errCount > 0 ? $", RecentErrors={errCount}" : "";
-                _logger.LogInformation($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
+                _logger.LogDebug($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
             }
 
             // Handle "?" account name - assign to Foreground account (only FG bots send "?")
