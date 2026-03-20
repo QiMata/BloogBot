@@ -106,6 +106,13 @@ public class RagefireChasmTests
         var lastFingerprintChange = sw.Elapsed;
         TResult lastResult = default!;
 
+        void Log(string msg)
+        {
+            _output.WriteLine(msg);
+            // Also write to stderr so blame-hang detector sees activity
+            Console.Error.WriteLine(msg);
+        }
+
         while (sw.Elapsed < maxTimeout)
         {
             await _bot.RefreshSnapshotsAsync();
@@ -115,13 +122,13 @@ public class RagefireChasmTests
 
             if (done)
             {
-                _output.WriteLine($"[{phaseName}] Complete at {sw.Elapsed.TotalSeconds:F0}s");
+                Log($"[{phaseName}] Complete at {sw.Elapsed.TotalSeconds:F0}s");
                 return result;
             }
 
             if (fingerprint != lastFingerprint)
             {
-                _output.WriteLine($"[{phaseName}] Progress at {sw.Elapsed.TotalSeconds:F0}s: {fingerprint}");
+                Log($"[{phaseName}] Progress at {sw.Elapsed.TotalSeconds:F0}s: {fingerprint}");
                 lastFingerprint = fingerprint;
                 lastFingerprintChange = sw.Elapsed;
             }
@@ -129,19 +136,21 @@ public class RagefireChasmTests
             var staleDuration = sw.Elapsed - lastFingerprintChange;
             if (staleDuration > staleTimeout)
             {
-                Assert.Fail(
-                    $"[{phaseName}] STALE — no snapshot progress for {staleDuration.TotalSeconds:F0}s " +
+                var msg = $"[{phaseName}] STALE — no snapshot progress for {staleDuration.TotalSeconds:F0}s " +
                     $"(stale limit: {staleTimeout.TotalSeconds:F0}s). " +
                     $"Last fingerprint: {lastFingerprint}. " +
-                    $"Elapsed: {sw.Elapsed.TotalSeconds:F0}s/{maxTimeout.TotalSeconds:F0}s max.");
+                    $"Elapsed: {sw.Elapsed.TotalSeconds:F0}s/{maxTimeout.TotalSeconds:F0}s max.";
+                Log(msg);
+                Assert.Fail(msg);
             }
 
             await Task.Delay(pollInterval);
         }
 
-        Assert.Fail(
-            $"[{phaseName}] TIMEOUT — {maxTimeout.TotalSeconds:F0}s elapsed without completion. " +
-            $"Last fingerprint: {lastFingerprint}");
+        var timeoutMsg = $"[{phaseName}] TIMEOUT — {maxTimeout.TotalSeconds:F0}s elapsed without completion. " +
+            $"Last fingerprint: {lastFingerprint}";
+        Log(timeoutMsg);
+        Assert.Fail(timeoutMsg);
         return lastResult; // unreachable but satisfies compiler
     }
 
@@ -370,8 +379,10 @@ public class RagefireChasmTests
 
         // Enable the coordinator and restart with RFC 10-bot config
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
+        Console.Error.WriteLine($"[RFC] Restarting with RFC config + coordinator enabled: {Path.GetFileName(settingsPath)}");
         _output.WriteLine($"Restarting with RFC config + coordinator enabled: {settingsPath}");
         await _bot.EnsureSettingsAsync(settingsPath);
+        Console.Error.WriteLine($"[RFC] Fixture ready={_bot.IsReady}, bots={_bot.AllBots.Count}");
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
 
         // ===== Phase: Bots enter world =====
@@ -589,7 +600,9 @@ public class RagefireChasmTests
                     var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
                     var aggressorCount = snap.NearbyUnits?.Count(u => u.TargetGuid == playerGuid && u.Health > 0) ?? 0;
 
-                    if (aggressorCount > 0 || targetGuid != 0)
+                    // Exclude self-targeting (from .targetself during spell learning) from combat count
+                    var isTargetingSelf = targetGuid == playerGuid;
+                    if (aggressorCount > 0 || (targetGuid != 0 && !isTargetingSelf))
                         botsInCombat++;
 
                     // Include position (rounded), health, and target in fingerprint
@@ -619,8 +632,8 @@ public class RagefireChasmTests
                 if (rfcBots.Count > 0 && rfcBots.All(s => (s.Player?.Unit?.Health ?? 0) <= 0))
                     return (true, combatEngagements, $"WIPE|{fpParts}");
 
-                // Dungeon clear detection
-                if (combatEngagements > 5 && botsInCombat == 0 &&
+                // Dungeon clear detection — require at least 1 bot on RFC map
+                if (rfcBots.Count > 0 && combatEngagements > 5 && botsInCombat == 0 &&
                     !rfcBots.Any(s => s.Player?.Unit?.TargetGuid != 0))
                     return (true, combatEngagements, $"CLEAR|{fpParts}");
 

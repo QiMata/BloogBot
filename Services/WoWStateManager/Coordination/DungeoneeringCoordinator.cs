@@ -218,8 +218,22 @@ public class DungeoneeringCoordinator
         if (readyMembers < 1)
             return null;
 
-        _logger.LogInformation("DUNGEON_COORD: {Count} members ready. Starting character preparation.",
-            readyMembers);
+        _tickCount++;
+
+        // Wait for ALL members (with 30s timeout for stragglers)
+        if (readyMembers < _memberAccounts.Count)
+        {
+            if (_tickCount % 10 == 1)
+                _logger.LogInformation("DUNGEON_COORD: Waiting for bots: {Ready}/{Total} members InWorld (tick {Tick})",
+                    readyMembers, _memberAccounts.Count, _tickCount);
+            if (_tickCount < 60) // ~30s at 500ms poll
+                return null;
+            _logger.LogWarning("DUNGEON_COORD: Timeout waiting for all members. Proceeding with {Ready}/{Total}.",
+                readyMembers, _memberAccounts.Count);
+        }
+
+        _logger.LogInformation("DUNGEON_COORD: {Count}/{Total} members ready. Starting character preparation.",
+            readyMembers, _memberAccounts.Count);
 
         // If SOAP is available, do full prep; otherwise skip to group formation
         if (_soapClient != null)
