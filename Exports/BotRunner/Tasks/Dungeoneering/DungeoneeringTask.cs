@@ -39,7 +39,7 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const int RestManaPercent = 30;        // Low threshold — proceed earlier in dungeons
     private const int StuckTimeoutMs = 10000;
 
-    private bool _isLeader;
+    private readonly bool _isLeader;
     private readonly List<Position> _waypoints;
     private DungeonState _state;
     private int _waypointIndex;
@@ -66,19 +66,6 @@ public class DungeoneeringTask : BotTask, IBotTask
 
         Log.Information("[DUNGEONEERING] Task started: leader={IsLeader}, waypoints={Count}",
             _isLeader, _waypoints.Count);
-    }
-
-    /// <summary>
-    /// Promote this follower to leader. Called when coordinator performs leader failover.
-    /// Transitions from FollowLeader to NavigateToWaypoint.
-    /// </summary>
-    public void PromoteToLeader()
-    {
-        if (_isLeader) return;
-        _isLeader = true;
-        _state = DungeonState.NavigateToWaypoint;
-        _leaderLostTicks = 0;
-        Log.Information("[DUNGEONEERING] Promoted to leader! waypoints={Count}, wp={WpIdx}", _waypoints.Count, _waypointIndex);
     }
 
     private int _updateCount;
@@ -304,8 +291,6 @@ public class DungeoneeringTask : BotTask, IBotTask
         }
     }
 
-    private int _leaderLostTicks;
-    private const int LeaderLostThreshold = 3; // ~1.5s — in dungeons, catch up via waypoints quickly
 
     private void HandleFollowLeader(IWoWPlayer player)
     {

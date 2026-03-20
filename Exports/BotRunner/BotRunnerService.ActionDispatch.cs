@@ -647,9 +647,7 @@ namespace BotRunner
                             var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
                             if (existingTask != null)
                             {
-                                // Task already running — promote to leader if coordinator says so (failover)
-                                if (isLeader)
-                                    existingTask.PromoteToLeader();
+                                // Task already running — skip duplicate dispatch
                             }
                             else
                             {
