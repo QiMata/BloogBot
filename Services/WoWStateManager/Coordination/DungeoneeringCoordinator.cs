@@ -1228,6 +1228,16 @@ public class DungeoneeringCoordinator
 
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
+        // Late-join teleport: if this bot is not on RFC map (crashed/restarted during teleport),
+        // send them a teleport command instead of StartDungeoneering. They'll get dispatched next poll.
+        if (snapshots.TryGetValue(requestingAccount, out var snap)
+            && snap.Player?.Unit?.GameObject?.Base?.MapId != RfcMapId)
+        {
+            _logger.LogWarning("DUNGEON_COORD: '{Account}' not on RFC map (map={Map}). Teleporting to RFC.",
+                requestingAccount, snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0);
+            return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+        }
+
         _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
         _logger.LogWarning("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader}) [{Dispatched}/{Total}]",
             requestingAccount, isLeader, _dungeoneeringDispatched.Count, snapshots.Count);
@@ -1242,8 +1252,10 @@ public class DungeoneeringCoordinator
         {
             TransitionTo(CoordState.DungeonInProgress);
         }
-        else if (_tickCount > 100)
+        else if (_tickCount > 300)
         {
+            // 300 ticks @ ~500ms = ~150s. FG bot may crash during RFC teleport and needs
+            // ~60s to relaunch + ~30s to enter world + teleport to RFC. Give ample time.
             _logger.LogWarning("DUNGEON_COORD: Dispatch timeout (tick {Tick}). Leader dispatched={LeaderOk}. Forcing transition.",
                 _tickCount, leaderDispatched);
             TransitionTo(CoordState.DungeonInProgress);
@@ -1289,13 +1301,22 @@ public class DungeoneeringCoordinator
             _leaderLastSeen = DateTime.UtcNow;
         }
 
-        // If the leader missed the DispatchDungeoneering window (FG bot polls slower),
-        // or was just promoted via failover, send them StartDungeoneering now.
+        // If the leader missed the DispatchDungeoneering window (FG bot polls slower, or crashed
+        // and restarted during teleport), handle late join: teleport to RFC if needed, then dispatch.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
+            // Late-join teleport: if leader is not on RFC map, send them there first
+            var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            if (leaderMapId != RfcMapId)
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' late join — not on RFC map (map={Map}). Teleporting.",
+                    _leaderAccount, leaderMapId);
+                return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            }
+
             if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
             {
-                _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (late join)",
+                _logger.LogWarning("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (late join)",
                     _leaderAccount);
                 var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
                 action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
