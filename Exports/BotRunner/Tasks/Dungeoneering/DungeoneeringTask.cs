@@ -93,18 +93,23 @@ public class DungeoneeringTask : BotTask, IBotTask
         if (_updateCount % 50 == 1) // Log every ~5s
         {
             Log.Information("[DUNGEONEERING] Tick #{Count}: state={State}, leader={IsLeader}, wp={WpIdx}/{WpCount}, " +
-                "pos=({X:F0},{Y:F0},{Z:F0}), hp={HP}%, hostiles={Hostiles}, aggressors={Aggressors}",
+                "pos=({X:F0},{Y:F0},{Z:F0}), hp={HP}%, flags=0x{Flags:X}, hostiles={Hostiles}, aggressors={Aggressors}, map={Map}",
                 _updateCount, _state, _isLeader, _waypointIndex, _waypoints.Count,
                 player.Position.X, player.Position.Y, player.Position.Z,
-                player.HealthPercent, ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count());
+                player.HealthPercent, (uint)player.MovementFlags,
+                ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(), player.MapId);
         }
 
-        // Combat interrupts everything — push combat rotation task (only if not already fighting)
-        if (ObjectManager.Aggressors.Any())
+        // Combat interrupts navigation — but only for the LEADER.
+        // Followers keep following/navigating even when aggroed, because:
+        //   1. The DungeoneeringCoordinator handles combat via heal/DPS overlay actions
+        //   2. Mobs at the entrance aggro followers but often evade (position desync),
+        //      creating a permanent combat state that blocks all movement
+        //   3. Followers that stop to fight never catch up to the leader
+        // Leader stops to fight because they control the pace of dungeon advancement.
+        if (_isLeader && ObjectManager.Aggressors.Any())
         {
             // Only push a new PvERotation if one isn't already on the stack.
-            // Without this guard, a new task is pushed every tick (stack grows unbounded)
-            // and the constant StopAllMovement() prevents chase movement.
             if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
             {
                 ClearNavigation();
@@ -316,21 +321,34 @@ public class DungeoneeringTask : BotTask, IBotTask
                 // Leader invisible too long — navigate waypoints autonomously
                 if (_updateCount % 50 == 2)
                 {
-                    Log.Warning("[DUNGEONEERING] Follower lost leader for {Ticks} ticks — navigating waypoints autonomously. PartyMembers={Count}",
-                        _leaderLostTicks, ObjectManager.PartyMembers.Count());
+                    Log.Warning("[DUNGEONEERING] Follower lost leader for {Ticks} ticks — navigating waypoints autonomously. " +
+                        "PartyMembers={Count}, PartyLeaderGuid=0x{LeaderGuid:X}, map={Map}",
+                        _leaderLostTicks, ObjectManager.PartyMembers.Count(),
+                        ObjectManager.PartyLeaderGuid, player.MapId);
                 }
                 HandleNavigateToWaypoint(player);
                 return;
             }
             if (_updateCount % 50 == 2)
-                Log.Warning("[DUNGEONEERING] Follower has no party leader — waiting ({Ticks}/{Threshold}). PartyMembers={Count}",
-                    _leaderLostTicks, LeaderLostThreshold, ObjectManager.PartyMembers.Count());
+                Log.Warning("[DUNGEONEERING] Follower has no party leader — waiting ({Ticks}/{Threshold}). " +
+                    "PartyMembers={Count}, PartyLeaderGuid=0x{LeaderGuid:X}",
+                    _leaderLostTicks, LeaderLostThreshold, ObjectManager.PartyMembers.Count(),
+                    ObjectManager.PartyLeaderGuid);
             return;
         }
 
         _leaderLostTicks = 0; // Reset when leader is visible
 
         var dist = player.Position.DistanceTo(leader.Position);
+
+        if (_updateCount % 50 == 2)
+        {
+            Log.Information("[DUNGEONEERING] FollowLeader: dist={Dist:F1}y to leader at ({LX:F0},{LY:F0},{LZ:F0}), " +
+                "flags=0x{Flags:X}, moveResult={Band}",
+                dist, leader.Position.X, leader.Position.Y, leader.Position.Z,
+                (uint)player.MovementFlags,
+                dist > FollowDistance ? "FOLLOW" : dist < FollowStopDistance ? "STOP" : "BAND");
+        }
 
         if (dist > FollowDistance)
         {
@@ -341,7 +359,11 @@ public class DungeoneeringTask : BotTask, IBotTask
             ObjectManager.StopAllMovement();
             ClearNavigation();
         }
-        // else: in follow band, keep moving toward leader
+        else
+        {
+            // In follow band (8-15y) — keep moving toward leader to stay close
+            TryNavigateToward(leader.Position, allowDirectFallback: true);
+        }
 
         // Check rest
         if (!CanProceed)

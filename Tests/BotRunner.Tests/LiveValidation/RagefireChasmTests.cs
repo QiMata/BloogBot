@@ -565,9 +565,10 @@ public class RagefireChasmTests
             "Oggleflint", "Taragaman the Hungerer", "Jergosh the Invoker", "Bazzalan"
         };
 
+        var dungeonStartTime = DateTime.UtcNow;
         await WaitForProgressAsync<int>(
             phaseName: "DungeonCombat",
-            maxTimeout: TimeSpan.FromMinutes(10),
+            maxTimeout: TimeSpan.FromMinutes(3),
             staleTimeout: TimeSpan.FromSeconds(60),
             pollInterval: TimeSpan.FromSeconds(5),
             evaluate: snapshots =>
@@ -636,6 +637,26 @@ public class RagefireChasmTests
                 if (rfcBots.Count > 0 && combatEngagements > 5 && botsInCombat == 0 &&
                     !rfcBots.Any(s => s.Player?.Unit?.TargetGuid != 0))
                     return (true, combatEngagements, $"CLEAR|{fpParts}");
+
+                // Forward-progress check: if no bots moved >10y from entrance after 90s, fail fast
+                var elapsed = (DateTime.UtcNow - dungeonStartTime).TotalSeconds;
+                if (elapsed > 90 && rfcBots.Count > 0)
+                {
+                    const float entranceX = 3f, entranceY = -11f;
+                    var maxDistFromEntrance = rfcBots.Max(s =>
+                    {
+                        var p = s.Player?.Unit?.GameObject?.Base?.Position;
+                        if (p == null) return 0f;
+                        var dx = p.X - entranceX;
+                        var dy = p.Y - entranceY;
+                        return MathF.Sqrt(dx * dx + dy * dy);
+                    });
+                    if (maxDistFromEntrance < 10f)
+                    {
+                        return (true, combatEngagements,
+                            $"NO_PROGRESS|maxDist={maxDistFromEntrance:F1}y after {elapsed:F0}s|{fpParts}");
+                    }
+                }
 
                 var fingerprint = $"combat={botsInCombat},engagements={combatEngagements}," +
                     $"bosses={bossesKilled.Count}|{fpParts}";
