@@ -845,6 +845,13 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
     return false;
 }
 
+// Global mutex for ALL navmesh query operations (corridor, IsPointOnNavmesh, etc.).
+// dtNavMeshQuery is NOT thread-safe — it has internal mutable state (node pool,
+// open list). With 10 bots sharing one query per map, concurrent access causes
+// memory corruption and access violations (0xC0000005). Serializing all operations
+// is safe because each call takes microseconds.
+static std::mutex g_corridorMutex;
+
 // ===============================
 // SPATIAL QUERIES
 // ===============================
@@ -860,6 +867,8 @@ extern "C" __declspec(dllexport) bool IsPointOnNavmesh(
 {
     if (!g_initialized)
         InitializeAllSystems();
+
+    std::lock_guard<std::mutex> lock(g_corridorMutex);
 
     auto* nav = Navigation::GetInstance();
     const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
@@ -902,6 +911,8 @@ extern "C" __declspec(dllexport) uint32_t FindNearestWalkablePoint(
 {
     if (!g_initialized)
         InitializeAllSystems();
+
+    std::lock_guard<std::mutex> lock(g_corridorMutex);
 
     auto* nav = Navigation::GetInstance();
     const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
@@ -963,7 +974,6 @@ struct CorridorInstance
     bool           valid;
 };
 
-static std::mutex g_corridorMutex;
 static uint32_t g_nextCorridorHandle = 1;
 static std::unordered_map<uint32_t, CorridorInstance*> g_corridors;
 
@@ -1038,6 +1048,12 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
 
         auto* navigation = Navigation::GetInstance();
         if (!navigation) { fprintf(stderr, "[CORRIDOR] no Navigation instance\n"); return result; }
+
+        // Hold the corridor mutex for the ENTIRE operation.
+        // dtNavMeshQuery is NOT thread-safe — concurrent findPath/findNearestPoly
+        // on the same query object corrupts internal state and causes access violations.
+        // With 10 bots on the same map, all sharing one query, this is fatal.
+        std::lock_guard<std::mutex> lock(g_corridorMutex);
 
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }
@@ -1142,12 +1158,9 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         result.posZ = nearestStart[1]; // Detour[1] = WoW Z
 
         // Register corridor for future incremental updates
-        uint32_t handle;
-        {
-            std::lock_guard<std::mutex> lock(g_corridorMutex);
-            handle = g_nextCorridorHandle++;
-            g_corridors[handle] = ci;
-        }
+        // (already under g_corridorMutex from top of function)
+        uint32_t handle = g_nextCorridorHandle++;
+        g_corridors[handle] = ci;
 
         result.handle = handle;
         fprintf(stderr, "[CORRIDOR] handle=%u corners=%d pos=(%.1f,%.1f,%.1f)\n",
@@ -1173,13 +1186,14 @@ extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
 
     __try
     {
-        CorridorInstance* ci = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(g_corridorMutex);
-            auto it = g_corridors.find(handle);
-            if (it == g_corridors.end()) return result;
-            ci = it->second;
-        }
+        // Hold the corridor mutex for the ENTIRE operation to prevent:
+        // 1. Use-after-free: another thread calling CorridorDestroy while we use ci
+        // 2. dtNavMeshQuery corruption: concurrent access to shared query object
+        std::lock_guard<std::mutex> lock(g_corridorMutex);
+
+        auto it = g_corridors.find(handle);
+        if (it == g_corridors.end()) return result;
+        CorridorInstance* ci = it->second;
         if (!ci || !ci->valid) return result;
 
         dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
@@ -1226,13 +1240,11 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
 
     __try
     {
-        CorridorInstance* ci = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(g_corridorMutex);
-            auto it = g_corridors.find(handle);
-            if (it == g_corridors.end()) return result;
-            ci = it->second;
-        }
+        std::lock_guard<std::mutex> lock(g_corridorMutex);
+
+        auto it = g_corridors.find(handle);
+        if (it == g_corridors.end()) return result;
+        CorridorInstance* ci = it->second;
         if (!ci || !ci->valid) return result;
 
         dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
