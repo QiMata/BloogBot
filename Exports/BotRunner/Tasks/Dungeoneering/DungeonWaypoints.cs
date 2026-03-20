@@ -23,36 +23,40 @@ public static class DungeonWaypoints
     /// </summary>
     public static IReadOnlyList<Position> RagefireChasm { get; } =
     [
-        // Entrance area — just inside the portal
-        new Position(3f, -11f, -18f),
+        // Entrance area — just inside the portal (ground at Z≈-16.6)
+        new Position(3f, -11f, -16f),
 
-        // First corridor heading south
-        new Position(-15f, -40f, -20f),
-        new Position(-35f, -72f, -22f),
+        // First corridor — earthborers and molten elementals
+        new Position(-23f, -61f, -21f),
+        new Position(-70f, -33f, -18f),
 
-        // First open area with trogg packs
-        new Position(-55f, -100f, -22f),
-        new Position(-60f, -135f, -22f),
+        // Approaching Oggleflint — descending into trogg caves
+        new Position(-106f, -38f, -30f),
+        new Position(-130f, -35f, -33f),
 
-        // Oggleflint area (left fork)
-        new Position(-45f, -165f, -23f),
-        new Position(-28f, -190f, -22f),
+        // Oggleflint's area (first boss)
+        new Position(-148f, 28f, -39f),
 
-        // Central lava chamber approach — Taragaman the Hungerer
-        new Position(-20f, -220f, -22f),
-        new Position(-35f, -255f, -21f),
-        new Position(-55f, -280f, -20f),
+        // Ascending past Oggleflint toward lava chambers
+        new Position(-177f, 75f, -22f),
+        new Position(-209f, 56f, -14f),
 
-        // Taragaman's platform
-        new Position(-40f, -310f, -19f),
+        // Searing Blade territory — approaching Taragaman
+        new Position(-223f, 87f, -25f),
 
-        // Jergosh the Invoker area (rear cavern)
-        new Position(-20f, -345f, -19f),
-        new Position(-5f, -375f, -18f),
+        // Taragaman the Hungerer's platform (second boss)
+        new Position(-245f, 150f, -19f),
 
-        // Bazzalan's alcove (deep end)
-        new Position(10f, -400f, -18f),
-        new Position(0f, -420f, -17f),
+        // Deep corridor toward Jergosh and Bazzalan
+        new Position(-270f, 97f, -25f),
+        new Position(-300f, 154f, -25f),
+        new Position(-340f, 214f, -21f),
+
+        // Jergosh the Invoker area (third boss)
+        new Position(-377f, 209f, -22f),
+
+        // Bazzalan's alcove (final boss, upper ledge)
+        new Position(-385f, 146f, 8f),
     ];
 
     /// <summary>

@@ -897,20 +897,24 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             _output.WriteLine($"  GetGroundZ(z={qz:F2}, maxDist=20) = {gz:F4} {(valid ? "VALID" : "MISS")}");
         }
 
-        // Also probe some interior positions that bots navigate through
-        _output.WriteLine($"\n=== Interior positions ===");
+        // Probe all DungeonWaypoints.RagefireChasm positions (corrected to real dungeon layout)
+        _output.WriteLine($"\n=== Dungeon Waypoint positions ===");
         (float ix, float iy, float iz)[] interiorPoints = {
-            (-5.6f, -26.2f, -18.0f),    // where bot was moving
-            (-8.2f, -31.5f, -18.0f),    // where RFCBOT2 started falling
-            (-14.7f, -49.2f, -20.0f),   // where Z plummeted
-            (-20.1f, -64.1f, -20.0f),   // deeper inside
-            (-21.0f, -66.0f, -20.0f),   // boundary probe
-            (-22.0f, -68.0f, -20.0f),   // boundary probe
-            (-23.0f, -70.0f, -20.0f),   // boundary probe
-            (-24.0f, -72.0f, -20.0f),   // boundary probe
-            (-25.0f, -74.0f, -20.0f),   // boundary probe
-            (-25.0f, -77.0f, -20.0f),   // known miss
-            (-30.0f, -90.0f, -20.0f),   // known miss
+            (3f, -11f, -18f),           // WP1: entrance
+            (-23f, -61f, -21f),         // WP2: first corridor
+            (-70f, -33f, -18f),         // WP3: earthborers
+            (-106f, -38f, -30f),        // WP4: approaching Oggleflint
+            (-130f, -35f, -33f),        // WP5: near Oggleflint
+            (-148f, 28f, -39f),         // WP6: Oggleflint's area
+            (-177f, 75f, -22f),         // WP7: ascending past Oggleflint
+            (-209f, 56f, -14f),         // WP8: lava chambers
+            (-223f, 87f, -25f),         // WP9: Searing Blade territory
+            (-245f, 150f, -19f),        // WP10: Taragaman
+            (-270f, 97f, -25f),         // WP11: deep corridor
+            (-300f, 154f, -25f),        // WP12: deep corridor
+            (-340f, 214f, -21f),        // WP13: approaching Jergosh
+            (-377f, 209f, -22f),        // WP14: Jergosh
+            (-385f, 146f, 8f),          // WP15: Bazzalan
         };
         foreach (var (ix, iy, iz) in interiorPoints)
         {
