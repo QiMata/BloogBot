@@ -136,9 +136,10 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 - **Test baseline:** 139/139 physics tests pass (added 2 RFC diagnostic tests). RFC PhysicsStep and wall collision both verified.
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. VMapExtractor/Assembler at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings (pre-extracted WMOs) at `D:/World of Warcraft/Buildings/`.
 - **Key discovery:** RFC = Lavadungeon.wmo, non-tiled vmap (byte 8 = 0x00 in vmtree). All 148 collision objects stored in vmtree GOBJ section. vmtile files NOT generated because map is non-tiled — this is correct. Deadmines/SFK/SM are tiled (byte 8 = 0x01) and have vmtile files.
-- **P5 status:** Wall collision should now work. BG bots should move with proper physics (ground + walls) once PathfindingService finishes loading. Next test run will validate.
+- **PathfindingService lock starvation fix (5fd003c):** Replaced custom `_operationActive`/`_pendingPriorityOperations` mutex with `ReaderWriterLockSlim`. Physics/LOS/groundZ use read locks (concurrent), path-with-overlay uses write lock (exclusive), path-without-overlay uses read lock (concurrent). 9 bots requesting paths simultaneously no longer starve physics — physics calls proceed concurrently.
+- **P5 status:** Wall collision + lock starvation both fixed. BG bots should now move with proper physics and pathfinding under load.
 - **Next:**
-  1. Run RFC dungeon test to validate wall collision fix end-to-end
+  1. Run RFC dungeon test to validate both fixes end-to-end
   2. Fix TESTBOT1/RFCBOT2 raid membership (first invite timing)
   3. Verify mob evade issue resolves (was caused by position desync from dead-reckoning through walls)
   4. P3/P4: FG packet capture tests (fishing parity, teleport flags)

@@ -104,31 +104,14 @@ namespace WoWStateManager.Listeners
                     _logger.LogInformation($"  Slot '{activityKeyValue.Key}': AccountName='{slotAccountName}', isEmpty={isEmpty}");
                 }
 
-                // Only FG bots send "?" - assign them to the Foreground account from settings
+                // Only FG bots send "?" - assign them to the Foreground account from settings.
+                // This must work on EVERY poll, not just the first. The FG slot may already
+                // have AccountName set from a prior poll — that's fine, re-assign it.
                 var fgSettings = _characterSettings.Find(cs => cs.RunnerType == Settings.BotRunnerType.Foreground);
-                if (fgSettings != null)
+                if (fgSettings != null && CurrentActivityMemberList.ContainsKey(fgSettings.AccountName))
                 {
-                    var fgSlotSnapshot = CurrentActivityMemberList.GetValueOrDefault(fgSettings.AccountName);
-                    if (fgSlotSnapshot != null && string.IsNullOrEmpty(fgSlotSnapshot.AccountName))
-                    {
-                        accountName = fgSettings.AccountName;
-                        request.AccountName = accountName;
-                        _logger.LogInformation($"Assigned '?' to Foreground account '{accountName}'");
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"Foreground account '{fgSettings.AccountName}' already assigned, falling back to first empty slot");
-                        foreach (var activityKeyValue in CurrentActivityMemberList)
-                        {
-                            if (string.IsNullOrEmpty(activityKeyValue.Value.AccountName))
-                            {
-                                accountName = activityKeyValue.Key;
-                                request.AccountName = accountName;
-                                _logger.LogInformation($"Assigned account '{accountName}' to idle slot (fallback)");
-                                break;
-                            }
-                        }
-                    }
+                    accountName = fgSettings.AccountName;
+                    request.AccountName = accountName;
                 }
                 else
                 {

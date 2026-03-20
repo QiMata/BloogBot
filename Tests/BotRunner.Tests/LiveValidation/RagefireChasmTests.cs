@@ -41,10 +41,10 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~RagefireChasmTests" --configuration Release -v n --blame-hang --blame-hang-timeout 25m
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(RfcValidationCollection.Name)]
 public class RagefireChasmTests
 {
-    private readonly LiveBotFixture _bot;
+    private readonly RfcBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
     // RFC dungeon portal: Orgrimmar cleft entrance
@@ -70,7 +70,7 @@ public class RagefireChasmTests
 
     private const int ExpectedBotCount = 10;
 
-    public RagefireChasmTests(LiveBotFixture bot, ITestOutputHelper output)
+    public RagefireChasmTests(RfcBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -179,10 +179,8 @@ public class RagefireChasmTests
     [SkippableFact]
     public async Task RFC_AllBotsEnterWorld()
     {
-        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-        _output.WriteLine($"Restarting StateManager with RFC config: {settingsPath}");
-        await _bot.EnsureSettingsAsync(settingsPath);
-        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart with RFC config");
+        // RfcBotFixture launches with RFC config from the start
+        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         var botCount = await WaitForProgressAsync(
             phaseName: "BotsEnterWorld",
@@ -214,10 +212,7 @@ public class RagefireChasmTests
     [SkippableFact]
     public async Task RFC_FormRaidGroup()
     {
-        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-        _output.WriteLine($"Restarting StateManager with RFC config: {settingsPath}");
-        await _bot.EnsureSettingsAsync(settingsPath);
-        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
+        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         await _bot.RefreshSnapshotsAsync();
         var allBots = _bot.AllBots;
@@ -310,8 +305,6 @@ public class RagefireChasmTests
     [SkippableFact]
     public async Task RFC_TeleportToEntrance()
     {
-        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-        await _bot.EnsureSettingsAsync(settingsPath);
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         await _bot.RefreshSnapshotsAsync();
@@ -375,15 +368,10 @@ public class RagefireChasmTests
     [SkippableFact]
     public async Task RFC_PrepareAndOrganizeRaid()
     {
-        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
-
-        // Enable the coordinator and restart with RFC 10-bot config
-        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
-        Console.Error.WriteLine($"[RFC] Restarting with RFC config + coordinator enabled: {Path.GetFileName(settingsPath)}");
-        _output.WriteLine($"Restarting with RFC config + coordinator enabled: {settingsPath}");
-        await _bot.EnsureSettingsAsync(settingsPath);
+        // RfcBotFixture launches with RFC config + coordinator enabled from the start.
+        // No restart needed.
         Console.Error.WriteLine($"[RFC] Fixture ready={_bot.IsReady}, bots={_bot.AllBots.Count}");
-        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
+        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         // ===== Phase: Bots enter world =====
         // Fingerprint: bot count. Stale if count stops increasing for 30s.

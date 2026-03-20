@@ -60,6 +60,17 @@ public partial class LiveBotFixture : IAsyncLifetime
     private readonly Dictionary<string, int> _lastPrintedErrorCountByAccount = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _fgResponsive = true;
+    private string? _presetSettingsPath;
+
+    /// <summary>
+    /// Set custom settings path before InitializeAsync. Used by derived fixtures
+    /// (e.g. RfcBotFixture) to launch with a specific config from the start.
+    /// </summary>
+    protected void SetCustomSettingsPath(string path)
+    {
+        _presetSettingsPath = path;
+        _serviceFixture.CustomSettingsPath = path;
+    }
 
     /// <summary>
     /// Tracks the normalized settings path that StateManager was last started with.
