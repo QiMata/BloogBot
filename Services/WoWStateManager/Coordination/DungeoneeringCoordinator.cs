@@ -14,10 +14,12 @@ namespace WoWStateManager.Coordination;
 /// Coordinates N bots for dungeon crawling with full raid preparation.
 ///
 /// Pipeline:
-///   WaitingForBots → PrepareCharacters → EquipGear → TeleportToOrgrimmar → FormGroup →
-///   TeleportToRFC → DispatchDungeoneering → DungeonInProgress
+///   WaitingForBots → PrepareCharacters → LearnSpellsViaChat → AddItemsViaChat → EquipGear →
+///   TeleportToOrgrimmar → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
 ///
-/// PrepareCharacters: SOAP-based level set, .learn all_myclass, class-specific setup + .additem
+/// PrepareCharacters: SOAP-based level set, instance unbind, reset items (charName-based commands)
+/// LearnSpellsViaChat: Bot chat .targetself + .learn all_myclass + .learn <spellId> for each class spell
+/// AddItemsViaChat: Bot chat .additem <itemId> for each gear piece
 /// EquipGear: Send EquipItem actions so bots auto-equip gear from backpack
 /// TeleportToOrgrimmar: Bot chat .go xyz to Orgrimmar safe zone
 /// FormGroup: Leader invites, members accept, verify
@@ -31,6 +33,8 @@ public class DungeoneeringCoordinator
     {
         WaitingForBots,
         PrepareCharacters,
+        LearnSpellsViaChat,
+        AddItemsViaChat,
         EquipGear,
         TeleportToOrgrimmar,
         WaitForTeleportSettle,
@@ -73,6 +77,10 @@ public class DungeoneeringCoordinator
     private int _rfcTeleportIndex;
     private DateTime _lastRfcTeleportAt = DateTime.MinValue;
     private const double RFC_TELEPORT_STAGGER_SEC = 1.0; // Seconds between each bot's teleport (FG crash fixed, 1s is safe)
+
+    // Chat-based spell/item tracking — per-bot command index into the chat command sequence
+    private readonly ConcurrentDictionary<string, int> _chatSpellIndex = new(); // account → next spell command index
+    private readonly ConcurrentDictionary<string, int> _chatItemIndex = new();  // account → next item command index
 
     // Equip tracking — each bot needs EquipItem actions for each gear piece
     private readonly ConcurrentDictionary<string, int> _equipItemIndex = new(); // account → next item index to equip
@@ -166,6 +174,8 @@ public class DungeoneeringCoordinator
         {
             CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
             CoordState.PrepareCharacters => HandlePrepareCharacters(requestingAccount, snapshots),
+            CoordState.LearnSpellsViaChat => HandleLearnSpellsViaChat(requestingAccount, snapshots),
+            CoordState.AddItemsViaChat => HandleAddItemsViaChat(requestingAccount, snapshots),
             CoordState.EquipGear => HandleEquipGear(requestingAccount, snapshots),
             CoordState.TeleportToOrgrimmar => HandleTeleportToOrgrimmar(requestingAccount, snapshots),
             CoordState.WaitForTeleportSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.FormGroup_LeaveOldGroups, 1),
@@ -261,10 +271,10 @@ public class DungeoneeringCoordinator
             _logger.LogWarning("DUNGEON_COORD: {Unprepared} accounts never came InWorld, continuing.", unprepared);
         }
 
-        // All accounts prepared — now equip the gear that was added to backpacks
-        _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared. Equipping gear.",
+        // All accounts prepared via SOAP — now learn spells via bot chat
+        _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared via SOAP. Learning spells via chat.",
             _preparedAccounts.Count);  // ConcurrentDictionary.Count is safe
-        TransitionTo(CoordState.EquipGear);
+        TransitionTo(CoordState.LearnSpellsViaChat);
         return null;
     }
 
@@ -416,12 +426,8 @@ public class DungeoneeringCoordinator
 
         try
         {
-            var settings = _allSettings.FirstOrDefault(s =>
-                s.AccountName.Equals(account, StringComparison.OrdinalIgnoreCase));
-            var charClass = settings?.CharacterClass ?? "Warrior";
-
-            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}, {Class}): level 15 + spells + gear",
-                account, charName, charClass);
+            _logger.LogInformation("DUNGEON_COORD: Preparing {Account} ({CharName}): level 15 + instance unbind + reset items",
+                account, charName);
 
             // Clear instance binds so RFC can be reset freely
             await _soapClient.ExecuteGMCommandAsync($".instance unbind all {charName}");
@@ -429,24 +435,14 @@ public class DungeoneeringCoordinator
             // Set level to 15 (RFC mobs are level 13-16)
             await _soapClient.ExecuteGMCommandAsync($".character level {charName} 15");
 
-            // Learn all class spells up to level 8
-            await _soapClient.ExecuteGMCommandAsync($".learn all_myclass {charName}");
-
-            // Learn specific spells that .learn all_myclass may miss
-            if (Level8KeySpells.TryGetValue(charClass, out var spells))
-            {
-                foreach (var spellId in spells)
-                    await _soapClient.ExecuteGMCommandAsync($".learn {spellId} {charName}");
-            }
-
-            // Class-specific quest items and abilities
-            await PrepareClassSpecific(charName, charClass);
-
-            // Reset items to clean slate, then equip class-appropriate gear
+            // Reset items to clean slate (works via SOAP when character is online)
             await _soapClient.ExecuteGMCommandAsync($".reset items {charName}");
-            await AddStarterGear(charName, charClass);
 
-            _logger.LogInformation("DUNGEON_COORD: {Account} ({CharName}) preparation complete.", account, charName);
+            // NOTE: .learn and .additem require a selected player target in VMaNGOS.
+            // SOAP has no selection context, so these commands fail silently.
+            // Spells and items are now handled via bot chat in LearnSpellsViaChat / AddItemsViaChat phases.
+
+            _logger.LogInformation("DUNGEON_COORD: {Account} ({CharName}) SOAP preparation complete.", account, charName);
         }
         catch (Exception ex)
         {
@@ -454,43 +450,123 @@ public class DungeoneeringCoordinator
         }
     }
 
-    private async Task PrepareClassSpecific(string charName, string charClass)
+    /// <summary>
+    /// Builds the sequence of chat commands a bot must type to learn all spells.
+    /// First command is always ".targetself" so .learn targets the bot itself.
+    /// Then ".learn all_myclass" for bulk class spells, followed by specific spell IDs.
+    /// </summary>
+    private List<string> BuildSpellChatCommands(string charClass)
     {
-        if (_soapClient == null) return;
-
-        switch (charClass.ToLowerInvariant())
+        var commands = new List<string> { ".targetself", ".learn all_myclass" };
+        if (Level8KeySpells.TryGetValue(charClass, out var spells))
         {
-            case "shaman":
-                // Earth Totem is a quest reward item required for totem spells
-                // (handled in gear table, but also .learn the totem quests just in case)
-                break;
-            case "warlock":
-                // Summon Imp should be learned by .learn all_myclass
-                // Give Soul Shards for summoning
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} 6265 10"); // Soul Shard x10
-                break;
-            case "hunter":
-                // Tame Beast is level 10 — not available at 8
-                // Hunters need ammo (handled in gear table)
-                break;
+            foreach (var spellId in spells)
+                commands.Add($".learn {spellId}");
         }
+        return commands;
     }
 
-    private async Task AddStarterGear(string charName, string charClass)
+    /// <summary>
+    /// Builds the sequence of chat commands a bot must type to add all gear items.
+    /// Assumes ".targetself" was already sent in spell phase.
+    /// </summary>
+    private List<string> BuildItemChatCommands(string charClass)
     {
-        if (_soapClient == null) return;
-
-        if (!Level8Gear.TryGetValue(charClass, out var gearList))
-            return;
-
-        foreach (var (itemId, name) in gearList)
+        var commands = new List<string> { ".targetself" }; // Re-target self in case selection changed
+        if (Level8Gear.TryGetValue(charClass, out var gearList))
         {
-            // Hunter arrows get quantity 200
-            if (itemId == 2512) // Rough Arrow
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} {itemId} 200");
-            else
-                await _soapClient.ExecuteGMCommandAsync($".additem {charName} {itemId}");
+            foreach (var (itemId, _) in gearList)
+            {
+                if (itemId == 2512) // Rough Arrow — quantity 200
+                    commands.Add($".additem {itemId} 200");
+                else
+                    commands.Add($".additem {itemId}");
+            }
         }
+        // Class-specific items
+        if (charClass.Equals("Warlock", StringComparison.OrdinalIgnoreCase))
+            commands.Add(".additem 6265 10"); // Soul Shard x10
+        return commands;
+    }
+
+    private ActionMessage? HandleLearnSpellsViaChat(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Each bot gets one SEND_CHAT action per tick: .targetself, .learn all_myclass, .learn <id>...
+        var settings = _allSettings.FirstOrDefault(s =>
+            s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase));
+        var charClass = settings?.CharacterClass ?? "Warrior";
+        var commands = BuildSpellChatCommands(charClass);
+
+        var idx = _chatSpellIndex.GetOrAdd(requestingAccount, 0);
+        if (idx < commands.Count)
+        {
+            _chatSpellIndex[requestingAccount] = idx + 1;
+            var cmd = commands[idx];
+            _logger.LogInformation("DUNGEON_COORD: {Account} spell chat [{Idx}/{Total}]: {Cmd}",
+                requestingAccount, idx + 1, commands.Count, cmd);
+            return MakeSendChatAction(cmd);
+        }
+
+        // Check if all accounts have finished learning
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+
+        var allDone = allAccounts.All(a =>
+        {
+            if (!_chatSpellIndex.TryGetValue(a, out var i)) return false;
+            var aSettings = _allSettings.FirstOrDefault(s =>
+                s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase));
+            var aClass = aSettings?.CharacterClass ?? "Warrior";
+            return i >= BuildSpellChatCommands(aClass).Count;
+        });
+
+        if (allDone)
+        {
+            _logger.LogInformation("DUNGEON_COORD: All bots learned spells. Adding items via chat.");
+            TransitionTo(CoordState.AddItemsViaChat);
+        }
+        return null;
+    }
+
+    private ActionMessage? HandleAddItemsViaChat(string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Each bot gets one SEND_CHAT action per tick: .additem <id> for each gear piece
+        var settings = _allSettings.FirstOrDefault(s =>
+            s.AccountName.Equals(requestingAccount, StringComparison.OrdinalIgnoreCase));
+        var charClass = settings?.CharacterClass ?? "Warrior";
+        var commands = BuildItemChatCommands(charClass);
+
+        var idx = _chatItemIndex.GetOrAdd(requestingAccount, 0);
+        if (idx < commands.Count)
+        {
+            _chatItemIndex[requestingAccount] = idx + 1;
+            var cmd = commands[idx];
+            _logger.LogInformation("DUNGEON_COORD: {Account} item chat [{Idx}/{Total}]: {Cmd}",
+                requestingAccount, idx + 1, commands.Count, cmd);
+            return MakeSendChatAction(cmd);
+        }
+
+        // Check if all accounts have finished adding items
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
+
+        var allDone = allAccounts.All(a =>
+        {
+            if (!_chatItemIndex.TryGetValue(a, out var i)) return false;
+            var aSettings = _allSettings.FirstOrDefault(s =>
+                s.AccountName.Equals(a, StringComparison.OrdinalIgnoreCase));
+            var aClass = aSettings?.CharacterClass ?? "Warrior";
+            return i >= BuildItemChatCommands(aClass).Count;
+        });
+
+        if (allDone)
+        {
+            _logger.LogInformation("DUNGEON_COORD: All bots have items. Equipping gear.");
+            TransitionTo(CoordState.EquipGear);
+        }
+        return null;
     }
 
     private ActionMessage? HandleEquipGear(string requestingAccount,
