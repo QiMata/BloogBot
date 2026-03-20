@@ -1,6 +1,6 @@
 {
   "name": "RFC_FullDungeonRun",
-  "description": "10-man Ragefire Chasm dungeoneering — coordinator drives entire pipeline",
+  "description": "10-man Ragefire Chasm dungeoneering — coordinator drives entire pipeline through combat",
   "settings": "RagefireChasm.settings.json",
   "enableCoordinator": true,
   "minBots": 3,
@@ -15,6 +15,7 @@
   "assertions": {
     "groupFormed": true,
     "dungeoneeringDispatched": true,
+    "combatSeen": true,
     "minBotsOnMap": { "mapId": 389, "count": 3 }
   }
 }

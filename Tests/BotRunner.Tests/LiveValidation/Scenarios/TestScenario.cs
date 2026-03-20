@@ -260,6 +260,12 @@ public class ScenarioAssertions
     public bool? DungeoneeringDispatched { get; set; }
 
     /// <summary>
+    /// If true, at least 1 bot must have UNIT_FLAG_IN_COMBAT during observation.
+    /// </summary>
+    [JsonPropertyName("combatSeen")]
+    public bool? CombatSeen { get; set; }
+
+    /// <summary>
     /// Assert N+ bots are on a specific map.
     /// </summary>
     [JsonPropertyName("minBotsOnMap")]

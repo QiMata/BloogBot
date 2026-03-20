@@ -315,6 +315,9 @@ public class TestScenarioRunner
         if (a.DungeoneeringDispatched == true && !result.ActionTypesSeen.Contains("StartDungeoneering"))
             result.Failures.Add("Expected StartDungeoneering action, but it was never seen");
 
+        if (a.CombatSeen == true && !result.CombatSeen)
+            result.Failures.Add("Expected combat (UNIT_FLAG_IN_COMBAT) during observation, but none seen");
+
         if (a.MinBotsOnMap != null)
         {
             var onMap = result.GetMapCount(a.MinBotsOnMap.MapId);
@@ -359,6 +362,7 @@ public class TestScenarioRunner
 
         if (a.GroupFormed == true && !result.GroupFormed) return false;
         if (a.DungeoneeringDispatched == true && !result.ActionTypesSeen.Contains("StartDungeoneering")) return false;
+        if (a.CombatSeen == true && !result.CombatSeen) return false;
         if (a.MinBotsOnMap != null && result.GetMapCount(a.MinBotsOnMap.MapId) < a.MinBotsOnMap.Count) return false;
         if (a.ActionTypeSeen != null && !result.ActionTypesSeen.Contains(a.ActionTypeSeen)) return false;
 
