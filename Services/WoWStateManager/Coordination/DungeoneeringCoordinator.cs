@@ -117,9 +117,14 @@ public class DungeoneeringCoordinator
     private int _subgroupAssignIndex;
     private bool _subgroupsComputed;
 
-    // Leader monitoring — log warnings when FG leader is unavailable but do NOT promote BG bots
+    // Leader failover — promote a BG bot to leader when FG leader is absent too long
     private DateTime _leaderLastSeen = DateTime.UtcNow;
-    private const double LEADER_FAILOVER_TIMEOUT_SEC = 15.0;
+    private const double LEADER_FAILOVER_TIMEOUT_SEC = 30.0;
+    private bool _leaderPromoted; // True once a BG bot has been promoted to leader
+
+    // Teleport throttle — prevent spamming .go xyz to bots mid-loading (causes crashes)
+    private readonly ConcurrentDictionary<string, DateTime> _lastTeleportSent = new();
+    private const double TELEPORT_COOLDOWN_SEC = 20.0; // Cross-map load can take 15s+
 
     public CoordState State => _state;
 
@@ -1196,6 +1201,7 @@ public class DungeoneeringCoordinator
             return null; // Not this bot's turn
 
         _teleportedToRFC.TryAdd(requestingAccount, 0);
+        _lastTeleportSent[requestingAccount] = DateTime.UtcNow; // Seed throttle for late-join path
         _rfcTeleportIndex++;
         _lastRfcTeleportAt = DateTime.UtcNow;
 
@@ -1229,13 +1235,14 @@ public class DungeoneeringCoordinator
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
         // Late-join teleport: if this bot is not on RFC map (crashed/restarted during teleport),
-        // send them a teleport command instead of StartDungeoneering. They'll get dispatched next poll.
+        // send them a teleport command. THROTTLED to prevent spamming during map loading.
+        // Spamming .go xyz to an FG bot mid-loading causes WoW.exe to crash!
         if (snapshots.TryGetValue(requestingAccount, out var snap)
             && snap.Player?.Unit?.GameObject?.Base?.MapId != RfcMapId)
         {
-            _logger.LogWarning("DUNGEON_COORD: '{Account}' not on RFC map (map={Map}). Teleporting to RFC.",
-                requestingAccount, snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0);
-            return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            var teleportAction = TrySendThrottledTeleport(requestingAccount,
+                $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            return teleportAction; // null if throttled — bot will re-poll
         }
 
         _dungeoneeringDispatched.TryAdd(requestingAccount, 0);
@@ -1252,13 +1259,27 @@ public class DungeoneeringCoordinator
         {
             TransitionTo(CoordState.DungeonInProgress);
         }
-        else if (_tickCount > 300)
+        else if (_tickCount > 300 && !leaderDispatched)
         {
-            // 300 ticks @ ~500ms = ~150s. FG bot may crash during RFC teleport and needs
-            // ~60s to relaunch + ~30s to enter world + teleport to RFC. Give ample time.
-            _logger.LogWarning("DUNGEON_COORD: Dispatch timeout (tick {Tick}). Leader dispatched={LeaderOk}. Forcing transition.",
-                _tickCount, leaderDispatched);
-            TransitionTo(CoordState.DungeonInProgress);
+            // 300 ticks @ ~500ms = ~150s. FG bot crashed and didn't recover in time.
+            // Promote a BG bot that's already on the RFC map to leader so the dungeon can proceed.
+            var promotionTarget = FindBgBotOnRfcMap(snapshots);
+            if (promotionTarget != null)
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' absent after {Tick} ticks. " +
+                    "Promoting '{NewLeader}' to leader.",
+                    _leaderAccount, _tickCount, promotionTarget);
+                _leaderAccount = promotionTarget;
+                _leaderPromoted = true;
+                // Remove from dispatched so it gets re-dispatched as leader on next poll
+                _dungeoneeringDispatched.TryRemove(promotionTarget, out _);
+            }
+            else
+            {
+                _logger.LogWarning("DUNGEON_COORD: Dispatch timeout (tick {Tick}). No BG bot on RFC map to promote. Forcing transition.",
+                    _tickCount);
+                TransitionTo(CoordState.DungeonInProgress);
+            }
         }
         else if (!leaderDispatched && _tickCount % 10 == 0)
         {
@@ -1291,13 +1312,27 @@ public class DungeoneeringCoordinator
         }
         else if ((DateTime.UtcNow - _leaderLastSeen).TotalSeconds > LEADER_FAILOVER_TIMEOUT_SEC)
         {
-            // FG bot is the permanent leader / main tank. Do NOT promote BG bots.
-            // Log the situation but keep waiting — FG bot may be loading WoW.exe, zoning, or restarting.
             var reason = leaderDead ? "dead" : leaderAlive ? "not on dungeon map" : "no snapshot";
-            _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' unavailable ({Reason} for {Timeout}s). " +
-                "Waiting for leader to recover — BG bots continue autonomous waypoint navigation.",
-                _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC);
-            // Reset timer so we log again after another timeout period
+
+            // Promote a BG bot to leader so the dungeon can proceed without the FG bot
+            var promotionTarget = FindBgBotOnRfcMap(snapshots);
+            if (promotionTarget != null && !_leaderPromoted)
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' unavailable ({Reason} for {Timeout}s). " +
+                    "Promoting '{NewLeader}' to leader.",
+                    _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC, promotionTarget);
+                _leaderAccount = promotionTarget;
+                _leaderPromoted = true;
+                // Remove from dispatched so it gets re-dispatched as leader (with PromoteToLeader)
+                _dungeoneeringDispatched.TryRemove(promotionTarget, out _);
+            }
+            else
+            {
+                _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' unavailable ({Reason} for {Timeout}s). " +
+                    "No BG bot available for promotion. Waiting for recovery.",
+                    _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC);
+            }
+            // Reset timer so we check again after another timeout period
             _leaderLastSeen = DateTime.UtcNow;
         }
 
@@ -1305,13 +1340,13 @@ public class DungeoneeringCoordinator
         // and restarted during teleport), handle late join: teleport to RFC if needed, then dispatch.
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
-            // Late-join teleport: if leader is not on RFC map, send them there first
+            // Late-join teleport: if leader is not on RFC map, send them there first.
+            // THROTTLED — spamming .go xyz during map loading crashes WoW.exe!
             var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
             if (leaderMapId != RfcMapId)
             {
-                _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' late join — not on RFC map (map={Map}). Teleporting.",
-                    _leaderAccount, leaderMapId);
-                return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+                return TrySendThrottledTeleport(_leaderAccount,
+                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
             }
 
             if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
@@ -1375,6 +1410,51 @@ public class DungeoneeringCoordinator
     }
 
     // ===== Helpers =====
+
+    /// <summary>
+    /// Send a teleport command if not already sent recently. Returns null if throttled.
+    /// CRITICAL: Spamming .go xyz to an FG bot mid-loading causes WoW.exe to crash.
+    /// One teleport command is enough — the bot needs 10-20s to complete cross-map loading.
+    /// </summary>
+    private ActionMessage? TrySendThrottledTeleport(string account, string teleportCommand)
+    {
+        if (_lastTeleportSent.TryGetValue(account, out var lastSent)
+            && (DateTime.UtcNow - lastSent).TotalSeconds < TELEPORT_COOLDOWN_SEC)
+        {
+            return null; // Already sent recently — wait for load to complete
+        }
+        _lastTeleportSent[account] = DateTime.UtcNow;
+        _logger.LogWarning("DUNGEON_COORD: Sending teleport to '{Account}': {Cmd}", account, teleportCommand);
+        return MakeSendChatAction(teleportCommand);
+    }
+
+    /// <summary>
+    /// Find a BG bot that is alive on the RFC map and can be promoted to leader.
+    /// Prefers bots that have already been dispatched (have DungeoneeringTask running).
+    /// </summary>
+    private string? FindBgBotOnRfcMap(ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        // Prefer a dispatched member (already has DungeoneeringTask running → PromoteToLeader works)
+        foreach (var member in _memberAccounts)
+        {
+            if (!snapshots.TryGetValue(member, out var snap)) continue;
+            if (snap.ScreenState != "InWorld") continue;
+            if ((snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != RfcMapId) continue;
+            if ((snap.Player?.Unit?.Health ?? 0) <= 0) continue;
+            if (_dungeoneeringDispatched.ContainsKey(member))
+                return member;
+        }
+        // Fallback: any alive member on the map
+        foreach (var member in _memberAccounts)
+        {
+            if (!snapshots.TryGetValue(member, out var snap)) continue;
+            if (snap.ScreenState != "InWorld") continue;
+            if ((snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != RfcMapId) continue;
+            if ((snap.Player?.Unit?.Health ?? 0) <= 0) continue;
+            return member;
+        }
+        return null;
+    }
 
     private void ResolveSpells(string account, WoWActivitySnapshot snap)
     {
