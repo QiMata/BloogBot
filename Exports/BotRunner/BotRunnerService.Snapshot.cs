@@ -42,8 +42,11 @@ namespace BotRunner
             // Always flush message buffers (even during login — captures GM command errors)
             FlushMessageBuffers();
 
-            // Only populate game data when in world
-            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null)
+            // Only populate game data when in world and not in a map transition.
+            // During cross-map teleports, object pointers become invalid — reading them
+            // causes ACCESS_VIOLATION that .NET 8 cannot catch (process termination).
+            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null
+                || _objectManager.IsInMapTransition)
                 return;
 
             var player = _objectManager.Player;

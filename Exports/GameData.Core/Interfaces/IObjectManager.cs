@@ -50,6 +50,14 @@ namespace GameData.Core.Interfaces
         string GlueDialogText { get; }
         LoginStates LoginState { get; }
         bool HasEnteredWorld { get; }
+
+        /// <summary>
+        /// True when the game client is in a map transition (loading screen, cross-map teleport,
+        /// continent change). Object pointers are invalid during this period — callers MUST NOT
+        /// dereference WoWObject properties. FG returns true from ContinentId/PauseDuringTeleport;
+        /// BG always returns false (protocol-based, no memory pointers).
+        /// </summary>
+        bool IsInMapTransition => false;
 #if NET8_0_OR_GREATER
         public void Face(Position pos)
         {

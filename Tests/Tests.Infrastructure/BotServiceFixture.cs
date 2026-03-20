@@ -1209,8 +1209,9 @@ public class BotServiceFixture : IAsyncLifetime
             // || line.Contains("Action forward: queued")
             // || line.Contains("INJECTING PENDING ACTION")
             // || line.Contains("DELIVERING ACTION")
-            || line.Contains("Detected terminated bot process")
-            || line.Contains("attempting re-launch")
+            // FG crash/relaunch events must NOT be filtered — need visibility
+            // || line.Contains("Detected terminated bot process")
+            // || line.Contains("attempting re-launch")
             // Packet hex dump spam from Console.WriteLine in PacketPipeline
             || line.Contains("[RX]")
             || line.Contains("[TX]")

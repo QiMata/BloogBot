@@ -491,7 +491,7 @@ namespace WoWStateManager
                 if (processInfo.hThread != IntPtr.Zero)
                     CloseHandle(processInfo.hThread);
 
-                _logger.LogInformation($"WoW.exe started for account {accountName} (Process ID: {processId}, Handle: 0x{processHandle:X})");
+                _logger.LogWarning($"WoW.exe started for account {accountName} (Process ID: {processId}, Handle: 0x{processHandle:X})");
             }
 
             // IMPORTANT: Add to managed services IMMEDIATELY to prevent duplicate launches
@@ -586,9 +586,9 @@ namespace WoWStateManager
                         if (_activityMemberSocketListener.CurrentActivityMemberList.ContainsKey(accountName))
                         {
                             _activityMemberSocketListener.CurrentActivityMemberList[accountName] = new();
-                            _logger.LogInformation($"Reset activity member slot for account {accountName}");
+                            _logger.LogWarning($"Reset activity member slot for account {accountName}");
                         }
-                        _logger.LogInformation($"Foreground bot process for account {accountName} has exited and been removed from tracking");
+                        _logger.LogWarning($"Foreground bot process for account {accountName} has exited and been removed from tracking");
                     }
                 }
             });
@@ -598,7 +598,7 @@ namespace WoWStateManager
             {
                 _managedServices.Add(accountName, (null, tokenSource, monitoringTask, processId));
             }
-            _logger.LogInformation($"Added {accountName} to managed services with PID {processId} - preventing duplicate launches");
+            _logger.LogWarning($"Added {accountName} to managed services with PID {processId} - preventing duplicate launches");
 
             // 62a: Poll for WoW window before injection (up to 15s)
             // Uses WaitForSingleObject + EnumWindows instead of Process.GetProcessById
@@ -636,7 +636,7 @@ namespace WoWStateManager
                     if (foundWindow)
                     {
                         windowReady = true;
-                        _logger.LogInformation($"WoW window detected for PID {processId} after {windowPollSw.Elapsed.TotalSeconds:F1}s");
+                        _logger.LogWarning($"WoW window detected for PID {processId} after {windowPollSw.Elapsed.TotalSeconds:F1}s");
                         break;
                     }
 
@@ -652,7 +652,7 @@ namespace WoWStateManager
                 }
             }
 
-            _logger.LogInformation($"ATTEMPTING DLL INJECTION: {loaderPath}");
+            _logger.LogWarning($"ATTEMPTING DLL INJECTION: {loaderPath}");
 
             // allocate enough memory to hold the full file path to Loader.dll within the WoW process
             var loaderPathPtr = VirtualAllocEx(
@@ -744,8 +744,8 @@ namespace WoWStateManager
                 return;
             }
 
-            _logger.LogInformation($"[OK] Remote thread created successfully (Handle: 0x{threadHandle:X})");
-            _logger.LogInformation("Waiting for injection to complete...");
+            _logger.LogWarning($"[OK] Remote thread created successfully (Handle: 0x{threadHandle:X})");
+            _logger.LogWarning("Waiting for injection to complete...");
 
             // Wait for the injection thread to complete (with timeout)
             var waitResult = WaitForSingleObject(threadHandle, 30000); // 30 second timeout for injection
@@ -757,8 +757,8 @@ namespace WoWStateManager
                 {
                     if (exitCode != 0)
                     {
-                        _logger.LogInformation($"SUCCESS: DLL injection completed successfully!");
-                        _logger.LogInformation($"[OK] LoadLibrary returned: 0x{exitCode:X} (Module handle)");
+                        _logger.LogWarning($"SUCCESS: DLL injection completed successfully!");
+                        _logger.LogWarning($"[OK] LoadLibrary returned: 0x{exitCode:X} (Module handle)");
                         
                         // Give the injected DLL time to initialize
                         Thread.Sleep(2000);
@@ -851,7 +851,7 @@ namespace WoWStateManager
                         && snapshot.AccountName != "?")
                     {
                         phoneHomeReceived = true;
-                        _logger.LogInformation($"Bot phone-home received for {accountName} after {phoneHomeSw.Elapsed.TotalSeconds:F1}s");
+                        _logger.LogWarning($"Bot phone-home received for {accountName} after {phoneHomeSw.Elapsed.TotalSeconds:F1}s");
                         break;
                     }
 
@@ -868,8 +868,8 @@ namespace WoWStateManager
             // The monitoring task uses Process.GetProcessById which opens its own handle.
             CloseHandleSafe(processHandle);
 
-            _logger.LogInformation($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
-            _logger.LogInformation("=== DLL INJECTION DIAGNOSTICS END ===");
+            _logger.LogWarning($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
+            _logger.LogWarning("=== DLL INJECTION DIAGNOSTICS END ===");
         }
 
         /// <summary>

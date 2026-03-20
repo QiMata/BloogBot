@@ -128,7 +128,13 @@ namespace ForegroundBotRunner.Statics
                     // Double-check safety: if a cross-map transfer started between the
                     // SimplePolling guard check and this delegate executing on the main thread,
                     // bail out immediately to avoid ACCESS_VIOLATION during object teardown.
-                    if (PauseDuringTeleport || IsContinentTransition)
+                    // Re-read ContinentId and ManagerBase directly from memory (not from the
+                    // background thread's cached _isContinentTransition) to catch transitions
+                    // that the background polling hasn't detected yet.
+                    uint liveContId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    bool managerBaseNull = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero;
+                    if (PauseDuringTeleport || IsContinentTransition
+                        || liveContId == 0xFF || liveContId == 0xFFFFFFFF || managerBaseNull)
                     {
                         return;
                     }

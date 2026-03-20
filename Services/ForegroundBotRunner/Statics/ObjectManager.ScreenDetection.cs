@@ -752,6 +752,13 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public bool IsContinentTransition => _isContinentTransition;
 
+        /// <summary>
+        /// IObjectManager.IsInMapTransition — combines all FG transition guards.
+        /// Object pointers are invalid when this returns true.
+        /// </summary>
+        public bool IsInMapTransition => _isContinentTransition || PauseDuringTeleport
+            || MemoryManager.ReadUint(Offsets.Map.ContinentId) is 0xFF or 0xFFFFFFFF;
+
 
 
         internal async Task StartSimplePollingLoop()

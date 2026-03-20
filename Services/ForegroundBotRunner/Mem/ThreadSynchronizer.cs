@@ -258,13 +258,19 @@ namespace ForegroundBotRunner.Mem
                 if (csm != null)
                 {
                     // Packet-driven: trust the state machine's deterministic IsLuaSafe.
-                    // Also respect ManagerBase as a hard safety net (catches edge cases
-                    // where packets haven't arrived yet but memory is already torn down).
+                    // Also respect ManagerBase and ContinentId as hard safety nets (catches
+                    // edge cases where packets haven't arrived yet but memory is already
+                    // torn down — e.g. cross-map teleport race window).
                     bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
                     if (managerBaseValid)
                         _objMgrWasValid = true;
 
-                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid);
+                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    if (managerBaseValid && continentId < 0xFF)
+                        _hasEnteredWorldOnce = true;
+                    bool inTransition = _hasEnteredWorldOnce && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+
+                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid) || inTransition;
                 }
                 else
                 {
