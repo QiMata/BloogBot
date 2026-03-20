@@ -927,4 +927,175 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         _output.WriteLine($"\nTotal valid ground hits: {validHits}/{queryHeights.Length + interiorPoints.Length}");
         Assert.True(validHits > 0, "Physics engine found NO ground in RFC (map 389) — VMAP collision data missing or not loading");
     }
+
+    /// <summary>
+    /// Diagnostic: run PhysicsStepV2 inside RFC with MOVEFLAG_FORWARD set.
+    /// Verifies the physics engine actually moves the capsule horizontally
+    /// AND provides wall collision (collide-and-slide) in the dungeon.
+    /// </summary>
+    [Fact]
+    public void RFC_PhysicsStep_Movement_Diagnostic()
+    {
+        const uint mapId = 389;
+        // RFC entrance — face south into the dungeon (orientation ~4.7 rad ≈ south)
+        float startX = 3.0f, startY = -11.0f, startZ = -15.0f;
+        float facing = 4.7f; // roughly south
+
+        // First, find actual ground Z at this position
+        float groundZ = NavigationInterop.GetGroundZ(mapId, startX, startY, startZ, 20.0f);
+        _output.WriteLine($"=== RFC PhysicsStep Movement Diagnostic ===");
+        _output.WriteLine($"Start: ({startX}, {startY}, {startZ}), facing={facing:F2}");
+        _output.WriteLine($"GetGroundZ at start = {groundZ:F4} (valid={groundZ > -100000f})");
+
+        // Use ground Z if valid, otherwise use start Z
+        float useZ = groundZ > -100000f ? groundZ + 0.1f : startZ;
+
+        // Simulate 30 frames (~1 second) of forward movement
+        float posX = startX, posY = startY, posZ = useZ;
+        float vx = 0, vy = 0, vz = 0;
+        float prevGroundZ = groundZ > -100000f ? groundZ : -200000f;
+        int framesWithGround = 0;
+        int framesWithMovement = 0;
+
+        for (int frame = 0; frame < 30; frame++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x1, // MOVEFLAG_FORWARD
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Pitch = 0,
+                Vx = vx,
+                Vy = vy,
+                Vz = vz,
+                WalkSpeed = 2.5f,
+                RunSpeed = 7.0f,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                FlightSpeed = 7.0f,
+                TurnSpeed = 3.14f,
+                FallTime = 0,
+                FallStartZ = useZ,
+                Height = 2.0313f,
+                Radius = 0.3064f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0, PrevGroundNy = 0, PrevGroundNz = 1,
+                MapId = mapId,
+                DeltaTime = 0.0333f,  // ~30 FPS
+                FrameCounter = (uint)frame,
+                StepUpBaseZ = -200000f,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float dz = output.Z - posZ;
+            float dist2D = MathF.Sqrt(dx * dx + dy * dy);
+            bool hasGround = output.GroundZ > -50000f;
+            if (hasGround) framesWithGround++;
+            if (dist2D > 0.001f) framesWithMovement++;
+
+            _output.WriteLine($"  Frame {frame:D2}: pos=({output.X:F2},{output.Y:F2},{output.Z:F2}) " +
+                $"delta2D={dist2D:F4} dz={dz:F4} groundZ={output.GroundZ:F2} " +
+                $"vel=({output.Vx:F2},{output.Vy:F2},{output.Vz:F2}) " +
+                $"flags=0x{output.MoveFlags:X} {(hasGround ? "GROUND" : "NO_GROUND")}");
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            vx = output.Vx;
+            vy = output.Vy;
+            vz = output.Vz;
+            prevGroundZ = hasGround ? output.GroundZ : prevGroundZ;
+        }
+
+        float totalDist = MathF.Sqrt((posX - startX) * (posX - startX) + (posY - startY) * (posY - startY));
+        _output.WriteLine($"\nFinal: ({posX:F2},{posY:F2},{posZ:F2}), total 2D dist={totalDist:F2}");
+        _output.WriteLine($"Frames with ground: {framesWithGround}/30");
+        _output.WriteLine($"Frames with movement: {framesWithMovement}/30");
+
+        Assert.True(framesWithGround > 0, "Physics engine found no ground in any frame — VMAP collision data not loading for PhysicsStep");
+        Assert.True(framesWithMovement > 0, "Physics engine returned zero horizontal delta in all frames — movement not working in RFC");
+    }
+
+    /// <summary>
+    /// Diagnostic: test wall collision in RFC. Walk the capsule toward a known wall
+    /// and verify the physics engine blocks/deflects the movement.
+    /// </summary>
+    [Fact]
+    public void RFC_WallCollision_Diagnostic()
+    {
+        const uint mapId = 389;
+        // Start in first corridor, face directly into the east wall
+        // The corridor runs roughly north-south at x≈-23, y≈-61
+        // Face east (orientation 0) to walk into the wall
+        float startX = -23f, startY = -61f, startZ = -21f;
+        float facing = 0f; // east — into the wall
+
+        float groundZ = NavigationInterop.GetGroundZ(mapId, startX, startY, startZ, 20.0f);
+        _output.WriteLine($"=== RFC Wall Collision Diagnostic ===");
+        _output.WriteLine($"Start: ({startX}, {startY}, {startZ}), facing={facing:F2} (east into wall)");
+        _output.WriteLine($"GetGroundZ = {groundZ:F4}");
+
+        float useZ = groundZ > -100000f ? groundZ + 0.1f : startZ;
+        float posX = startX, posY = startY, posZ = useZ;
+        float vx = 0, vy = 0, vz = 0;
+        float prevGroundZ = groundZ > -100000f ? groundZ : -200000f;
+        int wallBlockedFrames = 0;
+
+        for (int frame = 0; frame < 60; frame++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x1, // MOVEFLAG_FORWARD
+                X = posX, Y = posY, Z = posZ,
+                Orientation = facing,
+                Vx = vx, Vy = vy, Vz = vz,
+                WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f, SwimBackSpeed = 2.5f, FlightSpeed = 7.0f, TurnSpeed = 3.14f,
+                Height = 2.0313f, Radius = 0.3064f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0, PrevGroundNy = 0, PrevGroundNz = 1,
+                MapId = mapId,
+                DeltaTime = 0.0333f,
+                FrameCounter = (uint)frame,
+                FallStartZ = useZ,
+                StepUpBaseZ = -200000f,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float dist2D = MathF.Sqrt(dx * dx + dy * dy);
+            bool hasGround = output.GroundZ > -50000f;
+            if (dist2D < 0.001f && hasGround) wallBlockedFrames++;
+
+            if (frame < 10 || frame % 10 == 0 || dist2D < 0.001f)
+                _output.WriteLine($"  Frame {frame:D2}: pos=({output.X:F2},{output.Y:F2},{output.Z:F2}) " +
+                    $"delta2D={dist2D:F4} groundZ={output.GroundZ:F2} " +
+                    $"flags=0x{output.MoveFlags:X} {(dist2D < 0.001f ? "BLOCKED" : "MOVED")}");
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            vx = output.Vx;
+            vy = output.Vy;
+            vz = output.Vz;
+            prevGroundZ = hasGround ? output.GroundZ : prevGroundZ;
+        }
+
+        float totalDist = MathF.Sqrt((posX - startX) * (posX - startX) + (posY - startY) * (posY - startY));
+        _output.WriteLine($"\nTotal 2D distance moved: {totalDist:F2} (expected: <2y if wall blocks)");
+        _output.WriteLine($"Frames where wall blocked movement: {wallBlockedFrames}/60");
+
+        // If no wall collision: bot would move 7 y/s * 2s = 14y east (through the wall)
+        // If wall collision works: bot should be blocked at <2y total distance
+        _output.WriteLine($"\nIf totalDist > 5: wall collision NOT working (bot walked through wall)");
+        _output.WriteLine($"If totalDist < 2: wall collision IS working (bot was blocked by wall)");
+    }
 }

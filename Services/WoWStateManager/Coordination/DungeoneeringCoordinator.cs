@@ -117,10 +117,9 @@ public class DungeoneeringCoordinator
     private int _subgroupAssignIndex;
     private bool _subgroupsComputed;
 
-    // Leader failover — promote a BG bot if FG leader drops
+    // Leader monitoring — log warnings when FG leader is unavailable but do NOT promote BG bots
     private DateTime _leaderLastSeen = DateTime.UtcNow;
     private const double LEADER_FAILOVER_TIMEOUT_SEC = 15.0;
-    private bool _leaderFailoverTriggered;
 
     public CoordState State => _state;
 
@@ -1189,26 +1188,16 @@ public class DungeoneeringCoordinator
     {
         _tickCount++;
 
-        // If the designated leader (FG bot) hasn't polled and all members have been dispatched,
-        // promote the first available BG bot as leader immediately rather than waiting for the
-        // 15s failover timeout in DungeonInProgress. The FG bot takes time to launch WoW.exe
-        // and may miss the entire dispatch window.
+        // Wait for the designated leader (FG bot / TESTBOT1) to poll. Do NOT promote a BG bot
+        // as substitute — the FG bot is the main tank and must always be leader.
+        // BG members wait in FollowLeader state (autonomous waypoint nav) until the FG leader arrives.
         bool leaderHasPolled = _dungeoneeringDispatched.ContainsKey(_leaderAccount);
         bool allMembersDispatched = _memberAccounts.All(m => _dungeoneeringDispatched.ContainsKey(m));
-        if (!leaderHasPolled && allMembersDispatched && _tickCount > 10)
+        if (!leaderHasPolled && allMembersDispatched && _tickCount % 10 == 0)
         {
-            var newLeader = _memberAccounts.FirstOrDefault(m =>
-                snapshots.TryGetValue(m, out var s) && s.ScreenState == "InWorld"
-                && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
-            if (newLeader != null)
-            {
-                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' absent during dispatch. Promoting '{NewLeader}' immediately.",
-                    _leaderAccount, newLeader);
-                _leaderAccount = newLeader;
-                _leaderFailoverTriggered = true;
-                // Clear dispatch tracking so the new leader gets re-dispatched as leader
-                _dungeoneeringDispatched.TryRemove(newLeader, out _);
-            }
+            _logger.LogInformation("DUNGEON_COORD: Waiting for leader '{Leader}' to poll (tick {Tick}). " +
+                "Members dispatched: {Dispatched}/{Total}",
+                _leaderAccount, _tickCount, _dungeoneeringDispatched.Count, snapshots.Count);
         }
 
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
@@ -1247,24 +1236,16 @@ public class DungeoneeringCoordinator
         {
             _leaderLastSeen = DateTime.UtcNow;
         }
-        else if (!_leaderFailoverTriggered
-                 && (DateTime.UtcNow - _leaderLastSeen).TotalSeconds > LEADER_FAILOVER_TIMEOUT_SEC)
+        else if ((DateTime.UtcNow - _leaderLastSeen).TotalSeconds > LEADER_FAILOVER_TIMEOUT_SEC)
         {
-            // Find first BG bot that's alive and on the RFC map
-            var newLeader = _memberAccounts.FirstOrDefault(a =>
-                snapshots.TryGetValue(a, out var s) && s.ScreenState == "InWorld"
-                && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
-            if (newLeader != null)
-            {
-                var reason = leaderDead ? "dead" : leaderAlive ? "not on dungeon map" : "no snapshot";
-                _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' lost ({Reason} for {Timeout}s). Promoting '{NewLeader}' to leader.",
-                    _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC, newLeader);
-                _leaderAccount = newLeader;
-                _leaderFailoverTriggered = true;
-                _leaderLastSeen = DateTime.UtcNow;
-                // Clear dispatch tracking so the new leader gets re-dispatched as leader
-                _dungeoneeringDispatched.TryRemove(newLeader, out _);
-            }
+            // FG bot is the permanent leader / main tank. Do NOT promote BG bots.
+            // Log the situation but keep waiting — FG bot may be loading WoW.exe, zoning, or restarting.
+            var reason = leaderDead ? "dead" : leaderAlive ? "not on dungeon map" : "no snapshot";
+            _logger.LogWarning("DUNGEON_COORD: Leader '{Leader}' unavailable ({Reason} for {Timeout}s). " +
+                "Waiting for leader to recover — BG bots continue autonomous waypoint navigation.",
+                _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC);
+            // Reset timer so we log again after another timeout period
+            _leaderLastSeen = DateTime.UtcNow;
         }
 
         // If the leader missed the DispatchDungeoneering window (FG bot polls slower),
@@ -1273,8 +1254,8 @@ public class DungeoneeringCoordinator
         {
             if (_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
             {
-                _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (failover={Failover})",
-                    _leaderAccount, _leaderFailoverTriggered);
+                _logger.LogInformation("DUNGEON_COORD: Dispatching START_DUNGEONEERING to leader '{Leader}' (late join)",
+                    _leaderAccount);
                 var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
                 action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
                 return action;

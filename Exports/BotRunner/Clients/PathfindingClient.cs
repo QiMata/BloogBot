@@ -206,31 +206,10 @@ namespace BotRunner.Clients
                 // Guard against empty/unexpected response (oneof not set → Step is null)
                 var result = response.Step ?? throw new Exception("PathfindingService returned empty Step response");
 
-                // Detect zero-delta with active movement flags — physics engine lacks collision data
-                // (e.g., dungeon maps missing vmtile files). Fall back to dead reckoning.
-                var flags = (MovementFlags)physicsInput.MovementFlags;
-                bool wantsMove = flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD) ||
-                                 flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD) ||
-                                 flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) ||
-                                 flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT);
-                if (wantsMove)
-                {
-                    float dx = MathF.Abs(result.NewPosX - physicsInput.PosX);
-                    float dy = MathF.Abs(result.NewPosY - physicsInput.PosY);
-                    if (dx < 0.001f && dy < 0.001f)
-                    {
-                        _zeroPhysicsCount++;
-                        if (_zeroPhysicsCount == 5)
-                            _logger?.LogWarning("Physics returning zero-delta with movement flags on map {MapId} — using dead reckoning fallback", physicsInput.MapId);
-                        if (_zeroPhysicsCount >= 5)
-                            return DeadReckon(physicsInput);
-                    }
-                    else
-                    {
-                        _zeroPhysicsCount = 0;
-                    }
-                }
-
+                // Zero-delta with movement flags means the physics engine blocked us at a wall.
+                // This is CORRECT behavior — do NOT fall back to dead reckoning, which has no
+                // wall collision and causes the bot to walk through dungeon walls.
+                // The NavigationPath layer handles repath/avoidance when the bot is stuck.
                 return result;
             }
             catch (Exception ex)
@@ -239,58 +218,38 @@ namespace BotRunner.Clients
                 if (_consecutiveFailures <= 3)
                     _logger?.LogWarning("PathfindingService physics call failed ({Count}): {Msg}", _consecutiveFailures, ex.Message);
                 else if (_consecutiveFailures == 4)
-                    _logger?.LogError("PathfindingService unreachable, using dead reckoning. Suppressing further warnings.");
+                    _logger?.LogError("PathfindingService unreachable — holding position until service recovers.");
 
-                return DeadReckon(physicsInput);
+                // Hold position instead of dead-reckoning. Dead reckoning has NO wall collision
+                // and causes bots to walk through dungeon walls. Setting GroundZ to -999999
+                // signals to MovementController that no physics ground data is available,
+                // which triggers the Z interpolation fallback (using navmesh waypoint Z)
+                // while keeping XY frozen until the physics service is available.
+                return HoldPosition(physicsInput);
             }
         }
 
-        private int _zeroPhysicsCount;
-
         /// <summary>
-        /// Dead reckoning: apply simple forward/backward movement + gravity.
-        /// Used when the physics engine can't resolve collision (missing vmtile data)
-        /// or when the PathfindingService is unreachable.
+        /// Hold position: return the same XY position with GroundZ = -999999 to signal
+        /// "no physics data available." MovementController will freeze XY and interpolate Z
+        /// from navmesh waypoints. This prevents the bot from walking through walls when
+        /// the PathfindingService is still initializing or unreachable.
         /// </summary>
-        private static PhysicsOutput DeadReckon(PhysicsInput physicsInput)
+        private static PhysicsOutput HoldPosition(PhysicsInput physicsInput)
         {
-            float dx = 0, dy = 0;
-            var flags = (MovementFlags)physicsInput.MovementFlags;
-            float facing = physicsInput.Facing;
-
-            if (flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
-            {
-                dx += MathF.Cos(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-                dy += MathF.Sin(facing) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-            }
-            if (flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD))
-            {
-                dx -= MathF.Cos(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
-                dy -= MathF.Sin(facing) * physicsInput.RunBackSpeed * physicsInput.DeltaTime;
-            }
-            if (flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT))
-            {
-                dx += MathF.Cos(facing + MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-                dy += MathF.Sin(facing + MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-            }
-            if (flags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT))
-            {
-                dx += MathF.Cos(facing - MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-                dy += MathF.Sin(facing - MathF.PI / 2) * physicsInput.RunSpeed * physicsInput.DeltaTime;
-            }
-
             return new PhysicsOutput
             {
-                NewPosX = physicsInput.PosX + dx,
-                NewPosY = physicsInput.PosY + dy,
+                NewPosX = physicsInput.PosX,
+                NewPosY = physicsInput.PosY,
                 NewPosZ = physicsInput.PosZ,
-                NewVelX = physicsInput.VelX,
-                NewVelY = physicsInput.VelY,
-                NewVelZ = physicsInput.VelZ - 19.2911f * physicsInput.DeltaTime,
+                NewVelX = 0,
+                NewVelY = 0,
+                NewVelZ = 0,
                 MovementFlags = physicsInput.MovementFlags,
                 Orientation = physicsInput.Facing,
                 Pitch = physicsInput.SwimPitch,
-                FallTime = physicsInput.FallTime + physicsInput.DeltaTime * 1000f,
+                FallTime = 0,
+                GroundZ = -999999f, // Signal: no physics ground data
             };
         }
         /// <summary>
