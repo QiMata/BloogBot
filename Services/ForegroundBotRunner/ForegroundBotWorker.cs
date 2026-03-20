@@ -338,7 +338,7 @@ namespace ForegroundBotRunner
                         if (_hooksInitialized && workerContId != _lastObservedContinentId)
                         {
                             bool wasInTransition = _lastObservedContinentId == 0xFF || _lastObservedContinentId == 0xFFFFFFFF;
-                            bool nowValid = workerContId < 0xFF;
+                            bool nowValid = workerContId != 0xFF && workerContId != 0xFFFFFFFF;
                             bool nowInTransition = workerContId == 0xFF || workerContId == 0xFFFFFFFF;
 
                             if (nowInTransition && !wasInTransition)

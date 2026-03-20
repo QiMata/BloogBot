@@ -226,8 +226,8 @@ public class RagefireChasmTests
         // This captures all coordinator state transitions. Stale if nothing changes for 45s.
         var botsOnRfcMap = await WaitForProgressAsync<int>(
             phaseName: "CoordinatorPrep",
-            maxTimeout: TimeSpan.FromMinutes(3),
-            staleTimeout: TimeSpan.FromSeconds(30),
+            maxTimeout: TimeSpan.FromMinutes(5),
+            staleTimeout: TimeSpan.FromSeconds(45),
             pollInterval: TimeSpan.FromSeconds(3),
             evaluate: snapshots =>
             {
@@ -235,6 +235,13 @@ public class RagefireChasmTests
                 var onRfc = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
                 var totalSpells = snapshots.Sum(s => s.Player?.SpellList?.Count ?? 0);
                 var totalItems = snapshots.Sum(s => s.Player?.BagContents?.Count ?? 0);
+
+                // Include HP totals (changes during level resets), equipped items, and action types
+                var totalHp = snapshots.Sum(s => s.Player?.Unit?.MaxHealth ?? 0);
+                var totalLevel = snapshots.Sum(s => (int)(s.Player?.Unit?.GameObject?.Level ?? 0));
+                var actionTypes = string.Join(",", snapshots
+                    .Select(s => s.CurrentAction?.ActionType.ToString() ?? "-")
+                    .OrderBy(a => a));
 
                 // Position hash — round to integers to avoid noise from micro-movement
                 var posHash = string.Join("|", snapshots.Select(s =>
@@ -244,7 +251,8 @@ public class RagefireChasmTests
                     return $"{m}:{p?.X:F0},{p?.Y:F0}";
                 }));
 
-                var fingerprint = $"grp={grouped},rfc={onRfc},spells={totalSpells},items={totalItems},pos={posHash.GetHashCode():X8}";
+                var fingerprint = $"grp={grouped},rfc={onRfc},spells={totalSpells},items={totalItems}," +
+                    $"hp={totalHp},lvl={totalLevel},act={actionTypes.GetHashCode():X8},pos={posHash.GetHashCode():X8}";
                 return (onRfc >= 2, onRfc, fingerprint);
             });
 

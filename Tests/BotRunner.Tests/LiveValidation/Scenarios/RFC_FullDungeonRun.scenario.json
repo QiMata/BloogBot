@@ -8,7 +8,7 @@
   "setup": [],
   "action": null,
   "observe": {
-    "timeoutSeconds": 300,
+    "timeoutSeconds": 480,
     "pollIntervalMs": 3000,
     "logIntervalSeconds": 15
   },

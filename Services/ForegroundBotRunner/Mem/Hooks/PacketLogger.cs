@@ -670,9 +670,10 @@ namespace ForegroundBotRunner.Mem.Hooks
         /// </summary>
         public static void RecordInboundPacket(ushort opcode, int size = 0)
         {
-            // Skip manual recording if recv hook is capturing directly
-            if (_recvHookInstalled) return;
-
+            // Always process inferred packets — the recv hook misses certain opcodes
+            // (e.g., SMSG_LOGIN_VERIFY_WORLD during instance transitions). The ContinentId
+            // inference in ForegroundBotWorker is a safety net that MUST reach the CSM
+            // even when the recv hook is installed.
             _recvCount++;
             RecordPacket(PacketDirection.Recv, opcode, size);
             OnPacketCaptured?.Invoke(PacketDirection.Recv, opcode, size);
