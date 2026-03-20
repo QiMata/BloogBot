@@ -661,6 +661,184 @@ public class RagefireChasmTests
         result.AssertAll();
     }
 
+    /// <summary>
+    /// Diagnostic test: 2-bot RFC movement investigation.
+    /// Bypasses the 10-bot coordinator — uses default TESTBOT1 (FG) + TESTBOT2 (BG),
+    /// teleports both into RFC (map 389), sends StartDungeoneering directly,
+    /// and watches for movement. Captures NAV/DUNGEON diagnostics to botrunner_diag.log.
+    /// </summary>
+    [SkippableFact]
+    public async Task RFC_DiagnosticMovement_2Bot()
+    {
+        // Use 2-bot settings (only TESTBOT1 + TESTBOT2)
+        var settingsPath = ResolveTestSettingsPath("RagefireChasm2Bot.settings.json");
+        _output.WriteLine($"Restarting with 2-bot RFC config: {settingsPath}");
+
+        // Coordinator stays disabled — we'll send actions directly
+        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
+        await _bot.RestartWithSettingsAsync(settingsPath);
+        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready after restart");
+
+        await _bot.RefreshSnapshotsAsync();
+        _output.WriteLine($"Bots online: {_bot.AllBots.Count}");
+        foreach (var snap in _bot.AllBots)
+        {
+            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            _output.WriteLine($"  {snap.AccountName}/{snap.CharacterName}: map={mapId} pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
+        }
+
+        // Teleport both bots into RFC (map 389, entrance coords)
+        const int rfcMap = 389;
+        const float rfcX = 3f, rfcY = -11f, rfcZ = -15f; // RFC entrance, Z+3
+
+        _output.WriteLine("\n=== TELEPORTING TO RFC ===");
+        foreach (var accountName in new[] { _bot.BgAccountName!, _bot.FgAccountName! })
+        {
+            if (string.IsNullOrEmpty(accountName)) continue;
+            _output.WriteLine($"Teleporting {accountName} to RFC ({rfcX},{rfcY},{rfcZ}) map {rfcMap}...");
+            await _bot.BotTeleportAsync(accountName, rfcMap, rfcX, rfcY, rfcZ);
+            await Task.Delay(2000); // Let map transition settle
+        }
+
+        // Wait for both bots to appear on RFC map
+        _output.WriteLine("\n=== WAITING FOR MAP TRANSITION ===");
+        var settledSw = Stopwatch.StartNew();
+        bool bothOnRfc = false;
+        while (settledSw.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var onRfc = 0;
+            foreach (var snap in _bot.AllBots)
+            {
+                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                if (mapId == rfcMap) onRfc++;
+            }
+            if (onRfc >= 2) { bothOnRfc = true; break; }
+            if (settledSw.Elapsed.TotalSeconds % 5 < 1)
+                _output.WriteLine($"  Waiting... {onRfc}/2 bots on RFC map ({settledSw.Elapsed.TotalSeconds:F0}s)");
+            await Task.Delay(1000);
+        }
+
+        await _bot.RefreshSnapshotsAsync();
+        foreach (var snap in _bot.AllBots)
+        {
+            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            _output.WriteLine($"  POST-TELEPORT: {snap.AccountName}: map={mapId} pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}) screen={snap.ScreenState}");
+        }
+
+        if (!bothOnRfc)
+            _output.WriteLine("WARNING: Not all bots on RFC map. Continuing anyway to collect diagnostics.");
+
+        // Heal both bots to full HP before starting (warriors have no food at low levels)
+        _output.WriteLine("\n=== HEALING BOTS (via SOAP .revive) ===");
+        foreach (var charName in new[] { _bot.FgCharacterName, _bot.BgCharacterName })
+        {
+            if (string.IsNullOrEmpty(charName)) continue;
+            // .revive heals to full whether alive or dead
+            var healResult = await _bot.ExecuteGMCommandAsync($".revive {charName}");
+            _output.WriteLine($"  Heal {charName}: {healResult}");
+        }
+        await Task.Delay(2000);
+
+        // Send StartDungeoneering as LEADER to both bots (both navigate waypoints independently)
+        _output.WriteLine("\n=== DISPATCHING START_DUNGEONEERING ===");
+        foreach (var accountName in new[] { _bot.FgAccountName!, _bot.BgAccountName! })
+        {
+            if (string.IsNullOrEmpty(accountName)) continue;
+            var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
+            action.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader=1
+            var result = await _bot.SendActionAsync(accountName, action);
+            _output.WriteLine($"  Sent StartDungeoneering to {accountName}: {result}");
+        }
+
+        // Wait 30s and track position changes
+        _output.WriteLine("\n=== MONITORING MOVEMENT (30s) ===");
+        var positions = new Dictionary<string, List<string>>();
+        var monitorSw = Stopwatch.StartNew();
+        while (monitorSw.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            foreach (var snap in _bot.AllBots)
+            {
+                var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                var key = snap.AccountName;
+                if (!positions.ContainsKey(key)) positions[key] = [];
+                positions[key].Add($"({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1}) map={mapId}");
+            }
+
+            if (monitorSw.Elapsed.TotalSeconds % 5 < 1.5)
+            {
+                foreach (var snap in _bot.AllBots)
+                {
+                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                    var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    _output.WriteLine($"  [{monitorSw.Elapsed.TotalSeconds:F0}s] {snap.AccountName}: map={mapId} pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1}) screen={snap.ScreenState}");
+                }
+            }
+            await Task.Delay(1500);
+        }
+
+        // Report position deltas
+        _output.WriteLine("\n=== POSITION ANALYSIS ===");
+        foreach (var (account, posList) in positions)
+        {
+            if (posList.Count < 2) { _output.WriteLine($"  {account}: Not enough samples"); continue; }
+            var first = posList.First();
+            var last = posList.Last();
+            var changed = first != last;
+            _output.WriteLine($"  {account}: first={first} last={last} MOVED={changed} (samples={posList.Count})");
+        }
+
+        // Dump diagnostic log tail (FG writes to AppContext.BaseDirectory = WoW.exe dir)
+        _output.WriteLine("\n=== DIAG LOG TAIL (botrunner_diag.log) ===");
+        var diagPath = @"D:\World of Warcraft\botrunner_diag.log";
+        if (File.Exists(diagPath))
+        {
+            var lines = File.ReadAllLines(diagPath);
+            var relevantLines = lines
+                .Where(l => l.Contains("[NAV") || l.Contains("[DUNGEON") || l.Contains("[TICK") || l.Contains("[ACTION") || l.Contains("[TASK"))
+                .TakeLast(60)
+                .ToArray();
+            foreach (var line in relevantLines)
+                _output.WriteLine($"  {line}");
+        }
+        else
+        {
+            _output.WriteLine("  botrunner_diag.log not found at " + diagPath);
+        }
+
+        // Dump FG-specific logs
+        _output.WriteLine("\n=== FG DIAG LOG TAIL (foreground_bot_debug.log) ===");
+        var fgDiagPath = @"D:\World of Warcraft\WWoWLogs\foreground_bot_debug.log";
+        if (File.Exists(fgDiagPath))
+        {
+            var fgLines = File.ReadAllLines(fgDiagPath).TakeLast(30).ToArray();
+            foreach (var line in fgLines)
+                _output.WriteLine($"  {line}");
+        }
+
+        _output.WriteLine("\n=== OBJECT MANAGER DEBUG TAIL ===");
+        var omPath = @"D:\World of Warcraft\WWoWLogs\object_manager_debug.log";
+        if (File.Exists(omPath))
+        {
+            var omLines = File.ReadAllLines(omPath).TakeLast(20).ToArray();
+            foreach (var line in omLines)
+                _output.WriteLine($"  {line}");
+        }
+
+        // Assert that at least one bot moved
+        var anyMoved = positions.Any(kvp =>
+        {
+            if (kvp.Value.Count < 2) return false;
+            return kvp.Value.First() != kvp.Value.Last();
+        });
+        _output.WriteLine($"\n=== RESULT: anyMoved={anyMoved} ===");
+        // Don't assert — this is a diagnostic test. Collect the data.
+    }
+
     /// <summary>Map account name to character class from RagefireChasm.settings.json config.</summary>
     private static string? GetCharacterClass(string accountName) => accountName.ToUpperInvariant() switch
     {

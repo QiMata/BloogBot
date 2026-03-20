@@ -35,8 +35,8 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const float AggroCheckRange = 12f;         // While navigating — only pull mobs this close
     private const float FollowDistance = 15f;
     private const float FollowStopDistance = 8f;
-    private const int RestHealthPercent = 85;
-    private const int RestManaPercent = 80;
+    private const int RestHealthPercent = 30;       // Low threshold — warriors can't eat without food
+    private const int RestManaPercent = 30;        // Low threshold — proceed earlier in dungeons
     private const int StuckTimeoutMs = 10000;
 
     private readonly bool _isLeader;
@@ -77,14 +77,13 @@ public class DungeoneeringTask : BotTask, IBotTask
             return;
 
         _updateCount++;
-        if (_updateCount % 50 == 1) // Log every ~25s (500ms tick assumed)
+        if (_updateCount % 50 == 1) // Log every ~5s
         {
             Log.Information("[DUNGEONEERING] Tick #{Count}: state={State}, leader={IsLeader}, wp={WpIdx}/{WpCount}, " +
-                "pos=({X:F0},{Y:F0},{Z:F0}), hostiles={Hostiles}, aggressors={Aggressors}, partyLeader={PartyLeader}",
+                "pos=({X:F0},{Y:F0},{Z:F0}), hp={HP}%, hostiles={Hostiles}, aggressors={Aggressors}",
                 _updateCount, _state, _isLeader, _waypointIndex, _waypoints.Count,
                 player.Position.X, player.Position.Y, player.Position.Z,
-                ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(),
-                ObjectManager.PartyLeader != null ? "yes" : "null");
+                player.HealthPercent, ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count());
         }
 
         // Combat interrupts everything — push combat rotation task
@@ -250,17 +249,36 @@ public class DungeoneeringTask : BotTask, IBotTask
         }
     }
 
+    private int _restTicksWaiting;
+    private const int RestGiveUpTicks = 100; // ~10s — if rest can't help, proceed anyway
+
     private void HandleRestBeforePull()
     {
         if (CanProceed)
         {
+            _restTicksWaiting = 0;
             TransitionTo(_isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader);
             return;
         }
 
-        ObjectManager.StopAllMovement();
-        // Push rest task — class container provides class-specific rest (eat/drink/bandage)
-        BotTasks.Push(Container.ClassContainer.CreateRestTask(BotContext));
+        _restTicksWaiting++;
+
+        // Give up waiting if health isn't recovering (no food, no bandages)
+        if (_restTicksWaiting >= RestGiveUpTicks)
+        {
+            Log.Warning("[DUNGEONEERING] Rest gave up after {Ticks} ticks — proceeding at {HP}% HP",
+                _restTicksWaiting, ObjectManager.Player?.HealthPercent ?? 0);
+            _restTicksWaiting = 0;
+            TransitionTo(_isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader);
+            return;
+        }
+
+        // Only push a rest task if one isn't already on top (prevents stack growth)
+        if (BotTasks.Count == 0 || BotTasks.Peek() is DungeoneeringTask)
+        {
+            ObjectManager.StopAllMovement();
+            BotTasks.Push(Container.ClassContainer.CreateRestTask(BotContext));
+        }
     }
 
     private int _leaderLostTicks;
@@ -279,8 +297,10 @@ public class DungeoneeringTask : BotTask, IBotTask
             {
                 // Leader invisible too long — navigate waypoints autonomously
                 if (_updateCount % 50 == 2)
+                {
                     Log.Warning("[DUNGEONEERING] Follower lost leader for {Ticks} ticks — navigating waypoints autonomously. PartyMembers={Count}",
                         _leaderLostTicks, ObjectManager.PartyMembers.Count());
+                }
                 HandleNavigateToWaypoint(player);
                 return;
             }
@@ -345,8 +365,8 @@ public class DungeoneeringTask : BotTask, IBotTask
             if (player.HealthPercent <= RestHealthPercent)
                 return false;
 
-            // Only check local player's mana (warriors/rogues have ManaPercent < 0)
-            if (player.ManaPercent >= 0 && player.ManaPercent < RestManaPercent)
+            // Only check mana for classes that use it. Warriors/rogues have MaxMana=0.
+            if (player.MaxMana > 0 && player.ManaPercent < RestManaPercent)
                 return false;
 
             return true;

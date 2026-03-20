@@ -762,6 +762,14 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] Using custom settings: {CustomSettingsPath}");
             }
 
+            // Explicitly forward coordinator toggle so restarts inherit the test's intent
+            var coordDisable = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR");
+            if (coordDisable != null)
+            {
+                psi.Environment["WWOW_TEST_DISABLE_COORDINATOR"] = coordDisable;
+                Log($"  [StateManager] WWOW_TEST_DISABLE_COORDINATOR={coordDisable}");
+            }
+
             _stateManagerProcess = Process.Start(psi);
             if (_stateManagerProcess == null)
             {

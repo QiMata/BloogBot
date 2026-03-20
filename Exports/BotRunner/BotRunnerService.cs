@@ -49,6 +49,7 @@ namespace BotRunner
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
+        private int _tickCount;
 
         private IBehaviourTreeNode? _behaviorTree;
         private BehaviourTreeStatus _behaviorTreeStatus = BehaviourTreeStatus.Success;
@@ -155,6 +156,17 @@ namespace BotRunner
                     var playerWorldReady = _objectManager.HasEnteredWorld
                         && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
+                    _tickCount++;
+                    if (_tickCount % 100 == 1) // Every 10s
+                    {
+                        var action = incomingActivityMemberState?.CurrentAction;
+                        var actionType = action?.ActionType.ToString() ?? "null";
+                        var taskTop = _botTasks.Count > 0 ? _botTasks.Peek().GetType().Name : "empty";
+                        var screenState = _activitySnapshot?.ScreenState ?? "?";
+                        var mapId = (_objectManager.Player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0;
+                        DiagLog($"[TICK#{_tickCount}] ready={playerWorldReady} action={actionType} tree={_behaviorTreeStatus} tasks={_botTasks.Count}({taskTop}) screen={screenState} map={mapId} char={_activitySnapshot?.CharacterName ?? "?"}");
+                    }
+
                     UpdateBehaviorTree(incomingActivityMemberState);
 
                     if (_behaviorTree != null)
@@ -224,6 +236,7 @@ namespace BotRunner
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
             {
                 var action = incomingActivityMemberState.CurrentAction;
+                DiagLog($"[ACTION-RECV] type={action.ActionType} params={action.Parameters.Count} ready={playerWorldReady}");
 
                 // Spell-cast lockout: don't let movement actions interrupt active spell casts.
                 // Channeled spells (fishing, etc.) need time to complete.
