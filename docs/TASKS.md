@@ -120,24 +120,25 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-20 (session 120)
+- **Last updated:** 2026-03-20 (session 121)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **ROOT CAUSE FOUND: BG bots stuck at RFC entrance.** Physics engine returns FALLINGFAR when no vmtile data exists (RFC map 389). This blocks StartMovement(ControlBits.Front) via IsPlayerAirborne(), preventing MOVEFLAG_FORWARD and dead-reckoning. Fix: strip FALLINGFAR in `!physicsHasGround` block.
-  - **Z interpolation during dead-reckoning.** When physics has no ground geometry, Z was frozen at teleport height while dungeon floor slopes → server position desync → mob evade. Fix: lerp Z toward navmesh waypoint Z.
-  - **Chase timeout for position desync.** Dead-reckoning makes local distance calculations unreliable. Bots perpetually chase mobs they think are out of range while mobs are hitting them. Fix: after 30 chase ticks targeting an active aggressor, force auto-attack.
-  - **ConvertToRaid timing.** Batch 2 invites race the server-side raid state transition. Increased wait from 5 to 10 ticks.
-  - **Test results after fixes:** Bots now MOVE through RFC (positions change from entrance). Some bots take damage from mobs (hp100→hp0). Still 0 kills / ~107 engagements due to mob evade and position desync.
-- **Commits:** `d12ae06` (FALLINGFAR + Z interp + combat logging) → `4ec3157` (chase timeout + raid conversion)
-- **Test baseline:** 137/137 physics tests pass. RFC test still fails (0 kills, timeout) but bots navigate and engage.
-- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. Source at `D:/vmangos/`.
-- **P5 status:** Movement is unblocked. Combat is partially working (bots auto-attack, take/deal damage). Remaining issues:
-  1. **TESTBOT1 + RFCBOT2 not in raid** — invite timing issue, need investigation
-  2. **Instance teleport loop** — ungrouped bots bounce between map 389 and map 1
-  3. **Mob evade (CANCEL_COMBAT)** — 50 evade events. Position desync from dead-reckoning makes server think bot is at wrong position
-  4. **0 kills despite 769 attack events** — bots deal low damage (1-16 per hit), many misses. Mobs evade before dying
+  - **ROOT CAUSE: BG bots walk through walls.** PathfindingClient had two DeadReckon fallback paths with NO wall collision:
+    1. Zero-delta detection: physics returns 0 XY delta when bot hits a wall → after 5 frames, fell back to DeadReckon which walked through walls
+    2. Service init race: PathfindingService takes ~60s to load maps. During this time, physics calls error out → DeadReckon with GroundZ=0 (protobuf default) → MovementController thinks ground exists → bot moves freely through walls
+  - **Fix (f255ddd):** Replaced DeadReckon with HoldPosition (GroundZ=-999999). Physics zero-delta = wall contact (correct behavior, not a bug). Removed collision-free dead-reckoning entirely from PathfindingClient.
+  - **RFC collision data verified:** Physics tests prove map 389 WMO collision works perfectly — vmtree GOBJ section (non-tiled map, 148 global objects) provides both ground detection (30/30 frames) and wall collision (bot blocked at wall). No vmtile files needed.
+  - **FG leader enforcement:** Removed BG bot promotion in DungeoneeringCoordinator. TESTBOT1 (FG) is permanent leader/main tank. Coordinator waits for FG bot instead of promoting BG substitutes.
+  - **Follower autonomous navigation (a215f2b, prior session):** Followers navigate waypoints independently instead of following PartyLeader GUID (which was TESTBOT1 at entrance, not the dungeon leader).
+  - **Dead-reckoning speed fix (a215f2b):** Changed from 2.5 y/s to player.RunSpeed (7 y/s).
+  - **Path plumbing fix (a215f2b):** BotTask.TryNavigateToward now calls SetNavigationPath AFTER MoveToward to provide full path for dead-reckoning.
+- **Commits:** `a215f2b` → `f255ddd`
+- **Test baseline:** 139/139 physics tests pass (added 2 RFC diagnostic tests). RFC PhysicsStep and wall collision both verified.
+- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. VMapExtractor/Assembler at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings (pre-extracted WMOs) at `D:/World of Warcraft/Buildings/`.
+- **Key discovery:** RFC = Lavadungeon.wmo, non-tiled vmap (byte 8 = 0x00 in vmtree). All 148 collision objects stored in vmtree GOBJ section. vmtile files NOT generated because map is non-tiled — this is correct. Deadmines/SFK/SM are tiled (byte 8 = 0x01) and have vmtile files.
+- **P5 status:** Wall collision should now work. BG bots should move with proper physics (ground + walls) once PathfindingService finishes loading. Next test run will validate.
 - **Next:**
-  1. Analyze test run #2 (with chase timeout) for kill progress
+  1. Run RFC dungeon test to validate wall collision fix end-to-end
   2. Fix TESTBOT1/RFCBOT2 raid membership (first invite timing)
-  3. Investigate if mob evade is caused by Z desync or position drift
+  3. Verify mob evade issue resolves (was caused by position desync from dead-reckoning through walls)
   4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
