@@ -1214,12 +1214,15 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // --- Leader failover: if leader drops, disconnects, or can't enter the dungeon map ---
+        // --- Leader failover: if leader drops, disconnects, dies, or can't enter the dungeon map ---
         bool leaderAlive = snapshots.TryGetValue(_leaderAccount, out var leaderSnap)
                            && leaderSnap.ScreenState == "InWorld";
         bool leaderOnDungeonMap = leaderAlive
                            && (leaderSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId;
-        if (leaderOnDungeonMap)
+        bool leaderDead = leaderOnDungeonMap
+                           && (leaderSnap!.Player?.Unit?.Health ?? 0) <= 0;
+        // Only refresh last-seen if leader is alive AND on the dungeon map
+        if (leaderOnDungeonMap && !leaderDead)
         {
             _leaderLastSeen = DateTime.UtcNow;
         }
@@ -1232,7 +1235,7 @@ public class DungeoneeringCoordinator
                 && (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMapId);
             if (newLeader != null)
             {
-                var reason = leaderAlive ? "not on dungeon map" : "no snapshot";
+                var reason = leaderDead ? "dead" : leaderAlive ? "not on dungeon map" : "no snapshot";
                 _logger.LogWarning("DUNGEON_COORD: Leader '{OldLeader}' lost ({Reason} for {Timeout}s). Promoting '{NewLeader}' to leader.",
                     _leaderAccount, reason, LEADER_FAILOVER_TIMEOUT_SEC, newLeader);
                 _leaderAccount = newLeader;

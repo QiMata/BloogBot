@@ -464,6 +464,28 @@ namespace WoWSharpClient.Movement
                     output.NewPosZ = oldPos.Z;
                 }
 
+                // When physics has no ground, the engine can't simulate horizontal movement.
+                // Apply software dead-reckoning for XY based on movement flags + orientation.
+                // Without this, bots in dungeons without vmtile data (e.g. RFC map 389) are
+                // completely stuck — position never changes even though MOVEFLAG_FORWARD is set.
+                bool isMovingForward = (output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FORWARD) != 0;
+                if (isMovingForward && _currentPath != null
+                    && _currentWaypointIndex >= 0
+                    && _currentWaypointIndex < _currentPath.Length)
+                {
+                    var wp = _currentPath[_currentWaypointIndex];
+                    float drDx = wp.X - output.NewPosX;
+                    float drDy = wp.Y - output.NewPosY;
+                    float drDist = MathF.Sqrt(drDx * drDx + drDy * drDy);
+                    if (drDist > 0.5f)
+                    {
+                        // Walk speed = 2.5 y/s * dt (typically 0.033s for 30fps)
+                        float drSpeed = 2.5f * deltaSec;
+                        output.NewPosX += (drDx / drDist) * drSpeed;
+                        output.NewPosY += (drDy / drDist) * drSpeed;
+                    }
+                }
+
                 output.NewVelX = 0;
                 output.NewVelY = 0;
                 output.NewVelZ = 0;
