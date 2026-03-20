@@ -871,4 +871,56 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
                 _output.WriteLine($"  Missing: {name} (may not match vmaps naming)");
         }
     }
+
+    /// <summary>
+    /// Diagnostic: probe GetGroundZ for Ragefire Chasm (map 389) to verify
+    /// the physics engine can find collision geometry in the instance.
+    /// </summary>
+    [Fact]
+    public void RFC_GroundZ_Diagnostic()
+    {
+        const uint mapId = 389;
+        // RFC entrance coordinates (where bots get teleported)
+        float x = 3.0f, y = -11.0f, z = -15.0f;
+
+        _output.WriteLine($"=== Ragefire Chasm (map {mapId}) GetGroundZ Diagnostic ===");
+        _output.WriteLine($"Probe position: ({x}, {y}, {z})");
+
+        // Query GetGroundZ from various heights
+        float[] queryHeights = { z - 5, z - 2, z - 1, z, z + 1, z + 2, z + 5, z + 10 };
+        int validHits = 0;
+        foreach (float qz in queryHeights)
+        {
+            float gz = NavigationInterop.GetGroundZ(mapId, x, y, qz, 20.0f);
+            bool valid = gz > -100000f;
+            if (valid) validHits++;
+            _output.WriteLine($"  GetGroundZ(z={qz:F2}, maxDist=20) = {gz:F4} {(valid ? "VALID" : "MISS")}");
+        }
+
+        // Also probe some interior positions that bots navigate through
+        _output.WriteLine($"\n=== Interior positions ===");
+        (float ix, float iy, float iz)[] interiorPoints = {
+            (-5.6f, -26.2f, -18.0f),    // where bot was moving
+            (-8.2f, -31.5f, -18.0f),    // where RFCBOT2 started falling
+            (-14.7f, -49.2f, -20.0f),   // where Z plummeted
+            (-20.1f, -64.1f, -20.0f),   // deeper inside
+            (-21.0f, -66.0f, -20.0f),   // boundary probe
+            (-22.0f, -68.0f, -20.0f),   // boundary probe
+            (-23.0f, -70.0f, -20.0f),   // boundary probe
+            (-24.0f, -72.0f, -20.0f),   // boundary probe
+            (-25.0f, -74.0f, -20.0f),   // boundary probe
+            (-25.0f, -77.0f, -20.0f),   // known miss
+            (-30.0f, -90.0f, -20.0f),   // known miss
+        };
+        foreach (var (ix, iy, iz) in interiorPoints)
+        {
+            float gz = NavigationInterop.GetGroundZ(mapId, ix, iy, iz, 20.0f);
+            bool valid = gz > -100000f;
+            if (valid) validHits++;
+            _output.WriteLine($"  GetGroundZ({ix:F1},{iy:F1},z={iz:F1}) = {gz:F4} {(valid ? "VALID" : "MISS")}");
+        }
+
+        _output.WriteLine($"\nTotal valid ground hits: {validHits}/{queryHeights.Length + interiorPoints.Length}");
+        Assert.True(validHits > 0, "Physics engine found NO ground in RFC (map 389) — VMAP collision data missing or not loading");
+    }
 }

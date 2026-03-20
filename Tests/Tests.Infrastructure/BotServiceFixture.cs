@@ -452,12 +452,16 @@ public class BotServiceFixture : IAsyncLifetime
         var normalized = Path.GetFullPath(settingsPath);
         var coordFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
 
+        Log($"[EnsureSettings] Requested={Path.GetFileName(settingsPath)}, Active={_activeSettingsPath ?? "(null)"}, " +
+            $"coord={coordFlag}/{_activeCoordinatorFlag ?? "(null)"}, ready={ServicesReady}");
+
         if (ServicesReady && _activeSettingsPath == normalized && _activeCoordinatorFlag == coordFlag)
         {
             Log($"[EnsureSettings] Already running with {Path.GetFileName(settingsPath)} (coordinator={coordFlag}), skipping restart.");
             return;
         }
 
+        Log($"[EnsureSettings] Settings differ — restarting StateManager.");
         await RestartWithSettingsAsync(settingsPath);
     }
 
@@ -789,10 +793,15 @@ public class BotServiceFixture : IAsyncLifetime
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
 
             // Pass custom settings override to StateManager if configured
+            Log($"  [StateManager] CustomSettingsPath={CustomSettingsPath ?? "(null)"}");
             if (!string.IsNullOrEmpty(CustomSettingsPath) && File.Exists(CustomSettingsPath))
             {
                 psi.Environment["WWOW_SETTINGS_OVERRIDE"] = CustomSettingsPath;
                 Log($"  [StateManager] Using custom settings: {CustomSettingsPath}");
+            }
+            else if (!string.IsNullOrEmpty(CustomSettingsPath))
+            {
+                Log($"  [StateManager] WARNING: CustomSettingsPath set but file not found: {CustomSettingsPath}");
             }
 
             // Explicitly forward coordinator toggle so restarts inherit the test's intent
