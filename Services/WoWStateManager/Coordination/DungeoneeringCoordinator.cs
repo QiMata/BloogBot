@@ -1229,11 +1229,14 @@ public class DungeoneeringCoordinator
 
         bool isLeader = requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase);
 
-        // Late-join teleport: if this bot is not on RFC map (crashed/restarted during teleport),
-        // send them a teleport command. THROTTLED to prevent spamming during map loading.
-        // Spamming .go xyz to an FG bot mid-loading causes WoW.exe to crash!
+        // Late-join teleport: if this bot is not on RFC map AND was never teleported
+        // in the TeleportToRFC phase, send them a teleport command.
+        // If they WERE already teleported, their snapshot may show stale mapId while
+        // WoW.exe loads the dungeon (10-20s loading screen). Do NOT re-teleport during
+        // loading — spamming .go xyz mid-load crashes WoW.exe.
         if (snapshots.TryGetValue(requestingAccount, out var snap)
-            && snap.Player?.Unit?.GameObject?.Base?.MapId != RfcMapId)
+            && snap.Player?.Unit?.GameObject?.Base?.MapId != RfcMapId
+            && !_teleportedToRFC.ContainsKey(requestingAccount))
         {
             var teleportAction = TrySendThrottledTeleport(requestingAccount,
                 $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
@@ -1279,10 +1282,11 @@ public class DungeoneeringCoordinator
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
             snapshots.TryGetValue(_leaderAccount, out leaderSnap);
-            // Late-join teleport: if leader is not on RFC map, send them there first.
-            // THROTTLED — spamming .go xyz during map loading crashes WoW.exe!
+            // Late-join teleport: if leader is not on RFC map AND wasn't already teleported,
+            // send them there. If they were already teleported (in TeleportToRFC phase),
+            // their snapshot may lag behind during WoW.exe loading — just wait.
             var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            if (leaderMapId != RfcMapId)
+            if (leaderMapId != RfcMapId && !_teleportedToRFC.ContainsKey(_leaderAccount))
             {
                 return TrySendThrottledTeleport(_leaderAccount,
                     $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
