@@ -281,6 +281,18 @@ namespace WoWSharpClient.Handlers
                 uint spellId = reader.ReadUInt32();
                 uint blockedAmount = reader.ReadUInt32();
 
+                // Log melee swings involving the local player for combat diagnostics
+                var localPlayer = WoWSharpObjectManager.Instance.Player;
+                bool isOurAttack = localPlayer != null && attackerGuid == localPlayer.Guid;
+                bool isAttackOnUs = localPlayer != null && targetGuid == localPlayer.Guid;
+                if (isOurAttack || isAttackOnUs)
+                {
+                    Log.Warning("[SpellHandler] ATTACKER_STATE_UPDATE: {Dir} attacker=0x{Attacker:X} target=0x{Target:X} " +
+                        "damage={Damage} hitInfo=0x{HitInfo:X} spell={SpellId} blocked={Blocked}",
+                        isOurAttack ? "OUR_SWING" : "HIT_ON_US",
+                        attackerGuid, targetGuid, totalDamage, hitInfo, spellId, blockedAmount);
+                }
+
                 WoWSharpEventEmitter.Instance.FireOnAttackerStateUpdate(
                     hitInfo, attackerGuid, targetGuid, totalDamage, spellId, blockedAmount);
             }
@@ -570,7 +582,7 @@ namespace WoWSharpClient.Handlers
             if (player is Models.WoWLocalPlayer localPlayer)
             {
                 localPlayer.IsAutoAttacking = false;
-                Log.Information("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking");
+                Log.Warning("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking (possible mob evade)");
             }
         }
 

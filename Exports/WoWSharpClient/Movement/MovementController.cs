@@ -427,11 +427,56 @@ namespace WoWSharpClient.Movement
             if (!physicsHasGround)
             {
                 _noGroundFrameCount++;
-                output.NewPosZ = oldPos.Z;
+
+                // When no collision geometry exists (dead-reckoning fallback), interpolate Z
+                // toward the current target waypoint. The waypoint Z comes from the navmesh
+                // (mmaps) and is correct even when vmtile collision data is missing.
+                // Without this, the bot's Z freezes at the teleport height while walking
+                // through dungeons with sloping floors, causing server-side position desync
+                // and mob evade behavior.
+                if (_currentPath != null
+                    && _currentWaypointIndex >= 0
+                    && _currentWaypointIndex < _currentPath.Length)
+                {
+                    var waypoint = _currentPath[_currentWaypointIndex];
+                    float targetZ = waypoint.Z;
+
+                    // Lerp Z toward waypoint based on 2D proximity
+                    float dist2D = HorizontalDistance(output.NewPosX, output.NewPosY, waypoint.X, waypoint.Y);
+                    float startDist = _currentPath.Length >= 2 && _currentWaypointIndex > 0
+                        ? HorizontalDistance(_currentPath[_currentWaypointIndex - 1].X,
+                                             _currentPath[_currentWaypointIndex - 1].Y,
+                                             waypoint.X, waypoint.Y)
+                        : dist2D + 1f;
+
+                    if (startDist > 0.1f)
+                    {
+                        float progress = 1f - MathF.Min(dist2D / startDist, 1f);
+                        output.NewPosZ = oldPos.Z + (targetZ - oldPos.Z) * MathF.Min(progress * 2f, 1f);
+                    }
+                    else
+                    {
+                        output.NewPosZ = targetZ;
+                    }
+                }
+                else
+                {
+                    output.NewPosZ = oldPos.Z;
+                }
+
                 output.NewVelX = 0;
                 output.NewVelY = 0;
                 output.NewVelZ = 0;
                 output.FallTime = 0;
+
+                // Strip FALLINGFAR when there's no collision geometry at all.
+                // Without ground data the physics engine reports "falling" but the bot
+                // is really walking on a surface the vmtile data doesn't know about.
+                // Leaving FALLINGFAR set blocks StartMovement(ControlBits.Front) via
+                // IsPlayerAirborne(), which prevents MOVEFLAG_FORWARD from being set,
+                // which prevents dead-reckoning from ever activating → bot stuck.
+                output.MovementFlags = output.MovementFlags
+                    & ~((uint)MovementFlags.MOVEFLAG_FALLINGFAR | (uint)MovementFlags.MOVEFLAG_JUMPING);
 
                 if (_noGroundFrameCount == 30) // ~1 second at 30 FPS
                 {
