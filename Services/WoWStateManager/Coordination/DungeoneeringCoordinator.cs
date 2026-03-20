@@ -71,6 +71,7 @@ public class DungeoneeringCoordinator
 
     // Prep tracking — concurrent because multiple bot threads call GetAction()
     private readonly ConcurrentDictionary<string, byte> _preparedAccounts = new();
+    private readonly ConcurrentDictionary<string, Task> _prepTasks = new();
     private readonly ConcurrentDictionary<string, byte> _teleportedToOrg = new();
     private readonly ConcurrentDictionary<string, byte> _teleportedToRFC = new();
     private readonly List<string> _rfcTeleportOrder = new(); // Built once: leader first, then members
@@ -242,7 +243,7 @@ public class DungeoneeringCoordinator
             return null;
         }
 
-        // Fire all SOAP prep commands in parallel (async, fire-and-forget)
+        // Fire all SOAP prep commands in parallel, track tasks for completion
         var allAccounts = new List<string> { _leaderAccount };
         allAccounts.AddRange(_memberAccounts);
 
@@ -257,7 +258,8 @@ public class DungeoneeringCoordinator
             if (!snapshots.TryGetValue(account, out var snap) || snap.ScreenState != "InWorld")
                 continue;
 
-            _ = PrepareCharacterAsync(account, charName);
+            var task = PrepareCharacterAsync(account, charName);
+            _prepTasks.TryAdd(account, task);
             _preparedAccounts.TryAdd(account, 0);
         }
 
@@ -271,9 +273,21 @@ public class DungeoneeringCoordinator
             _logger.LogWarning("DUNGEON_COORD: {Unprepared} accounts never came InWorld, continuing.", unprepared);
         }
 
+        // Wait for ALL SOAP tasks to complete before proceeding.
+        // .character level can reset spells, so it must finish before .learn via chat.
+        var pendingTasks = _prepTasks.Values.Where(t => !t.IsCompleted).ToList();
+        if (pendingTasks.Count > 0)
+        {
+            _tickCount++;
+            if (_tickCount < 40) // Wait up to ~20s for SOAP commands to complete
+                return null;
+            _logger.LogWarning("DUNGEON_COORD: {Count} SOAP prep tasks still running after timeout, continuing.",
+                pendingTasks.Count);
+        }
+
         // All accounts prepared via SOAP — now learn spells via bot chat
         _logger.LogInformation("DUNGEON_COORD: All {Count} characters prepared via SOAP. Learning spells via chat.",
-            _preparedAccounts.Count);  // ConcurrentDictionary.Count is safe
+            _preparedAccounts.Count);
         TransitionTo(CoordState.LearnSpellsViaChat);
         return null;
     }

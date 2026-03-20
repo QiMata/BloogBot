@@ -245,6 +245,14 @@ namespace WoWSharpClient
                                             _ = _woWClient.SendSetActiveMoverAsync(PlayerGuid.FullGuid);
                                             _isInControl = true;
                                             _isBeingTeleported = false;
+
+                                            // Re-create MovementController after cross-map transfer.
+                                            // ResetWorldSessionState nulls _movementController, but
+                                            // InitializeMovementController is only called from EnterWorld()
+                                            // (initial login). Without this, physics never runs after
+                                            // teleporting to a different map (e.g. Kalimdor → RFC).
+                                            if (_movementController == null)
+                                                InitializeMovementController();
                                         }
                                     }
 

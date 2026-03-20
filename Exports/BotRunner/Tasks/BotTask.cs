@@ -82,7 +82,10 @@ public abstract class BotTask(IBotContext botContext)
                 gender: player?.Gender ?? 0);
         }
         if (player?.Position == null)
+        {
+            Log.Warning("[NAV-DIAG] TryNavigateToward: player or position is null");
             return false;
+        }
 
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
@@ -96,6 +99,10 @@ public abstract class BotTask(IBotContext botContext)
             return true;
         }
 
+        Log.Warning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
+            "pos=({PosX:F1},{PosY:F1},{PosZ:F1}), dest=({DestX:F1},{DestY:F1},{DestZ:F1}), map={Map}",
+            player.Position.X, player.Position.Y, player.Position.Z,
+            destination.X, destination.Y, destination.Z, player.MapId);
         ObjectManager.StopAllMovement();
         return false;
     }

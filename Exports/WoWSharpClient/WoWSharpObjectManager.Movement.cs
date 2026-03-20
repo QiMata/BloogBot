@@ -403,6 +403,7 @@ namespace WoWSharpClient
         }
 
 
+        private int _moveTowardAirborneLogCount;
         public void MoveToward(Position pos)
         {
             if (pos == null || Player == null) return;
@@ -411,7 +412,16 @@ namespace WoWSharpClient
             // The bot keeps its pre-jump trajectory — steering mid-air causes spiraling
             // and sends illegal movement flag transitions to the server.
             var player = (WoWLocalPlayer)Player;
-            if (IsPlayerAirborne(player)) return;
+            if (IsPlayerAirborne(player))
+            {
+                _moveTowardAirborneLogCount++;
+                if (_moveTowardAirborneLogCount <= 5 || _moveTowardAirborneLogCount % 50 == 0)
+                    Log.Warning("[NAV-DIAG] MoveToward blocked by IsPlayerAirborne (x{Count}): flags=0x{Flags:X}, pos=({X:F1},{Y:F1},{Z:F1}), map={Map}",
+                        _moveTowardAirborneLogCount, (uint)player.MovementFlags,
+                        player.Position.X, player.Position.Y, player.Position.Z, player.MapId);
+                return;
+            }
+            _moveTowardAirborneLogCount = 0;
 
             // Face the target
             if (!Player.IsFacing(pos))
