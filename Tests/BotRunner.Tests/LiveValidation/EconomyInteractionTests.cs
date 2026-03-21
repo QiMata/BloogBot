@@ -259,7 +259,7 @@ public class EconomyInteractionTests
     private async Task<bool> InteractWithNpcType(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string npcType, string label)
     {
         // After teleport, NPC objects may not be streamed in yet — poll for up to 5s.
-        Communication.WoWNearbyUnit? npc = null;
+        Game.WoWUnit? npc = null;
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(5))
         {
