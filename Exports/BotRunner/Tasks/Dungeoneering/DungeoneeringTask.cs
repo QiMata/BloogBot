@@ -60,8 +60,8 @@ public class DungeoneeringTask : BotTask, IBotTask
         _isLeader = isLeader;
         _waypoints = waypoints?.Select(p => new Position(p.X, p.Y, p.Z)).ToList() ?? [];
 
-        if (_isLeader && _waypoints.Count == 0)
-            Log.Warning("[DUNGEONEERING] Leader task created with no waypoints — will only react to visible hostiles.");
+        if (_waypoints.Count == 0)
+            Log.Warning("[DUNGEONEERING] Task created with NO waypoints (leader={IsLeader}) — bot will not navigate!", _isLeader);
 
         _state = _isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader;
 
