@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using GameData.Core.Enums;
+using Serilog;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
@@ -523,26 +524,31 @@ namespace WoWSharpClient.Client
 
         private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTINRANGE — server says player is out of melee range");
             _attackErrors.OnNext("Attack failed: Not in range.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_BADFACING — server says player has wrong facing");
             _attackErrors.OnNext("Attack failed: Bad facing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTSTANDING — server says player is not standing");
             _attackErrors.OnNext("Attack failed: Not standing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_DEADTARGET — server says target is dead");
             _attackErrors.OnNext("Attack failed: Target is dead.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_CANTATTACK — server says can't attack target");
             _attackErrors.OnNext("Attack failed: Can't attack.");
             return Task.CompletedTask;
         }

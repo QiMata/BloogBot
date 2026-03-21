@@ -307,9 +307,13 @@ namespace WoWSharpClient
                     // player position from the last movement packet, causing it to
                     // think the player is out of melee range even when the client
                     // shows them right next to the mob.
+                    // CRITICAL: Await the heartbeat send before issuing the attack.
+                    // Fire-and-forget heartbeat caused CMSG_ATTACKSWING to arrive at
+                    // the server before the position update, resulting in stale position
+                    // → SMSG_ATTACKSWING_NOTINRANGE → no damage dealt.
                     var gameTimeMs = (uint)_worldTimeTracker.NowMS.TotalMilliseconds;
                     var heartbeat = Parsers.MovementPacketHandler.BuildMovementInfoBuffer(localPlayer, gameTimeMs, 0);
-                    _ = _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat);
+                    _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat).GetAwaiter().GetResult();
 
                     localPlayer.IsAutoAttacking = true;
                 }
@@ -320,7 +324,7 @@ namespace WoWSharpClient
             }
 
             var payload = BitConverter.GetBytes(_currentTargetGuid);
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSWING, payload);
+            _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSWING, payload).GetAwaiter().GetResult();
         }
 
 
