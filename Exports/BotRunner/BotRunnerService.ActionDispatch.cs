@@ -635,11 +635,13 @@ namespace BotRunner
                     case CharacterAction.StartDungeoneering:
                     {
                         // Params: [0] = isLeader (int, 1=leader 0=follower)
-                        // Optional: [1..N] = float waypoints (x,y,z triples)
+                        //         [1] = target map ID (int, e.g. 389 for RFC)
+                        // Optional: [2..N] = float waypoints (x,y,z triples)
                         // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
                         bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
-                        var waypointPositions = actionEntry.Item2.Count > 1
-                            ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(1))
+                        uint targetMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0;
+                        var waypointPositions = actionEntry.Item2.Count > 2
+                            ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(2))
                             : null;
 
                         builder.Do("Queue Dungeoneering Task", time =>
@@ -651,8 +653,12 @@ namespace BotRunner
                             }
                             else
                             {
-                                // If no explicit waypoints, try map-based defaults
-                                var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(_objectManager.Player?.MapId ?? 0);
+                                // Use target map ID from coordinator (reliable), falling back to
+                                // player's current MapId (may be stale during instance loading).
+                                uint mapId = targetMapId != 0
+                                    ? targetMapId
+                                    : (_objectManager.Player?.MapId ?? 0);
+                                var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(mapId);
                                 IReadOnlyList<GameData.Core.Models.Position>? waypoints = waypointPositions?.Count > 0
                                     ? waypointPositions
                                     : mapWaypoints;

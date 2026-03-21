@@ -1277,6 +1277,7 @@ public class DungeoneeringCoordinator
 
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
+        action.Parameters.Add(new RequestParameter { IntParam = RfcMapId }); // target dungeon map ID
 
         // Transition when all bots (including leader) have been dispatched.
         // Re-evaluate after TryAdd since the pre-check was before this bot was added.
