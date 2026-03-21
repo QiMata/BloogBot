@@ -147,7 +147,9 @@ public class EquipmentEquipTests
             _output.WriteLine($"  [{label}] Adding Worn Mace (item {LiveBotFixture.TestItems.WornMace}).");
             await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.WornMace);
             var addItemSw = Stopwatch.StartNew();
-            while (addItemSw.Elapsed < TimeSpan.FromSeconds(5))
+            // SOAP .additem can take 10+ seconds to propagate through the
+            // server → SMSG_UPDATE_OBJECT → BG client pipeline.
+            while (addItemSw.Elapsed < TimeSpan.FromSeconds(15))
             {
                 await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();

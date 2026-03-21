@@ -155,11 +155,12 @@ public class FishingProfessionTests
         await _bot.BotAddItemAsync(account, FishingData.FishingPole);
         await _bot.BotAddItemAsync(account, FishingLureItemId);
 
-        // Single wait for both items to appear.
+        // Single wait for both items to appear. SOAP .additem can take 10+ seconds
+        // to propagate through the server → SMSG_UPDATE_OBJECT → BG client pipeline.
         var itemsReady = await _bot.WaitForSnapshotConditionAsync(
             account,
             snapshot => ContainsFishingPole(snapshot) && CountItem(snapshot, FishingLureItemId) > 0,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(15),
             pollIntervalMs: 300,
             progressLabel: $"{label} fishing-items");
 
