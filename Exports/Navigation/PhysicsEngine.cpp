@@ -1499,19 +1499,21 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
     }
 
     if (!st.isGrounded) {
-        // No ground found within range: start falling
-        // Note: ExecuteDownPass should have already undone the step offset,
-        // so st.z is at the correct position for falling
+        // No ground found within range: start falling.
+        // The 3-pass sweep already applied horizontal displacement (SIDE pass).
+        // We need ProcessAirMovement for gravity + ground collision detection,
+        // but must preserve the sweep's horizontal result.
         PHYS_INFO(PHYS_MOVE, "[GroundMove] No ground - transitioning to air movement");
-        // The 3-pass sweep already handled horizontal displacement for this frame.
-        // Zero horizontal velocity so ProcessAirMovement only applies vertical (gravity)
-        // and ground collision detection. Without this, ProcessAirMovement adds st.vx*dt
-        // ON TOP of the sweep displacement, causing a velocity feedback loop:
-        // actualV = (sweep + air) / dt → next frame air = actualV*dt → growing each frame.
+        const float sweepX = st.x;
+        const float sweepY = st.y;
         st.vx = 0.0f;
         st.vy = 0.0f;
         st.vz = PhysicsConstants::FALL_START_VELOCITY;
         ProcessAirMovement(input, intent, st, dt, moveSpeed);
+        // Restore horizontal position from sweep — ProcessAirMovement with vx=vy=0
+        // only contributes vertical displacement and ground collision detection.
+        st.x = sweepX;
+        st.y = sweepY;
     } else {
         // =====================================================================
         // Cliff detection: if the ground dropped too fast from previous frame,
@@ -1535,7 +1537,10 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         if (groundDrop > cliffThreshold &&
             VMAP::IsValidHeight(input.prevGroundZ) &&
             input.prevGroundZ > -100000.0f) {
-            // Cliff edge: ground dropped too fast — enter freefall
+            // Cliff edge: ground dropped too fast — enter freefall.
+            // Preserve sweep horizontal displacement (same pattern as no-ground case).
+            const float cliffSweepX = st.x;
+            const float cliffSweepY = st.y;
             st.z = preMoveZ;  // Restore pre-move Z (don't snap below cliff)
             st.isGrounded = false;
             st.vx = 0.0f;
@@ -1550,6 +1555,8 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
                 PHYS_INFO(PHYS_MOVE, oss.str());
             }
             ProcessAirMovement(input, intent, st, dt, moveSpeed);
+            st.x = cliffSweepX;
+            st.y = cliffSweepY;
         } else {
             // Normal grounded movement - set horizontal velocity
             G3D::Vector3 vProj = dirN * moveSpeed;
