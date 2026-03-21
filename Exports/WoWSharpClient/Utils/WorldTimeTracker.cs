@@ -1,16 +1,15 @@
 ﻿using System;
-using System.Diagnostics;
 namespace WoWSharpClient.Utils
 {
     public class WorldTimeTracker
     {
-        private readonly Stopwatch _realTime = Stopwatch.StartNew();
-
         /// <summary>
-        /// Returns the current server-aligned monotonic time in ms.
-        /// Equivalent to WorldTimer::getMSTime().
+        /// Returns the current monotonic time in ms using the same time base
+        /// as MaNGOS's WorldTimer::getMSTime(), which calls GetTickCount().
+        /// Environment.TickCount64 wraps the same Win32 API, so packet
+        /// timestamps will be consistent with server-side expectations.
         /// </summary>
-        public TimeSpan NowMS => TimeSpan.FromMilliseconds(_realTime.ElapsedMilliseconds);
+        public TimeSpan NowMS => TimeSpan.FromMilliseconds(Environment.TickCount64);
     }
 }
 

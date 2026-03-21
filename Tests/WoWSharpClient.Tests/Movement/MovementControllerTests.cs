@@ -226,19 +226,19 @@ namespace WoWSharpClient.Tests.Movement
         // ======== HEARTBEAT TIMING ========
 
         [Fact]
-        public void Heartbeat_SentAfter500ms()
+        public void Heartbeat_SentAfterPacketInterval()
         {
             // Start moving
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 1000); // Sends START_FORWARD
             _sentPackets.Clear();
 
-            // 400ms later — no heartbeat yet
-            _controller.Update(0.05f, 1400);
+            // 150ms later — no heartbeat yet (PACKET_INTERVAL_MS = 200)
+            _controller.Update(0.05f, 1150);
             Assert.Empty(_sentPackets);
 
-            // 500ms total — heartbeat fires
-            _controller.Update(0.05f, 1500);
+            // 200ms total — heartbeat fires
+            _controller.Update(0.05f, 1200);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -264,19 +264,19 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000); // Sends START_FORWARD
             _sentPackets.Clear();
 
-            // At t=1200, start strafing (flag change → sends immediately)
+            // At t=1100, start strafing (flag change → sends immediately)
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT;
-            _controller.Update(0.05f, 1200);
+            _controller.Update(0.05f, 1100);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_START_STRAFE_LEFT, _sentPackets[0].opcode);
             _sentPackets.Clear();
 
-            // At t=1600 (400ms since last packet) — no heartbeat
-            _controller.Update(0.05f, 1600);
+            // At t=1250 (150ms since last packet) — no heartbeat
+            _controller.Update(0.05f, 1250);
             Assert.Empty(_sentPackets);
 
-            // At t=1700 (500ms since last packet) — heartbeat
-            _controller.Update(0.05f, 1700);
+            // At t=1300 (200ms since last packet) — heartbeat
+            _controller.Update(0.05f, 1300);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -848,21 +848,21 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 0);
             Assert.Single(_sentPackets);
 
-            // t=250: no heartbeat
-            _controller.Update(0.05f, 250);
+            // t=100: no heartbeat (PACKET_INTERVAL_MS = 200)
+            _controller.Update(0.05f, 100);
             Assert.Single(_sentPackets);
 
-            // t=500: first heartbeat
-            _controller.Update(0.05f, 500);
+            // t=200: first heartbeat
+            _controller.Update(0.05f, 200);
             Assert.Equal(2, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
 
-            // t=750: no heartbeat
-            _controller.Update(0.05f, 750);
+            // t=300: no heartbeat
+            _controller.Update(0.05f, 300);
             Assert.Equal(2, _sentPackets.Count);
 
-            // t=1000: second heartbeat
-            _controller.Update(0.05f, 1000);
+            // t=400: second heartbeat
+            _controller.Update(0.05f, 400);
             Assert.Equal(3, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
         }

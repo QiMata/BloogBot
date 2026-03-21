@@ -9,7 +9,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="Moq" Version="4.20.70" />
+    <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -21,6 +21,7 @@
          Integration tests communicate with it over TCP, not via assembly reference. -->
     <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" />
     <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
+    <ProjectReference Include="..\Navigation.Physics.Tests\Navigation.Physics.Tests.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

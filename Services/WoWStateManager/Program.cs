@@ -195,17 +195,37 @@ namespace WoWStateManager
                     return null;
                 }
 
+                var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = "dotnet",
                     Arguments = $"\"{dllPath}\"",
                     UseShellExecute = false,
-                    CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
+                    CreateNoWindow = !showWindows,
+                    RedirectStandardOutput = !showWindows,
+                    RedirectStandardError = !showWindows,
                     WorkingDirectory = serviceDir
                 };
 
                 var process = Process.Start(processInfo);
                 Console.WriteLine($"PathfindingService launched from {serviceDir} (PID: {process?.Id}).");
+
+                // Forward PathfindingService stdout/stderr so C++ physics diagnostics are visible
+                if (!showWindows && process != null)
+                {
+                    process.OutputDataReceived += (s, e) =>
+                    {
+                        if (!string.IsNullOrEmpty(e.Data))
+                            Console.WriteLine($"[PathfindingService-OUT] {e.Data}");
+                    };
+                    process.ErrorDataReceived += (s, e) =>
+                    {
+                        if (!string.IsNullOrEmpty(e.Data))
+                            Console.WriteLine($"[PathfindingService-ERR] {e.Data}");
+                    };
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                }
                 return process;
             }
             catch (Exception ex)

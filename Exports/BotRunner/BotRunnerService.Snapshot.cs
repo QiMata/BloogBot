@@ -59,6 +59,13 @@ namespace BotRunner
             try
             {
                 var pos = player.Position;
+                // DIAG: log snapshot position to compare with heartbeat position
+                if (_tickCount % 10 == 1 && (uint)player.MovementFlags != 0)
+                {
+                    Log.Warning("[SNAP_POS] tick={Tick} live=({X:F2},{Y:F2},{Z:F2}) flags=0x{Flags:X}",
+                        _tickCount, pos?.X ?? -999, pos?.Y ?? -999, pos?.Z ?? -999,
+                        (uint)player.MovementFlags);
+                }
                 _activitySnapshot.MovementData = new Game.MovementData
                 {
                     MovementFlags = (uint)player.MovementFlags,

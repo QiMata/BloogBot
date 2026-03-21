@@ -221,6 +221,7 @@ namespace WoWSharpClient
         private const float PHYSICS_MAX_DT = 0.200f;
         // Accumulated fractional time from previous tick, carried forward for sub-stepping.
         private float _physicsTimeAccumulator = 0f;
+        private int _substepZeroCount = 0;
 
         private void OnGameLoopTick(object? sender, ElapsedEventArgs e)
         {
@@ -254,9 +255,27 @@ namespace WoWSharpClient
                     int subSteps = 0;
                     while (_physicsTimeAccumulator >= PHYSICS_FIXED_DT)
                     {
+                        var preX = Player.Position.X;
+                        var preY = Player.Position.Y;
                         _movementController.Update(PHYSICS_FIXED_DT, gameTimeMs);
+                        var postX = Player.Position.X;
+                        var postY = Player.Position.Y;
+                        var moved = MathF.Abs(postX - preX) >= 0.001f || MathF.Abs(postY - preY) >= 0.001f;
+                        if (!moved && (Player.MovementFlags & GameData.Core.Enums.MovementFlags.MOVEFLAG_FORWARD) != 0)
+                        {
+                            _substepZeroCount++;
+                            if (_substepZeroCount <= 3 || _substepZeroCount % 200 == 0)
+                                Log.Warning("[SubStep] Zero-delta sub-step {SubStep}/{Total}: pre=({PreX:F3},{PreY:F3}) post=({PostX:F3},{PostY:F3}) accum={Accum:F4}",
+                                    subSteps, (int)(_physicsTimeAccumulator / PHYSICS_FIXED_DT) + subSteps + 1,
+                                    preX, preY, postX, postY, _physicsTimeAccumulator + PHYSICS_FIXED_DT);
+                        }
                         _physicsTimeAccumulator -= PHYSICS_FIXED_DT;
-                        gameTimeMs += 50; // Advance virtual time so packet timing and stale-forward detection work across sub-steps
+                        // NOTE: Do NOT advance gameTimeMs between substeps. The virtual time
+                        // increment caused packet timestamps to exceed real clock time, and on
+                        // the next timer tick (uint)now.TotalMilliseconds would be LESS than the
+                        // inflated gameTimeMs — the server detected backward timestamps as time
+                        // manipulation and rubber-banded the player, causing ~50% of frames to
+                        // have zero displacement. All substeps share the same real timestamp.
                         subSteps++;
                     }
                 }

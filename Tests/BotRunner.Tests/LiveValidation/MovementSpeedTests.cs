@@ -23,15 +23,16 @@ public class MovementSpeedTests
 
     private const int MapId = 1; // Kalimdor
 
-    // Valley of Trials — proven coordinates from NavigationTests
-    private const float StartX = -284.0f;
-    private const float StartY = -4383.0f;
-    private const float StartZ = 57.0f;
+    // Durotar road south of Razor Hill — flat open terrain, no buildings or cliffs.
+    // The road sits at Z≈11-12 on ADT terrain. Use Z=12 so .go xyz lands on the road.
+    private const float StartX = 285.0f;
+    private const float StartY = -4740.0f;
+    private const float StartZ = 12.0f;
 
-    // Target ~66y away (toward VotLongEnd direction)
-    private const float TargetX = -350.0f;
-    private const float TargetY = -4450.0f;
-    private const float TargetZ = 50.0f;
+    // Target ~50y north along the road — flat terrain, no obstacles.
+    private const float TargetX = 285.0f;
+    private const float TargetY = -4690.0f;
+    private const float TargetZ = 12.0f;
 
     // Expected run speed for a level 1 character
     private const float ExpectedRunSpeed = 7.0f;

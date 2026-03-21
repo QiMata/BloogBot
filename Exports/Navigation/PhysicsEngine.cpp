@@ -1100,6 +1100,19 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
     float afterSideX = st.x, afterSideY = st.y, afterSideZ = st.z;
     float sideDist = std::sqrt((afterSideX - afterUpX)*(afterSideX - afterUpX) + (afterSideY - afterUpY)*(afterSideY - afterUpY));
 
+    // Diagnostic: when side pass achieves <50% of intended distance
+    if (sideDist < distance * 0.5f) {
+        std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+        oss << "[SIDE_LOW] intended=" << distance << " sideDist=" << sideDist
+            << " hitWall=" << (sideResult.hitWall ? 1 : 0)
+            << " hitCorner=" << (sideResult.hitCorner ? 1 : 0)
+            << " distMoved=" << sideResult.distanceMoved
+            << " distRemain=" << sideResult.distanceRemaining
+            << " afterUp=(" << afterUpX << "," << afterUpY << "," << afterUpZ << ")"
+            << " afterSide=(" << afterSideX << "," << afterSideY << "," << afterSideZ << ")";
+        PHYS_ERR(PHYS_MOVE, oss.str());
+    }
+
     // =========================================================================
     // Step 3b: LEDGE GUARD - Prevent walking off elevated surfaces
     // When the character was grounded and has moved horizontally, probe ground
@@ -1129,7 +1142,13 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
         float originGroundZ = SceneQuery::GetGroundZ(input.mapId, afterUpX, afterUpY, originalZ,
             PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
 
-        const float ledgeThreshold = PhysicsConstants::STEP_HEIGHT + 0.5f; // ~2.625y
+        // Threshold increased from STEP_HEIGHT+0.5 (2.625y) to 4.0y because
+        // GetGroundZ only sees ADT terrain, not M2/WMO collision surfaces.
+        // Normal terrain in Valley of Trials has up to 3y ADT height variance
+        // between adjacent grid points. The old threshold (2.625y) falsely
+        // blocked horizontal movement on ordinary terrain. Real ledge edges
+        // (pier/dock/bridge to terrain below) are typically 5-15y drops.
+        const float ledgeThreshold = 4.0f;
         bool isLedgeDrop = false;
 
         if (VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
@@ -1173,7 +1192,7 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
                     << " originGroundZ=" << originGroundZ
                     << " originalZ=" << originalZ
                     << " sideDist=" << sideDist;
-                PHYS_INFO(PHYS_MOVE, oss.str());
+                PHYS_ERR(PHYS_MOVE, oss.str());
             }
         }
     }
@@ -1408,6 +1427,8 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
 
     // Save pre-move Z for cliff detection after 3-pass
     const float preMoveZ = st.z;
+    // Save entry position for zero-displacement diagnostic
+    const float entryX = st.x, entryY = st.y, entryZ = st.z;
 
     // =========================================================================
     // Use the new 3-pass movement system (PhysX CCT style)
@@ -1421,16 +1442,24 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
     }
 
     ThreePassResult result = PerformThreePassMove(input, st, r, h, dirN, intendedDist, dt);
-    
+
+    // Snapshot position after 3-pass (before post-move fixups)
+    const float after3passX = st.x, after3passY = st.y, after3passZ = st.z;
+
     {
-        std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-        oss << "[GroundMove] 3-pass result: "
-            << " collisionUp=" << (result.collisionUp ? 1 : 0)
-            << " collisionSide=" << (result.collisionSide ? 1 : 0)
-            << " collisionDown=" << (result.collisionDown ? 1 : 0)
-            << " hitNonWalkable=" << (result.hitNonWalkable ? 1 : 0)
-            << " pos=(" << st.x << "," << st.y << "," << st.z << ")";
-        PHYS_INFO(PHYS_MOVE, oss.str());
+        float aDx = st.x - entryX, aDy = st.y - entryY;
+        float aDist = std::sqrt(aDx*aDx + aDy*aDy);
+        if (aDist < intendedDist * 0.5f) {
+            std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+            oss << "[3PASS_LOW] intended=" << intendedDist << " achieved=" << aDist
+                << " collUp=" << (result.collisionUp ? 1 : 0)
+                << " collSide=" << (result.collisionSide ? 1 : 0)
+                << " collDown=" << (result.collisionDown ? 1 : 0)
+                << " nonWalk=" << (result.hitNonWalkable ? 1 : 0)
+                << " entry=(" << entryX << "," << entryY << "," << entryZ << ")"
+                << " post=(" << st.x << "," << st.y << "," << st.z << ")";
+            PHYS_ERR(PHYS_MOVE, oss.str());
+        }
     }
 
     // Propagate wall contact info to MovementState so StepV2 can relay it to PhysicsOutput
@@ -1441,7 +1470,19 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
     }
 
     // Resolve any remaining horizontal overlaps
-    ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ true);
+    float postMoveDepenDist = 0.0f;
+    {
+        float preDepenX = st.x, preDepenY = st.y;
+        ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ true);
+        postMoveDepenDist = std::sqrt((st.x-preDepenX)*(st.x-preDepenX) + (st.y-preDepenY)*(st.y-preDepenY));
+        if (postMoveDepenDist > 0.001f) {
+            std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+            oss << "[PostMoveHDepen] pushback=" << postMoveDepenDist;
+            PHYS_INFO(PHYS_MOVE, oss.str());
+        }
+    }
+    // Snapshot position after post-move depen (before ledge guard)
+    const float afterDepenX = st.x, afterDepenY = st.y;
 
     // =========================================================================
     // Handle non-walkable slope or no ground
@@ -1515,6 +1556,36 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
             st.vx = vProj.x;
             st.vy = vProj.y;
             st.vz = 0.0f;
+        }
+    }
+
+    // =========================================================================
+    // ALWAYS-ON zero-displacement diagnostic (PHYS_ERR = always visible)
+    // Fires when GroundMoveElevatedSweep produces < 50% of intended distance.
+    // Reports which sub-step was responsible: 3-pass, post-depen, or ledge guard.
+    // =========================================================================
+    {
+        float finalDx = st.x - entryX;
+        float finalDy = st.y - entryY;
+        float finalDist = std::sqrt(finalDx*finalDx + finalDy*finalDy);
+        if (finalDist < intendedDist * 0.5f) {
+            // Compute 3-pass displacement
+            float passAchieved = std::sqrt((after3passX - entryX)*(after3passX - entryX) + (after3passY - entryY)*(after3passY - entryY));
+            // Check if ledge guard fired (position == afterDepenX/Y means no ledge guard, or afterUpX/Y if ledge guard reverted)
+            bool ledgeReverted = (std::fabs(st.x - afterDepenX) > 0.001f || std::fabs(st.y - afterDepenY) > 0.001f);
+            std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+            oss << "[STUCK_DIAG] intended=" << intendedDist
+                << " final=" << finalDist
+                << " 3pass=" << passAchieved
+                << " postDepen=" << postMoveDepenDist
+                << " ledgeRevert=" << (ledgeReverted ? 1 : 0)
+                << " collSide=" << (result.collisionSide ? 1 : 0)
+                << " collUp=" << (result.collisionUp ? 1 : 0)
+                << " nonWalk=" << (result.hitNonWalkable ? 1 : 0)
+                << " grounded=" << (st.isGrounded ? 1 : 0)
+                << " pos=(" << st.x << "," << st.y << "," << st.z << ")"
+                << " entry=(" << entryX << "," << entryY << "," << entryZ << ")";
+            PHYS_ERR(PHYS_MOVE, oss.str());
         }
     }
 }
@@ -1961,6 +2032,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			int penCount = 0;
 			for (const auto& oh : overlaps) {
 				if (!oh.startPenetrating) continue;
+				// Apply the same walkable + Side-region filter as the immediate
+				// recovery (line 1977). Without this filter, terrain slope contacts
+				// that the immediate recovery correctly ignores still produce a
+				// deferred push vector that fights against forward movement every
+				// frame, reducing speed to ~9% of expected.
+				if (std::fabs(oh.normal.z) < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) continue;
+				if (oh.region != SceneHit::CapsuleRegion::Side) continue;
 				float d = std::max(0.0f, oh.penetrationDepth);
 				if (d <= PhysicsConstants::VECTOR_EPSILON) continue;
 				G3D::Vector3 n = oh.normal.directionOrZero();
@@ -2236,6 +2314,24 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			// First pass: regular ground move (UP→SIDE→DOWN)
 			MovementState preMove = st;
 			GroundMoveElevatedSweep(input, intent, st, r, h, moveDir, intendedDist, dt, moveSpeed);
+
+			// Diagnostic: how much did the 3-pass actually move us?
+			{
+				float dx = st.x - preMove.x;
+				float dy = st.y - preMove.y;
+				float achieved = std::sqrt(dx*dx + dy*dy);
+				if (achieved < intendedDist * 0.5f) {
+					std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+					oss << "[GroundMoveDiag] LOW_DISPLACEMENT: intended=" << intendedDist
+						<< " achieved=" << achieved << " ratio=" << (intendedDist > 0 ? achieved/intendedDist : 0)
+						<< " wallHit=" << (st.wallHit ? 1 : 0)
+						<< " grounded=" << (st.isGrounded ? 1 : 0)
+						<< " nZ=" << st.groundNormal.z
+						<< " pos=(" << st.x << "," << st.y << "," << st.z << ")"
+						<< " pre=(" << preMove.x << "," << preMove.y << "," << preMove.z << ")";
+					PHYS_ERR(PHYS_MOVE, oss.str());
+				}
+			}
 
 			// PhysX-style "walk experiment" (see SWEEP_TEST_MOVE_CHARACTER_REFERENCE.md Step 7):
 			// When the initial 3-pass lands on a non-walkable slope, we:
@@ -3000,7 +3096,19 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		}
 	}
 
-	out.groundZ = st.z;
+	// Ground Z output: when grounded, st.z was snapped to terrain by the DOWN pass.
+	// When airborne, st.z is the falling position — use prevGroundZ (the last grounded
+	// surface) so the C# side can distinguish real falls (large gap) from capsule sweep
+	// misses (small gap near ground).
+	if (st.isGrounded) {
+		out.groundZ = st.z;
+	} else if (VMAP::IsValidHeight(input.prevGroundZ) && input.prevGroundZ > -100000.0f) {
+		out.groundZ = input.prevGroundZ;
+	} else {
+		// No previous ground reference — report character position as fallback.
+		// This preserves existing behavior for bots that start airborne.
+		out.groundZ = st.z;
+	}
 	out.fallTime = st.fallTime * 1000.0f;  // Convert seconds (internal) → ms for output
 
 	// Fall distance tracking: detect grounded↔airborne transitions

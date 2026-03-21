@@ -363,10 +363,25 @@ namespace WoWSharpClient.Movement
                 StepUpAge = _stepUpAge,
             };
 
+            // Save the position and flags we're sending to C++ for race-detection and diagnostics.
+            // If a teleport modifies _player.Position during the gRPC call,
+            // ApplyPhysicsResult will detect the divergence and discard the stale result.
+            _physicsInputX = input.PosX;
+            _physicsInputY = input.PosY;
+            _physicsInputZ = input.PosZ;
+            _physicsInputFlags = input.MovementFlags;
+
             return _physics.PhysicsStep(input);
         }
 
         private int _deadReckonCount = 0;
+        private float _prevOutX, _prevOutY, _prevOutZ;
+        private float _prev2OutX, _prev2OutY, _prev2OutZ;
+        // Race-detection: position that was sent to the C++ physics engine.
+        // If _player.Position diverges from this after RunPhysics returns,
+        // a teleport occurred during the gRPC call and the result is stale.
+        private float _physicsInputX, _physicsInputY, _physicsInputZ;
+        private uint _physicsInputFlags;
         private int _noGroundFrameCount = 0;
         private int _falseFreefallCount = 0;
         private float _ffsStartZ = float.NaN;  // Z where FFS first engaged — tracks cumulative drift
@@ -387,6 +402,28 @@ namespace WoWSharpClient.Movement
 
         private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
         {
+            // Race-detection: check if a teleport modified _player.Position during the gRPC call.
+            // If so, the physics result is based on a stale input position — discard it.
+            // The teleport's position is authoritative; applying the stale physics result would
+            // overwrite it and cause the server to rubber-band us again (infinite loop).
+            {
+                float raceDx = _player.Position.X - _physicsInputX;
+                float raceDy = _player.Position.Y - _physicsInputY;
+                float raceDist = MathF.Sqrt(raceDx * raceDx + raceDy * raceDy);
+                if (raceDist > 0.5f)
+                {
+                    Log.Warning("[MovementController] TELEPORT_RACE: position changed by {Dist:F2}y during physics step. " +
+                        "Input=({InX:F1},{InY:F1}) Current=({CurX:F1},{CurY:F1}). Discarding stale physics result.",
+                        raceDist, _physicsInputX, _physicsInputY, _player.Position.X, _player.Position.Y);
+                    // Still update continuity state from the output (ground Z, normals) but don't touch position.
+                    _prevGroundZ = output.GroundZ;
+                    _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
+                    _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
+                    _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+                    return;
+                }
+            }
+
             // Capture wall contact feedback for the path layer (Phase 1: physics-to-path feedback)
             LastHitWall = output.HitWall;
             LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);
@@ -401,10 +438,10 @@ namespace WoWSharpClient.Movement
             var oldPos = _player.Position;
 
             // Diagnostic: detect if physics returned unchanged position while movement was expected.
-            // Dead-reckoning fallback has been REMOVED — the physics engine should handle all movement.
-            // If physics returns same position, it means: no movement flags, collision blocked, or engine error.
-            float dx = output.NewPosX - oldPos.X;
-            float dy = output.NewPosY - oldPos.Y;
+            // Compare against the INPUT position sent to C++, not _player.Position which may
+            // have been modified by a teleport on another thread during the gRPC call.
+            float dx = output.NewPosX - _physicsInputX;
+            float dy = output.NewPosY - _physicsInputY;
             bool physicsMovedUs = MathF.Abs(dx) >= 0.001f || MathF.Abs(dy) >= 0.001f;
 
             if (!physicsMovedUs && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
@@ -416,19 +453,67 @@ namespace WoWSharpClient.Movement
                         "Count={Count} flags=0x{Flags:X} dt={Dt:F4}",
                         _deadReckonCount, (uint)_player.MovementFlags, deltaSec);
                 }
-                if (_deadReckonCount == 1 || _deadReckonCount == 50)
+                if (_deadReckonCount <= 5 || _deadReckonCount == 50)
                 {
-                    Log.Warning("[MovementController] Physics zero-delta diagnostic: " +
-                        "mapId={MapId} in=({InX:F1},{InY:F1},{InZ:F1}) out=({OutX:F1},{OutY:F1},{OutZ:F1}) " +
-                        "facing={Facing:F2} runSpeed={Speed:F1} prevGZ={PrevGZ:F1} groundZ={GroundZ:F1}",
-                        _player.MapId, oldPos.X, oldPos.Y, oldPos.Z,
+                    float pdMag = MathF.Sqrt(_pendingDepen.X * _pendingDepen.X +
+                        _pendingDepen.Y * _pendingDepen.Y + _pendingDepen.Z * _pendingDepen.Z);
+                    // Check if output matches 2-frames-ago position (oscillation)
+                    float oscDx = output.NewPosX - _prev2OutX;
+                    float oscDy = output.NewPosY - _prev2OutY;
+                    bool oscillating = MathF.Abs(oscDx) < 0.01f && MathF.Abs(oscDy) < 0.01f
+                        && _deadReckonCount > 1;
+                    // Log INPUT flags sent to C++ (saved at RunPhysics time) to detect flag race conditions
+                    Log.Warning("[MovementController] ZERO_DIAG: " +
+                        "map={MapId} sentFlags=0x{SentFlags:X} curFlags=0x{CurFlags:X} in=({InX:F3},{InY:F3},{InZ:F3}) out=({OutX:F3},{OutY:F3},{OutZ:F3}) " +
+                        "facing={Facing:F3} runSpd={Speed:F1} outFlags=0x{OutFlags:X} " +
+                        "wall={Wall} groundZ={GZ:F2} groundN=({GNx:F3},{GNy:F3},{GNz:F3}) " +
+                        "prevGZ={PGZ:F2} teleZ={TZ} " +
+                        "pendDepen=({PDx:F4},{PDy:F4},{PDz:F4}) pdMag={PDmag:F4} " +
+                        "oscillation={Osc} prevOut=({PX:F3},{PY:F3}) prev2Out=({P2X:F3},{P2Y:F3})" +
+                        " inputVel=({VX:F3},{VY:F3},{VZ:F3})",
+                        _player.MapId, _physicsInputFlags, (uint)_player.MovementFlags, _physicsInputX, _physicsInputY, _physicsInputZ,
                         output.NewPosX, output.NewPosY, output.NewPosZ,
-                        _player.Facing, _player.RunSpeed, _prevGroundZ, output.GroundZ);
+                        _player.Facing, _player.RunSpeed, output.MovementFlags,
+                        output.HitWall, output.GroundZ,
+                        output.GroundNx, output.GroundNy, output.GroundNz,
+                        _prevGroundZ, _teleportZ,
+                        _pendingDepen.X, _pendingDepen.Y, _pendingDepen.Z, pdMag,
+                        oscillating, _prevOutX, _prevOutY, _prev2OutX, _prev2OutY,
+                        _velocity.X, _velocity.Y, _velocity.Z);
                 }
             }
             else if (physicsMovedUs)
             {
                 _physicsMovedCount++;
+                _deadReckonCount = 0; // reset consecutive zero counter
+
+                // Check if physics moved us BACKWARD (opposite to facing direction)
+                float facingDirX = MathF.Cos(_player.Facing);
+                float facingDirY = MathF.Sin(_player.Facing);
+                float dotProduct = dx * facingDirX + dy * facingDirY;
+                if (dotProduct < -0.01f && (_physicsMovedCount <= 10 || _physicsMovedCount % 50 == 0))
+                {
+                    float moveDist2 = MathF.Sqrt(dx * dx + dy * dy);
+                    Log.Warning("[MovementController] BACKWARD_MOVE: " +
+                        "dot={Dot:F4} dist={Dist:F3} " +
+                        "in=({InX:F3},{InY:F3}) out=({OutX:F3},{OutY:F3}) facing={F:F3} " +
+                        "wall={Wall} flags=0x{Flags:X}",
+                        dotProduct, moveDist2,
+                        oldPos.X, oldPos.Y, output.NewPosX, output.NewPosY, _player.Facing,
+                        output.HitWall, output.MovementFlags);
+                }
+
+                // Log when pendingDepen is significant relative to movement — suggests partial undo
+                float moveDist = MathF.Sqrt(dx * dx + dy * dy);
+                float pdOutMag = MathF.Sqrt(output.PendingDepenX * output.PendingDepenX +
+                    output.PendingDepenY * output.PendingDepenY);
+                if (pdOutMag > 0.01f && (_physicsMovedCount <= 10 || _physicsMovedCount % 100 == 0))
+                {
+                    Log.Warning("[MovementController] MOVE_DEPEN: moved={MoveDist:F4} pendDepen=({PDx:F4},{PDy:F4},{PDz:F4}) pdMag={PDmag:F4} " +
+                        "pos=({X:F2},{Y:F2},{Z:F2})",
+                        moveDist, output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ, pdOutMag,
+                        output.NewPosX, output.NewPosY, output.NewPosZ);
+                }
             }
 
             // When physics doesn't provide valid ground, keep current Z rather than interpolating
@@ -535,7 +620,21 @@ namespace WoWSharpClient.Movement
                 // Without this, the bot enters a stuck loop: physics returns FALLINGFAR →
                 // MoveToward blocked → no FORWARD flag → zero movement → stuck recovery →
                 // MoveToward sets FORWARD → physics returns FALLINGFAR again → repeat.
-                if ((output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0)
+                //
+                // IMPORTANT: Only strip when close to the LAST KNOWN ground (_prevGroundZ).
+                // output.GroundZ is unreliable when airborne (C++ sets it to st.z = character pos).
+                // Use _prevGroundZ which tracks the real terrain surface from the last grounded frame.
+                // When the bot is genuinely elevated (> 4y above last ground), FALLINGFAR is
+                // correct and must be preserved for real gravity/falling.
+                float gapFromLastGround = !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+                    && _hasPhysicsGroundContact  // Only trust _prevGroundZ if established from real physics ground
+                    ? output.NewPosZ - _prevGroundZ
+                    : float.MaxValue; // Unknown ground → assume far (let FALLINGFAR through)
+                // Gap must be non-negative AND small: bot is at or slightly above ground.
+                // Negative gap = bot is BELOW last known ground (fell through terrain) —
+                // FALLINGFAR is correct in that case and must not be stripped.
+                bool closeToGroundSurface = gapFromLastGround >= 0f && gapFromLastGround < 4.0f;
+                if ((output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0 && closeToGroundSurface)
                 {
                     output.MovementFlags &= ~(uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
                     output.FallTime = 0;
@@ -543,9 +642,9 @@ namespace WoWSharpClient.Movement
                     _falseFreefallCount++;
                     if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
                     {
-                        Log.Warning("[MovementController] Stripped false FALLINGFAR — ground exists at Z={GroundZ:F1} " +
-                            "but physics flagged airborne. Count={Count}",
-                            output.GroundZ, _falseFreefallCount);
+                        Log.Warning("[MovementController] Stripped false FALLINGFAR — close to ground " +
+                            "(prevGround={PrevGround:F1}, pos={Pos:F1}, gap={Gap:F2}). Count={Count}",
+                            _prevGroundZ, output.NewPosZ, gapFromLastGround, _falseFreefallCount);
                     }
                 }
                 else
@@ -737,7 +836,7 @@ namespace WoWSharpClient.Movement
                 output.NewVelZ = 0;
                 output.FallTime = 0;
             }
-            else if (physicsHasGround && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+            else if (!isFalling && physicsHasGround && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
                 && output.NewPosZ < _prevGroundZ - MaxGroundZDropPerFrame)
             {
                 finalPosZ = _prevGroundZ;
@@ -787,7 +886,13 @@ namespace WoWSharpClient.Movement
             // was initialized to the spawn position rather than actual terrain.
             if (physicsHasGround && (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0)
                 _hasPhysicsGroundContact = true;
-            if (physicsHasGround)
+            // Only update _prevGroundZ when the character is actually grounded.
+            // When airborne, output.GroundZ is the character's falling position (C++ sets
+            // out.groundZ = st.z when airborne), NOT the terrain surface. Updating _prevGroundZ
+            // from airborne frames would track the falling position, making the FALLINGFAR
+            // stripping logic at line 585 think the bot is always near "ground".
+            bool outputIsGrounded = (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0;
+            if (physicsHasGround && outputIsGrounded)
             {
                 if (!float.IsNaN(_teleportZ) && output.GroundZ < _teleportZ - 1.5f)
                 {
@@ -811,6 +916,10 @@ namespace WoWSharpClient.Movement
                     _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
                 }
             }
+            // Track output history for oscillation detection
+            _prev2OutX = _prevOutX; _prev2OutY = _prevOutY; _prev2OutZ = _prevOutZ;
+            _prevOutX = output.NewPosX; _prevOutY = output.NewPosY; _prevOutZ = output.NewPosZ;
+
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
             _standingOnLocal = new Vector3(output.StandingOnLocalX, output.StandingOnLocalY, output.StandingOnLocalZ);

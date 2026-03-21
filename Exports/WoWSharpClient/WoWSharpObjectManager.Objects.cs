@@ -174,6 +174,20 @@ namespace WoWSharpClient
 
             if (allowPositionWrite)
             {
+                // Diagnostic: detect when server overwrites local player position
+                if (unit is WoWLocalPlayer)
+                {
+                    float dx = data.X - unit.Position.X;
+                    float dy = data.Y - unit.Position.Y;
+                    float dist = MathF.Sqrt(dx * dx + dy * dy);
+                    if (dist > 0.1f)
+                    {
+                        Log.Warning("[POS_OVERWRITE] Server writing local player pos: " +
+                            "cur=({CurX:F3},{CurY:F3},{CurZ:F3}) new=({NewX:F3},{NewY:F3},{NewZ:F3}) delta={Dist:F3}",
+                            unit.Position.X, unit.Position.Y, unit.Position.Z,
+                            data.X, data.Y, data.Z, dist);
+                    }
+                }
                 unit.Position.X = data.X;
                 unit.Position.Y = data.Y;
                 unit.Position.Z = data.Z;
@@ -1403,6 +1417,20 @@ namespace WoWSharpClient
 
         private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data)
         {
+            // Diagnostic: detect when 2-arg overload writes local player position (always writes)
+            if (unit is WoWLocalPlayer)
+            {
+                float dx = data.X - unit.Position.X;
+                float dy = data.Y - unit.Position.Y;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                if (dist > 0.1f)
+                {
+                    Log.Warning("[POS_OVERWRITE_ADD] Server ADD writing local player pos: " +
+                        "cur=({CurX:F3},{CurY:F3},{CurZ:F3}) new=({NewX:F3},{NewY:F3},{NewZ:F3}) delta={Dist:F3}",
+                        unit.Position.X, unit.Position.Y, unit.Position.Z,
+                        data.X, data.Y, data.Z, dist);
+                }
+            }
             unit.MovementFlags = data.MovementFlags;
             unit.LastUpdated = data.LastUpdated;
             unit.Position.X = data.X;

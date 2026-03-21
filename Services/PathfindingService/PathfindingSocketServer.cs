@@ -414,6 +414,10 @@ namespace PathfindingService
 
         private int _physicsLogCounter = 0;
         private int _zeroForwardCount = 0;
+        // Position history for oscillation detection
+        private float _prevOutX, _prevOutY, _prevOutZ;
+        private float _prev2OutX, _prev2OutY, _prev2OutZ;
+        private int _oscillationCount = 0;
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             return _dynamicObjectOverlay.ExecuteExclusive(() =>
@@ -538,9 +542,53 @@ namespace PathfindingService
                     }
                     else if (hasForward)
                     {
+                        // Position advanced — check if it matches 2-frames-ago (oscillation)
+                        float backDx = physicsOutput.x - _prev2OutX;
+                        float backDy = physicsOutput.y - _prev2OutY;
+                        bool matchesTwoFramesAgo = Math.Abs(backDx) < 0.01f && Math.Abs(backDy) < 0.01f;
+                        if (matchesTwoFramesAgo && _zeroForwardCount > 0)
+                        {
+                            _oscillationCount++;
+                            if (_oscillationCount <= 5 || _oscillationCount % 100 == 0)
+                            {
+                                logger.LogWarning(
+                                    "[PHYS_OSCILLATION] Output matches 2-frames-ago! count={Count} " +
+                                    "in=({IX:F3},{IY:F3},{IZ:F3}) out=({OX:F3},{OY:F3},{OZ:F3}) " +
+                                    "prev=({PX:F3},{PY:F3}) prev2=({P2X:F3},{P2Y:F3}) " +
+                                    "pendDepen=({PDX:F4},{PDY:F4},{PDZ:F4})",
+                                    _oscillationCount,
+                                    physicsInput.x, physicsInput.y, physicsInput.z,
+                                    physicsOutput.x, physicsOutput.y, physicsOutput.z,
+                                    _prevOutX, _prevOutY,
+                                    _prev2OutX, _prev2OutY,
+                                    physicsInput.pendingDepenX, physicsInput.pendingDepenY, physicsInput.pendingDepenZ);
+                            }
+                        }
                         _zeroForwardCount = 0;
                     }
                 }
+
+                // Log non-zero output pendingDepen (carried to next frame)
+                {
+                    float pdMag = MathF.Sqrt(physicsOutput.pendingDepenX * physicsOutput.pendingDepenX
+                        + physicsOutput.pendingDepenY * physicsOutput.pendingDepenY
+                        + physicsOutput.pendingDepenZ * physicsOutput.pendingDepenZ);
+                    if (pdMag > 0.001f && (_zeroForwardCount > 0 || _oscillationCount > 0))
+                    {
+                        if (_zeroForwardCount <= 3 || _zeroForwardCount % 100 == 0)
+                        {
+                            logger.LogWarning(
+                                "[PHYS_PEND_DEPEN] outDepen=({PDX:F4},{PDY:F4},{PDZ:F4}) mag={Mag:F4} " +
+                                "zeroCount={ZC} frame={Frame}",
+                                physicsOutput.pendingDepenX, physicsOutput.pendingDepenY, physicsOutput.pendingDepenZ,
+                                pdMag, _zeroForwardCount, physicsInput.frameCounter);
+                        }
+                    }
+                }
+
+                // Track position history
+                _prev2OutX = _prevOutX; _prev2OutY = _prevOutY; _prev2OutZ = _prevOutZ;
+                _prevOutX = physicsOutput.x; _prevOutY = physicsOutput.y; _prevOutZ = physicsOutput.z;
 
                 return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
             });
