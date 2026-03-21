@@ -1,4 +1,5 @@
 using ForegroundBotRunner.Mem;
+using ForegroundBotRunner.Mem.Hooks;
 using ForegroundBotRunner.Statics;
 using Game;
 using Google.Protobuf;
@@ -44,6 +45,9 @@ namespace ForegroundBotRunner
         private int _diagnosticFrameCount;
 
         private int _splineSampleCount;
+
+        /// <summary>Handler reference for PacketLogger subscription (stored so we can unsubscribe).</summary>
+        private Action<PacketDirection, ushort, int>? _packetHandler;
 
         /// <summary>Tracks last-known GoState per GUID to log transitions (doors opening/closing).</summary>
         private readonly System.Collections.Generic.Dictionary<ulong, uint> _lastGoState = new();
@@ -307,6 +311,23 @@ namespace ForegroundBotRunner
                 _lastCaptureMs = -1; // Force immediate first capture
                 _recordingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+                // Subscribe to packet events — captures CMSG/SMSG opcodes during recording
+                _packetHandler = (direction, opcode, size) =>
+                {
+                    if (_recordingStopwatch == null) return;
+                    var packetEvent = new PacketEvent
+                    {
+                        TimestampMs = (ulong)_recordingStopwatch.ElapsedMilliseconds,
+                        Opcode = opcode,
+                        IsOutbound = direction == PacketDirection.Send
+                    };
+                    lock (_recordingLock)
+                    {
+                        _currentRecording?.Packets.Add(packetEvent);
+                    }
+                };
+                PacketLogger.OnPacketCaptured += _packetHandler;
+
                 var raceName = Enum.IsDefined(typeof(Race), (int)race) ? ((Race)race).ToString() : "Unknown";
                 var genderName = Enum.IsDefined(typeof(Gender), (byte)gender) ? ((Gender)gender).ToString() : "Unknown";
 
@@ -327,6 +348,13 @@ namespace ForegroundBotRunner
 
             MovementRecording? recordingToSave = null;
             int frameCount = 0;
+
+            // Unsubscribe from packet events before taking the lock
+            if (_packetHandler != null)
+            {
+                PacketLogger.OnPacketCaptured -= _packetHandler;
+                _packetHandler = null;
+            }
 
             lock (_recordingLock)
             {
@@ -349,9 +377,11 @@ namespace ForegroundBotRunner
                 _currentRecording = null;
             }
 
+            int packetCount = recordingToSave.Packets.Count;
+
             // Save on a background thread so the main WoW message pump isn't blocked.
             // A long-running save on the main thread freezes WoW and can trigger a crash.
-            _logger.LogInformation("RECORDING_STOPPED: {FrameCount} frames captured, saving in background...", frameCount);
+            _logger.LogInformation("RECORDING_STOPPED: {FrameCount} frames + {PacketCount} packets captured, saving in background...", frameCount, packetCount);
             Task.Run(() =>
             {
                 try
@@ -813,7 +843,15 @@ namespace ForegroundBotRunner
                 Gender = recording.Gender,
                 GenderName = genderName,
                 FrameCount = recording.Frames.Count,
+                PacketCount = recording.Packets.Count,
                 DurationMs = recording.Frames.Count > 0 ? recording.Frames.Last().FrameTimestamp : 0,
+                Packets = recording.Packets.Select(p => new
+                {
+                    p.TimestampMs,
+                    p.Opcode,
+                    OpcodeHex = $"0x{p.Opcode:X4}",
+                    p.IsOutbound
+                }),
                 Frames = recording.Frames.Select(f => new
                 {
                     f.FrameTimestamp,
@@ -907,7 +945,8 @@ namespace ForegroundBotRunner
                 recording.WriteTo(output);
             }
 
-            _logger.LogInformation("Saved recording to:\n  JSON: {JsonPath}\n  Binary: {ProtoPath}", jsonPath, protoPath);
+            _logger.LogInformation("Saved recording ({FrameCount} frames, {PacketCount} packets) to:\n  JSON: {JsonPath}\n  Binary: {ProtoPath}",
+                recording.Frames.Count, recording.Packets.Count, jsonPath, protoPath);
 
             return jsonPath;
         }

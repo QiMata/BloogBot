@@ -643,6 +643,263 @@ public class MovementControllerRecordedFrameTests
             $"Only moved {actualDist:F1}y in 3s — guards blocking movement without path");
     }
 
+    [Fact]
+    public void SyntheticWalk_PacketSequence_StartsWithStartForward_EndsWithStop()
+    {
+        // Verifies that MovementController sends the correct opcode sequence for
+        // a simple walk: START_FORWARD → HEARTBEATs → STOP.
+        // This is the baseline for FG/BG parity — FG client sends the same sequence.
+        var sentOpcodes = new List<(uint gameTimeMs, Opcode opcode)>();
+
+        var mockClient = new Mock<WoWClient>();
+        mockClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Returns<Opcode, byte[], CancellationToken>((op, _, _) =>
+            {
+                sentOpcodes.Add((0, op));
+                return Task.CompletedTask;
+            });
+
+        var mockPhysics = new Mock<PathfindingClient>();
+        var player = new WoWLocalPlayer(new HighGuid(42))
+        {
+            Position = new Position(285f, -4740f, 12f),
+            Facing = MathF.PI / 2f,
+            MovementFlags = MovementFlags.MOVEFLAG_NONE,
+            WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
+            Race = Race.Orc, Gender = Gender.Male, MapId = 1,
+            Health = 100, MaxHealth = 100,
+        };
+
+        var controller = new MovementController(mockClient.Object, mockPhysics.Object, player);
+        controller.SetTargetWaypoint(new Position(285f, -4690f, 12f));
+
+        // Perfect flat physics
+        mockPhysics
+            .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+            .Returns<PhysicsInput>(input =>
+            {
+                float step = input.RunSpeed * input.DeltaTime;
+                bool fwd = (input.MovementFlags & MOVEFLAG_FORWARD) != 0;
+                float dirX = MathF.Cos(input.Facing);
+                float dirY = MathF.Sin(input.Facing);
+                return new PhysicsOutput
+                {
+                    NewPosX = input.PosX + (fwd ? dirX * step : 0f),
+                    NewPosY = input.PosY + (fwd ? dirY * step : 0f),
+                    NewPosZ = 12f,
+                    IsGrounded = true, GroundZ = 12f,
+                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                    MovementFlags = input.MovementFlags,
+                    FallTime = 0,
+                };
+            });
+
+        // Phase 1: Start walking (90 frames = 3s at 30fps)
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        for (int i = 0; i < 90; i++)
+            controller.Update(0.033f, (uint)(1000 + i * 33));
+
+        // Phase 2: Stop walking (30 frames with no forward flag)
+        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+        for (int i = 0; i < 30; i++)
+            controller.Update(0.033f, (uint)(4000 + i * 33));
+
+        _output.WriteLine($"Total opcodes sent: {sentOpcodes.Count}");
+        foreach (var (_, op) in sentOpcodes)
+            _output.WriteLine($"  {op}");
+
+        // Must have sent at least one packet
+        Assert.True(sentOpcodes.Count > 0, "No movement packets sent");
+
+        // First movement-related opcode should be START_FORWARD
+        var firstMoveOpcode = sentOpcodes.First().opcode;
+        Assert.Equal(Opcode.MSG_MOVE_START_FORWARD, firstMoveOpcode);
+
+        // Should contain heartbeats
+        int heartbeats = sentOpcodes.Count(s => s.opcode == Opcode.MSG_MOVE_HEARTBEAT);
+        _output.WriteLine($"Heartbeats: {heartbeats}");
+        Assert.True(heartbeats >= 1, "Expected at least 1 heartbeat during 3s walk");
+
+        // Last opcode should be STOP (after clearing FORWARD flag)
+        var lastOpcode = sentOpcodes.Last().opcode;
+        Assert.Equal(Opcode.MSG_MOVE_STOP, lastOpcode);
+    }
+
+    [Fact]
+    public void RecordedFrames_WithPackets_OpcodeSequenceParity()
+    {
+        // Loads a recording that has packet data (from FG PacketLogger integration).
+        // Feeds frames through BG MovementController, captures its opcode output,
+        // and compares against the recorded FG opcode sequence.
+        //
+        // If no recording has packets, the test documents what BG sends for the
+        // recorded movement and passes (no parity assertion without FG data).
+        var recordings = LoadAllRecordings();
+        if (recordings.Count == 0)
+        {
+            _output.WriteLine("No recordings found — skipping parity test");
+            return;
+        }
+
+        // Find a recording with a walking segment
+        MovementRecording? recording = null;
+        (int startIdx, int endIdx)? segment = null;
+        string? recordingName = null;
+        foreach (var (name, rec) in recordings)
+        {
+            segment = FindWalkingSegment(rec, 30);
+            if (segment != null)
+            {
+                recording = rec;
+                recordingName = name;
+                break;
+            }
+        }
+
+        if (recording == null || segment == null)
+        {
+            _output.WriteLine("No recording with 30+ walking frames found");
+            return;
+        }
+
+        var (start, end) = segment.Value;
+        var frames = recording.Frames;
+        _output.WriteLine($"Recording: {recordingName}");
+        _output.WriteLine($"Walking segment: frames {start}-{end} ({end - start + 1} frames)");
+
+        // Set up controller with opcode capture
+        var bgOpcodes = new List<(ulong timestampMs, Opcode opcode)>();
+        var mockClient = new Mock<WoWClient>();
+        mockClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Returns<Opcode, byte[], CancellationToken>((op, _, _) =>
+            {
+                bgOpcodes.Add((0, op));
+                return Task.CompletedTask;
+            });
+
+        var mockPhysics = new Mock<PathfindingClient>();
+        var (controller, player, _) = CreateController(frames[start]);
+        // Re-wire with our capturing mock client
+        var capturingController = new MovementController(mockClient.Object, mockPhysics.Object, player);
+
+        float facing = frames[start].Facing;
+        capturingController.SetTargetWaypoint(new Position(
+            frames[start].Position.X + MathF.Cos(facing) * 100f,
+            frames[start].Position.Y + MathF.Sin(facing) * 100f,
+            frames[start].Position.Z));
+
+        int frameIdx = start;
+        mockPhysics
+            .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+            .Returns<PhysicsInput>(_ =>
+            {
+                int nextIdx = Math.Min(frameIdx + 1, end);
+                return BuildPerfectOutput(frames[nextIdx], frames[frameIdx]);
+            });
+
+        // Run through the walking segment
+        for (int i = start; i < end; i++)
+        {
+            frameIdx = i;
+            var frame = frames[i];
+            var nextFrame = frames[i + 1];
+            float dt = (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f;
+            if (dt <= 0 || dt > 1.0f) dt = 0.033f;
+
+            player.MovementFlags = (MovementFlags)frame.MovementFlags;
+            player.Facing = frame.Facing;
+            player.Position = new Position(frame.Position.X, frame.Position.Y, frame.Position.Z);
+
+            uint gameTimeMs = (uint)(frame.FrameTimestamp & 0xFFFFFFFF);
+            capturingController.Update(dt, gameTimeMs);
+        }
+
+        // Report BG opcodes
+        _output.WriteLine($"\nBG MovementController sent {bgOpcodes.Count} packets:");
+        var bgMovementOpcodes = bgOpcodes
+            .Where(o => IsMovementOpcode((ushort)o.opcode))
+            .ToList();
+        foreach (var (_, op) in bgMovementOpcodes)
+            _output.WriteLine($"  {op} (0x{(ushort)op:X4})");
+
+        // Check if recording has FG packet data for parity comparison
+        bool hasPackets = recording.Packets.Count > 0;
+        if (hasPackets)
+        {
+            // Filter FG packets to movement-related outbound opcodes in the segment's time range
+            ulong segmentStartMs = (ulong)frames[start].FrameTimestamp;
+            ulong segmentEndMs = (ulong)frames[end].FrameTimestamp;
+            var fgMovementPackets = recording.Packets
+                .Where(p => p.IsOutbound
+                    && IsMovementOpcode(p.Opcode)
+                    && p.TimestampMs >= segmentStartMs
+                    && p.TimestampMs <= segmentEndMs)
+                .ToList();
+
+            _output.WriteLine($"\nFG recorded {fgMovementPackets.Count} movement packets in segment:");
+            foreach (var p in fgMovementPackets)
+                _output.WriteLine($"  0x{p.Opcode:X4} @ {p.TimestampMs}ms (outbound={p.IsOutbound})");
+
+            // Parity: compare opcode type distribution (not exact timing)
+            var bgOpcodeCounts = bgMovementOpcodes
+                .GroupBy(o => o.opcode)
+                .ToDictionary(g => g.Key, g => g.Count());
+            var fgOpcodeCounts = fgMovementPackets
+                .GroupBy(p => (Opcode)p.Opcode)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            _output.WriteLine("\n=== Opcode Distribution Parity ===");
+            var allOpcodes = bgOpcodeCounts.Keys.Union(fgOpcodeCounts.Keys).OrderBy(o => (ushort)o);
+            foreach (var op in allOpcodes)
+            {
+                int bgCount = bgOpcodeCounts.GetValueOrDefault(op, 0);
+                int fgCount = fgOpcodeCounts.GetValueOrDefault(op, 0);
+                string match = bgCount == fgCount ? "MATCH" : (MathF.Abs(bgCount - fgCount) <= 2 ? "CLOSE" : "DIFFER");
+                _output.WriteLine($"  {op,-35} BG={bgCount,3}  FG={fgCount,3}  [{match}]");
+            }
+
+            // Assert: BG should send START_FORWARD if FG did
+            bool fgHasStartForward = fgMovementPackets.Any(p => p.Opcode == (ushort)Opcode.MSG_MOVE_START_FORWARD);
+            bool bgHasStartForward = bgMovementOpcodes.Any(o => o.opcode == Opcode.MSG_MOVE_START_FORWARD);
+            if (fgHasStartForward)
+            {
+                Assert.True(bgHasStartForward,
+                    "FG sent MSG_MOVE_START_FORWARD but BG didn't — BG failed to start movement");
+            }
+
+            // Assert: heartbeat counts should be within 50% of each other
+            int fgHeartbeats = fgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
+            int bgHeartbeats = bgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
+            if (fgHeartbeats > 0 && bgHeartbeats > 0)
+            {
+                float ratio = (float)bgHeartbeats / fgHeartbeats;
+                Assert.True(ratio > 0.5f && ratio < 2.0f,
+                    $"Heartbeat count mismatch: BG={bgHeartbeats} FG={fgHeartbeats} ratio={ratio:F2} — timing divergence");
+            }
+        }
+        else
+        {
+            _output.WriteLine("\nNo FG packet data in recording — parity comparison deferred.");
+            _output.WriteLine("Record with FG PacketLogger enabled to populate packets for parity testing.");
+        }
+
+        // Regardless of FG data, verify BG sent reasonable packets
+        Assert.True(bgMovementOpcodes.Count > 0,
+            "BG controller sent no movement opcodes for a walking segment");
+    }
+
+    /// <summary>
+    /// Returns true if the opcode is a movement-related opcode (MSG_MOVE_*).
+    /// Movement opcodes in 1.12.1 are in the range 0x0B5-0x0EE.
+    /// </summary>
+    private static bool IsMovementOpcode(ushort opcode) =>
+        opcode >= 0x0B5 && opcode <= 0x0EE;
+
     /// <summary>
     /// Loads all available recordings. Returns empty list if directory not found.
     /// </summary>
