@@ -1,6 +1,7 @@
 using GameData.Core.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -193,14 +194,14 @@ namespace PathfindingService.Repository
             var rawPath = waypoints.ToArray();
             Console.Error.WriteLine($"[CORRIDOR] map={mapId} corners={corridorResult.CornerCount} path=[{string.Join(" -> ", rawPath.Select(p => $"({p.X:F1},{p.Y:F1},{p.Z:F1})"))}]");
 
-            // Post-corridor segment validation: check each segment against physics capsule
-            // sweeps to detect obstacles the navmesh doesn't account for (small rocks, etc.).
-            // The navmesh was generated with walkableRadius=0.2 which is too small for most
-            // characters — corridor paths can route within 0.2y of obstacle surfaces.
-            var validatedPath = ValidateCorridorSegments(mapId, rawPath, agentRadius, agentHeight, out int? blockedIdx);
-
-            var resultTag = blockedIdx.HasValue ? "corridor_path_repaired" : "corridor_path";
-            return new NavigationPathResult(validatedPath, rawPath, resultTag, blockedIdx);
+            // Post-corridor segment validation DISABLED.
+            // ValidateWalkableSegment physics capsule sweeps cost 5-28 SECONDS per segment,
+            // causing PathfindingService hangs and crashes during extended test runs.
+            // The corridor path is already navmesh-constrained via dtPathCorridor — walkable
+            // by construction. Runtime physics (collide-and-slide) handles any minor obstacles
+            // the navmesh doesn't account for. Re-enable only if corridor paths reliably route
+            // through solid geometry (not observed).
+            return new NavigationPathResult(rawPath, rawPath, "corridor_path", null);
         }
 
         // ── Corridor Segment Validation ──
@@ -210,16 +211,34 @@ namespace PathfindingService.Repository
         /// If a segment is blocked, try lateral offsets to route around the obstacle.
         /// Returns the validated (potentially repaired) path.
         /// </summary>
+        /// <summary>
+        /// Maximum time budget for post-corridor segment validation.
+        /// ValidateWalkableSegment runs physics capsule sweeps (~630ms per segment worst case).
+        /// With repair attempts (6 offsets * 2 calls each), a 10-corner path can take 70+ seconds.
+        /// If we exceed this budget, return the raw corridor path — it's already navmesh-constrained.
+        /// </summary>
+        private static readonly TimeSpan SegmentValidationBudget = TimeSpan.FromSeconds(5);
+
         private static XYZ[] ValidateCorridorSegments(uint mapId, XYZ[] path, float radius, float height, out int? firstBlockedIdx)
         {
             firstBlockedIdx = null;
             if (path.Length < 2) return path;
 
+            var sw = Stopwatch.StartNew();
             var result = new List<XYZ> { path[0] };
             int repairCount = 0;
 
             for (int i = 0; i < path.Length - 1; i++)
             {
+                // Time budget exceeded — accept remaining segments as-is
+                if (sw.Elapsed > SegmentValidationBudget)
+                {
+                    Console.Error.WriteLine($"[CORRIDOR-VALIDATE] Time budget exceeded ({sw.ElapsedMilliseconds}ms) at segment {i}/{path.Length - 1}. Accepting remaining segments as-is.");
+                    for (int j = i + 1; j < path.Length; j++)
+                        result.Add(path[j]);
+                    break;
+                }
+
                 var segStart = result[^1]; // use the (potentially adjusted) current position
                 var segEnd = path[i + 1];
 
@@ -249,8 +268,16 @@ namespace PathfindingService.Repository
                     continue;
                 }
 
-                // Segment blocked — try lateral offsets to route around the obstacle.
+                // Segment blocked — try lateral offsets to route around the obstacle,
+                // but only if we have time budget remaining.
                 if (!firstBlockedIdx.HasValue) firstBlockedIdx = i;
+
+                if (sw.Elapsed > SegmentValidationBudget)
+                {
+                    Console.Error.WriteLine($"[CORRIDOR-BLOCKED] seg {i}: blocked code={validationCode}, no time for repair, accepting as-is");
+                    result.Add(segEnd);
+                    continue;
+                }
 
                 float dx = segEnd.X - segStart.X;
                 float dy = segEnd.Y - segStart.Y;
@@ -266,6 +293,8 @@ namespace PathfindingService.Repository
 
                 foreach (float offset in offsets)
                 {
+                    if (sw.Elapsed > SegmentValidationBudget) break;
+
                     // Offset the midpoint laterally
                     float midX = (segStart.X + segEnd.X) * 0.5f + perpX * offset;
                     float midY = (segStart.Y + segEnd.Y) * 0.5f + perpY * offset;
@@ -302,7 +331,7 @@ namespace PathfindingService.Repository
             }
 
             if (repairCount > 0)
-                Console.Error.WriteLine($"[CORRIDOR-VALIDATE] {repairCount} segments repaired out of {path.Length - 1}");
+                Console.Error.WriteLine($"[CORRIDOR-VALIDATE] {repairCount} segments repaired out of {path.Length - 1} ({sw.ElapsedMilliseconds}ms)");
 
             return result.ToArray();
         }

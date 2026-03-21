@@ -258,13 +258,21 @@ public class EconomyInteractionTests
 
     private async Task<bool> InteractWithNpcType(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string npcType, string label)
     {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = getSnap();
-        var npc = snap?.NearbyUnits?.FirstOrDefault(u => (u.NpcFlags & npcFlag) != 0);
+        // After teleport, NPC objects may not be streamed in yet — poll for up to 5s.
+        Communication.WoWNearbyUnit? npc = null;
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = getSnap();
+            npc = snap?.NearbyUnits?.FirstOrDefault(u => (u.NpcFlags & npcFlag) != 0);
+            if (npc != null) break;
+            await Task.Delay(500);
+        }
 
         if (npc == null)
         {
-            _output.WriteLine($"  [{label}] No {npcType} found nearby");
+            _output.WriteLine($"  [{label}] No {npcType} found nearby after {sw.ElapsedMilliseconds}ms");
             return false;
         }
 
