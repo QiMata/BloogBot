@@ -506,13 +506,19 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteUpPass(
     G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
     SceneQuery::SweepCapsule(input.mapId, cap, upDir, sweepDist, upHits, playerFwd);
     
-    // Find earliest blocking hit (ceiling or obstacle above)
+    // Find earliest blocking hit (ceiling or obstacle above).
+    // Filter out ground contacts: if the hit normal points upward (Z > walkable threshold),
+    // it's a floor/slope the capsule is sitting on, not a ceiling above. This prevents
+    // false ceiling hits when the capsule bottom hemisphere is slightly embedded in sloped terrain.
     const SceneHit* earliest = nullptr;
     float minDist = FLT_MAX;
     for (const auto& hit : upHits) {
-        if (!hit.hit || hit.startPenetrating) 
+        if (!hit.hit || hit.startPenetrating)
             continue;
-        if (hit.distance < PhysicsConstants::VECTOR_EPSILON) 
+        if (hit.distance < PhysicsConstants::VECTOR_EPSILON)
+            continue;
+        // Skip ground/slope contacts — upward-facing normals are floors, not ceilings
+        if (hit.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z)
             continue;
         if (hit.distance < minDist) {
             minDist = hit.distance;
@@ -1140,7 +1146,7 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
             // (typically 1-3y at Valley of Trials, hillsides, etc.).
             // A lower threshold (e.g. STEP_HEIGHT = 2.125y) falsely triggers on
             // normal terrain, blocking all horizontal movement.
-            constexpr float ELEVATED_STRUCTURE_THRESHOLD = 5.0f;
+            constexpr float ELEVATED_STRUCTURE_THRESHOLD = 8.0f;
             if (!isLedgeDrop) {
                 float charAboveOriginGround = originalZ - originGroundZ;
                 if (charAboveOriginGround > ELEVATED_STRUCTURE_THRESHOLD) {

@@ -2,9 +2,9 @@ namespace WoWStateManager;
 
 public class MangosServerOptions
 {
-    public string MangosDirectory { get; set; } = @"E:\repos\MaNGOS";
-    public string MySqlRelativePath { get; set; } = @"mysql5\bin\mysqld.exe";
-    public string MySqlArgs { get; set; } = "--console --max_allowed_packet=128M";
+    public string MangosDirectory { get; set; } = @"C:\Mangos\server";
+    public string MySqlRelativePath { get; set; } = @"..\mysql\bin\mysqld.exe";
+    public string MySqlArgs { get; set; } = "--defaults-file=C:/Mangos/mysql/my.ini --console";
     public string RealmdExe { get; set; } = "realmd.exe";
     public string MangosdExe { get; set; } = "mangosd.exe";
     public int MySqlPort { get; set; } = 3306;

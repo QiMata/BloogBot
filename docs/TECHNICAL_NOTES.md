@@ -12,11 +12,11 @@
 | Item | Value |
 |------|-------|
 | Server | VMaNGOS (vanilla 1.12.1 build 5875), always running locally |
-| VMaNGOS server binaries | `D:\vmangos-server\` (mangosd.exe, realmd.exe) |
-| VMaNGOS source (reference) | `D:\vmangos\` (cloned from github.com/vmangos/core) |
-| MaNGOS data directory | `D:\MaNGOS\data\` (maps, vmaps, mmaps, dbc) |
-| MaNGOS MySQL | `D:\MaNGOS\mysql5\` (mysqld.exe, data dir) |
-| VMaNGOS DB version | db-4a0668b (Jan 12, 2026), binary dev-2f1b104 (Feb 24, 2026) |
+| VMaNGOS server binaries | `C:\Mangos\server\` (mangosd.exe, realmd.exe) |
+| VMaNGOS source (reference) | `C:\Mangos\vmangos-core\` (cloned from github.com/vmangos/core) |
+| MaNGOS data directory | `C:\Mangos\data\` (maps, vmaps, mmaps, dbc) |
+| MaNGOS MySQL | `C:\Mangos\mysql\` (mysqld.exe, data dir) |
+| VMaNGOS DB version | db-097449b (Mar 20, 2026), binary dev-6a82ed9 (Mar 20, 2026) |
 | VMaNGOS databases | mangos (world), characters, realmd, logs |
 | VMaNGOS DB credentials | root:root (localhost:3306) |
 | Server protocol docs | `docs/server-protocol/` (7 docs from Task 21) |
@@ -119,13 +119,14 @@ dotnet test Tests/BotRunner.Tests --filter "Category=Integration" --settings Tes
 
 ### VMaNGOS Server Startup
 
-Server infrastructure lives outside the repo at `D:\vmangos-server\`. Start order:
-1. MySQL: `D:\MaNGOS\mysql5\bin\mysqld.exe --console --max_allowed_packet=128M`
-2. Realm: `D:\vmangos-server\realmd.exe`
-3. World: `D:\vmangos-server\mangosd.exe`
+Server infrastructure lives at `C:\Mangos\`. Start order:
+1. MySQL: `C:\Mangos\scripts\start-mysql.bat`
+2. Realm: `C:\Mangos\scripts\start-realmd.bat`
+3. World: `C:\Mangos\scripts\start-mangosd.bat`
 
-Startup batch script: `D:\vmangos-server\Start All.bat`
+Start all at once: `C:\Mangos\scripts\start-all.bat`
+Stop all: `C:\Mangos\scripts\stop-all.bat`
 
-Config files: `D:\vmangos-server\mangosd.conf`, `D:\vmangos-server\realmd.conf`
+Config files: `C:\Mangos\server\mangosd.conf`, `C:\Mangos\server\realmd.conf`
 - SOAP enabled on port 7878 (admin: ADMINISTRATOR/PASSWORD)
 - WowPatch = 10 (1.12 Drums of War)

@@ -252,6 +252,25 @@ namespace ForegroundBotRunner
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too
                         _objectManager?.AntiAfk();
 
+                        // At character select with characters present + not already entering world:
+                        // click "Enter World" button directly via Lua. Skip cinematics too.
+                        if (!ObjectManager.PauseNativeCallsDuringWorldEntry
+                            && _objectManager?.HasEnteredWorld != true
+                            && _objectManager?.GetCurrentScreenState() == WoWScreenState.CharacterSelect
+                            && ObjectManager.MaxCharacterCount > 0
+                            && loopCount % 6 == 3) // Every 3s, rate-limited
+                        {
+                            try
+                            {
+                                DiagLog($"[FG-ENTER] CharSelect with {ObjectManager.MaxCharacterCount} char(s). Clicking Enter World button...");
+                                ObjectManager.MainThreadLuaCall("if GameMovieFinished then GameMovieFinished() end");
+                                ObjectManager.MainThreadLuaCall(
+                                    "if CharSelectEnterWorldButton and CharSelectEnterWorldButton:IsVisible() then " +
+                                    "CharSelectEnterWorldButton:Click() end");
+                            }
+                            catch (Exception ex) { DiagLog($"[FG-ENTER] Error: {ex.Message}"); }
+                        }
+
                         // Initialize SignalEventManager hooks once after entering world.
                         // These inject assembly into WoW's event system and must NOT run during
                         // the world server handshake (causes disconnect).

@@ -77,7 +77,7 @@ namespace ForegroundBotRunner.Statics
         /// All Lua calls MUST execute on WoW's main thread — calling from a background
         /// thread (e.g., BotRunnerService) silently fails.
         /// </summary>
-        private static void MainThreadLuaCall(string lua) =>
+        internal static void MainThreadLuaCall(string lua) =>
             ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCall(lua));
 
         /// <summary>

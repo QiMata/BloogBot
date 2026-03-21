@@ -164,7 +164,22 @@ namespace BotRunner
                     PopulateSnapshotFromObjectManager();
                     CaptureTransformFrame();
 
-                    var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
+                    Communication.WoWActivitySnapshot? incomingActivityMemberState = null;
+                    try
+                    {
+                        incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Socket was disposed (StateManager restart or connection reset).
+                        // Continue the tick with null state — bot keeps running autonomously
+                        // with its current behavior tree until the connection is restored.
+                    }
+                    catch (System.IO.IOException)
+                    {
+                        // Connection reset or broken pipe — same recovery as above.
+                    }
+
                     var playerWorldReady = _objectManager.HasEnteredWorld
                         && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
@@ -220,13 +235,13 @@ namespace BotRunner
             }
         }
 
-        private void UpdateBehaviorTree(WoWActivitySnapshot incomingActivityMemberState)
+        private void UpdateBehaviorTree(WoWActivitySnapshot? incomingActivityMemberState)
         {
             // Check for new incoming actions FIRST — they can interrupt a running tree
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
-            if (incomingActivityMemberState.CurrentAction != null
+            if (incomingActivityMemberState?.CurrentAction != null
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait
                 && !playerWorldReady)
             {
@@ -237,14 +252,14 @@ namespace BotRunner
                     $"action={incomingActivityMemberState.CurrentAction.ActionType}");
             }
 
-            if (incomingActivityMemberState.CurrentAction != null
+            if (incomingActivityMemberState?.CurrentAction != null
                 && incomingActivityMemberState.CurrentAction.ActionType == Communication.ActionType.RetrieveCorpse)
             {
                 DiagLog($"[TICK-DIAG] RetrieveCorpse action received. playerWorldReady={playerWorldReady} taskCount={_botTasks.Count} treeStatus={_behaviorTreeStatus}");
             }
 
             if (playerWorldReady
-                && incomingActivityMemberState.CurrentAction != null
+                && incomingActivityMemberState?.CurrentAction != null
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
             {
                 var action = incomingActivityMemberState.CurrentAction;
@@ -333,7 +348,7 @@ namespace BotRunner
 
             if (_objectManager.LoginScreen?.IsLoggedIn != true)
             {
-                _behaviorTree = BuildLoginSequence(incomingActivityMemberState.AccountName, "PASSWORD");
+                _behaviorTree = BuildLoginSequence(incomingActivityMemberState?.AccountName ?? _activitySnapshot.AccountName, "PASSWORD");
                 return;
             }
 

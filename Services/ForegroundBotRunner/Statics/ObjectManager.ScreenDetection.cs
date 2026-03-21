@@ -651,17 +651,15 @@ namespace ForegroundBotRunner.Statics
         {
             try
             {
-                // Only dismiss dialogs that contain error/disconnect text.
-                // The "Success!" dialog must NOT be dismissed — the client handles it internally.
+                // At character select screen, dismiss ANY visible GlueDialog except "Success!"
+                // which is part of the auth handshake. Stale dialogs like "Retrieving realm list",
+                // "Retrieving character list", Lua errors, etc. all block the bot from proceeding.
                 MainThreadLuaCall(
                     "if GlueDialog and GlueDialog:IsVisible() then " +
                     "  local text = GlueDialogText and GlueDialogText:GetText() or '' " +
-                    "  if text and (string.find(text, 'Disconnected') or string.find(text, 'failed') " +
-                    "    or string.find(text, 'error') or string.find(text, 'Error') " +
-                    "    or string.find(text, 'unable') or string.find(text, 'Unable') " +
-                    "    or string.find(text, 'timeout') or string.find(text, 'Timeout') " +
-                    "    or string.find(text, 'closed') or string.find(text, 'Closed')) then " +
-                    "    GlueDialogButton1:Click() " +
+                    "  if text and not string.find(text, 'Success') then " +
+                    "    if GlueDialogButton1 and GlueDialogButton1:IsVisible() then GlueDialogButton1:Click() end " +
+                    "    if GlueDialogButton2 and GlueDialogButton2:IsVisible() then GlueDialogButton2:Click() end " +
                     "  end " +
                     "end");
             }

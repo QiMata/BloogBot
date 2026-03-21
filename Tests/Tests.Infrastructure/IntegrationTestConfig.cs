@@ -61,7 +61,7 @@ public class IntegrationTestConfig
     /// Override: WWOW_MANGOS_DIR
     /// </summary>
     public string MangosDirectory { get; init; } =
-        Environment.GetEnvironmentVariable("WWOW_MANGOS_DIR") ?? @"E:\repos\MaNGOS";
+        Environment.GetEnvironmentVariable("WWOW_MANGOS_DIR") ?? @"C:\Mangos\server";
 
     /// <summary>
     /// MySQL port.

@@ -323,7 +323,7 @@ public class WoWProcessManager(WoWProcessConfig config, ILogger<WoWProcessManage
         _processHandle = pi.hProcess;
         processId = (int)pi.dwProcessId;
 
-        // Close the thread handle — we don't need it
+        // Close the thread handle ï¿½ we don't need it
         if (pi.hThread != IntPtr.Zero)
         {
             _threadHandle = pi.hThread;
@@ -531,7 +531,7 @@ public class WoWProcessConfig
     /// Override: WWOW_TEST_WOW_PATH
     /// </summary>
     public string WoWExecutablePath { get; init; } =
-        Environment.GetEnvironmentVariable("WWOW_TEST_WOW_PATH") ?? @"E:\Elysium Project Game Client\WoW.exe";
+        Environment.GetEnvironmentVariable("WWOW_TEST_WOW_PATH") ?? @"C:\World of Warcraft\WoW.exe";
 
     /// <summary>
     /// Path to Loader.dll.
