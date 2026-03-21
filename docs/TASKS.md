@@ -120,21 +120,29 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-21 (session 125)
+- **Last updated:** 2026-03-21 (session 126)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **Settings-driven test fixture refactor (f55653a):** Removed COMBATTEST from default config (2-bot: TESTBOT1 FG + TESTBOT2 BG). Created CombatBgBotFixture/CombatFgBotFixture with dedicated collections and settings files. Split CombatLoopTests into CombatBgTests + CombatFgTests + CombatTestHelpers. Moved LootCorpseTests to CombatBg collection. Simplified LiveBotFixture.InitializeAsync — removed zombie cleanup, DB character name seeding, SOAP resolution, clean character state, and stabilization waits. Fixture now just launches StateManager and polls snapshots for InWorld.
-  - **ResolveTestSettingsPath shared method:** Extracted settings path resolution from CombatLoopTests and RfcBotFixture into LiveBotFixture base class.
-- **Commits:** `f55653a5` (fixture refactor)
-- **Test baseline:** BasicLoopTests (2/2), CharacterLifecycleTests, EquipmentEquipTests, VendorBuySellTests, GroupFormationTests all pass. MovementSpeedTests (BG_FlatTerrain_MovesAtExpectedSpeed) fails — BG bot not moving (0 distance, pre-existing). NpcInteractionTests pass individually but fail when run with other tests (state contamination). CombatBg test fails — BG COMBATTEST bot dispatches StartMeleeAttack but doesn't deal damage (HP stays 100/100, pre-existing combat loop issue).
+  - **BG bot CharacterSelect stuck fix (72476477):** Root cause: `ReadItemField` in ObjectUpdateHandler.cs had no catch-all for unrecognized item fields (enchantment sub-slots 23-42). Missing 4-byte reads corrupted the update stream — player GUID 0x10 was read as update type 16, discarding the player's own create object. Added `else reader.ReadUInt32()` to all field readers (Item, GameObject, DynamicObject, Corpse, Container). BG bot now reliably enters world.
+  - **Elevated-structure ledge guard (46183c06):** Physics engine `GetGroundZ` returns terrain Z below WMO docks/piers. Added two-stage check: detect character is on invisible surface (charZ >> originGroundZ), then use STEP_HEIGHT threshold to prevent walking off. Fixes BG bot sinking at Ratchet dock.
+  - **PathfindingService hang fix (ac2b7986):** Disabled post-corridor segment validation — `ValidateWalkableSegment` physics sweeps cost 5-28s per segment. Corridor paths are navmesh-constrained by construction.
+  - **NPC detection polling (ac2b7986, b5e02f19):** Economy tests use 5-second polling loop for NPC streaming after teleport. Fixed `Game.WoWUnit` type.
+  - **SOAP item delivery timeout (014e2507):** Increased from 5s to 15s for `.additem` propagation.
+- **Commits:** `ac2b7986`, `b5e02f19`, `014e2507`, `46183c06`, `72476477`
+- **Test baseline (26 passed, 10 failed, 2 skipped, aborted before all tests ran):**
+  - **Passing (26):** BasicLoop (2/2), BuffAndConsumable (1/2), CharacterLifecycle, CraftingProfession, EquipmentEquip, GatheringRouteSelection (6/6), LiveBotFixtureDiagnostics (2/2), MapTransition, MovementParity (10/10), MovementSpeed.ZStable
+  - **Failing (10):** DeathCorpseRun (BG), Economy (3: Bank, AH, Mail), Fishing, Gathering (Mining + Herbalism), GroupFormation, MovementSpeed (2: BG speed, Dual comparison)
+  - **Not run (aborted):** Navigation (3), NpcInteraction (4), SpellCast, StarterQuest, TalentAllocation, UnequipItem, VendorBuySell (2), QuestInteraction, OrgrimmarGroundZ (2)
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings at `D:/World of Warcraft/Buildings/`.
 - **Known issues:**
-  1. CombatBg: COMBATTEST bot sends StartMeleeAttack but mob HP unchanged (no first hit). Likely BG melee attack sequence not connecting.
-  2. FG bot (TESTBOT1) stuck at CharacterSelect in CombatBg fixture — login takes >45s, fixture proceeds without it.
-  3. MovementSpeedTests: BG bot moves 0 distance during flat terrain walk test.
-  4. Test ordering state contamination: NpcInteraction tests pass individually but fail in batch.
+  1. BG bot teleport position check fails — `.go xyz` commands execute but snapshot position doesn't update within 5s timeout. Causes cascade failures in Economy, Gathering, MovementSpeed tests.
+  2. BG bot dead/ghost after teleport — EnsureCleanSlateAsync revive doesn't complete before test body runs.
+  3. Gathering (Mining/Herbalism) — bot detects nodes but can't interact/gather (11min timeout).
+  4. MovementSpeed — BG bot barely moves (0.39 y/s vs expected 7 y/s) during walk test.
+  5. CombatBg/CombatFg fixtures — FG bot stuck at CharacterSelect (COMBATTEST injection/login issue).
+  6. Test run aborted after 40min — remaining 16 tests never executed.
 - **Next:**
-  1. Fix BG melee combat — StartMeleeAttack dispatches but no damage dealt
-  2. Investigate FG bot CharacterSelect stuck in CombatBg fixture (longer timeout or login sequence issue)
-  3. Fix MovementSpeedTests — BG bot not moving
-  4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  1. Fix BG bot teleport position tracking — snapshot position not updating after `.go xyz`
+  2. Fix BG bot movement speed — barely moves during walk tests
+  3. Investigate gathering interaction protocol (CMSG_GAMEOBJ_USE → channel → loot)
+  4. Run remaining tests that didn't execute (Navigation, NPC, Spell, Quest, Vendor)
