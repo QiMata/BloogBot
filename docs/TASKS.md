@@ -109,8 +109,8 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 # Corpse-run only
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m
 
-# Combat tests only
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatLoopTests"
+# Combat tests only (BG + FG collections)
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatBgTests|FullyQualifiedName~CombatFgTests"
 
 # Physics calibration
 dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings
@@ -120,16 +120,21 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-20 (session 124)
+- **Last updated:** 2026-03-21 (session 125)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **FG crash hardening (a8e1d55):** (1) BotRunnerService map transition guard — skip all work (snapshot, IPC, behavior tree) when `HasEnteredWorld && IsInMapTransition`, sleep 500ms. (2) ThreadSynchronizer: cached log dir to eliminate Process.GetCurrentProcess() flood (79K+ Win32Exceptions), added WndProc hook integrity verification via GetWindowLong. (3) SignalEventManager: Paused flag suppressed during Transferring state. (4) CrashTrace methods: use cached paths instead of Process.GetCurrentProcess() in ObjectManager, ForegroundBotWorker, MovementRecorder.
-  - **FG login fix (3c72200):** Map transition guard blocked FG login sequence. ContinentId reads 0xFFFFFFFF at login screen → `IsInMapTransition` returned true → BotRunnerService skipped ALL work including login behavior tree. Fix: guard only applies after `HasEnteredWorld`.
-  - **RFC_FullDungeonRun test PASSING:** 10-bot dungeon test passes in 1m16s. FG bot logs in, coordinator drives group formation + teleport to RFC, bots navigate map 389 with physics-based movement. WoW.exe survives entire run.
-- **Commits:** `a8e1d55` → `3c72200`
-- **Test baseline:** RFC_FullDungeonRun passes. 140/140 physics tests pass.
+  - **Settings-driven test fixture refactor (f55653a):** Removed COMBATTEST from default config (2-bot: TESTBOT1 FG + TESTBOT2 BG). Created CombatBgBotFixture/CombatFgBotFixture with dedicated collections and settings files. Split CombatLoopTests into CombatBgTests + CombatFgTests + CombatTestHelpers. Moved LootCorpseTests to CombatBg collection. Simplified LiveBotFixture.InitializeAsync — removed zombie cleanup, DB character name seeding, SOAP resolution, clean character state, and stabilization waits. Fixture now just launches StateManager and polls snapshots for InWorld.
+  - **ResolveTestSettingsPath shared method:** Extracted settings path resolution from CombatLoopTests and RfcBotFixture into LiveBotFixture base class.
+- **Commits:** `f55653a5` (fixture refactor)
+- **Test baseline:** BasicLoopTests (2/2), CharacterLifecycleTests, EquipmentEquipTests, VendorBuySellTests, GroupFormationTests all pass. MovementSpeedTests (BG_FlatTerrain_MovesAtExpectedSpeed) fails — BG bot not moving (0 distance, pre-existing). NpcInteractionTests pass individually but fail when run with other tests (state contamination). CombatBg test fails — BG COMBATTEST bot dispatches StartMeleeAttack but doesn't deal damage (HP stays 100/100, pre-existing combat loop issue).
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings at `D:/World of Warcraft/Buildings/`.
-- **P5 status:** RFC dungeon test fully passing. Remaining: SMSG_COMPRESSED_MOVES parser errors (non-blocking), PathfindingClient reconnect during shutdown (cosmetic).
+- **Known issues:**
+  1. CombatBg: COMBATTEST bot sends StartMeleeAttack but mob HP unchanged (no first hit). Likely BG melee attack sequence not connecting.
+  2. FG bot (TESTBOT1) stuck at CharacterSelect in CombatBg fixture — login takes >45s, fixture proceeds without it.
+  3. MovementSpeedTests: BG bot moves 0 distance during flat terrain walk test.
+  4. Test ordering state contamination: NpcInteraction tests pass individually but fail in batch.
 - **Next:**
-  1. P3/P4: FG packet capture tests (fishing parity, teleport flags)
-  2. Investigate SMSG_COMPRESSED_MOVES parsing errors during dungeon runs
+  1. Fix BG melee combat — StartMeleeAttack dispatches but no damage dealt
+  2. Investigate FG bot CharacterSelect stuck in CombatBg fixture (longer timeout or login sequence issue)
+  3. Fix MovementSpeedTests — BG bot not moving
+  4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
