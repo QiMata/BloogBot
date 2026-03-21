@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -20,31 +19,10 @@ public class RfcBotFixture : LiveBotFixture, IAsyncLifetime
         SkipGroupCleanup = true;
 
         // Set RFC settings before launching StateManager
-        var settingsPath = ResolveRfcSettingsPath();
+        var settingsPath = ResolveTestSettingsPath("RagefireChasm.settings.json");
         if (settingsPath != null)
             SetCustomSettingsPath(settingsPath);
 
         await base.InitializeAsync();
-    }
-
-    private static string? ResolveRfcSettingsPath()
-    {
-        // Look for the RFC settings file relative to the build output
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "LiveValidation", "Settings", "RagefireChasm.settings.json");
-            if (File.Exists(candidate))
-                return candidate;
-
-            // Also check Bot/Release path where StateManager copies settings
-            candidate = Path.Combine(dir.FullName, "Bot", "Release", "net8.0", "LiveValidation", "Settings", "RagefireChasm.settings.json");
-            if (File.Exists(candidate))
-                return candidate;
-
-            dir = dir.Parent;
-        }
-
-        return null;
     }
 }

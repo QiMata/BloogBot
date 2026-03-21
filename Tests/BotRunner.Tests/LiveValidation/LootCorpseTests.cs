@@ -30,10 +30,10 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~LootCorpseTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(CombatBgValidationCollection.Name)]
 public class LootCorpseTests
 {
-    private readonly LiveBotFixture _bot;
+    private readonly CombatBgBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1;
@@ -46,7 +46,7 @@ public class LootCorpseTests
     private const uint VileFamiliarEntry = 3101;
     private const float MeleeRange = 5f;
 
-    public LootCorpseTests(LiveBotFixture bot, ITestOutputHelper output)
+    public LootCorpseTests(CombatBgBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -58,8 +58,7 @@ public class LootCorpseTests
     public async Task Loot_KillAndLootMob_InventoryChanges()
     {
         var combatAccount = _bot.CombatTestAccountName;
-        global::Tests.Infrastructure.Skip.If(combatAccount == null,
-            "COMBATTEST bot not available - add COMBATTEST entry to StateManagerSettings.json");
+        Assert.NotNull(combatAccount);
 
         _output.WriteLine($"=== Combat Test Bot: {_bot.CombatTestCharacterName} ({combatAccount}) ===");
         _output.WriteLine("Using dedicated non-GM account (never receives .gm on → no factionTemplate corruption)");

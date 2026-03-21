@@ -79,6 +79,29 @@ public partial class LiveBotFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Resolves the path to a per-test settings file in LiveValidation/Settings/.
+    /// Checks the build output directory first, then walks up to find the source file.
+    /// </summary>
+    protected static string? ResolveTestSettingsPath(string fileName)
+    {
+        var outputPath = Path.Combine(AppContext.BaseDirectory, "LiveValidation", "Settings", fileName);
+        if (File.Exists(outputPath)) return outputPath;
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "LiveValidation", "Settings", fileName);
+            if (File.Exists(candidate)) return candidate;
+
+            candidate = Path.Combine(dir.FullName, "Bot", "Release", "net8.0", "LiveValidation", "Settings", fileName);
+            if (File.Exists(candidate)) return candidate;
+
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Tracks the normalized settings path that StateManager was last started with.
     /// Used by <see cref="EnsureSettingsAsync"/> to skip redundant teardown/relaunch cycles.
     /// </summary>
@@ -403,16 +426,12 @@ public partial class LiveBotFixture : IAsyncLifetime
             // 2b. Ensure GM commands are enabled in the command table
             await EnsureGmCommandsEnabledAsync();
 
-            // 2c. Clean up zombie gameobjects from previous .gobject add runs
-            await CleanupZombieGameObjectsAsync();
-
             // 3. Connect to StateManager on port 8088
             _stateManagerClient = new StateManagerTestClient("127.0.0.1", 8088);
             using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await _stateManagerClient.ConnectAsync(connectCts.Token);
             _logger.LogInformation("[FIXTURE] Connected to StateManager on port 8088.");
             SeedExpectedAccountsFromStateManagerSettings();
-            await SeedExpectedCharacterNamesFromDatabaseAsync();
 
             // 4. Wait for bots to enter world
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
@@ -493,24 +512,6 @@ public partial class LiveBotFixture : IAsyncLifetime
                 _logger.LogError("[FIXTURE] {Reason}", FailureReason);
                 return;
             }
-
-            // 5. Verify SOAP can resolve character names (prevents "Player not found!" errors).
-            _logger.LogInformation("[FIXTURE] Verifying SOAP player resolution...");
-            if (BgCharacterName != null)
-                await WaitForSoapPlayerResolutionAsync(BgCharacterName);
-            if (FgCharacterName != null)
-                await WaitForSoapPlayerResolutionAsync(FgCharacterName);
-            if (CombatTestCharacterName != null)
-                await WaitForSoapPlayerResolutionAsync(CombatTestCharacterName);
-
-            // 6. Ensure clean state: revive dead characters, disband existing groups
-            _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
-            await EnsureCleanCharacterStateAsync();
-
-            // 7. Stabilization: do not apply a fixture-owned startup teleport.
-            //    Each live suite now stages its own location explicitly, which avoids
-            //    redundant travel before tests like fishing immediately named-teleport elsewhere.
-            await WaitForBotsStabilizedAsync();
 
             _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}' ({BgAccount}), FG='{Fg}' ({FgAccount}), Combat='{Combat}' ({CombatAccount})",
                 BgCharacterName ?? "N/A",
@@ -642,16 +643,6 @@ public partial class LiveBotFixture : IAsyncLifetime
             _logger.LogError("[FIXTURE] {Reason}", FailureReason);
             return;
         }
-
-        if (BgCharacterName != null)
-            await WaitForSoapPlayerResolutionAsync(BgCharacterName);
-        if (FgCharacterName != null)
-            await WaitForSoapPlayerResolutionAsync(FgCharacterName);
-        if (CombatTestCharacterName != null)
-            await WaitForSoapPlayerResolutionAsync(CombatTestCharacterName);
-
-        await EnsureCleanCharacterStateAsync();
-        await WaitForBotsStabilizedAsync();
 
         _logger.LogInformation("[FIXTURE] Restart complete. BG='{Bg}' ({BgAccount}), FG='{Fg}' ({FgAccount}), Combat='{Combat}' ({CombatAccount})",
             BgCharacterName ?? "N/A", BgAccountName ?? "N/A",
