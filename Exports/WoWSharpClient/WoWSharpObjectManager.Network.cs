@@ -317,8 +317,8 @@ namespace WoWSharpClient
                                             movementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
                                         }
 
-                                        bool allowPositionWrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
-                                        ApplyMovementData((WoWUnit)obj, movementData, allowPositionWrite);
+                                        bool allowLocalOverwrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
+                                        ApplyMovementData((WoWUnit)obj, movementData, allowLocalOverwrite, allowLocalOverwrite);
 
                                         // Wire spline data to SplineController for server-driven movement
                                         TryActivateSpline(update.Guid, movementData, isLocalPlayer);

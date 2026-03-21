@@ -166,9 +166,10 @@ namespace WoWSharpClient
         /// </summary>
 
 
-        private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite)
+        private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite, bool allowMovementFlagWrite = true)
         {
-            unit.MovementFlags = data.MovementFlags;
+            if (allowMovementFlagWrite)
+                unit.MovementFlags = data.MovementFlags;
             unit.LastUpdated = data.LastUpdated;
 
             if (allowPositionWrite)
@@ -176,9 +177,8 @@ namespace WoWSharpClient
                 unit.Position.X = data.X;
                 unit.Position.Y = data.Y;
                 unit.Position.Z = data.Z;
+                unit.Facing = data.Facing;
             }
-
-            unit.Facing = data.Facing;
             unit.TransportGuid = data.TransportGuid ?? 0;
             unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
             unit.TransportOrientation = data.TransportOrientation ?? 0f;
