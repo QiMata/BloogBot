@@ -120,26 +120,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-20 (session 121)
+- **Last updated:** 2026-03-20 (session 123)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **ROOT CAUSE: BG bots walk through walls.** PathfindingClient had two DeadReckon fallback paths with NO wall collision:
-    1. Zero-delta detection: physics returns 0 XY delta when bot hits a wall → after 5 frames, fell back to DeadReckon which walked through walls
-    2. Service init race: PathfindingService takes ~60s to load maps. During this time, physics calls error out → DeadReckon with GroundZ=0 (protobuf default) → MovementController thinks ground exists → bot moves freely through walls
-  - **Fix (f255ddd):** Replaced DeadReckon with HoldPosition (GroundZ=-999999). Physics zero-delta = wall contact (correct behavior, not a bug). Removed collision-free dead-reckoning entirely from PathfindingClient.
-  - **RFC collision data verified:** Physics tests prove map 389 WMO collision works perfectly — vmtree GOBJ section (non-tiled map, 148 global objects) provides both ground detection (30/30 frames) and wall collision (bot blocked at wall). No vmtile files needed.
-  - **FG leader enforcement:** Removed BG bot promotion in DungeoneeringCoordinator. TESTBOT1 (FG) is permanent leader/main tank. Coordinator waits for FG bot instead of promoting BG substitutes.
-  - **Follower autonomous navigation (a215f2b, prior session):** Followers navigate waypoints independently instead of following PartyLeader GUID (which was TESTBOT1 at entrance, not the dungeon leader).
-  - **Dead-reckoning speed fix (a215f2b):** Changed from 2.5 y/s to player.RunSpeed (7 y/s).
-  - **Path plumbing fix (a215f2b):** BotTask.TryNavigateToward now calls SetNavigationPath AFTER MoveToward to provide full path for dead-reckoning.
-- **Commits:** `a215f2b` → `f255ddd`
-- **Test baseline:** 139/139 physics tests pass (added 2 RFC diagnostic tests). RFC PhysicsStep and wall collision both verified.
-- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. VMapExtractor/Assembler at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings (pre-extracted WMOs) at `D:/World of Warcraft/Buildings/`.
-- **Key discovery:** RFC = Lavadungeon.wmo, non-tiled vmap (byte 8 = 0x00 in vmtree). All 148 collision objects stored in vmtree GOBJ section. vmtile files NOT generated because map is non-tiled — this is correct. Deadmines/SFK/SM are tiled (byte 8 = 0x01) and have vmtile files.
-- **PathfindingService lock starvation fix (5fd003c):** Replaced custom `_operationActive`/`_pendingPriorityOperations` mutex with `ReaderWriterLockSlim`. Physics/LOS/groundZ use read locks (concurrent), path-with-overlay uses write lock (exclusive), path-without-overlay uses read lock (concurrent). 9 bots requesting paths simultaneously no longer starve physics — physics calls proceed concurrently.
-- **P5 status:** Wall collision + lock starvation both fixed. BG bots should now move with proper physics and pathfinding under load.
+  - **FG bot handle leak fix (179cac4):** Cached `_mainThreadId` from WndProc instead of `Process.GetCurrentProcess().Threads[0].Id` (leaked OS thread handles → native WoW.exe crash). Also: capture mainThreadId from WndProc (main thread) not static constructor (LoadLibrary thread); instance map support (continentId != 0xFF instead of < 0xFF for RFC=389); WndProc map change detection; _prevContinentId ordering fix; BeginTeleportPause on map change; PostMessage error logging.
+  - **BG bot movement packet interval (f5451ef):** Reduced PACKET_INTERVAL_MS from 500ms → 200ms. 500ms caused BG bots to appear 1-2 waypoints behind during dungeoneering (server only got position updates 2x/sec). 200ms matches real WoW client heartbeat frequency.
+  - **BG bot empty waypoints fix (f8650ce):** ROOT CAUSE of BG bots not moving in dungeons. Coordinator only sent `isLeader` flag but no target map ID. ActionDispatch fell back to `Player.MapId` which was stale (0) during instance loading → `DungeonWaypoints.GetWaypointsForMap(0)` returned null → DungeoneeringTask created with empty waypoint list → immediately transitioned to Complete on first Update(). Fix: coordinator now sends target map ID (389) as second parameter.
+- **Commits:** `179cac4` → `af05ab2`
+- **Test baseline:** 140/140 physics tests pass (packet timing test updated for 200ms interval).
+- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings at `D:/World of Warcraft/Buildings/`.
+- **P5 status:** Wall collision, lock starvation, handle leak, packet rate, and waypoint dispatch all fixed. BG bots should now properly navigate RFC waypoints.
 - **Next:**
-  1. Run RFC dungeon test to validate both fixes end-to-end
-  2. Fix TESTBOT1/RFCBOT2 raid membership (first invite timing)
-  3. Verify mob evade issue resolves (was caused by position desync from dead-reckoning through walls)
+  1. Run RFC dungeon test to validate all fixes end-to-end
+  2. Investigate remaining first-injection crash (intermittent — second injection succeeds)
+  3. Fix TESTBOT1/RFCBOT2 raid membership (first invite timing)
   4. P3/P4: FG packet capture tests (fishing parity, teleport flags)
