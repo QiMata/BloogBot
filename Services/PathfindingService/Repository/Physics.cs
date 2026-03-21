@@ -129,6 +129,9 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern PhysicsOutput PhysicsStepV2(ref PhysicsInput input);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetPhysicsLogLevel(int level, uint mask);
+
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
         private static extern bool NativeLineOfSight(uint mapId, XYZ from, XYZ to);
 
@@ -144,6 +147,15 @@ namespace PathfindingService.Repository
             input.deltaTime = deltaTime;
             var output = PhysicsStepV2(ref input);
             return SanitizeOutput(input, output);
+        }
+
+        /// <summary>
+        /// Sets the C++ physics engine log level at runtime.
+        /// level: 0=ERR, 1=INFO, 2=DBG, 3=TRACE. mask: category bitmask (0=keep current).
+        /// </summary>
+        public void EnablePhysicsLogging(int level, uint mask = 0)
+        {
+            SetPhysicsLogLevel(level, mask);
         }
 
         // For backwards compatibility - maps to CalculatePath

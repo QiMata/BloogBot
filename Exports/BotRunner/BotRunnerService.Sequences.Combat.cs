@@ -129,8 +129,9 @@ namespace BotRunner
 
                             if (DateTime.UtcNow - lastChaseLogUtc > TimeSpan.FromSeconds(3))
                             {
-                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F2}y, arrival={Arrival:F2}y (pReach={PR:F2}, tReach={TR:F2})",
-                                    targetGuid, dist, chaseArrivalDist, player.CombatReach, target.CombatReach);
+                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F2}y, arrival={Arrival:F2}y (pReach={PR:F2}, tReach={TR:F2}), wp={HasWP}, flags=0x{Flags:X}, pos=({PX:F1},{PY:F1},{PZ:F1})",
+                                    targetGuid, dist, chaseArrivalDist, player.CombatReach, target.CombatReach,
+                                    waypoint != null, (uint)player.MovementFlags, player.Position.X, player.Position.Y, player.Position.Z);
                                 lastChaseLogUtc = DateTime.UtcNow;
                             }
 

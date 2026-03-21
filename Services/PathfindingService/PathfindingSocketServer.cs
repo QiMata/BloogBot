@@ -478,14 +478,62 @@ namespace PathfindingService
                     if (hasForward && Math.Abs(dx) < 0.001f && Math.Abs(dy) < 0.001f)
                     {
                         _zeroForwardCount++;
-                        if (_zeroForwardCount == 1 || _zeroForwardCount % 200 == 0)
+                        if (_zeroForwardCount == 1)
+                        {
+                            // Full struct dump on first stuck frame for comparison with unit test
+                            logger.LogWarning(
+                                "[PHYS_STUCK_DUMP] moveFlags=0x{MF:X} pos=({X},{Y},{Z}) orient={O} pitch={P} " +
+                                "vel=({VX},{VY},{VZ}) walk={WK} run={RN} runBack={RB} swim={SW} swimBack={SB} " +
+                                "flight={FL} turn={TN} height={H} radius={R} fallTime={FT} fallStartZ={FSZ} " +
+                                "prevGZ={PGZ} prevGN=({PNX},{PNY},{PNZ}) pendingDepen=({PDX},{PDY},{PDZ}) " +
+                                "standingOn={SOI} standingOnLocal=({SOX},{SOY},{SOZ}) map={MAP} dt={DT} frame={FC} " +
+                                "physFlags=0x{PF:X} stepUpBaseZ={SUBZ} stepUpAge={SUA} nearbyObjCount={NOC}",
+                                physicsInput.moveFlags, physicsInput.x, physicsInput.y, physicsInput.z,
+                                physicsInput.orientation, physicsInput.pitch,
+                                physicsInput.vx, physicsInput.vy, physicsInput.vz,
+                                physicsInput.walkSpeed, physicsInput.runSpeed, physicsInput.runBackSpeed,
+                                physicsInput.swimSpeed, physicsInput.swimBackSpeed,
+                                physicsInput.flightSpeed, physicsInput.turnSpeed,
+                                physicsInput.height, physicsInput.radius,
+                                physicsInput.fallTime, physicsInput.fallStartZ,
+                                physicsInput.prevGroundZ,
+                                physicsInput.prevGroundNx, physicsInput.prevGroundNy, physicsInput.prevGroundNz,
+                                physicsInput.pendingDepenX, physicsInput.pendingDepenY, physicsInput.pendingDepenZ,
+                                physicsInput.standingOnInstanceId,
+                                physicsInput.standingOnLocalX, physicsInput.standingOnLocalY, physicsInput.standingOnLocalZ,
+                                physicsInput.mapId, physicsInput.deltaTime, physicsInput.frameCounter,
+                                physicsInput.physicsFlags, physicsInput.stepUpBaseZ, physicsInput.stepUpAge,
+                                physicsInput.nearbyObjectCount);
+                        }
+                        // Diagnostic: enable C++ physics logging and retry to see internal pipeline
+                        if (_zeroForwardCount == 1)
+                        {
+                            logger.LogWarning("[PHYS_STUCK_DIAG] Enabling C++ physics logging for retry...");
+                            _physics.EnablePhysicsLogging(2, 0xFFFFFFFF); // DBG level, all categories
+
+                            // Retry with same input — C++ engine will now log its internal pipeline
+                            var testInput = physicsInput;
+                            var testOut = _physics.StepPhysicsV2(testInput, testInput.deltaTime);
+                            float tdx = testOut.x - testInput.x;
+                            float tdy = testOut.y - testInput.y;
+
+                            _physics.EnablePhysicsLogging(0, 0xFFFFFFFF); // Back to ERR only
+                            logger.LogWarning(
+                                "[PHYS_STUCK_DIAG] Logged retry: dx={DX:F6} dy={DY:F6} outFlags=0x{OF:X} groundZ={GZ:F2} hitWall={HW} blockedFrac={BF:F4}",
+                                tdx, tdy, testOut.moveFlags, testOut.groundZ, testOut.hitWall, testOut.blockedFraction);
+                        }
+                        if (_zeroForwardCount <= 10 || _zeroForwardCount % 200 == 0)
                         {
                             logger.LogWarning(
                                 "[PHYS_STUCK] Zero-delta with FORWARD: count={Count} frame={Frame} " +
-                                "pos=({X:F1},{Y:F1},{Z:F1}) map={Map} groundZ={GZ:F2} speed={Spd:F1}",
+                                "pos=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) map={Map} groundZ={GZ:F2} " +
+                                "speed={Spd:F1} facing={Fac:F3} dt={DT:F4} flags=0x{Flags:X} prevGZ={PGZ:F1}",
                                 _zeroForwardCount, physicsInput.frameCounter,
                                 physicsInput.x, physicsInput.y, physicsInput.z,
-                                physicsInput.mapId, physicsOutput.groundZ, physicsInput.runSpeed);
+                                physicsOutput.x, physicsOutput.y, physicsOutput.z,
+                                physicsInput.mapId, physicsOutput.groundZ, physicsInput.runSpeed,
+                                physicsInput.orientation, physicsInput.deltaTime,
+                                physicsInput.moveFlags, physicsInput.prevGroundZ);
                         }
                     }
                     else if (hasForward)

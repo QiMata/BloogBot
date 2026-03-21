@@ -512,6 +512,31 @@ namespace WoWSharpClient.Movement
             else
             {
                 _noGroundFrameCount = 0;
+
+                // When physics HAS valid ground but still reports FALLINGFAR, the DOWN pass
+                // capsule sweep missed the ground surface (e.g. Valley of Trials slope terrain).
+                // Strip FALLINGFAR to prevent IsPlayerAirborne() from blocking MoveToward(),
+                // which would prevent MOVEFLAG_FORWARD from being set on subsequent frames.
+                // Without this, the bot enters a stuck loop: physics returns FALLINGFAR →
+                // MoveToward blocked → no FORWARD flag → zero movement → stuck recovery →
+                // MoveToward sets FORWARD → physics returns FALLINGFAR again → repeat.
+                if ((output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0)
+                {
+                    output.MovementFlags &= ~(uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    output.FallTime = 0;
+                    output.NewVelZ = 0;
+                    _falseFreefallCount++;
+                    if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
+                    {
+                        Log.Warning("[MovementController] Stripped false FALLINGFAR — ground exists at Z={GroundZ:F1} " +
+                            "but physics flagged airborne. Count={Count}",
+                            output.GroundZ, _falseFreefallCount);
+                    }
+                }
+                else
+                {
+                    _falseFreefallCount = 0;
+                }
             }
             // Guard against falling through objects that the navmesh doesn't model (docks, bridges,
             // WMO platforms). After a teleport, if gravity would pull us more than GROUND_SNAP_MAX_DROP

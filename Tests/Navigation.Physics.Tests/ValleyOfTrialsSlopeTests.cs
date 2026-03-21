@@ -453,4 +453,264 @@ public class ValleyOfTrialsSlopeTests
         Assert.True(noGroundFrames < 20,
             $"Physics failed to find ground for {noGroundFrames} frames on steep terrain — DOWN pass capsule sweep is missing ground");
     }
+
+    /// <summary>
+    /// Reproduces the BG combat test stuck scenario: physics returns zero XY delta
+    /// despite MOVEFLAG_FORWARD at (-283.5, -4382.1, 55.3) facing 0.04 rad.
+    /// This is the exact position where the combat test bot gets stuck.
+    /// </summary>
+    [Fact]
+    public void StuckPosition_StepPhysics_ShouldMoveForward()
+    {
+        Assert.True(_fixture.IsInitialized, "Physics engine not initialized");
+
+        // Exact stuck position from combat test logs
+        float posX = -283.5f, posY = -4382.1f, posZ = 55.3f;
+        float facing = 0.04f; // radians, ~2.3 degrees east
+        float runSpeed = 7.0f;
+        float dt = 0.05f; // 50ms per tick (standard physics tick)
+
+        _output.WriteLine($"=== Stuck Position Physics Test ===");
+        _output.WriteLine($"Position: ({posX}, {posY}, {posZ})");
+        _output.WriteLine($"Facing: {facing} rad ({facing * 180 / MathF.PI:F1} deg)");
+        _output.WriteLine($"Expected: {runSpeed * dt:F3}y movement per tick");
+        _output.WriteLine("");
+
+        // First, probe ground at this position
+        float groundZ = NavigationInterop.GetGroundZ(MapId, posX, posY, posZ + 5f, 20f);
+        _output.WriteLine($"GetGroundZ at stuck pos: {groundZ:F2} (delta from player: {groundZ - posZ:F2})");
+
+        float prevGroundZ = groundZ > -50000f ? groundZ : posZ;
+
+        _output.WriteLine($"\n{"Step",4} {"X",10} {"Y",12} {"Z",10} {"GroundZ",10} {"DX",8} {"DY",8} {"MoveFlags",12} {"HitWall",8}");
+        _output.WriteLine(new string('-', 85));
+
+        int stuckFrames = 0;
+        for (int step = 0; step < 20; step++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x00000001, // MOVEFLAG_FORWARD
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Vx = 0f, Vy = 0f, Vz = 0f, // No initial velocity — physics derives from flags
+                WalkSpeed = 2.5f,
+                RunSpeed = runSpeed,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                TurnSpeed = 3.14159f,
+                Height = 1.83f,
+                Radius = 0.45f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1.0f,
+                StepUpBaseZ = -200000f,
+                FallStartZ = -200000f,
+                MapId = MapId,
+                DeltaTime = dt,
+                FrameCounter = (uint)step,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float xyDist = MathF.Sqrt(dx * dx + dy * dy);
+
+            _output.WriteLine($"{step,4} {output.X,10:F3} {output.Y,12:F3} {output.Z,10:F3} {output.GroundZ,10:F2} {dx,8:F4} {dy,8:F4} 0x{output.MoveFlags:X8} {output.HitWall,8}");
+
+            if (xyDist < 0.001f)
+            {
+                stuckFrames++;
+                _output.WriteLine($"  ** STUCK: zero XY delta on frame {step} (vx={output.Vx:F3} vy={output.Vy:F3} vz={output.Vz:F3})");
+            }
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            if (output.GroundZ > -50000f)
+                prevGroundZ = output.GroundZ;
+        }
+
+        _output.WriteLine($"\nStuck frames: {stuckFrames}/20");
+        _output.WriteLine($"Final position: ({posX:F3}, {posY:F3}, {posZ:F3})");
+
+        // Bot should move forward, not get stuck
+        Assert.True(stuckFrames <= 2,
+            $"Physics returned zero XY delta for {stuckFrames}/20 frames at the stuck position — " +
+            "the physics engine is failing to produce horizontal movement despite MOVEFLAG_FORWARD");
+    }
+
+    /// <summary>
+    /// Reproduces the EXACT scenario from CombatBg test failure:
+    /// pos=(-283.3, -4383.0, 57.4), prevGZ=57.4, facing=-0.021, groundZ oscillates 57.14-57.40.
+    /// Physics returns zero XY delta despite MOVEFLAG_FORWARD.
+    /// </summary>
+    [Fact]
+    public void StuckPosition_RealScenario_ShouldMoveForward()
+    {
+        Assert.True(_fixture.IsInitialized, "Physics engine not initialized");
+
+        // EXACT values from CombatBg test PHYS_STUCK logs
+        float posX = -283.3f, posY = -4383.0f, posZ = 57.4f;
+        float facing = -0.021f;
+        float runSpeed = 7.0f;
+        float dt = 0.05f;
+        float prevGroundZ = 57.4f;
+
+        _output.WriteLine($"=== Real Stuck Scenario (CombatBg) ===");
+        _output.WriteLine($"Position: ({posX}, {posY}, {posZ})");
+        _output.WriteLine($"Facing: {facing} rad, PrevGZ: {prevGroundZ}");
+        _output.WriteLine($"Expected: {runSpeed * dt:F3}y movement per tick\n");
+
+        // First probe ground
+        float probeGroundZ = NavigationInterop.GetGroundZ(MapId, posX, posY, posZ + 5f, 20f);
+        _output.WriteLine($"GetGroundZ probe: {probeGroundZ:F2}");
+
+        _output.WriteLine($"\n{"Step",4} {"X",10} {"Y",12} {"Z",10} {"GroundZ",10} {"DX",8} {"DY",8} {"MoveFlags",12} {"HitWall",8}");
+        _output.WriteLine(new string('-', 85));
+
+        int stuckFrames = 0;
+        for (int step = 0; step < 40; step++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x00000001, // MOVEFLAG_FORWARD
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Vx = 0f, Vy = 0f, Vz = 0f,
+                WalkSpeed = 2.5f,
+                RunSpeed = runSpeed,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                TurnSpeed = 3.14159f,
+                Height = 1.83f,
+                Radius = 0.45f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1.0f,
+                StepUpBaseZ = -200000f,
+                FallStartZ = -200000f,
+                MapId = MapId,
+                DeltaTime = dt,
+                FrameCounter = (uint)step,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float xyDist = MathF.Sqrt(dx * dx + dy * dy);
+
+            _output.WriteLine($"{step,4} {output.X,10:F3} {output.Y,12:F3} {output.Z,10:F3} {output.GroundZ,10:F2} {dx,8:F4} {dy,8:F4} 0x{output.MoveFlags:X8} {output.HitWall,8}");
+
+            if (xyDist < 0.001f)
+            {
+                stuckFrames++;
+                _output.WriteLine($"  ** STUCK: zero XY delta on frame {step}");
+            }
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            if (output.GroundZ > -50000f)
+                prevGroundZ = output.GroundZ;
+        }
+
+        _output.WriteLine($"\nStuck frames: {stuckFrames}/40");
+        _output.WriteLine($"Final position: ({posX:F3}, {posY:F3}, {posZ:F3})");
+
+        Assert.True(stuckFrames <= 4,
+            $"Physics returned zero XY delta for {stuckFrames}/40 frames — reproduces CombatBg movement stuck bug");
+    }
+
+    /// <summary>
+    /// Uses the EXACT native struct values from the PathfindingService PHYS_STUCK_DUMP log.
+    /// Tests whether the capsule dimensions (height=2.0313, radius=0.2556) and step-up state
+    /// (stepUpBaseZ=57.394, stepUpAge=1) cause zero XY delta in the C++ physics engine.
+    /// </summary>
+    [Fact]
+    public void StuckPosition_ExactServiceValues_ShouldMoveForward()
+    {
+        Assert.True(_fixture.IsInitialized, "Physics engine not initialized");
+
+        // EXACT values from PHYS_STUCK_DUMP
+        float posX = -283.30515f, posY = -4382.9155f, posZ = 57.394436f;
+        float facing = 0.12090772f;
+        float runSpeed = 7.0f;
+        float dt = 0.05f;
+
+        _output.WriteLine($"=== Exact Service Values Test ===");
+        _output.WriteLine($"Position: ({posX}, {posY}, {posZ})");
+        _output.WriteLine($"Facing: {facing} rad, Capsule: h=2.0313 r=0.2556");
+        _output.WriteLine($"StepUp: baseZ=57.394436 age=1\n");
+
+        _output.WriteLine($"\n{"Step",4} {"X",10} {"Y",12} {"Z",10} {"GroundZ",10} {"DX",8} {"DY",8} {"MoveFlags",12} {"HitWall",8}");
+        _output.WriteLine(new string('-', 85));
+
+        float prevGroundZ = 57.394436f;
+        int stuckFrames = 0;
+        for (int step = 0; step < 40; step++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x00000001,
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Pitch = 0f,
+                Vx = 0f, Vy = 0f, Vz = 0f,
+                WalkSpeed = 2.5f,
+                RunSpeed = runSpeed,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722222f,
+                SwimBackSpeed = 2.5f,
+                FlightSpeed = 7.0f,
+                TurnSpeed = 0f,
+                Height = 2.0313f,
+                Radius = 0.2556f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = -0.033878695f,
+                PrevGroundNy = 0.16411875f,
+                PrevGroundNz = 0.9858586f,
+                StepUpBaseZ = step == 0 ? 57.394436f : -200000f,
+                StepUpAge = step == 0 ? 1u : 0u,
+                FallStartZ = -200000f,
+                MapId = MapId,
+                DeltaTime = dt,
+                FrameCounter = (uint)(2786 + step),
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float xyDist = MathF.Sqrt(dx * dx + dy * dy);
+
+            _output.WriteLine($"{step,4} {output.X,10:F3} {output.Y,12:F3} {output.Z,10:F3} {output.GroundZ,10:F2} {dx,8:F4} {dy,8:F4} 0x{output.MoveFlags:X8} {output.HitWall,8} stepUp=({output.StepUpBaseZ:F1},{output.StepUpAge})");
+
+            if (xyDist < 0.001f)
+            {
+                stuckFrames++;
+                _output.WriteLine($"  ** STUCK: zero XY delta");
+            }
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            if (output.GroundZ > -50000f)
+                prevGroundZ = output.GroundZ;
+        }
+
+        _output.WriteLine($"\nStuck frames: {stuckFrames}/40");
+        _output.WriteLine($"Final position: ({posX:F3}, {posY:F3}, {posZ:F3})");
+
+        Assert.True(stuckFrames <= 4,
+            $"Physics returned zero XY delta for {stuckFrames}/40 frames — exact service values reproduce stuck bug");
+    }
 }

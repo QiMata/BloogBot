@@ -10,6 +10,7 @@
 #include "SceneQuery.h"
 #include "DynamicObjectRegistry.h"
 #include "DetourPathCorridor.h"
+#include "VMapLog.h"
 
 #define NOMINMAX
 #include <windows.h>
@@ -273,6 +274,15 @@ extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput&
                 GetExceptionCode());
         return MakePassthroughOutput(input);
     }
+}
+
+extern "C" __declspec(dllexport) void SetPhysicsLogLevel(int level, uint32_t mask)
+{
+    gPhysLogLevel = level;
+    if (mask != 0)
+        gPhysLogMask = mask;
+    fprintf(stdout, "[Navigation.dll] SetPhysicsLogLevel: level=%d mask=0x%x\n", gPhysLogLevel, gPhysLogMask);
+    fflush(stdout);
 }
 
 extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
