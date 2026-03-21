@@ -354,6 +354,8 @@ namespace WoWSharpClient.Handlers
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field == EGameObjectFields.GAMEOBJECT_PADDING)
                 reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // consume unrecognized game object field
         }
 
         private static void ReadDynamicObjectField(
@@ -380,6 +382,8 @@ namespace WoWSharpClient.Handlers
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadSingle();
             else if (field == EDynamicObjectFields.DYNAMICOBJECT_PAD)
                 reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // consume unrecognized dynamic object field
         }
 
         private static void ReadCorpseField(
@@ -414,6 +418,8 @@ namespace WoWSharpClient.Handlers
                 objectUpdate.UpdatedFields[(uint)field] = (DynamicFlags)reader.ReadUInt32();
             else if (field == ECorpseFields.CORPSE_FIELD_PAD)
                 reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // consume unrecognized corpse field
         }
 
         private static void ReadUnitField(
@@ -834,6 +840,8 @@ namespace WoWSharpClient.Handlers
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field == EItemFields.ITEM_FIELD_MAXDURABILITY)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // consume unrecognized item field (e.g. enchantment sub-slots 23-42)
         }
 
         private static void ReadContainerField(
@@ -848,6 +856,8 @@ namespace WoWSharpClient.Handlers
                 reader.ReadUInt32();
             else if (field <= EContainerFields.CONTAINER_FIELD_SLOT_LAST)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // consume unrecognized container field
         }
     }
 }
