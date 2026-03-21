@@ -42,7 +42,7 @@ namespace ForegroundBotRunner.Mem
             int lParam
         );
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(
             int hWnd,
             uint Msg,
@@ -77,6 +77,12 @@ namespace ForegroundBotRunner.Mem
 
         private static volatile bool _hookInstalled = false;
 
+        /// <summary>Cached main thread ID — captured from WndProc on its first invocation,
+        /// which guarantees it's WoW's actual main thread (window message pump thread).
+        /// Avoids Process.GetCurrentProcess().Threads[0].Id which creates disposable Process
+        /// objects, leaks thread handles, and throws Win32Exception on every call.</summary>
+        private static uint _mainThreadId;
+
         /// <summary>
         /// When true, WndProc will NOT execute queued actions/delegates. Callers of
         /// RunOnMainThread will timeout. Set this during map/instance transitions to
@@ -86,6 +92,9 @@ namespace ForegroundBotRunner.Mem
 
         /// <summary>True once the object manager has been valid at least once (i.e., we connected to world server).</summary>
         private static volatile bool _objMgrWasValid = false;
+
+        /// <summary>Last ContinentId seen by WndProc — used to detect map changes on the main thread.</summary>
+        private static uint _wndProcLastContId = 0xFFFFFFFF;
 
         /// <summary>
         /// True once we've actually been in a valid map (continentId less than 0xFF).
@@ -137,9 +146,12 @@ namespace ForegroundBotRunner.Mem
             newCallback = WndProc;
             oldCallback = SetWindowLong(windowHandle, GWL_WNDPROC, Marshal.GetFunctionPointerForDelegate(newCallback));
             _hookInstalled = true;
+            // NOTE: Do NOT cache _mainThreadId here — the static constructor runs on
+            // the LoadLibrary thread, NOT WoW's main thread. _mainThreadId is captured
+            // on the first WndProc invocation (which IS the main thread).
 
             // Log initialization result
-            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X}");
+            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X} (mainThreadId deferred to WndProc)");
             if (windowHandle == 0)
             {
                 DiagLogStatic("WARNING: Window handle not found! WM_USER messages will not be delivered.");
@@ -155,7 +167,7 @@ namespace ForegroundBotRunner.Mem
                 return;
             }
 
-            if (GetCurrentThreadId() == Process.GetCurrentProcess().Threads[0].Id)
+            if (GetCurrentThreadId() == _mainThreadId)
             {
                 action();
                 return;
@@ -178,7 +190,7 @@ namespace ForegroundBotRunner.Mem
                 return function();
             }
 
-            if (GetCurrentThreadId() == Process.GetCurrentProcess().Threads[0].Id)
+            if (GetCurrentThreadId() == _mainThreadId)
                 return function();
 
             // Use a signal to wait for the result to be ready
@@ -248,6 +260,14 @@ namespace ForegroundBotRunner.Mem
         {
             try
             {
+                // Capture the main thread ID on first WndProc call — guaranteed to be
+                // WoW's window message pump thread.
+                if (_mainThreadId == 0)
+                {
+                    _mainThreadId = GetCurrentThreadId();
+                    DiagLogStatic($"WndProc: captured mainThreadId={_mainThreadId}");
+                }
+
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
 
                 // Safety gate: determine if Lua execution is safe on WoW's main thread.
@@ -266,11 +286,28 @@ namespace ForegroundBotRunner.Mem
                         _objMgrWasValid = true;
 
                     uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
-                    if (managerBaseValid && continentId < 0xFF)
+                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
+                    if (managerBaseValid && isValidMap)
                         _hasEnteredWorldOnce = true;
-                    bool inTransition = _hasEnteredWorldOnce && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
 
-                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid) || inTransition;
+                    // Detect map changes on the main thread (e.g., map 1 → 389 for RFC).
+                    // The background thread's Paused flag may not be set yet — this catches
+                    // the race where a WM_USER fires during a teleport before SimplePolling
+                    // can set Paused=true.
+                    bool mapJustChanged = false;
+                    if (continentId != _wndProcLastContId && isValidMap
+                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
+                    {
+                        mapJustChanged = true;
+                        Paused = true;
+                        Statics.ObjectManager.BeginTeleportPause();
+                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing");
+                    }
+                    if (continentId != _wndProcLastContId)
+                        _wndProcLastContId = continentId;
+
+                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
                 }
                 else
                 {
@@ -284,16 +321,30 @@ namespace ForegroundBotRunner.Mem
                         _objMgrWasValid = true;
 
                     uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
 
-                    // Track when we've actually been in a valid map (continentId < 0xFF)
-                    if (managerBaseValid && continentId < 0xFF)
+                    // Track when we've actually been in a valid map (includes instance maps > 0xFF)
+                    if (managerBaseValid && isValidMap)
                         _hasEnteredWorldOnce = true;
 
                     // Only block for transitions AFTER we've been in a real map.
                     // At initial charselect, _hasEnteredWorldOnce is false → Lua calls proceed.
-                    bool inTransition = _hasEnteredWorldOnce && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
 
-                    shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition;
+                    // Detect map changes on the main thread (legacy path)
+                    bool mapJustChanged = false;
+                    if (continentId != _wndProcLastContId && isValidMap
+                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
+                    {
+                        mapJustChanged = true;
+                        Paused = true;
+                        Statics.ObjectManager.BeginTeleportPause();
+                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing (legacy)");
+                    }
+                    if (continentId != _wndProcLastContId)
+                        _wndProcLastContId = continentId;
+
+                    shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
                 }
                 if (shouldBlock)
                 {
@@ -414,7 +465,13 @@ namespace ForegroundBotRunner.Mem
         // game state is stable. SendMessage dispatches via the "sent message" queue which can fire
         // during nested SendMessage/PeekMessage calls inside packet processing, potentially executing
         // our Lua calls while WoW is mid-transfer-teardown (before ContinentId even changes).
-        private static void SendUserMessage() => PostMessage(windowHandle, WM_USER, 0, 0);
+        private static void SendUserMessage()
+        {
+            if (!PostMessage(windowHandle, WM_USER, 0, 0))
+            {
+                DiagLogStatic($"PostMessage FAILED! windowHandle=0x{windowHandle:X} error={Marshal.GetLastWin32Error()}");
+            }
+        }
 
         /// <summary>
         /// Simulates a spacebar press+release to trigger a jump.

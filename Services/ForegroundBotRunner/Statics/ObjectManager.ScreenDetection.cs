@@ -793,6 +793,8 @@ namespace ForegroundBotRunner.Statics
                         LoginStateMonitor.CaptureSnapshot($"LoginStateChanged_{loginState}");
                         _prevLoginState = loginState;
                     }
+                    // Save previous continent ID BEFORE updating, so mapChanged check works.
+                    uint prevContId = _prevContinentId;
                     if (continentId != _prevContinentId)
                     {
                         DiagLog($"STATE CHANGE: ContinentId 0x{_prevContinentId:X} -> 0x{continentId:X}");
@@ -820,13 +822,20 @@ namespace ForegroundBotRunner.Statics
                     bool isContinentTransition = HasEnteredWorld && (continentId == 0xFFFFFFFF || continentId == 0xFF);
 
                     // Detect instance/map transitions: map ID changed to a new valid map.
-                    bool mapChanged = _prevContinentId != 0xFFFFFFFF && continentId != _prevContinentId
+                    // Uses prevContId (saved before update) so the check isn't defeated by the
+                    // early _prevContinentId = continentId assignment above.
+                    bool mapChanged = prevContId != 0xFFFFFFFF && continentId != prevContId
                                       && continentId != 0xFF && continentId != 0xFFFFFFFF;
                     if (mapChanged && HasEnteredWorld)
                     {
-                        CrashTrace($"MAP_CHANGE: {_prevContinentId} → {continentId} — pausing native calls");
+                        CrashTrace($"MAP_CHANGE: {prevContId} → {continentId} — pausing native calls");
                         isContinentTransition = true;
                         Mem.ThreadSynchronizer.Paused = true;
+                        // Also engage the teleport pause timer (5s) so EnumerateVisibleObjects
+                        // stays blocked even after isContinentTransition clears on the next poll.
+                        // Instance map loads (RFC=389) complete in <200ms — the ContinentId settles
+                        // before WoW's internal object manager is fully rehydrated.
+                        BeginTeleportPause();
                     }
 
                     _isContinentTransition = isContinentTransition;
@@ -838,7 +847,7 @@ namespace ForegroundBotRunner.Statics
                         Mem.ThreadSynchronizer.Paused = true;
                         CrashTrace($"TRANSITION: contId=0x{continentId:X} paused=true logged={isLoggedIn} loading={isLoadingWorld}");
                     }
-                    else if (Mem.ThreadSynchronizer.Paused && !isContinentTransition && isLoggedIn && !isLoadingWorld)
+                    else if (Mem.ThreadSynchronizer.Paused && !isContinentTransition && !PauseDuringTeleport && isLoggedIn && !isLoadingWorld)
                     {
                         CrashTrace("TRANSITION_END: resuming native calls");
                         Mem.ThreadSynchronizer.Paused = false;
