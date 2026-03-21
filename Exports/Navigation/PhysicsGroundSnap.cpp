@@ -335,11 +335,15 @@ float ApplyVerticalDepenetration(
         float dz = snapZ - st.z;
         if (dz > 1e-6f) {
             st.z = snapZ;
-            // Refine Z with direct height query at exact XY
+            // Refine Z with direct height query at exact XY.
+            // IMPORTANT: only accept a preciseZ that is AT or ABOVE the depenetration plane.
+            // GetGroundZ fires a ray downward and can find terrain THROUGH WMO/M2 surfaces,
+            // which would snap us back below the surface we just depenetrated from — defeating
+            // the entire depenetration and causing the capsule to be permanently stuck.
             float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
                 PhysicsConstants::STEP_DOWN_HEIGHT);
             if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-                preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
+                preciseZ <= st.z + 0.1f && preciseZ >= planeZ - snapEps)
                 st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;

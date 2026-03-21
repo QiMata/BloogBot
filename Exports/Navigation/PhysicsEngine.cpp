@@ -872,9 +872,15 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
             : 0.5f;
         float preciseZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, st.z,
             PhysicsConstants::STEP_DOWN_HEIGHT);
+        // When the character is BELOW the collision surface (snapZ was capped to originalZ
+        // because planeZ > originalZ), GetGroundZ can fire through the surface and return
+        // terrain below — which would embed the character even deeper. Only accept refinement
+        // that stays near or above the collision plane in this case.
+        const bool belowSurface = chosen->planeZ > originalZ + 0.1f;
+        const float planeFloor = belowSurface ? chosen->planeZ - 0.5f : st.z - preciseFallTolerance;
         if (VMAP::IsValidHeight(preciseZ) &&
             preciseZ <= st.z + preciseRiseTolerance &&
-            preciseZ >= st.z - preciseFallTolerance) {
+            preciseZ >= planeFloor) {
             st.z = preciseZ;
         }
 
@@ -1128,19 +1134,26 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
             // Elevated-structure check: character is on a WMO/M2 surface that
             // GetGroundZ can't see (it returns terrain far below the character).
             // In this case dropFromOrigin is small (both probes see terrain), but
-            // the character is clearly elevated. Use STEP_HEIGHT as a tighter
-            // threshold to prevent walking off docks, piers, bridges, etc.
+            // the character is clearly elevated. Use a high threshold (5y) to
+            // distinguish real elevated structures (docks, piers, bridges — typically
+            // 5-15y above terrain) from normal terrain/collision mesh variance
+            // (typically 1-3y at Valley of Trials, hillsides, etc.).
+            // A lower threshold (e.g. STEP_HEIGHT = 2.125y) falsely triggers on
+            // normal terrain, blocking all horizontal movement.
+            constexpr float ELEVATED_STRUCTURE_THRESHOLD = 5.0f;
             if (!isLedgeDrop) {
                 float charAboveOriginGround = originalZ - originGroundZ;
-                if (charAboveOriginGround > PhysicsConstants::STEP_HEIGHT) {
+                if (charAboveOriginGround > ELEVATED_STRUCTURE_THRESHOLD) {
                     float dropFromCharacter = originalZ - groundProbeZ;
                     isLedgeDrop = (dropFromCharacter > PhysicsConstants::STEP_HEIGHT);
                 }
             }
-        } else if (!VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
-            // No ground found at new position at all — void beyond the edge
-            isLedgeDrop = true;
         }
+        // NOTE: Previously had a void check here (groundProbeZ invalid, originGroundZ valid)
+        // that declared a ledge. Removed because GetGroundZ ray casts can't see WMO/M2
+        // collision surfaces, causing false positives on terrain where the capsule sweep
+        // finds walkable ground but the ray returns -200000. The DOWN pass and standard
+        // drop check handle real ledge edges correctly.
 
         if (isLedgeDrop) {
             // Clamp back to pre-side position
@@ -1908,7 +1921,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			// Using existing helpers as a first-class overlap recovery step.
 			// Vertical first (most common: clipped into ground), then horizontal.
 			float dz = ApplyVerticalDepenetration(input, st, r, h);
-			float dxy = ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ false);
+			// Use walkableOnly=true so walkable ground contacts on sloped terrain are
+			// resolved vertically (by ApplyVerticalDepenetration), not pushed horizontally.
+			// With walkableOnly=false, the capsule's side-region contacts on sloped ground
+			// generate a horizontal push that fights against forward movement, causing the
+			// bot to be stuck: every frame the overlap recovery pushes backward by the same
+			// amount the SidePass advances forward.
+			float dxy = ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ true);
 			float step = dz + dxy;
 			totalRecovered += step;
 			if (step <= PhysicsConstants::VECTOR_EPSILON)

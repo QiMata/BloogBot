@@ -262,6 +262,21 @@ namespace WoWSharpClient.Movement
                     _fallTimeMs = 0;
                 }
 
+                // Guard against physics finding geometry ABOVE the teleport target (roofs, WMO
+                // surfaces, bridges). The server is authoritative on post-teleport position —
+                // if the player is significantly above teleport Z, physics found a ceiling/roof,
+                // not the intended ground surface. Clamp back to teleport Z.
+                if (!float.IsNaN(_teleportZ) && _player.Position.Z > _teleportZ + GROUND_SNAP_MAX_DROP)
+                {
+                    Log.Warning("[MovementController] Ground snap found geometry above teleport target: " +
+                        "posZ={PosZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1}. Clamping to teleport Z.",
+                        _player.Position.Z, _teleportZ, _prevGroundZ);
+                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _velocity = Vector3.Zero;
+                    _fallTimeMs = 0;
+                }
+
                 bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
                 if (!stillFalling || _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
                 {
@@ -625,12 +640,14 @@ namespace WoWSharpClient.Movement
                         }
                     }
                 }
-                else if (physicsHasGround && output.GroundZ >= _teleportZ - 0.5f)
+                else if (physicsHasGround && output.GroundZ >= _teleportZ - 0.5f
+                    && output.GroundZ <= _teleportZ + GROUND_SNAP_MAX_DROP)
                 {
                     // Physics found terrain-level ground near teleport Z — this is normal operation.
                     // Only clear when groundZ (not just position Z) is near the teleport level.
                     // This prevents premature clearing when cave geometry exists below terrain but
                     // the position is still held near teleport Z by the ground snap phase.
+                    // Also reject if ground is far ABOVE teleport Z — that's a roof/WMO, not terrain.
                     _teleportZ = float.NaN;
                     _teleportClampFrames = 0;
                     _teleportZGraceFrames = 0;
