@@ -1121,9 +1121,22 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
         bool isLedgeDrop = false;
 
         if (VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
-            // The ground at the new position is much lower than where we started
             float dropFromOrigin = originGroundZ - groundProbeZ;
+            // Standard check: ground drops significantly between old and new positions
             isLedgeDrop = (dropFromOrigin > ledgeThreshold);
+
+            // Elevated-structure check: character is on a WMO/M2 surface that
+            // GetGroundZ can't see (it returns terrain far below the character).
+            // In this case dropFromOrigin is small (both probes see terrain), but
+            // the character is clearly elevated. Use STEP_HEIGHT as a tighter
+            // threshold to prevent walking off docks, piers, bridges, etc.
+            if (!isLedgeDrop) {
+                float charAboveOriginGround = originalZ - originGroundZ;
+                if (charAboveOriginGround > PhysicsConstants::STEP_HEIGHT) {
+                    float dropFromCharacter = originalZ - groundProbeZ;
+                    isLedgeDrop = (dropFromCharacter > PhysicsConstants::STEP_HEIGHT);
+                }
+            }
         } else if (!VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
             // No ground found at new position at all — void beyond the edge
             isLedgeDrop = true;
