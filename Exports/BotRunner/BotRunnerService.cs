@@ -152,7 +152,10 @@ namespace BotRunner
                     // Skip ALL work during map transitions — the loading screen is active,
                     // WoW's internal state is unstable, and any managed code activity
                     // (IPC, memory reads, GC pressure) risks crashing the process.
-                    if (_objectManager.IsInMapTransition)
+                    // Only applies AFTER first world entry — before that, we need the
+                    // login/realm/charselect sequence to run (ContinentId reads 0xFFFFFFFF
+                    // at the login screen, which falsely triggers IsInMapTransition).
+                    if (_objectManager.HasEnteredWorld && _objectManager.IsInMapTransition)
                     {
                         await Task.Delay(500, cancellationToken);
                         continue;
