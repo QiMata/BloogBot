@@ -120,25 +120,16 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-20 (session 123)
+- **Last updated:** 2026-03-20 (session 124)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **FG bot handle leak fix (179cac4):** Cached `_mainThreadId` from WndProc instead of `Process.GetCurrentProcess().Threads[0].Id` (leaked OS thread handles → native WoW.exe crash). Also: capture mainThreadId from WndProc (main thread) not static constructor (LoadLibrary thread); instance map support (continentId != 0xFF instead of < 0xFF for RFC=389); WndProc map change detection; _prevContinentId ordering fix; BeginTeleportPause on map change; PostMessage error logging.
-  - **BG bot movement packet interval (f5451ef):** Reduced PACKET_INTERVAL_MS from 500ms → 200ms. 500ms caused BG bots to appear 1-2 waypoints behind during dungeoneering (server only got position updates 2x/sec). 200ms matches real WoW client heartbeat frequency.
-  - **BG bot empty waypoints fix (f8650ce):** ROOT CAUSE of BG bots not moving in dungeons. Coordinator only sent `isLeader` flag but no target map ID. ActionDispatch fell back to `Player.MapId` which was stale (0) during instance loading → `DungeonWaypoints.GetWaypointsForMap(0)` returned null → DungeoneeringTask created with empty waypoint list → immediately transitioned to Complete on first Update(). Fix: coordinator now sends target map ID (389) as second parameter.
-  - **SetControlBit null guard (f6cefb5):** `StopMovement()` called `SetControlBitSafeFunction` with null device pointer during early world entry → NullRef (first-chance, caught by SEH). Added `if (ptr == nint.Zero) return;` guard.
-- **Commits:** `179cac4` → `f6cefb5`
-- **Test baseline:** 140/140 physics tests pass. RFC dungeon test fails due to FG crash (see below).
+  - **FG crash hardening (a8e1d55):** (1) BotRunnerService map transition guard — skip all work (snapshot, IPC, behavior tree) when `HasEnteredWorld && IsInMapTransition`, sleep 500ms. (2) ThreadSynchronizer: cached log dir to eliminate Process.GetCurrentProcess() flood (79K+ Win32Exceptions), added WndProc hook integrity verification via GetWindowLong. (3) SignalEventManager: Paused flag suppressed during Transferring state. (4) CrashTrace methods: use cached paths instead of Process.GetCurrentProcess() in ObjectManager, ForegroundBotWorker, MovementRecorder.
+  - **FG login fix (3c72200):** Map transition guard blocked FG login sequence. ContinentId reads 0xFFFFFFFF at login screen → `IsInMapTransition` returned true → BotRunnerService skipped ALL work including login behavior tree. Fix: guard only applies after `HasEnteredWorld`.
+  - **RFC_FullDungeonRun test PASSING:** 10-bot dungeon test passes in 1m16s. FG bot logs in, coordinator drives group formation + teleport to RFC, bots navigate map 389 with physics-based movement. WoW.exe survives entire run.
+- **Commits:** `a8e1d55` → `3c72200`
+- **Test baseline:** RFC_FullDungeonRun passes. 140/140 physics tests pass.
 - **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings at `D:/World of Warcraft/Buildings/`.
-- **P5 status:** BG bot fixes (packet rate, waypoint dispatch) complete. **FG bot still crashes ~27s after entering world during CoordinatorPrep phase.** Second injection succeeds.
-- **FG crash investigation:**
-  - Crash is native (no .NET stack trace, process just dies)
-  - Consistent timing: ~27s after CoordinatorPrep starts (5s after CSM→InWorld, WndProc TIMEOUTs begin)
-  - Not Warden (Warden.WinEnabled=0 in mangosd.conf)
-  - Firstchance log shows Win32Exception flood + NullRef in LocalPlayer.InGhostForm + SetControlBit null device
-  - ThreadSynchronizer log shows WM_USER TIMEOUTs starting 5s after CSM registration — main thread stops pumping messages
-  - Occurs during coordinator teleport phase (Org → RFC map transitions)
-  - Second injection always works — FG bot survives and operates normally
+- **P5 status:** RFC dungeon test fully passing. Remaining: SMSG_COMPRESSED_MOVES parser errors (non-blocking), PathfindingClient reconnect during shutdown (cosmetic).
 - **Next:**
-  1. **FG crash root cause** — Add instrumentation to identify what happens on the main thread at timeout onset. Suspect: coordinator SOAP teleport triggers map transition while hooks are still initializing, OR Process.GetCurrentProcess().MainModule calls in multiple logging paths (seen at lines 112, 206-207, 231, 249 of ForegroundBotWorker/ThreadSynchronizer)
-  2. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  1. P3/P4: FG packet capture tests (fishing parity, teleport flags)
+  2. Investigate SMSG_COMPRESSED_MOVES parsing errors during dungeon runs
