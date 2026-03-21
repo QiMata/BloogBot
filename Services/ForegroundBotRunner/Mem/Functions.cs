@@ -231,6 +231,8 @@ namespace ForegroundBotRunner.Mem
         static public void SetControlBit(int bit, int state, int tickCount)
         {
             var ptr = MemoryManager.ReadIntPtr(MemoryAddresses.SetControlBitDevicePtr);
+            if (ptr == nint.Zero)
+                return; // Device not initialized yet (early world entry)
             if (SetControlBitSafeFunction(ptr, bit, state, tickCount, MemoryAddresses.SetControlBitFunPtr) == 0)
                 Log.Warning("[FG] SetControlBit SEH exception — skipping");
         }
