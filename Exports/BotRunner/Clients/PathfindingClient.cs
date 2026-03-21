@@ -210,6 +210,7 @@ namespace BotRunner.Clients
                 // This is CORRECT behavior — do NOT fall back to dead reckoning, which has no
                 // wall collision and causes the bot to walk through dungeon walls.
                 // The NavigationPath layer handles repath/avoidance when the bot is stuck.
+
                 return result;
             }
             catch (Exception ex)

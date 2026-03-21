@@ -460,16 +460,18 @@ namespace PathfindingService
                     if (pinHandle.IsAllocated) pinHandle.Free();
                 }
 
-                // Log every 100th physics step to diagnose ground snapping
+                // Log every 100th physics step for diagnostics
                 if (++_physicsLogCounter % 100 == 1)
                 {
+                    float dxd = physicsOutput.x - physicsInput.x;
+                    float dyd = physicsOutput.y - physicsInput.y;
                     float dz = physicsOutput.z - physicsInput.z;
                     logger.LogInformation(
-                        "[PHYS_DIAG] frame={Frame} in=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) dZ={DZ:F2} groundZ={GZ:F1} flags=0x{F:X} prevGZ={PGZ:F1} dt={DT:F4}",
+                        "[PHYS_DIAG] frame={Frame} in=({X:F3},{Y:F3},{Z:F3}) out=({OX:F3},{OY:F3},{OZ:F3}) dx={DX:F4} dy={DY:F4} dZ={DZ:F4} groundZ={GZ:F2} flags=0x{F:X} outFlags=0x{OF:X} prevGZ={PGZ:F2} dt={DT:F4}",
                         physicsInput.frameCounter,
                         physicsInput.x, physicsInput.y, physicsInput.z,
                         physicsOutput.x, physicsOutput.y, physicsOutput.z,
-                        dz, physicsOutput.groundZ, physicsOutput.moveFlags,
+                        dxd, dyd, dz, physicsOutput.groundZ, physicsInput.moveFlags, physicsOutput.moveFlags,
                         physicsInput.prevGroundZ, physicsInput.deltaTime);
                 }
 

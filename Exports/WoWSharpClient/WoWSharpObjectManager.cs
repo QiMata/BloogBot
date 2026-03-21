@@ -57,10 +57,8 @@ namespace WoWSharpClient
         private PathfindingClient _pathfindingClient;
 
         // Movement controller - handles all movement logic
-
-
-        // Movement controller - handles all movement logic
         private MovementController _movementController;
+        private int _gameLoopReentrancyGuard; // 0 = idle, 1 = running
 
 
         private LoginScreen _loginScreen;
@@ -225,6 +223,12 @@ namespace WoWSharpClient
 
         private void OnGameLoopTick(object? sender, ElapsedEventArgs e)
         {
+            // Reentrancy guard: System.Timers.Timer fires on ThreadPool threads.
+            // If the physics IPC takes >50ms, the next tick fires concurrently.
+            // Without this guard, two ticks read the same starting position and the
+            // second overwrites the first's result — causing position oscillation.
+            if (Interlocked.CompareExchange(ref _gameLoopReentrancyGuard, 1, 0) != 0)
+                return;
             try
             {
                 var now = _worldTimeTracker.NowMS;
@@ -288,6 +292,10 @@ namespace WoWSharpClient
             catch (Exception ex)
             {
                 Log.Error(ex, "[GameLoop] Tick error");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _gameLoopReentrancyGuard, 0);
             }
         }
 
