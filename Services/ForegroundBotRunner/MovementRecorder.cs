@@ -54,13 +54,13 @@ namespace ForegroundBotRunner
         /// <summary>Replace NaN/Infinity with 0. Memory reads can return garbage during state transitions.</summary>
         private static float Safe(float v) => float.IsFinite(v) ? v : 0f;
 
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
+        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.
+        /// Uses AppContext.BaseDirectory to avoid Process.GetCurrentProcess() calls.</summary>
         private static void CrashTrace(string message)
         {
             try
             {
-                var logPath = Path.Combine(Path.Combine(Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ".") ?? ".", "WWoWLogs"), "crash_trace.log");
-                try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)!); } catch { }
+                var logPath = Path.Combine(AppContext.BaseDirectory, "WWoWLogs", "crash_trace.log");
                 using var sw = new StreamWriter(logPath, true);
                 sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Recorder] {message}");
                 sw.Flush();

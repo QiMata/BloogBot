@@ -17,6 +17,9 @@ namespace ForegroundBotRunner.Mem
         private static extern nint SetWindowLong(nint hWnd, int nIndex, nint dwNewLong);
 
         [DllImport("user32.dll")]
+        private static extern nint GetWindowLong(nint hWnd, int nIndex);
+
+        [DllImport("user32.dll")]
         private static extern int CallWindowProc(nint lpPrevWndFunc, nint hWnd, int Msg, int wParam, int lParam);
 
         [DllImport("user32.dll")]
@@ -73,9 +76,17 @@ namespace ForegroundBotRunner.Mem
 
         // Set to true to disable the window hook (for Warden testing)
         // When disabled, RunOnMainThread will execute directly (WARNING: may cause threading issues)
-        private static readonly bool DISABLE_WINDOW_HOOK = false; // Re-enabled: thread safety required for Lua calls
+        private static readonly bool DISABLE_WINDOW_HOOK = false;
 
         private static volatile bool _hookInstalled = false;
+
+        /// <summary>Our WndProc function pointer — cached for hook-still-installed verification.</summary>
+        private static nint _ourCallbackPtr;
+
+        /// <summary>Cached WoW log directory — avoids Process.GetCurrentProcess() on every log write.
+        /// Process.GetCurrentProcess().MainModule throws Win32Exception on WoW's main thread,
+        /// flooding the first-chance exception handler and potentially destabilizing the process.</summary>
+        private static string? _cachedLogDir;
 
         /// <summary>Cached main thread ID — captured from WndProc on its first invocation,
         /// which guarantees it's WoW's actual main thread (window message pump thread).
@@ -142,16 +153,32 @@ namespace ForegroundBotRunner.Mem
                 return;
             }
 
+            // Cache the log directory FIRST — before any DiagLogStatic calls.
+            // This avoids Process.GetCurrentProcess().MainModule calls later (which
+            // throw Win32Exception on WoW's main thread and flood first-chance handler).
+            try
+            {
+                string wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+                _cachedLogDir = Path.Combine(wowDir, "WWoWLogs");
+                Directory.CreateDirectory(_cachedLogDir);
+            }
+            catch
+            {
+                _cachedLogDir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                try { Directory.CreateDirectory(_cachedLogDir); } catch { }
+            }
+
             EnumWindows(FindWindowProc, nint.Zero);
             newCallback = WndProc;
-            oldCallback = SetWindowLong(windowHandle, GWL_WNDPROC, Marshal.GetFunctionPointerForDelegate(newCallback));
+            _ourCallbackPtr = Marshal.GetFunctionPointerForDelegate(newCallback);
+            oldCallback = SetWindowLong(windowHandle, GWL_WNDPROC, _ourCallbackPtr);
             _hookInstalled = true;
             // NOTE: Do NOT cache _mainThreadId here — the static constructor runs on
             // the LoadLibrary thread, NOT WoW's main thread. _mainThreadId is captured
             // on the first WndProc invocation (which IS the main thread).
 
             // Log initialization result
-            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X} (mainThreadId deferred to WndProc)");
+            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X}, ourCallback=0x{_ourCallbackPtr:X} (mainThreadId deferred to WndProc)");
             if (windowHandle == 0)
             {
                 DiagLogStatic("WARNING: Window handle not found! WM_USER messages will not be delivered.");
@@ -207,8 +234,27 @@ namespace ForegroundBotRunner.Mem
             if (!signal.Wait(TimeSpan.FromSeconds(5)))
             {
                 _timeoutCount++;
+
+                // Verify WndProc hook is still installed — if something overwrote it,
+                // WM_USER messages no longer reach our callback.
+                string hookStatus = "unknown";
+                try
+                {
+                    nint currentProc = GetWindowLong((nint)windowHandle, GWL_WNDPROC);
+                    if (currentProc == _ourCallbackPtr)
+                        hookStatus = "INTACT";
+                    else if (currentProc == oldCallback)
+                        hookStatus = $"REVERTED to original 0x{oldCallback:X}";
+                    else
+                        hookStatus = $"HIJACKED to 0x{currentProc:X} (ours=0x{_ourCallbackPtr:X})";
+                }
+                catch (Exception ex) { hookStatus = $"CHECK_FAILED: {ex.Message}"; }
+
+                var csm = _connectionState;
+                var csmInfo = csm != null ? $"state={csm.CurrentState} luaSafe={csm.IsLuaSafe}" : "not registered";
+
                 Log.Error($"[THREAD] Timeout waiting for main thread (timeout #{_timeoutCount}, success #{_successCount})");
-                DiagLogStatic($"TIMEOUT #{_timeoutCount} waiting for main thread (windowHandle=0x{windowHandle:X})");
+                DiagLogStatic($"TIMEOUT #{_timeoutCount} waiting for main thread — hook={hookStatus}, paused={Paused}, csm=[{csmInfo}], windowHandle=0x{windowHandle:X}, queueDepth={delegateQueue.Count}");
                 return default!;
             }
 
@@ -222,17 +268,20 @@ namespace ForegroundBotRunner.Mem
             return default!;
         }
 
-        // Simple diagnostic logging to file
+        // Simple diagnostic logging to file — uses cached log dir to avoid
+        // Process.GetCurrentProcess() calls on WoW's main thread.
         private static void DiagLogStatic(string message)
         {
             try
             {
-                string wowDir;
-                try { wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory; }
-                catch { wowDir = AppContext.BaseDirectory; }
-                var logsDir = Path.Combine(wowDir, "WWoWLogs");
-                try { Directory.CreateDirectory(logsDir); } catch { }
-                var logPath = Path.Combine(logsDir, "thread_synchronizer_debug.log");
+                var dir = _cachedLogDir;
+                if (dir == null)
+                {
+                    // Fallback only during earliest init before cache is set
+                    dir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                    try { Directory.CreateDirectory(dir); } catch { }
+                }
+                var logPath = Path.Combine(dir, "thread_synchronizer_debug.log");
                 File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
             }
             catch { }
@@ -246,8 +295,8 @@ namespace ForegroundBotRunner.Mem
         {
             try
             {
-                var logPath = Path.Combine(Path.Combine(Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ".") ?? ".", "WWoWLogs"), "crash_trace.log");
-                try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)!); } catch { }
+                var dir = _cachedLogDir ?? Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                var logPath = Path.Combine(dir, "crash_trace.log");
                 using var sw = new StreamWriter(logPath, true);
                 sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
                 sw.Flush();

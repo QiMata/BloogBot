@@ -216,12 +216,14 @@ namespace ForegroundBotRunner.Mem.Hooks
                     if (newState == State.Transferring)
                     {
                         BeginTeleportPauseCallback();
-                        DiagLog("TRANSFER: ObjectManager paused (cross-map transfer)");
+                        SignalEventManager.Paused = true;
+                        DiagLog("TRANSFER: ObjectManager + SignalEvents paused (cross-map transfer)");
                     }
                     else if (oldState == State.Transferring && newState == State.InWorld)
                     {
                         EndTeleportPauseCallback();
-                        DiagLog("TRANSFER: ObjectManager resumed (back in world)");
+                        SignalEventManager.Paused = false;
+                        DiagLog("TRANSFER: ObjectManager + SignalEvents resumed (back in world)");
                     }
 
                     try { OnStateChanged?.Invoke(oldState, newState); }

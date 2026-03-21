@@ -45,23 +45,14 @@ namespace ForegroundBotRunner.Statics
             catch { }
         }
 
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
-
-
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
-
-
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
-
-
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
+        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.
+        /// Uses cached DiagnosticLogPath directory to avoid Process.GetCurrentProcess() calls.</summary>
         private static void CrashTrace(string message)
         {
             try
             {
-                var logPath = System.IO.Path.Combine(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ".") ?? ".", "WWoWLogs"), "crash_trace.log");
-                try { Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!); } catch { }
-                using var sw = new System.IO.StreamWriter(logPath, true);
+                var logPath = Path.Combine(Path.GetDirectoryName(DiagnosticLogPath)!, "crash_trace.log");
+                using var sw = new StreamWriter(logPath, true);
                 sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [ObjMgr] {message}");
                 sw.Flush();
             }

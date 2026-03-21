@@ -15,6 +15,8 @@ public class RfcBotFixture : LiveBotFixture, IAsyncLifetime
     {
         // Enable coordinator — it owns group lifecycle, so skip fixture group cleanup
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
+        // Hooks verified safe — crash is not caused by packet/signal/WndProc hooks.
+        // (WWOW_DISABLE_PACKET_HOOKS, WWOW_DISABLE_WNDPROC_HOOK both tested)
         SkipGroupCleanup = true;
 
         // Set RFC settings before launching StateManager

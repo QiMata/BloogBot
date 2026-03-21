@@ -20,6 +20,13 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static volatile bool _hooksInitialized;
 
+        /// <summary>
+        /// When true, SignalEvent callbacks return immediately without processing.
+        /// Set during map transfers to prevent stale pointer dereferences in
+        /// WoW's event argument data during teardown/rebuild phases.
+        /// </summary>
+        public static volatile bool Paused;
+
         static SignalEventManager()
         {
             string wowDir;
@@ -171,6 +178,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             // the method body and can't be caught by try/catch). We marshal manually here.
             try
             {
+                if (Paused) return;
                 _eventCount++;
 
                 // eventNamePtrPtr is a ptr-to-ptr: dereference to get actual string pointer.
@@ -318,6 +326,7 @@ namespace ForegroundBotRunner.Mem.Hooks
         {
             try
             {
+                if (Paused) return;
                 _eventCount++;
 
                 // eventNamePtrPtr is a ptr-to-ptr: dereference inside try/catch for SEH safety.
