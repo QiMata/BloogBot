@@ -91,7 +91,7 @@ namespace WoWSharpClient.Movement
         // When true, sync _lastPacketPosition to current player position on next Update().
         // Needed because Reset() runs before the teleport position is applied to _player.
         private bool _needsPacketPositionSync;
-        private const uint PACKET_INTERVAL_MS = 500;
+        private const uint PACKET_INTERVAL_MS = 200;
         private uint _latestGameTimeMs;
         private uint _staleForwardSuppressUntilMs;
         private int _staleForwardNoDisplacementTicks;
