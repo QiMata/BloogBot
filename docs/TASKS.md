@@ -119,9 +119,59 @@ dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --con
 dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
+## P6 — AABB Collision Rewrite (WoW.exe Exact Parity)
+
+**Goal:** Replace our capsule 3-pass collision with WoW.exe's exact AABB-based CollisionStep (VA 0x633840). Remove ALL custom workarounds. The binary is the source of truth.
+
+### Why
+Our current system has accumulated layers of hacks to work around capsule-vs-terrain issues: false-FALLINGFAR stripping, ground persistence probes, terrain-following in SIDE pass, multi-height GetGroundZ, slope projection, walk experiment. These break in tight corridors/caves and don't match the original client.
+
+### WoW.exe CollisionStep Algorithm (0x633840, Grounded Path)
+```
+1. AABB = pos ± collisionSkin(0.333) XY, pos.Z to pos.Z + stepHeight(2.028)
+2. slopeLimit = max(GetBoundingRadius() * tan(50°), skin + 1/720)
+3. SWEEP 1: moveDir * (slopeLimit + speed*dt) → CWorldCollision::Collide
+4. SWEEP 2: moveDir * speed*dt * 0.5, contracted by skin*√2 → Collide
+5. STEP HEIGHT: bbox.maxZ += min(2*radius, speed*dt)
+6. GROUND SEARCH: bbox.minZ = bbox.maxZ - (radius + speed*dt*tan(50°))
+7. TestTerrain validation at final position
+```
+
+### Implementation Tasks
+
+| # | Task | Status |
+|---|------|--------|
+| 6.1 | Implement `SweepAABB` in SceneQuery — SAT-based AABB-triangle test against SceneCache | Open |
+| 6.2 | Implement `TestTerrain` equivalent — query contacts within AABB at static position | Open |
+| 6.3 | Rewrite `CollisionStepWoW` to use SweepAABB with exact WoW.exe bounds | Open |
+| 6.4 | Remove `PerformThreePassMove` / `ExecuteUpPass` / `ExecuteSidePass` / `ExecuteDownPass` — no longer needed | Open |
+| 6.5 | Remove `CollideAndSlide` terrain-following hack in PhysicsCollideSlide.cpp | Open |
+| 6.6 | Remove false-FALLINGFAR stripping from MovementController.cs | Open |
+| 6.7 | Remove ground contact persistence (multi-probe rescue) from StepV2 | Open |
+| 6.8 | Remove walk experiment bypass | Open |
+| 6.9 | Unit tests: AABB sweep on flat terrain, uphill, downhill, ledge, corridor, cave ceiling | Open |
+| 6.10 | Unit tests: RFC map 389 corridor + cave — verify no ceiling/overhang clipping | Open |
+| 6.11 | Physics replay regression: verify avg error stays < 0.05y | Open |
+| 6.12 | Live tests: speed, combat, gathering — all must pass | Open |
+
+### Key Files
+- `Exports/Navigation/SceneQuery.h/.cpp` — add `SweepAABB`, `TestTerrainAABB`
+- `Exports/Navigation/PhysicsEngine.cpp` — rewrite `CollisionStepWoW`, remove 3-pass
+- `Exports/Navigation/PhysicsCollideSlide.cpp` — remove terrain-following hack
+- `Exports/WoWSharpClient/Movement/MovementController.cs` — remove FALLINGFAR stripping
+- `Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs` — add AABB + corridor tests
+
+### Reference: SAT AABB-Triangle Test
+Standard separating axis theorem with 13 axes:
+- 3 AABB face normals (X, Y, Z)
+- 1 triangle face normal
+- 9 edge cross products (3 AABB edges × 3 triangle edges)
+
+---
+
 ## Session Handoff
-- **Last updated:** 2026-03-22 (session 129)
-- **Branch:** `main` (merged from `cpp_physics_system`)
+- **Last updated:** 2026-03-22 (session 129, continued)
+- **Branch:** `main`
 - **Session 129 completed:**
   - Merged `cpp_physics_system` → `main` (131+ conflict resolutions)
   - Phases 5-6: FG hardening + opcode coverage sweep
