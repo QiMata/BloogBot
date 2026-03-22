@@ -630,15 +630,23 @@ namespace WoWSharpClient.Movement
                     && _hasPhysicsGroundContact  // Only trust _prevGroundZ if established from real physics ground
                     ? output.NewPosZ - _prevGroundZ
                     : float.MaxValue; // Unknown ground → assume far (let FALLINGFAR through)
-                // Gap must be non-negative AND small: bot is at or slightly above ground.
-                // Negative gap = bot is BELOW last known ground (fell through terrain) —
-                // FALLINGFAR is correct in that case and must not be stripped.
-                bool closeToGroundSurface = gapFromLastGround >= 0f && gapFromLastGround < 4.0f;
+                // Gap must be small: bot is near the last known ground surface.
+                // Allow small negative gap (-2y) for downhill slopes — the bot naturally
+                // descends below _prevGroundZ when walking down terrain. Without this
+                // tolerance, the first FALLINGFAR frame on a downhill slope is preserved,
+                // which blocks MOVEFLAG_FORWARD via IsPlayerAirborne(), causing the bot
+                // to enter true freefall and fall through the map.
+                // Large negative gap (< -2y) = fell through terrain → keep FALLINGFAR.
+                bool closeToGroundSurface = gapFromLastGround >= -2.0f && gapFromLastGround < 4.0f;
                 if ((output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0 && closeToGroundSurface)
                 {
                     output.MovementFlags &= ~(uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
                     output.FallTime = 0;
                     output.NewVelZ = 0;
+                    // When airborne, C++ sets output.GroundZ = input.prevGroundZ (echoes
+                    // the stale value). Override with current position so _prevGroundZ
+                    // tracks the descent on downhill slopes instead of freezing.
+                    output.GroundZ = output.NewPosZ;
                     _falseFreefallCount++;
                     if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
                     {
