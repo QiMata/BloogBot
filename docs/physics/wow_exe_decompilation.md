@@ -486,3 +486,77 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 
 ### Architectural Difference: AABB vs Capsule
 WoW.exe uses an **axis-aligned bounding box** (AABB) for collision, NOT a capsule. Our engine uses capsule sweeps via VMAP's `SceneQuery::SweepCapsule`. Both produce equivalent results for normal gameplay — the capsule is slightly more accurate for diagonal movement near corners, while the AABB is faster. The behavioral difference is negligible for physics parity.
+
+## Spatial Collision Grid (VA 0x6AA8B0)
+
+The core intersection query operates on a spatial grid covering the entire map:
+
+### Grid Parameters
+| Constant | Address | Value | Meaning |
+|----------|---------|-------|---------|
+| Grid center | `0x7FFAB4` | 17066.666 | `51200/3` — world-space center offset |
+| Grid scale | `0x810AE4` | 0.24 | World → grid conversion (`1/4.1667`) |
+| Cell center | `0x86AA2C` | 0.5 | Half-cell offset for rounding |
+| Grid extent | `0x7FFAB0` | 34133.332 | `2 × 17066.666` — full map width |
+| Walkable Z | `0x80DFFC` | 0.642788 | cos(50°) — min normal.Z for walkable |
+
+### Grid Structure
+- **Map size**: 34133.33 yards (matches WoW's 64×64 ADT grid at 533.33 yards/ADT)
+- **Cell size**: ~4.167 yards (`1 / 0.24`)
+- **Chunk size**: 8 cells = ~33.33 yards (matches ADT sub-chunks)
+- **Grid indices**: computed as `floor(worldPos * 0.24 - 0.5)`, then `>> 3` for chunk
+
+### Query Flow (0x6AA8B0)
+1. Convert AABB bounds from world space to grid indices
+2. Divide by 8 to get chunk range
+3. For each chunk in range: call `0x6AADC0` (per-chunk intersection test)
+4. Each chunk tests against terrain heightmap + WMO/M2 BSP trees
+5. Results: array of contact structs (52 bytes each: point, normal, depth, flags)
+
+### Contact Struct (52 bytes = 0x34)
+```
++0x00  Vec3   contactPoint     World-space contact location
++0x08  float  normalZ          Quick-access normal Z (checked against 0.642788)
++0x0C  Vec3   contactNormal    Full normal vector
++0x18  float  penetrationDepth
++0x1C  ...    flags/instanceId
+```
+
+### Key Function Chain
+```
+CollisionStep (0x633840)
+  → AABB::Merge (0x6373B0)              // Merge start + end AABBs
+  → CWorldCollision::TestTerrain (0x6721B0)
+    → SpatialQuery (0x6AA8B0)
+      → PerChunkTest (0x6AADC0)         // Per-chunk terrain + model intersection
+        → TerrainHeightmap test
+        → WMO BSP tree intersection
+        → M2 doodad collision
+      → Filter: normal.Z >= cos(50°)
+      → Copy to result array (stride 0x34)
+  → SlideAlongNormal (0x637330)         // Project displacement along contact
+```
+
+## Remote Unit Extrapolation (VA 0x616DE0)
+
+Used for OTHER players/NPCs (not local player). Predicts position between heartbeats:
+
+### Per-Frame Loop
+```
+while (accumulatedTime < totalDelta):
+    if (flags & 0x20FF):  // any movement flag active
+        if (hasSpline && !paused):
+            ExtrapolateFromFlags(0x616AF0)
+            speed² check: >3600 = teleport, <9 = jitter
+        else:
+            SplineStep(0x7C5360)
+            TerrainCollisionCheck(0x6191C0)  // optional
+    ApplyDisplacement(0x616CB0)
+    accumulatedTime += frameDelta
+```
+
+### Speed Thresholds
+| Threshold | Value | Check |
+|-----------|-------|-------|
+| Teleport | speed² > 3600 (>60 y/s) | Reject displacement |
+| Jitter | speed² < 9 (<3 y/s) | Ignore micro-movement |
