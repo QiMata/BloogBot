@@ -70,22 +70,6 @@ void InitializeAllSystems()
     // --- Data root ---
     std::string dataRoot;
     {
-<<<<<<< HEAD
-        // Get data root from environment variable if set.
-        // Use Win32 GetEnvironmentVariableA (not _dupenv_s) because .NET's
-        // Environment.SetEnvironmentVariable updates the process environment block
-        // but NOT the CRT cache that _dupenv_s reads from.
-        std::string dataRoot;
-        {
-            char buf[512] = {0};
-            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
-            if (len > 0 && len < sizeof(buf))
-            {
-                dataRoot = buf;
-                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                    dataRoot += '/';
-            }
-=======
         char buf[512] = {0};
         DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
         if (len > 0 && len < sizeof(buf))
@@ -93,7 +77,6 @@ void InitializeAllSystems()
             dataRoot = buf;
             if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
                 dataRoot += '/';
->>>>>>> cpp_physics_system
         }
     }
 
@@ -141,28 +124,6 @@ void InitializeAllSystems()
                 }
             }
         }
-<<<<<<< HEAD
-
-        // Set scenes/ directory for pre-cached collision data (if not already set).
-        // Directory doesn't need to exist yet — EnsureMapLoaded() creates it on first extraction.
-        // Don't overwrite if already configured (e.g. by test fixture via SetScenesDir export).
-        if (SceneQuery::GetScenesDir().empty())
-        {
-            if (!dataRoot.empty())
-                SceneQuery::SetScenesDir(dataRoot + "scenes/");
-            else
-                SceneQuery::SetScenesDir("scenes/");
-        }
-
-        // Initialize Navigation
-        Navigation::GetInstance()->Initialize();
-
-        // Initialize Physics Engine
-        PhysicsEngine::Instance()->Initialize();
-
-        g_initialized = true;
-=======
->>>>>>> cpp_physics_system
     }
     catch (...) {}
 

@@ -586,8 +586,6 @@ extern "C"
             SceneQuery::SetScenesDir(dir);
     }
 
-<<<<<<< HEAD
-=======
     // ==========================================================================
     // WMO DOODAD EXTRACTION (MPQ → .doodads files)
     // ==========================================================================
@@ -1079,5 +1077,4 @@ extern "C"
         return filesWritten;
     }
 
->>>>>>> cpp_physics_system
 } // extern "C"

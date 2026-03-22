@@ -1123,79 +1123,14 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
     // let the capsule slide past the edge; the DOWN pass then snaps to terrain
     // several yards below, making the character walk through support posts.
     // =========================================================================
-    if (wasGrounded && !isJumping && sideDist > MIN_MOVE_DISTANCE) {
-        // Probe at the capsule's leading edge, not just the center.
-        // The capsule extends 'radius' past the center, so the bottom can overhang
-        // a pier edge even while the center is still above the pier surface.
-        float sideDx = st.x - afterUpX;
-        float sideDy = st.y - afterUpY;
-        float sideDirLen = std::sqrt(sideDx * sideDx + sideDy * sideDy);
-        float probeX = st.x, probeY = st.y;
-        if (sideDirLen > PhysicsConstants::GROUND_SNAP_EPSILON) {
-            probeX = st.x + (sideDx / sideDirLen) * radius;
-            probeY = st.y + (sideDy / sideDirLen) * radius;
-        }
-
-        float groundProbeZ = SceneQuery::GetGroundZ(input.mapId, probeX, probeY, originalZ,
-            PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
-        // Also probe at the pre-side position to know what surface we were on
-        float originGroundZ = SceneQuery::GetGroundZ(input.mapId, afterUpX, afterUpY, originalZ,
-            PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
-
-        // Threshold increased from STEP_HEIGHT+0.5 (2.625y) to 4.0y because
-        // GetGroundZ only sees ADT terrain, not M2/WMO collision surfaces.
-        // Normal terrain in Valley of Trials has up to 3y ADT height variance
-        // between adjacent grid points. The old threshold (2.625y) falsely
-        // blocked horizontal movement on ordinary terrain. Real ledge edges
-        // (pier/dock/bridge to terrain below) are typically 5-15y drops.
-        const float ledgeThreshold = 6.0f;
-        bool isLedgeDrop = false;
-
-        if (VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {
-            float dropFromOrigin = originGroundZ - groundProbeZ;
-            // Standard check: ground drops significantly between old and new positions
-            isLedgeDrop = (dropFromOrigin > ledgeThreshold);
-
-            // Elevated-structure check: character is on a WMO/M2 surface that
-            // GetGroundZ can't see (it returns terrain far below the character).
-            // In this case dropFromOrigin is small (both probes see terrain), but
-            // the character is clearly elevated. Use a high threshold (5y) to
-            // distinguish real elevated structures (docks, piers, bridges — typically
-            // 5-15y above terrain) from normal terrain/collision mesh variance
-            // (typically 1-3y at Valley of Trials, hillsides, etc.).
-            // A lower threshold (e.g. STEP_HEIGHT = 2.125y) falsely triggers on
-            // normal terrain, blocking all horizontal movement.
-            constexpr float ELEVATED_STRUCTURE_THRESHOLD = 8.0f;
-            if (!isLedgeDrop) {
-                float charAboveOriginGround = originalZ - originGroundZ;
-                if (charAboveOriginGround > ELEVATED_STRUCTURE_THRESHOLD) {
-                    float dropFromCharacter = originalZ - groundProbeZ;
-                    isLedgeDrop = (dropFromCharacter > PhysicsConstants::STEP_HEIGHT);
-                }
-            }
-        }
-        // NOTE: Previously had a void check here (groundProbeZ invalid, originGroundZ valid)
-        // that declared a ledge. Removed because GetGroundZ ray casts can't see WMO/M2
-        // collision surfaces, causing false positives on terrain where the capsule sweep
-        // finds walkable ground but the ray returns -200000. The DOWN pass and standard
-        // drop check handle real ledge edges correctly.
-
-        if (isLedgeDrop) {
-            // Clamp back to pre-side position
-            st.x = afterUpX;
-            st.y = afterUpY;
-            st.z = afterUpZ;
-            result.collisionSide = true; // Report as if we hit a wall
-            {
-                std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-                oss << "[LedgeGuard] Blocked ledge drop: groundProbeZ=" << groundProbeZ
-                    << " originGroundZ=" << originGroundZ
-                    << " originalZ=" << originalZ
-                    << " sideDist=" << sideDist;
-                PHYS_ERR(PHYS_MOVE, oss.str());
-            }
-        }
-    }
+    // LEDGE GUARD REMOVED — WoW.exe (0x633840) does NOT have a ledge guard.
+    // The client's 2-pass AABB sweep handles terrain drops naturally:
+    //   - If the DOWN pass finds walkable ground → character moves there
+    //   - If the DOWN pass finds no ground → character enters freefall
+    // Our previous LedgeGuard used GetGroundZ ray probes (ADT-only, can't see WMO/M2)
+    // which caused false positives on normal hilly terrain (Valley of Trials, Durotar).
+    // The DOWN pass + freefall entry is the correct mechanism for handling ledges.
+    (void)wasGrounded; (void)isJumping; (void)sideDist; (void)afterUpX; (void)afterUpY; (void)afterUpZ;
 
     // =========================================================================
     // Step 4: DOWN PASS - Undo step offset + snap to ground
@@ -1853,10 +1788,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	st.orientation = simO; st.pitch = input.pitch;
 	st.vx = input.vx; st.vy = input.vy; st.vz = input.vz;
 	st.fallTime = input.fallTime / 1000.0f;  // Convert ms (from client) → seconds for internal physics
-<<<<<<< HEAD
-=======
 	st.fallStartZ = input.fallStartZ;
->>>>>>> cpp_physics_system
 	st.groundNormal = { 0,0,1 };
 	const bool inputSwimmingFlag = (input.moveFlags & MOVEFLAG_SWIMMING) != 0;
 	const bool inputAirborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
@@ -3150,10 +3082,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// but the physics engine ignores them — horizontal velocity is carried from launch.
 	}
 
-<<<<<<< HEAD
-	out.groundZ = st.z;
-	out.fallTime = st.fallTime * 1000.0f;  // Convert seconds (internal) → ms for output
-=======
 	// Ground Z output: when grounded, st.z was snapped to terrain by the DOWN pass.
 	// When airborne, st.z is the falling position — use prevGroundZ (the last grounded
 	// surface) so the C# side can distinguish real falls (large gap) from capsule sweep
@@ -3182,7 +3110,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		out.fallDistance = 0.0f;
 	}
 	out.fallStartZ = st.fallStartZ;
->>>>>>> cpp_physics_system
 	out.liquidZ = finalLiq.level;
 	out.liquidType = finalLiq.type;
 	out.groundNx = st.groundNormal.x;

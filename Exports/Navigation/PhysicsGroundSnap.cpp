@@ -343,11 +343,7 @@ float ApplyVerticalDepenetration(
             float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
                 PhysicsConstants::STEP_DOWN_HEIGHT);
             if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-<<<<<<< HEAD
-                preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
-=======
                 preciseZ <= st.z + 0.1f && preciseZ >= planeZ - snapEps)
->>>>>>> cpp_physics_system
                 st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;

@@ -476,10 +476,7 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 // --- SceneCache management ---
 void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 {
-<<<<<<< HEAD
-=======
     std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
->>>>>>> cpp_physics_system
     auto it = m_sceneCaches.find(mapId);
     if (it != m_sceneCaches.end())
     {
@@ -494,20 +491,14 @@ void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 
 SceneCache* SceneQuery::GetSceneCache(uint32_t mapId)
 {
-<<<<<<< HEAD
-=======
     std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
->>>>>>> cpp_physics_system
     auto it = m_sceneCaches.find(mapId);
     return (it != m_sceneCaches.end()) ? it->second : nullptr;
 }
 
 void SceneQuery::ClearSceneCaches()
 {
-<<<<<<< HEAD
-=======
     std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
->>>>>>> cpp_physics_system
     for (auto& [id, cache] : m_sceneCaches)
         delete cache;
     m_sceneCaches.clear();
@@ -543,11 +534,6 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 {
     EnsureMapLoaded(mapId);
 
-<<<<<<< HEAD
-    // Scene cache fast path: pre-processed triangles with spatial index
-    if (auto* cache = GetSceneCache(mapId))
-        return cache->GetGroundZ(x, y, z, maxSearchDist);
-=======
     // Underground interiors (Undercity, mines, caves) can be 40-50y below the
     // terrain surface. The default 10y search distance fails to find the WMO
     // floor when the query starts underground. Increase search distance for
@@ -588,7 +574,6 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
             return sceneZ;
         }
     }
->>>>>>> cpp_physics_system
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
@@ -952,15 +937,10 @@ SceneQuery::LiquidInfo SceneQuery::EvaluateLiquidAt(uint32_t mapId, float x, flo
                 out.level = cell.level;
                 out.type = cell.type;
                 out.fromVmap = (cell.flags & 0x02) != 0;
-<<<<<<< HEAD
-                // Determine swimming based on z vs liquid level
-                out.isSwimming = (z < cell.level - 0.5f);
-=======
                 // Determine swimming: player is submerged when below the water surface.
                 // Must match PhysicsLiquid::Evaluate logic (immersion > 0.0f = z < level).
                 // Previous 0.5f threshold created a dead zone where the bot stood on water.
                 out.isSwimming = (z < cell.level);
->>>>>>> cpp_physics_system
             }
         }
         return out;

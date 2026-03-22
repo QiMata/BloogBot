@@ -3,10 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
-<<<<<<< HEAD
-=======
 #include <mutex>
->>>>>>> cpp_physics_system
 #include <unordered_map>
 #include "Vector3.h"
 #include "AABox.h"
@@ -240,8 +237,6 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
-<<<<<<< HEAD
-=======
         // Capsule-aware support query. Samples the center and nearby footprint points
         // so narrow ledges / triangle seams do not falsely report "no support" when the
         // character capsule is still safely supported.
@@ -254,25 +249,12 @@ class SceneQuery
             float maxSearchDist,
             float radius);
 
->>>>>>> cpp_physics_system
         // --- Scene Cache (pre-processed collision geometry) ---
         static void SetSceneCache(uint32_t mapId, SceneCache* cache);
         static SceneCache* GetSceneCache(uint32_t mapId);
         static void ClearSceneCaches();
         static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
         static const std::string& GetScenesDir() { return m_scenesDir; }
-<<<<<<< HEAD
-
-    private:
-        inline static VMAP::VMapManager2* m_vmapManager = nullptr;
-        inline static MapLoader* m_mapLoader = nullptr;
-        inline static bool m_initialized = false;
-        inline static std::string m_scenesDir;
-
-        // Per-map scene caches (pre-processed collision geometry)
-        inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
-=======
->>>>>>> cpp_physics_system
 
         // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
         // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).

@@ -187,11 +187,6 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 		const auto mmapsPath = Navigation::GetMmapsPath();
 		if (!std::filesystem::exists(mmapsPath))
 		{
-<<<<<<< HEAD
-			return;
-		}
-
-=======
 			printf("[Navigation] mmaps path does not exist: %s\n", mmapsPath.c_str());
 			return;
 		}
@@ -203,7 +198,6 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 		printf("[Navigation] Loading map %u tiles from: %s\n", mapId, mmapsPath.c_str());
 		int tileCount = 0;
 
->>>>>>> cpp_physics_system
 		for (auto& p : std::filesystem::directory_iterator(mmapsPath))
 		{
 			if (!p.is_regular_file())
@@ -239,12 +233,8 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 
 				int x = (xTens * 10) + xOnes;
 				int y = (yTens * 10) + yOnes;
-<<<<<<< HEAD
-				manager->loadMap(mapId, x, y);
-=======
 				if (manager->loadMap(mapId, x, y))
 					tileCount++;
->>>>>>> cpp_physics_system
 			}
 		}
 

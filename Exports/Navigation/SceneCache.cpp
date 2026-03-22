@@ -9,22 +9,15 @@
 #include "MapLoader.h"
 #include "CoordinateTransforms.h"
 #include "SceneQuery.h"
-<<<<<<< HEAD
-=======
 #include "WmoDoodadFormat.h"
->>>>>>> cpp_physics_system
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
 #include <cmath>
-<<<<<<< HEAD
-#include <unordered_set>
-=======
 #include <limits>
 #include <unordered_set>
 #include <unordered_map>
 #include <filesystem>
->>>>>>> cpp_physics_system
 
 // ============================================================================
 // FILE I/O
@@ -154,8 +147,6 @@ SceneCache* SceneCache::LoadFromFile(const char* path)
 }
 
 // ============================================================================
-<<<<<<< HEAD
-=======
 // DOODAD HELPERS (quaternion rotation, coordinate conversions)
 // ============================================================================
 
@@ -191,7 +182,6 @@ static G3D::Vector3 FixCoords(const G3D::Vector3& v)
 }
 
 // ============================================================================
->>>>>>> cpp_physics_system
 // EXTRACTION FROM LIVE VMAP + ADT DATA
 // ============================================================================
 
@@ -297,8 +287,6 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
         }
     }
 
-<<<<<<< HEAD
-=======
     // 1.5) Extract doodad (M2) collision from WMO instances
     if (vmapMgr)
     {
@@ -490,7 +478,6 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
         }
     }
 
->>>>>>> cpp_physics_system
     // 2) Extract ADT terrain triangles (already in world space)
     if (mapLoader && mapLoader->IsInitialized())
     {
@@ -720,12 +707,8 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
     uint32_t count = m_cellCount[ci];
 
     float bestZ = -200000.0f;
-<<<<<<< HEAD
-    float zMax = z + 0.5f;         // accept slightly above
-=======
     float bestErr = std::numeric_limits<float>::max();
     float zMax = z + maxSearchDist; // symmetric search: accept ground above too
->>>>>>> cpp_physics_system
     float zMin = z - maxSearchDist; // search below
 
     for (uint32_t j = 0; j < count; ++j)
@@ -764,10 +747,6 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
         // Interpolate Z
         float triZ = st.az + u * (st.cz - st.az) + v * (st.bz - st.az);
 
-<<<<<<< HEAD
-        if (triZ >= zMin && triZ <= zMax && triZ > bestZ)
-            bestZ = triZ;
-=======
         // Pick the surface closest to query Z (consistent with non-cached
         // SceneQuery::GetGroundZ which uses "closest to z" for multi-level).
         if (triZ >= zMin && triZ <= zMax) {
@@ -777,7 +756,6 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
                 bestErr = err;
             }
         }
->>>>>>> cpp_physics_system
     }
 
     return bestZ;

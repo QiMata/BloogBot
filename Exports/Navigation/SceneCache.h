@@ -111,9 +111,5 @@ private:
 
     // File format magic and version
     static constexpr uint32_t FILE_MAGIC = 0x454E4353;   // "SCNE"
-<<<<<<< HEAD
-    static constexpr uint32_t FILE_VERSION = 1;
-=======
     static constexpr uint32_t FILE_VERSION = 1;  // bump when scene cache format changes
->>>>>>> cpp_physics_system
 };
