@@ -1,0 +1,18 @@
+{
+  "name": "RFC_AllBotsEnterWorld",
+  "description": "Launch 10 bots with RFC config and verify they enter world",
+  "settings": "RagefireChasm.settings.json",
+  "enableCoordinator": false,
+  "minBots": 2,
+  "botEntryTimeoutSeconds": 90,
+  "setup": [],
+  "action": null,
+  "observe": {
+    "timeoutSeconds": 10,
+    "pollIntervalMs": 2000,
+    "logIntervalSeconds": 5
+  },
+  "assertions": {
+    "snapshotConditions": []
+  }
+}

@@ -38,8 +38,14 @@ public class MovementRecording
     [JsonPropertyName("frameCount")]
     public int FrameCount { get; set; }
 
+    [JsonPropertyName("packetCount")]
+    public int PacketCount { get; set; }
+
     [JsonPropertyName("durationMs")]
     public int DurationMs { get; set; }
+
+    [JsonPropertyName("packets")]
+    public List<RecordedPacketEvent> Packets { get; set; } = [];
 
     [JsonPropertyName("frames")]
     public List<RecordedFrame> Frames { get; set; } = [];
@@ -184,6 +190,9 @@ public class RecordedGameObject
 
     [JsonPropertyName("distanceToPlayer")]
     public float DistanceToPlayer { get; set; }
+
+    [JsonPropertyName("animProgress")]
+    public uint AnimProgress { get; set; }
 }
 
 public class RecordedUnit
@@ -253,6 +262,21 @@ public class RecordedUnit
 
     [JsonPropertyName("splineNodeCount")]
     public uint SplineNodeCount { get; set; }
+}
+
+public class RecordedPacketEvent
+{
+    [JsonPropertyName("timestampMs")]
+    public ulong TimestampMs { get; set; }
+
+    [JsonPropertyName("opcode")]
+    public ushort Opcode { get; set; }
+
+    [JsonPropertyName("opcodeHex")]
+    public string OpcodeHex { get; set; } = "";
+
+    [JsonPropertyName("isOutbound")]
+    public bool IsOutbound { get; set; }
 }
 
 public class RecordedPosition

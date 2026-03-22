@@ -19,40 +19,218 @@ namespace G3D {
 }
 class Navigation;
 
-// WoW 1.12.1 Physics Constants (values adjusted to more closely reflect retail client behaviour)
+// WoW 1.12.1 Physics Constants — extracted from client binary (build 5875)
+// and VMaNGOS server source. All addresses refer to WoW.exe unless noted.
 namespace PhysicsConstants
 {
-    // Gravity and movement
-    constexpr float GRAVITY = 19.2911f;          // kept same
-    constexpr float JUMP_VELOCITY = 7.95577f;    // kept same
+    // =========================================================================
+    // GRAVITY AND MOVEMENT
+    // =========================================================================
+
+    // WoW.exe 1.12.1 VA 0x0081DA58: 19.29110527 (0x419A542F as IEEE 754 float)
+    // Pre-computed: GRAVITY/2 @ 0x0081DA60, 2*GRAVITY @ 0x0081DA64,
+    //               1/GRAVITY @ 0x0080E020, -1/GRAVITY @ 0x0081DA5C
+    constexpr float GRAVITY = 19.29110527f;
+
+    // WoW.exe 0x7C626F: immediate 0xC0FE93D8 = -7.955547f (negative = upward)
+    // Swimming jump: 0x7C6266: 0xC1118C48 = -9.096748f
+    // Implied max jump height: v²/(2g) = 1.640 yards.
+    constexpr float JUMP_VELOCITY = 7.955547f;
+    constexpr float JUMP_VELOCITY_SWIMMING = 9.096748f;
+
     constexpr float WATER_LEVEL_DELTA = 2.0f;
 
-    // Ground detection (authentic vanilla: client allows ~2.1-2.2 unit step ups; testing shows 2.125f safe)
-    constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f; // tighter tolerance (remove hover)
-    constexpr float STEP_HEIGHT = 2.125f;            // maximum upward auto step (was 2.1f)
-    constexpr float STEP_DOWN_HEIGHT = 4.0f;         // maximum downward snap while still considered grounded (was 3.0f, vanilla allows larger safe drops)
+    // Initial downward velocity when transitioning from grounded to freefall.
+    // Small nudge ensures the character doesn't hover for one frame at vz=0.
+    constexpr float FALL_START_VELOCITY = -0.1f;
 
-    // Height constants
+    // WoW.exe VA 0x0087D894: 60.148003 (0x4270978E)
+    // This is NOT a hardcoded constant — it's computed at init by SetTerminalVelocity()
+    // (0x7C6160): termVel = param * STEP_HEIGHT_FACTOR(1.0936). Default param ≈ 55.0.
+    constexpr float TERMINAL_VELOCITY = 60.14800262f;
+
+    // Pre-computed gravity multiples stored as static floats in WoW.exe.
+    constexpr float HALF_GRAVITY = GRAVITY * 0.5f;      // 9.64555f — VA 0x0081DA60
+    constexpr float DOUBLE_GRAVITY = GRAVITY * 2.0f;    // 38.5822f — VA 0x0081DA64
+    constexpr float INV_GRAVITY = 1.0f / GRAVITY;       // 0.05184f — VA 0x0080E020
+    constexpr float NEG_INV_GRAVITY = -INV_GRAVITY;     //           — VA 0x0081DA5C
+
+    // WoW.exe VA 0x0087D898: 7.0 (adjacent to TERMINAL_VELOCITY).
+    // Used when MOVEFLAG_SAFE_FALL (0x20000000) is set — e.g. Slow Fall, Levitate.
+    constexpr float SAFE_FALL_TERMINAL_VELOCITY = 7.0f;
+
+    // =========================================================================
+    // BASE MOVEMENT SPEEDS (VMaNGOS baseMoveSpeed[], yards/second)
+    // Walk and Run confirmed in client @ 0x0081018C, 0x00810190.
+    // =========================================================================
+    constexpr float BASE_WALK_SPEED      = 2.5f;
+    constexpr float BASE_RUN_SPEED       = 7.0f;
+    constexpr float BASE_RUN_BACK_SPEED  = 4.5f;
+    constexpr float BASE_SWIM_SPEED      = 4.722222f;  // server-side only
+    constexpr float BASE_SWIM_BACK_SPEED = 2.5f;
+    constexpr float BASE_TURN_RATE       = 3.141594f;   // pi rad/s
+
+    // =========================================================================
+    // FALL DAMAGE
+    // =========================================================================
+    // VA 0x0081DA80: 10.0 = FALL_DAMAGE_START_SPEED
+    // VA 0x0081DA84: 11.111111 = 100/9 (damage scalar)
+    // VA 0x0081DA88: 5.555555 = 50/9  (half scalar)
+    // VA 0x0081DA8C: 10.0 = duplicate
+    // VA 0x0081DA90: 5.0
+    // Init functions (0x7C7BD0, 0x7C7C00): square these and store as globals.
+    //   safe_fall_speed² = 10² = 100  (stored at ds:0xCF5D68)
+    //   damage_scalar²   = (100/9)² ≈ 123.457 (stored at ds:0xCF5D7C)
+    constexpr float FALL_DAMAGE_START_SPEED = 10.0f;
+    constexpr float FALL_DAMAGE_SCALAR      = 11.111111f;  // 100/9
+    // VMaNGOS formula: dmgPct = COEFF * (zDiff - safeFall) - OFFSET
+    constexpr float FALL_SAFE_DISTANCE  = 14.57f;  // Min fall distance for damage
+    constexpr float FALL_SAFE_TIME_MS   = 1229.0f; // Fall time from safe distance
+    constexpr float FALL_DAMAGE_COEFF   = 0.018f;  // % max HP per yard
+    constexpr float FALL_DAMAGE_OFFSET  = 0.2426f; // Damage formula intercept
+
+    // =========================================================================
+    // GROUND DETECTION
+    // =========================================================================
+    constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f;
+
+    // VA 0x0081DA74: 1.093600 (0x3F8BFB16) — used as terminal velocity factor.
+    // SetTerminalVelocity(0x7C6160): termVel = param * 1.0936.
+    constexpr float STEP_HEIGHT_FACTOR = 1.093600f;
+
+    // CMovement constructor hardcodes step-up at +0xB4 as 0x4001C71C = 2.027778f.
+    // Collision skin fraction at +0xB0 = 0.333333 (1/3 of bounding box).
+    constexpr float STEP_HEIGHT = 2.027778f;
+    constexpr float COLLISION_SKIN_FRACTION = 0.333333f;
+
+    constexpr float STEP_DOWN_HEIGHT = 4.0f;    // max downward snap while grounded
+
+    // =========================================================================
+    // HEIGHT CONSTANTS
+    // =========================================================================
     constexpr float INVALID_HEIGHT = -200000.0f;
     constexpr float MAX_HEIGHT = 100000.0f;
     constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
 
-    // Legacy smoothing / acceleration tuning (kept for compatibility but mostly bypassed now)
-    constexpr float GROUND_ACCEL = 40.0f;        // no longer used (instant ground velocity)
-    constexpr float GROUND_DECEL = 30.0f;        // no longer used
-    constexpr float AIR_ACCEL = 5.0f;            // mild air control (full directional)
-    constexpr float AIR_DECEL = 0.0f;            // no passive damping
-    constexpr float SWIM_ACCEL = 20.0f;          // retained
-    constexpr float SWIM_DECEL = 0.0f;           // no passive damping in water
-    constexpr float MIN_GROUND_SNAP_EPS = 0.02f; // smaller jitter ignore
-    // Removed time-based snap speeds (instant snap like client); constants kept to avoid compile issues if referenced
-    constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
-    constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
+    // =========================================================================
+    // SLOPE WALKABILITY
+    // =========================================================================
 
-    // Slope walkability threshold: cos(60°) = 0.5 per CMaNGOS walkableSlopeAngle default
-    // 50-60° = NAV_AREA_GROUND_STEEP (walkable for mobs, not players in navmesh)
-    // Recordings confirm: sustained walking at ~53°, airborne transitions at ~64°
-    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.5f;
+    // VA 0x0081DA54: sin(45°) = cos(45°) = 1/√2 = 0.70710677 (0x3F3504F3)
+    // Used in collision response: normal scaling for slide planes.
+    constexpr float SIN_45 = 0.70710677f;
+
+    // cos(50°) = 0.642788 @ 0x0080DFFC. Slopes steeper than 50° non-walkable.
+    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
+
+    // tan(50°) = 1.191754 @ 0x0080E008. Also -tan(50°) @ 0x0080E010.
+    // Used for cliff detection: if ground drops faster than this, enter freefall.
+    // In collision sweep (0x633C7B): slopeLimit = boundingRadius * tan(50°).
+    constexpr float WALKABLE_TAN_MAX_SLOPE = 1.19175363f;
+
+    // √2 = 1.414214 @ 0x0080E00C. Used in grounded collision sweep (0x633D93):
+    // AABB vertical contraction = collisionSkin * √2 for step-down detection.
+    constexpr float SQRT_2 = 1.41421354f;
+
+    // 1/720 = 0.001389 @ 0x0080DFEC. Added to collisionSkin when computing
+    // slope-limited displacement threshold in grounded collision (0x633C83).
+    constexpr float COLLISION_SKIN_EPSILON = 0.00138889f;
+
+    // Speed² thresholds from movement extrapolation (0x616B7E, 0x616B8D):
+    // dist²/dt² > 3600 (speed > 60 y/s) = teleport/illegal movement
+    // dist²/dt² < 9 (speed < 3 y/s) = jitter, ignore displacement
+    constexpr float TELEPORT_SPEED_SQ_THRESHOLD = 3600.0f;
+    constexpr float JITTER_SPEED_SQ_THRESHOLD = 9.0f;
+
+    // =========================================================================
+    // TERRAIN NORMAL ESTIMATION
+    // =========================================================================
+
+    // XY offset for finite-difference terrain normal probes (4 GetGroundZ calls)
+    constexpr float NORMAL_PROBE_OFFSET = 0.3f;
+
+    // =========================================================================
+    // STEP-UP TOLERANCES
+    // =========================================================================
+
+    // Extra penetration tolerance added to capsule radius during step-up promotion
+    constexpr float STEP_UP_PEN_TOLERANCE_EXTRA = 0.05f;
+
+    // Max Z above pre-step position for step-up candidate promotion
+    constexpr float MAX_STEP_UP_ABOVE_PRE_STEP = 1.5f;
+
+    // =========================================================================
+    // NUMERICAL EPSILONS
+    // =========================================================================
+
+    // VA 0x00801360: 0.001 — milliseconds to seconds conversion.
+    // WoW stores fall time as int32 ms, multiplies by this before physics.
+    constexpr float MS_TO_SEC = 0.001f;
+
+    // VA 0x008029D4: 2.384e-07 (0x34800000) — speed epsilon.
+    // If abs(velocity) < this, velocity is considered zero.
+    constexpr float SPEED_EPSILON = 2.384185791015625e-7f;
+
+    // General-purpose vector magnitude / sweep distance epsilon.
+    // Used throughout for "is this vector effectively zero?" checks.
+    constexpr float VECTOR_EPSILON = 1e-6f;
+
+    // Slightly larger epsilon for ground snap / candidate sorting where
+    // floating-point noise is higher (multi-ray probes, height comparisons).
+    constexpr float GROUND_SNAP_EPSILON = 1e-4f;
+
+    // =========================================================================
+    // COLLISION GEOMETRY
+    // =========================================================================
+
+    // Overlap normal Z filter — ignore overlaps whose normal Z exceeds this
+    // (they're floor/ceiling contacts, not walls).
+    constexpr float OVERLAP_NORMAL_Z_FILTER = 0.7f;
+
+    // Max deferred depenetration applied per physics tick (prevents teleporting).
+    constexpr float MAX_DEFERRED_DEPEN_PER_TICK = 0.05f;
+
+    // Max overlap recovery iterations per tick.
+    constexpr int MAX_OVERLAP_RECOVER_ITERATIONS = 4;
+
+    // =========================================================================
+    // WATER TRANSITION
+    // =========================================================================
+
+    // Velocity damping factor when entering water (halves horizontal + vertical).
+    constexpr float WATER_ENTRY_VELOCITY_DAMP = 0.5f;
+
+    // =========================================================================
+    // MOVEMENT FLAG RESTRICTIONS (WoW.exe binary analysis)
+    // =========================================================================
+    // WoW restricts which movement flags are allowed based on current state.
+    // When airborne (JUMPING or FALLINGFAR), directional input flags are ignored
+    // by the physics — horizontal velocity is frozen at the moment of leaving ground.
+    // When rooted (ROOT), all movement is blocked.
+    // These masks define which bits are ALLOWED in each state.
+
+    // Directional movement bits (FORWARD|BACKWARD|STRAFE_LEFT|STRAFE_RIGHT)
+    constexpr uint32_t DIRECTIONAL_BITS = 0x0000000F;
+    // Turn bits (TURN_LEFT|TURN_RIGHT)
+    constexpr uint32_t TURN_BITS = 0x00000030;
+    // Pitch bits (PITCH_UP|PITCH_DOWN)
+    constexpr uint32_t PITCH_BITS = 0x000000C0;
+
+    // While airborne (JUMPING or FALLINGFAR):
+    //   - Directional input is IGNORED (velocity frozen from launch)
+    //   - Turning is still allowed (camera/facing)
+    //   - Pitch is still allowed (irrelevant unless swimming)
+    constexpr uint32_t AIRBORNE_BLOCKED_BITS = DIRECTIONAL_BITS;
+
+    // While rooted: all movement blocked, only turns allowed
+    constexpr uint32_t ROOTED_BLOCKED_BITS = DIRECTIONAL_BITS | PITCH_BITS;
+
+    // =========================================================================
+    // TURN SPEED (WoW.exe binary analysis)
+    // =========================================================================
+    // VA 0x8012CC: 0.75f — when any directional flag (0x200F) is active,
+    // turn rate is multiplied by this factor. Characters turn slower while moving.
+    constexpr float MOVING_TURN_RATE_FACTOR = 0.75f;
 }
 
 class PhysicsEngine
@@ -118,6 +296,7 @@ private:
         bool isGrounded;
         bool isSwimming;
         float fallTime;
+        float fallStartZ = -200000.0f;  // Z when bot left the ground (-200000 = not falling)
         G3D::Vector3 groundNormal;
         // Support ramp plane (for smoothing step transitions)
         bool rampActive = false;
@@ -127,6 +306,10 @@ private:
         G3D::Vector3 rampEnd;   // new stepped point
         G3D::Vector3 rampDir;   // horizontal movement direction used to form plane
         float rampLength = 0.0f; // horizontal distance along rampDir between start/end
+        // Wall contact state — set by GroundMoveElevatedSweep from SIDE pass result
+        bool wallHit = false;
+        G3D::Vector3 wallHitNormal;
+        float wallBlockedFraction = 1.0f;
     };
 
     // Added physics query result structs
@@ -190,7 +373,7 @@ private:
 
     // Helper methods
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
-    void ApplyGravity(MovementState& state, float dt);
+    void ApplyGravity(MovementState& state, float dt, uint32_t moveFlags = 0);
 
     // Create player cylinder at position with specified dimensions
     VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z,
@@ -397,6 +580,9 @@ private:
         G3D::Vector3 sideHitNormal = G3D::Vector3(0, 0, 1); // valid if nonWalkableSource==Side
         float actualStepUpDelta;        // How much we actually rose in UP pass
         G3D::Vector3 groundNormal;      // Normal of ground surface (if landed)
+        // Wall contact feedback (populated from SIDE pass result)
+        G3D::Vector3 lastSideHitNormal; // contact normal of the wall hit during SIDE pass
+        float sideBlockedFraction;      // fraction of side distance completed (0=fully blocked, 1=no block)
     };
 
     // Decomposes a movement direction into up/side/down components.

@@ -1,6 +1,10 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
+<<<<<<< HEAD
+=======
+using GameData.Core.Constants;
+>>>>>>> cpp_physics_system
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
@@ -49,11 +53,21 @@ public abstract class BotTask(IBotContext botContext)
     private NavigationPath? _navPath;
 
     /// <summary>
+<<<<<<< HEAD
+=======
+    /// Exposes the cached NavigationPath for trace/diagnostic access in subclasses.
+    /// Returns null if no navigation has been attempted yet.
+    /// </summary>
+    protected NavigationPath? NavPath => _navPath;
+
+    /// <summary>
+>>>>>>> cpp_physics_system
     /// Move toward a destination using cached pathfinding. Only re-queries the pathfinding
     /// service when the destination changes significantly or a cooldown expires.
     /// Call ClearNavigation() when switching targets.
     /// </summary>
     protected void NavigateToward(Position destination)
+<<<<<<< HEAD
     {
         _navPath ??= new NavigationPath(Container.PathfindingClient);
         var player = ObjectManager.Player;
@@ -63,6 +77,62 @@ public abstract class BotTask(IBotContext botContext)
         var waypoint = _navPath.GetNextWaypoint(player.Position, destination, player.MapId);
         if (waypoint != null)
             ObjectManager.MoveToward(waypoint);
+=======
+        => TryNavigateToward(destination);
+
+    /// <summary>
+    /// Move toward a destination using cached pathfinding and report whether a waypoint was found.
+    /// </summary>
+    protected bool TryNavigateToward(Position destination, bool allowDirectFallback = false)
+    {
+        var player = ObjectManager.Player;
+        if (_navPath == null)
+        {
+            var (radius, height) = player != null
+                ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
+                : (0.3064f, 2.0313f);
+            _navPath = new NavigationPath(Container.PathfindingClient,
+                capsuleRadius: radius,
+                capsuleHeight: height,
+                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
+                race: player?.Race ?? 0,
+                gender: player?.Gender ?? 0);
+        }
+        if (player?.Position == null)
+        {
+            Log.Warning("[NAV-DIAG] TryNavigateToward: player or position is null");
+            return false;
+        }
+
+        var waypoint = _navPath.GetNextWaypoint(
+            player.Position,
+            destination,
+            player.MapId,
+            allowDirectFallback: allowDirectFallback);
+
+        if (waypoint != null)
+        {
+            // MoveToward first — sets facing + starts movement + calls SetTargetWaypoint
+            ObjectManager.MoveToward(waypoint);
+
+            // Then pass the full path to the MovementController for dead-reckoning.
+            // This MUST come after MoveToward because MoveToward calls SetTargetWaypoint
+            // which overwrites _currentPath with a single-waypoint path. We need the full
+            // path for XY dead-reckoning in dungeons without vmtile collision data.
+            var currentWaypoints = _navPath.CurrentWaypoints;
+            if (currentWaypoints.Length > 0)
+                ObjectManager.SetNavigationPath(currentWaypoints);
+
+            return true;
+        }
+
+        Log.Warning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
+            "pos=({PosX:F1},{PosY:F1},{PosZ:F1}), dest=({DestX:F1},{DestY:F1},{DestZ:F1}), map={Map}",
+            player.Position.X, player.Position.Y, player.Position.Z,
+            destination.X, destination.Y, destination.Z, player.MapId);
+        ObjectManager.StopAllMovement();
+        return false;
+>>>>>>> cpp_physics_system
     }
 
     /// <summary>
@@ -80,6 +150,11 @@ public abstract class BotTask(IBotContext botContext)
             return;
 
         var top = BotTasks.Peek();
+<<<<<<< HEAD
+=======
+        BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
+        BotRunnerService.DiagLog($"[TASK-POP] task={top.GetType().Name} reason={reason} remaining={BotTasks.Count - 1}");
+>>>>>>> cpp_physics_system
         BotTasks.Pop();
         Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);

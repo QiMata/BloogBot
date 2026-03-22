@@ -10,6 +10,10 @@ namespace DruidRestoration.Tasks
     /// </summary>
     public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
+        // Vanilla 1.12.1 druid base spell ranges
+        private const float WrathBaseRange = 30f;
+        private const float MoonfireBaseRange = 30f;
+
         public void Update()
         {
             if (!ObjectManager.Aggressors.Any())
@@ -23,7 +27,7 @@ namespace DruidRestoration.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null)
                 return;
 
-            if (Update(30))
+            if (Update(GetSpellRange(WrathBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -34,11 +38,11 @@ namespace DruidRestoration.Tasks
             ObjectManager.StopAllMovement();
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
-            TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
+            TryCastSpell(Rejuvenation, condition: ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
+            TryCastSpell(HealingTouch, condition: ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
 
-            TryCastSpell(Moonfire, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
-            TryCastSpell(Wrath, 0, 30);
+            TryCastSpell(Moonfire, 0f, GetSpellRange(MoonfireBaseRange), !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
+            TryCastSpell(Wrath, 0f, GetSpellRange(WrathBaseRange));
         }
     }
 }

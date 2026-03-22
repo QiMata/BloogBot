@@ -83,6 +83,24 @@ For complex investigations spanning multiple services:
 
 This is important because the layered architecture means changes in Exports/ can affect multiple Services/.
 
+## Token-Efficient Tooling — Use by Default
+
+**Save context tokens by defaulting to these tools for read-heavy work:**
+
+- **Codex CLI** (`codex "..."`) — Default for:
+  - Reading log files (use instead of Read/cat for any log >50 lines)
+  - Scanning large code files for specific patterns
+  - Summarizing physics replay frame output
+  - Analyzing test runner output (pipe dotnet test output through Codex)
+  - Example: `codex "summarize anomalous frames in this physics replay: <paste output>"`
+  - **Rule:** Never Read/cat files >200 lines in main context when Codex can answer the question
+- **GH Copilot** (`gh copilot explain "..."`) — Default for:
+  - Code understanding questions ("how does X work?", "what does this pattern mean?")
+  - Asking how two modules relate without reading both
+  - Near-zero token cost for question answering about the codebase
+  - Example: `gh copilot explain "how does WoWSharpObjectManager.NotifyTeleportIncoming relate to MovementController Z clamp"`
+- **Physics frame analysis:** Always pipe replay frame diffs through Codex before surfacing to main context. Use: `dotnet test ... | codex "find frames where Z drops unexpectedly"`
+
 ## Process Safety — CRITICAL
 
 **NEVER blanket-kill dotnet or Game processes.** Multiple Claude Code instances may be running concurrently across repos on this machine.
@@ -152,8 +170,9 @@ When working on any phase or task from `docs/TASKS.md`:
 - If a failure reveals a new issue, create a task for it before moving on
 - Flaky test setup should be evaluated before creating a code-fix task — distinguish infrastructure issues from real bugs
 
-## Session Handoff Protocol
+## Session Continuity — Single Session, Auto-Compact
 
+<<<<<<< HEAD
 Before completing ANY session, update the active task files directly:
 
 1. `docs/TASKS.md` (master handoff section)
@@ -172,6 +191,23 @@ Every session handoff update must include:
 ### Completion
 
 When all tracked work is complete, mark completion in `docs/TASKS.md` handoff section rather than creating separate prompt files.
+=======
+**CRITICAL: Use ONE continuous session.** Do not start new sessions to run tests, investigate issues, or continue work. A single session auto-compacts (context compression) as it approaches limits and seamlessly continues. Starting a new session loses all in-flight context, creates confusion, and risks regressions.
+
+**Rules:**
+1. **Never start a new session** when the current one can continue. Auto-compaction handles context limits automatically.
+2. **Keep working through compaction.** After compaction, pick up the last task as if the break never happened — do not recap, do not ask what to do next, just continue.
+3. **Commit and push frequently.** This is the primary persistence mechanism. Every logical unit of work (fix, test addition, refactor) gets its own commit. Push immediately after committing.
+4. **Update `docs/TASKS.md`** with progress after completing each task or before ending a session.
+
+### Handoff Fields (when session truly ends)
+
+Update `docs/TASKS.md` Session Handoff section with:
+1. What was completed
+2. Exact commands run and outcomes
+3. Files changed
+4. The very next command/task to run
+>>>>>>> cpp_physics_system
 
 ### Important
 
@@ -179,6 +215,16 @@ When all tracked work is complete, mark completion in `docs/TASKS.md` handoff se
 - Keep handoff entries self-contained and precise so any model can continue immediately.
 - If a task was partially completed, describe what's done and what remains
 - Reference `docs/TASKS.md` for the overall task list
+
+## Test Skip Policy — CRITICAL
+
+**Tests must NEVER skip for "resource not found."** If a fishing pool, gathering node, mob, or NPC exists in the game world (DB spawns) but the bot can't find it, that is a REAL FAILURE — a detection, pathfinding, or ObjectManager bug.
+
+- **Walking to find resources IS the test** — wider search routes validate navigation
+- **Do NOT spawn resources** (no `.gobject add`, no synthetic nodes) — test against natural world state
+- **Do NOT use Skip.If** for resource detection failures — use Assert.True/Assert.Fail
+- **Acceptable skips:** fixture readiness (bot not connected), known client bugs (CRASH-001)
+- **Not acceptable:** "no pool at Ratchet (respawn timer)", "no nodes spawned", "no mob found"
 
 ## AI Documentation Rules
 

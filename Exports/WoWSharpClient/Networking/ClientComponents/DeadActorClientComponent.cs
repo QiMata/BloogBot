@@ -91,9 +91,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Attempting to resurrect at corpse");
 
                 // CMSG_RECLAIM_CORPSE (1.12.1): ObjectGuid playerGuid (8)
-                // Server validates this is the player's own GUID.
-                // Send 0 — most servers infer the player from the session.
-                var payload = new byte[8];
+                // VMaNGOS validates the GUID matches the session player — zero is rejected silently.
+                var guid = WoWSharpObjectManager.Instance?.Player?.Guid ?? 0UL;
+                var payload = BitConverter.GetBytes(guid);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, payload, cancellationToken);
 

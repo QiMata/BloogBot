@@ -1,9 +1,11 @@
 using BotRunner.Combat;
 using BotRunner.Movement;
 using BotRunner.Clients;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
+using Pathfinding;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Threading.Tasks;
 using System.Threading;
@@ -88,16 +90,45 @@ namespace BotRunner.Tests
             target.SetupGet(x => x.Position).Returns(new Position(50, 0, 0));
 
             // NavigationPath skips waypoint[0] (current pos) and returns waypoint[1]
+<<<<<<< HEAD
             var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(1, 1, 1) });
+=======
+            var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(5, 0, 0) });
+>>>>>>> cpp_physics_system
 
             var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
 
             var inRange = service.EnsureInCombatRange(target.Object);
 
             Assert.False(inRange);
-            objectManager.Verify(x => x.MoveToward(It.Is<Position>(p => p.X == 1 && p.Y == 1 && p.Z == 1)), Times.Once);
+            objectManager.Verify(x => x.MoveToward(It.Is<Position>(p => p.X == 5 && p.Y == 0 && p.Z == 0)), Times.Once);
             objectManager.Verify(x => x.Face(It.IsAny<Position>()), Times.Never);
             objectManager.Verify(x => x.StopAllMovement(), Times.Never);
+        }
+
+        [Fact]
+        public void EnsureInCombatRange_StopsMovementWhenOutOfRangeAndNoWaypoint()
+        {
+            var player = new Mock<IWoWLocalPlayer>();
+            player.SetupGet(x => x.MapId).Returns(1U);
+            player.SetupGet(x => x.Position).Returns(new Position(0, 0, 0));
+            player.Setup(x => x.IsFacing(It.IsAny<IWoWUnit>())).Returns(true);
+
+            var objectManager = new Mock<IObjectManager>();
+            objectManager.SetupGet(x => x.Player).Returns(player.Object);
+
+            var target = new Mock<IWoWUnit>();
+            target.SetupGet(x => x.Position).Returns(new Position(50, 0, 0));
+
+            var pathfindingClient = new MovementTestPathfindingClient(Array.Empty<Position>());
+
+            var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
+
+            var inRange = service.EnsureInCombatRange(target.Object);
+
+            Assert.False(inRange);
+            objectManager.Verify(x => x.MoveToward(It.IsAny<Position>()), Times.Never);
+            objectManager.Verify(x => x.StopAllMovement(), Times.Once);
         }
 
         [Fact]
@@ -243,6 +274,12 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0) => _path;
+
+        public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
+
+        public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
+            => (0f, false);
     }
 
     internal sealed class TestPathfindingClient(Position[] path) : PathfindingClient
@@ -250,5 +287,6 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0) => _path;
     }
 }

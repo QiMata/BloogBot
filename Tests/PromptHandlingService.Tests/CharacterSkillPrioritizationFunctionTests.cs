@@ -12,6 +12,7 @@ namespace PromptHandlingService.Tests
         private readonly Uri _ollamaUri = new("http://localhost:11434");
         private const string ModelName = "deepseekr1:14b";
 
+        [Fact(Skip = "Integration: requires local Ollama")]
         public async Task GetPrioritizedCharacterSkill_ValidCharacterDescription_ReturnsPrioritizedSkill()
         {
             // Arrange

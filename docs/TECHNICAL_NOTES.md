@@ -7,14 +7,22 @@
 
 ## Environment & Paths
 
+> **Environment Variables:** For the full list of `WWOW_*` environment variables (injection, services, testing), see [BUILD.md § Environment Variables](BUILD.md#environment-variables).
+
 | Item | Value |
 |------|-------|
-| Server | Elysium private server (vanilla 1.12.1 build 5875), stays running |
-| MaNGOS server source | `E:\repos\MaNGOS\source\src\` |
+| Server | VMaNGOS (vanilla 1.12.1 build 5875), always running locally |
+| VMaNGOS server binaries | `C:\Mangos\server\` (mangosd.exe, realmd.exe) |
+| VMaNGOS source (reference) | `C:\Mangos\vmangos-core\` (cloned from github.com/vmangos/core) |
+| MaNGOS data directory | `C:\Mangos\data\` (maps, vmaps, mmaps, dbc) |
+| MaNGOS MySQL | `C:\Mangos\mysql\` (mysqld.exe, data dir) |
+| VMaNGOS DB version | db-097449b (Mar 20, 2026), binary dev-6a82ed9 (Mar 20, 2026) |
+| VMaNGOS databases | mangos (world), characters, realmd, logs |
+| VMaNGOS DB credentials | root:root (localhost:3306) |
 | Server protocol docs | `docs/server-protocol/` (7 docs from Task 21) |
 | Recordings | `C:\Users\lrhod\Documents\BloogBot\MovementRecordings\` |
 | Packet captures | `C:\Users\lrhod\Documents\BloogBot\PacketCaptures\` |
-| Test account | ORWR1 (GM level 3, character: Dralrahgra on Kalimdor) |
+| Test accounts | TESTBOT1 (Foreground/injected), TESTBOT2 (Background/headless) — GM level 6, same character type |
 | Memory notes | `C:\Users\lrhod\.claude\projects\e--repos-BloogBot\memory\` |
 | GM commands | `SendChatMessage('.command', 'SAY')` or DoString |
 
@@ -104,7 +112,21 @@ dotnet test Tests/BotRunner.Tests --filter "Category=Integration" --settings Tes
 
 ## Known Issues & Workarounds
 
-- **FastCall.dll stale copy** � `Bot\Debug\net8.0\FastCall.dll` can be 12KB (stale, missing `LuaCall` export). Correct version is 62KB. `BotServiceFixture` auto-detects and fixes.
-- **StateManager DLL lock race** � StateManager and test can fight over DLLs. Must kill ? build ? verify ? start SM ? test. Script `run-swimming-recording-test.ps1` handles this.
-- **Orgrimmar terrain divergence** � `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
-- **Spline data scarcity** � Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
+- **FastCall.dll stale copy** — `Bot\Debug\net8.0\FastCall.dll` can be 12KB (stale, missing `LuaCall` export). Correct version is 62KB. `BotServiceFixture` auto-detects and fixes.
+- **StateManager DLL lock race** — StateManager and test can fight over DLLs. Must kill → build → verify → start SM → test. Script `run-swimming-recording-test.ps1` handles this.
+- **Orgrimmar terrain divergence** — `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
+- **Spline data scarcity** — Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
+
+### VMaNGOS Server Startup
+
+Server infrastructure lives at `C:\Mangos\`. Start order:
+1. MySQL: `C:\Mangos\scripts\start-mysql.bat`
+2. Realm: `C:\Mangos\scripts\start-realmd.bat`
+3. World: `C:\Mangos\scripts\start-mangosd.bat`
+
+Start all at once: `C:\Mangos\scripts\start-all.bat`
+Stop all: `C:\Mangos\scripts\stop-all.bat`
+
+Config files: `C:\Mangos\server\mangosd.conf`, `C:\Mangos\server\realmd.conf`
+- SOAP enabled on port 7878 (admin: ADMINISTRATOR/PASSWORD)
+- WowPatch = 10 (1.12 Drums of War)

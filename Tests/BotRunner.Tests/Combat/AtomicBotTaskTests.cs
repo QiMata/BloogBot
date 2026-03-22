@@ -2,12 +2,20 @@ using BotRunner.Combat;
 using BotRunner.Clients;
 using BotRunner.Constants;
 using BotRunner.Interfaces;
+<<<<<<< HEAD
+=======
+using BotRunner.Movement;
+>>>>>>> cpp_physics_system
 using BotRunner.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
+<<<<<<< HEAD
+=======
+using Pathfinding;
+>>>>>>> cpp_physics_system
 using System.Collections.Generic;
 using System.Linq;
 
@@ -33,8 +41,31 @@ internal static class AtomicTaskTestHelpers
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)
             ]);
+<<<<<<< HEAD
         configurePathfinding?.Invoke(pathfinding);
 
+=======
+        pathfinding
+            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+            .Returns(true);
+        configurePathfinding?.Invoke(pathfinding);
+
+        // Wire 7-parameter GetPath to delegate to the 4-parameter overload (which
+        // configurePathfinding may have overridden). This ensures both overloads
+        // behave consistently when tests only configure the 4-parameter version.
+        pathfinding
+            .Setup(p => p.GetPath(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath, Race race, Gender gender) =>
+                pathfinding.Object.GetPath(mapId, start, end, smoothPath));
+
+>>>>>>> cpp_physics_system
         ctx.Setup(c => c.ObjectManager).Returns(om.Object);
         ctx.Setup(c => c.Config).Returns(new BotBehaviorConfig());
         ctx.Setup(c => c.EventHandler).Returns(eventHandler.Object);
@@ -65,6 +96,41 @@ internal static class AtomicTaskTestHelpers
         player.Setup(p => p.MapId).Returns(0);
         return player;
     }
+<<<<<<< HEAD
+=======
+
+    internal static Mock<IWoWItem> CreateItem(uint itemId, uint stackCount = 1)
+    {
+        var item = new Mock<IWoWItem>();
+        item.Setup(i => i.ItemId).Returns(itemId);
+        item.Setup(i => i.Name).Returns($"Item_{itemId}");
+        item.Setup(i => i.StackCount).Returns(stackCount);
+        item.Setup(i => i.Guid).Returns(itemId);
+        return item;
+    }
+
+    internal static Mock<IWoWGameObject> CreateGameObject(ulong guid, uint entry, uint typeId, Position pos, string name = "Fishing Pool")
+    {
+        var go = new Mock<IWoWGameObject>();
+        go.Setup(g => g.Guid).Returns(guid);
+        go.Setup(g => g.Entry).Returns(entry);
+        go.Setup(g => g.TypeId).Returns(typeId);
+        go.Setup(g => g.Position).Returns(pos);
+        go.Setup(g => g.Name).Returns(name);
+        go.Setup(g => g.CreatedBy).Returns(new HighGuid(0UL));
+        return go;
+    }
+
+    internal static void RewindFishingTaskState(FishingTask task, int elapsedMs)
+    {
+        var stateEnteredAtField = typeof(FishingTask).GetField(
+            "_stateEnteredAt",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("FishingTask._stateEnteredAt field not found.");
+
+        stateEnteredAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
+    }
+>>>>>>> cpp_physics_system
 }
 
 // ==================== IdleTask Tests ====================
@@ -183,6 +249,387 @@ public class CastSpellTaskTests
     }
 }
 
+<<<<<<< HEAD
+=======
+// ==================== FishingTask Tests ====================
+
+public class FishingTaskTests
+{
+    [Fact]
+    public void Update_WithoutEquippedPole_EquipsPoleBeforeCasting()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GetItem(0, 0)).Returns(AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+
+        om.Verify(o => o.EquipItem(0, 0, null), Times.Once);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithVisiblePool_MovesTowardFishingRange()
+    {
+        // Player placed 60y from pool — well outside approach arrival radius (5y).
+        // FishingTask should navigate toward the pool approach position.
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-1030f, -3880f, 4f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA11UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithPoolInsideTaskCastWindow_CastsAtLosFriendlyWaterTarget()
+    {
+        // Player at (0,0,0), pool at (20,0,0) — 20y distance is within casting range.
+        // State machine: EnsurePole → EnsureLure → AcquirePool → MoveToPool → ResolveAndCast.
+        // MoveToPool immediately transitions to ResolveAndCast because player is already at approach.
+        // CastStabilizeDelay requires 250ms, so rewind must happen AFTER entering ResolveAndCast.
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var poolPosition = new Position(20f, 0f, 0f);
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, poolPosition, 4f);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA12UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: poolPosition);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        // Updates 1-3: EnsurePole → EnsureLure → AcquirePool
+        task.Update();
+        task.Update();
+        task.Update();
+        // Update 4: MoveToPool → transitions to ResolveAndCast (player at approach)
+        task.Update();
+        // Rewind AFTER entering ResolveAndCast to satisfy CastStabilizeDelay
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        // Update 5: ResolveAndCast — casts the spell
+        task.Update();
+
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank2,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask cast_started", StringComparison.Ordinal)
+            && message.Contains($"target=({expectedCastTarget.X:F1},{expectedCastTarget.Y:F1},{expectedCastTarget.Z:F1})", StringComparison.Ordinal))), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithPoolInsideTaskCastWindowButLosBlocked_RepositionsInsteadOfCasting()
+    {
+        // LOS is blocked from Y<=1 positions. Player at (0,0,0) has LOS blocked.
+        // After entering ResolveAndCast, the task should detect LOS blocked and transition back to
+        // MoveToFishingPool, which navigates toward an approach candidate.
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.IsInLineOfSight(
+                    It.IsAny<uint>(),
+                    It.IsAny<Position>(),
+                    It.IsAny<Position>()))
+                .Returns((uint _, Position from, Position to) => from.Y > 1f || to.Y > 1f);
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var poolPosition = new Position(20f, 0f, 0f);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA13UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: poolPosition);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        // 1-3: EnsurePole → EnsureLure → AcquirePool
+        task.Update();
+        task.Update();
+        task.Update();
+        // 4: MoveToPool → ResolveAndCast (at approach)
+        task.Update();
+        // 5: ResolveAndCast → LOS blocked → back to MoveToFishingPool
+        task.Update();
+        // 6: MoveToFishingPool navigates toward approach via pathfinding
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithAvailableBait_UsesLureBeforeApproachingPool()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-995f, -3850f, 4f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(false);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole);
+        equippedPole.Setup(i => i.Guid).Returns(0UL);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole.Object]);
+        om.Setup(o => o.GetEquippedItem(EquipSlot.MainHand)).Returns(equippedPole.Object);
+        om.Setup(o => o.GetEquippedItemGuid(EquipSlot.MainHand)).Returns(0xF1A5UL);
+        om.Setup(o => o.GetContainedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.NightcrawlerBait).Object]);
+        om.Setup(o => o.GetItem(0, 1)).Returns(AtomicTaskTestHelpers.CreateItem(FishingData.NightcrawlerBait).Object);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.UseItem(0, 1, 0xF1A5UL), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask lure_use_started", StringComparison.Ordinal))), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_AfterLootWindowLootsCatchAndPops()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        // Player at exactly 24y from pool (DesiredPoolDistance) on same Z → within approach arrival radius.
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-999.7f, -3835.2f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xBB22UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
+        var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
+
+        uint channelingId = 0;
+        bool isChanneling = false;
+        bool lootOpen = false;
+        IEnumerable<IWoWItem> bagItems = Enumerable.Empty<IWoWItem>();
+        player.Setup(p => p.ChannelingId).Returns(() => channelingId);
+        player.Setup(p => p.IsChanneling).Returns(() => isChanneling);
+
+        var lootFrame = new Mock<ILootFrame>();
+        lootFrame.Setup(l => l.IsOpen).Returns(() => lootOpen);
+        lootFrame.Setup(l => l.LootCount).Returns(() => lootOpen ? 1 : 0);
+        lootFrame.Setup(l => l.LootItems).Returns(Array.Empty<LootItem>());
+        lootFrame.Setup(l => l.Close()).Callback(() => lootOpen = false);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole]);
+        om.Setup(o => o.GetContainedItems()).Returns(() => bagItems);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+        om.Setup(o => o.LootFrame).Returns(lootFrame.Object);
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        // 1-3: EnsurePole → EnsureLure → AcquirePool
+        task.Update();
+        task.Update();
+        task.Update();
+        // 4: MoveToPool → ResolveAndCast (player at ~13y from pool, within approach)
+        task.Update();
+        // Rewind AFTER entering ResolveAndCast
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        // 5: ResolveAndCast → casts
+        task.Update();
+
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank1,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+
+        channelingId = FishingData.FishingRank1;
+        isChanneling = true;
+        task.Update();
+        Assert.Single(stack);
+
+        channelingId = 0;
+        isChanneling = false;
+        task.Update();
+        lootOpen = true;
+        task.Update();
+        bagItems = [caughtFish];
+        task.Update();
+        task.Update();
+        task.Update();
+
+        lootFrame.Verify(l => l.LootAll(), Times.Once);
+        lootFrame.Verify(l => l.Close(), Times.AtLeastOnce);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask loot_window_open", StringComparison.Ordinal)
+            || message.Contains("FishingTask fishing_loot_success", StringComparison.Ordinal))), Times.AtLeastOnce);
+        Assert.Empty(stack);
+    }
+
+    [Fact]
+    public void Update_BagDeltaWithoutLootWindow_DoesNotPopSuccess()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        // Player at exactly 24y from pool (DesiredPoolDistance) on same Z → within approach arrival radius.
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-999.7f, -3835.2f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xCC33UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
+        var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
+
+        uint channelingId = 0;
+        bool isChanneling = false;
+        IEnumerable<IWoWItem> bagItems = Enumerable.Empty<IWoWItem>();
+        player.Setup(p => p.ChannelingId).Returns(() => channelingId);
+        player.Setup(p => p.IsChanneling).Returns(() => isChanneling);
+
+        var lootFrame = new Mock<ILootFrame>();
+        lootFrame.Setup(l => l.IsOpen).Returns(false);
+        lootFrame.Setup(l => l.LootCount).Returns(0);
+        lootFrame.Setup(l => l.LootItems).Returns(Array.Empty<LootItem>());
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole]);
+        om.Setup(o => o.GetContainedItems()).Returns(() => bagItems);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+        om.Setup(o => o.LootFrame).Returns(lootFrame.Object);
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        // 1-3: EnsurePole → EnsureLure → AcquirePool
+        task.Update();
+        task.Update();
+        task.Update();
+        // 4: MoveToPool → ResolveAndCast (player at ~13y from pool, within approach)
+        task.Update();
+        // Rewind AFTER entering ResolveAndCast
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        // 5: ResolveAndCast → casts
+        task.Update();
+
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank1,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+
+        channelingId = FishingData.FishingRank1;
+        isChanneling = true;
+        task.Update();
+
+        channelingId = 0;
+        isChanneling = false;
+        task.Update();
+        bagItems = [caughtFish];
+        task.Update();
+
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("fishing_loot_success", StringComparison.Ordinal))), Times.Never);
+        Assert.Single(stack);
+    }
+}
+
+>>>>>>> cpp_physics_system
 // ==================== UseItemTask Tests ====================
 
 public class UseItemTaskTests
@@ -626,6 +1073,102 @@ public class MoveToPositionTaskTests
 
 public class RetrieveCorpseTaskTests
 {
+<<<<<<< HEAD
+=======
+    [Fact]
+    public void FormatNavigationTraceSummary_IncludesKeyFieldsAndTruncatesPathsAndSamples()
+    {
+        var trace = new NavigationTraceSnapshot(
+            MapId: 1,
+            RequestedStart: new Position(0f, 0f, 0f),
+            RequestedDestination: new Position(100f, 50f, 0f),
+            ServiceWaypoints:
+            [
+                new Position(0f, 0f, 0f),
+                new Position(10f, 0f, 0f),
+                new Position(20f, 5f, 0f),
+                new Position(30f, 10f, 0f),
+                new Position(40f, 15f, 0f)
+            ],
+            PlannedWaypoints:
+            [
+                new Position(0f, 0f, 0f),
+                new Position(12f, 1f, 0f),
+                new Position(24f, 7f, 0f),
+                new Position(36f, 12f, 0f),
+                new Position(48f, 18f, 0f)
+            ],
+            Affordances: PathAffordanceInfo.Empty,
+            ActiveWaypoint: new Position(24f, 7f, 0f),
+            CurrentWaypointIndex: 2,
+            PlanVersion: 3,
+            LastReplanReason: NavigationTraceReason.StalledNearWaypoint,
+            LastResolution: "waypoint",
+            UsedDirectFallback: false,
+            UsedNearbyObjectOverlay: true,
+            NearbyObjectCount: 6,
+            SmoothPath: false,
+            IsShortRoute: false,
+            LastPlanTick: 1234,
+            ExecutionSamples:
+            [
+                new NavigationExecutionSample(new Position(0f, 0f, 0f), new Position(100f, 50f, 0f), new Position(10f, 0f, 0f), 1, 1, 10f, false, 100, "waypoint"),
+                new NavigationExecutionSample(new Position(9f, 0f, 0f), new Position(100f, 50f, 0f), new Position(20f, 5f, 0f), 2, 2, 12f, false, 200, "waypoint"),
+                new NavigationExecutionSample(new Position(18f, 4f, 0f), new Position(100f, 50f, 0f), new Position(24f, 7f, 0f), 2, 3, 6f, false, 300, "waypoint"),
+                new NavigationExecutionSample(new Position(23f, 6f, 0f), new Position(100f, 50f, 0f), new Position(36f, 12f, 0f), 3, 3, 14f, false, 400, "waypoint")
+            ]);
+
+        var summary = RetrieveCorpseTask.FormatNavigationTraceSummary(trace);
+
+        Assert.Contains("plan=3", summary);
+        Assert.Contains($"reason={NavigationTraceReason.StalledNearWaypoint}", summary);
+        Assert.Contains("resolution=waypoint", summary);
+        Assert.Contains("idx=2", summary);
+        Assert.Contains("overlay=6", summary);
+        Assert.Contains("request=(0.0,0.0,0.0)->(100.0,50.0,0.0)", summary);
+        Assert.Contains("service=[(0.0,0.0,0.0), (10.0,0.0,0.0), (20.0,5.0,0.0), (30.0,10.0,0.0), +1 more]", summary);
+        Assert.Contains("planned=[(0.0,0.0,0.0), (12.0,1.0,0.0), (24.0,7.0,0.0), (36.0,12.0,0.0), +1 more]", summary);
+        Assert.Contains("samples=[+1 earlier", summary);
+        Assert.Contains("p3:waypoint:idx3:(23.0,6.0,0.0)->(36.0,12.0,0.0)", summary);
+    }
+
+    [Fact]
+    public void PathAffordanceInfo_Classify_LabelsSegmentsCorrectly()
+    {
+        var waypoints = new Position[]
+        {
+            new(0f, 0f, 0f),      // start
+            new(10f, 0f, 0.3f),   // walk (flat, <1y Z)
+            new(20f, 0f, 2.5f),   // step-up (Z gain 2.2y)
+            new(20.1f, 0f, 8f),   // vertical (2D < 0.5y, Z > 2y)
+            new(30f, 0f, 5f),     // drop (Z loss 3y)
+            new(40f, 0f, -3f),    // cliff (Z loss 8y)
+        };
+
+        var info = PathAffordanceInfo.Classify(waypoints);
+
+        Assert.Equal(5, info.Segments.Length);
+        Assert.Equal(SegmentAffordance.Walk, info.Segments[0]);
+        Assert.Equal(SegmentAffordance.StepUp, info.Segments[1]);
+        Assert.Equal(SegmentAffordance.Vertical, info.Segments[2]);
+        Assert.Equal(SegmentAffordance.Drop, info.Segments[3]);
+        Assert.Equal(SegmentAffordance.Cliff, info.Segments[4]);
+        Assert.Equal(1, info.VerticalCount);
+        Assert.Equal(1, info.DropCount);
+        Assert.Equal(1, info.CliffCount);
+        Assert.True(info.TotalZGain > 0f);
+        Assert.True(info.TotalZLoss > 0f);
+    }
+
+    [Fact]
+    public void PathAffordanceInfo_Classify_EmptyPath_ReturnsEmpty()
+    {
+        var info = PathAffordanceInfo.Classify([]);
+        Assert.Empty(info.Segments);
+        Assert.Equal(0, info.StepUpCount);
+    }
+
+>>>>>>> cpp_physics_system
     private static void ForceRunbackSampleReady(RetrieveCorpseTask task)
     {
         var sampleField = typeof(RetrieveCorpseTask).GetField(
@@ -635,6 +1178,7 @@ public class RetrieveCorpseTaskTests
         sampleField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(2));
     }
 
+<<<<<<< HEAD
     private static void ForceExpireUnstickManeuver(RetrieveCorpseTask task)
     {
         var untilField = typeof(RetrieveCorpseTask).GetField(
@@ -642,6 +1186,45 @@ public class RetrieveCorpseTaskTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing _unstickManeuverUntilUtc field.");
         untilField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(1));
+=======
+    private static void ForceRunbackProgressExpired(RetrieveCorpseTask task, float bestDistance2D = 95f)
+    {
+        var bestField = typeof(RetrieveCorpseTask).GetField(
+            "_bestRunbackCorpseDistance2D",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _bestRunbackCorpseDistance2D field.");
+        bestField.SetValue(task, bestDistance2D);
+
+        var lastProgressField = typeof(RetrieveCorpseTask).GetField(
+            "_lastRunbackProgressUtc",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _lastRunbackProgressUtc field.");
+        lastProgressField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(25));
+    }
+
+    private static void ForceRunbackWaypointProgressExpired(
+        RetrieveCorpseTask task,
+        Position trackedWaypoint,
+        float bestWaypointDistance = 20f)
+    {
+        var trackedField = typeof(RetrieveCorpseTask).GetField(
+            "_trackedRunbackWaypoint",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _trackedRunbackWaypoint field.");
+        trackedField.SetValue(task, trackedWaypoint);
+
+        var bestField = typeof(RetrieveCorpseTask).GetField(
+            "_bestRunbackWaypointDistance",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _bestRunbackWaypointDistance field.");
+        bestField.SetValue(task, bestWaypointDistance);
+
+        var lastProgressField = typeof(RetrieveCorpseTask).GetField(
+            "_lastRunbackWaypointProgressUtc",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _lastRunbackWaypointProgressUtc field.");
+        lastProgressField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(12));
+>>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -662,7 +1245,11 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
+<<<<<<< HEAD
         om.Verify(o => o.StopAllMovement(), Times.Once);
+=======
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+>>>>>>> cpp_physics_system
         om.Verify(o => o.RetrieveCorpse(), Times.Once);
         Assert.Single(stack);
     }
@@ -684,7 +1271,11 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
+<<<<<<< HEAD
         om.Verify(o => o.StopAllMovement(), Times.Once);
+=======
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+>>>>>>> cpp_physics_system
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
         Assert.Empty(stack);
     }
@@ -705,14 +1296,182 @@ public class RetrieveCorpseTaskTests
         // Should still be on stack (navigating)
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
+<<<<<<< HEAD
+=======
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
+>>>>>>> cpp_physics_system
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
+<<<<<<< HEAD
     }
 
     [Fact]
     public void Update_FarFromCorpse_NoPath_DrivesFallbackTarget()
+=======
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithProbeStyleLeadIn_DrivesFirstServiceWaypoint()
+    {
+        var corpsePos = new Position(100, 0, 0);
+        // firstWaypoint (2.8y) is within WAYPOINT_REACH_DISTANCE (3.5y) of origin,
+        // so the non-strict advance loop skips past it. secondWaypoint (4.2y) is
+        // outside the radius and becomes the drive target.
+        var firstWaypoint = new Position(2.8f, 0f, 0f);
+        var secondWaypoint = new Position(4.2f, 0f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstWaypoint,
+                    secondWaypoint,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - secondWaypoint.X) < 0.01f &&
+            MathF.Abs(p.Y - secondWaypoint.Y) < 0.01f &&
+            MathF.Abs(p.Z - secondWaypoint.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithValidCornerRoute_DrivesFirstServiceWaypointInsteadOfDirectCorpse()
+    {
+        var corpsePos = new Position(100, 100, 0);
+        var firstCorner = new Position(20f, 0f, 0f);
+        var secondCorner = new Position(20f, 40f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstCorner,
+                    secondCorner,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - firstCorner.X) < 0.01f &&
+            MathF.Abs(p.Y - firstCorner.Y) < 0.01f &&
+            MathF.Abs(p.Z - firstCorner.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - corpsePos.X) < 0.01f &&
+            MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithInvalidServicePath_DoesNotDriveRouteOrDirectCorpse()
+    {
+        var corpsePos = new Position(500, 500, 0);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    new Position(float.NaN, start.Y + 3f, start.Z),
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithServicePathBlockedByLineOfSight_DrivesFirstCornerInNonStrictMode()
+    {
+        // Corpse run NavigationPath uses strictPathValidation: false and
+        // enableProbeHeuristics: false, so LOS blocks between corners do NOT
+        // prevent the bot from driving the navmesh path. The bot trusts the
+        // navmesh and drives the first corner waypoint.
+        var corpsePos = new Position(100, 100, 0);
+        var firstCorner = new Position(20f, 0f, 0f);
+        var blockedCorner = new Position(20f, 30f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+        {
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstCorner,
+                    blockedCorner,
+                    new Position(end.X, end.Y, end.Z)
+                ]);
+            pathfinding
+                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns((uint mapId, Position from, Position to) =>
+                {
+                    var blockedSegment =
+                        MathF.Abs(from.X - firstCorner.X) < 0.01f &&
+                        MathF.Abs(from.Y - firstCorner.Y) < 0.01f &&
+                        MathF.Abs(to.X - blockedCorner.X) < 0.01f &&
+                        MathF.Abs(to.Y - blockedCorner.Y) < 0.01f;
+                    return !blockedSegment;
+                });
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - firstCorner.X) < 0.01f &&
+            MathF.Abs(p.Y - firstCorner.Y) < 0.01f &&
+            MathF.Abs(p.Z - firstCorner.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_NoPath_StopsAndTriggersRecoveryInsteadOfDirectFallbackDrive()
+>>>>>>> cpp_physics_system
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -729,11 +1488,20 @@ public class RetrieveCorpseTaskTests
 
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
+<<<<<<< HEAD
         om.Verify(o => o.StopAllMovement(), Times.Never);
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
+=======
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.StopAllMovement(), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - corpsePos.X) < 0.01f &&
+            MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
+>>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -762,6 +1530,7 @@ public class RetrieveCorpseTaskTests
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
+<<<<<<< HEAD
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.AtLeastOnce);
         om.Verify(o => o.StartMovement(It.Is<ControlBits>(b =>
             b == ControlBits.StrafeLeft || b == ControlBits.StrafeRight || b == ControlBits.Back)), Times.AtLeastOnce);
@@ -769,6 +1538,15 @@ public class RetrieveCorpseTaskTests
 
     [Fact]
     public void Update_AfterStallRecovery_ExecutesAndStopsUnstickManeuver()
+=======
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+        om.Verify(o => o.StopMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_AfterStallRecovery_DoesNotIssueSyntheticStrafeCommands()
+>>>>>>> cpp_physics_system
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -788,6 +1566,7 @@ public class RetrieveCorpseTaskTests
             task.Update();
         }
 
+<<<<<<< HEAD
         task.Update();
         ForceExpireUnstickManeuver(task);
         task.Update();
@@ -795,6 +1574,78 @@ public class RetrieveCorpseTaskTests
         Assert.Single(stack);
         om.Verify(o => o.StartMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
         om.Verify(o => o.StopMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
+=======
+        Assert.Single(stack);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+        om.Verify(o => o.StopMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_MovingButNoDistanceProgress_TriggersStallRecovery()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var corpsePos = new Position(100, 0, 0);
+
+        var currentPosition = new Position(0, 0, 0);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_FORWARD);
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        // Seed baseline runback tracking.
+        task.Update();
+
+        // Simulate movement that changes position but does not improve corpse distance.
+        currentPosition = new Position(0, 0.5f, 0);
+        ForceRunbackProgressExpired(task);
+        ForceRunbackSampleReady(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_MovingButNoWaypointProgress_TriggersStallRecovery()
+    {
+        var forcedWaypoint = new Position(0, 20, 0);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    forcedWaypoint,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var corpsePos = new Position(100, 0, 0);
+
+        var currentPosition = new Position(0, 0, 0);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_FORWARD);
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        // Seed runback samples and waypoint tracking.
+        task.Update();
+
+        currentPosition = new Position(1f, 0, 0);
+        ForceRunbackSampleReady(task);
+        ForceRunbackWaypointProgressExpired(task, forcedWaypoint, bestWaypointDistance: 20f);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+>>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -816,7 +1667,11 @@ public class RetrieveCorpseTaskTests
         task.Update();
 
         Assert.Single(stack);
+<<<<<<< HEAD
         om.Verify(o => o.StopAllMovement(), Times.Once);
+=======
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+>>>>>>> cpp_physics_system
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
     }

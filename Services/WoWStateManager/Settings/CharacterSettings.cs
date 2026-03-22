@@ -79,6 +79,15 @@ namespace WoWStateManager.Settings
         public BotRunnerType RunnerType { get; set; } = BotRunnerType.Foreground;
 
         /// <summary>
+        /// GM level for this account (0=player, 6=full admin).
+        /// Controls command access (e.g. .go xyz, .learn). Does NOT enable in-game GM mode
+        /// (.gm on) — that must be sent separately and should be avoided for combat testing
+        /// because it corrupts factionTemplate.
+        /// </summary>
+        [JsonProperty("GmLevel")]
+        public int GmLevel { get; set; } = 6;
+
+        /// <summary>
         /// Optional: Process ID of an existing WoW.exe to inject into.
         /// If not specified and RunnerType is Foreground, a new WoW process will be launched.
         /// </summary>
@@ -91,5 +100,30 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("BehaviorConfig", NullValueHandling = NullValueHandling.Ignore)]
         public BotBehaviorConfig? BehaviorConfig { get; set; }
+<<<<<<< HEAD
+=======
+
+        /// <summary>
+        /// Optional: Character class override. If set, used instead of parsing class from AccountName.
+        /// Allows account names like "TESTBOT1" that don't encode race/class.
+        /// </summary>
+        [JsonProperty("CharacterClass", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterClass { get; set; }
+
+        /// <summary>
+        /// Optional: Character race override. If set, used instead of parsing race from AccountName.
+        /// </summary>
+        [JsonProperty("CharacterRace", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterRace { get; set; }
+
+        /// <summary>
+        /// Optional: Character gender override ("Male" or "Female").
+        /// If set, used instead of the class-based default from WoWNameGenerator.DetermineGender().
+        /// CRITICAL for parity tests: FG and BG characters must share the same gender
+        /// so capsule dimensions match (race+gender determines capsule radius/height).
+        /// </summary>
+        [JsonProperty("CharacterGender", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterGender { get; set; }
+>>>>>>> cpp_physics_system
     }
 }

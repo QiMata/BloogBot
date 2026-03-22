@@ -1,8 +1,13 @@
 using System;
+<<<<<<< HEAD
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
+=======
+using System.Collections.Generic;
+using System.Threading.Tasks;
+>>>>>>> cpp_physics_system
 using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
@@ -10,6 +15,7 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
+<<<<<<< HEAD
 /// Basic loop validation with snapshot-driven assertions.
 ///
 /// Scope:
@@ -20,12 +26,19 @@ namespace BotRunner.Tests.LiveValidation;
 /// - Level field update/read path with chat-first setup.
 /// </summary>
 [RequiresMangosStack]
+=======
+/// Minimal live-validation health checks that stay useful after the overhaul:
+/// fixture readiness and post-teleport physics stability.
+/// See docs/BasicLoopTests.md for the owning production code paths.
+/// </summary>
+>>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class BasicLoopTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
+<<<<<<< HEAD
     private const int DurotarMapId = 1;
     private const float RazorHillX = 326.81f;
     private const float RazorHillY = -4706.65f;
@@ -37,6 +50,8 @@ public class BasicLoopTests
     private const uint StandStateMask = 0xFF;
     private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
+=======
+>>>>>>> cpp_physics_system
     public BasicLoopTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -57,22 +72,37 @@ public class BasicLoopTests
         Assert.False(string.IsNullOrWhiteSpace(bg.AccountName));
         Assert.NotEqual(0UL, bg.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL);
         Assert.NotNull(bg.Player?.Unit?.GameObject?.Base?.Position);
+<<<<<<< HEAD
         Assert.True(IsStrictAlive(bg), "BG should be strict-alive at basic-loop login check.");
+=======
+        Assert.True(LiveBotFixture.IsStrictAlive(bg), "BG should be strict-alive at basic-loop login check.");
+>>>>>>> cpp_physics_system
 
         var bgPos = bg.Player!.Unit!.GameObject!.Base!.Position!;
         _output.WriteLine($"BG Bot: {bg.CharacterName} ({bg.AccountName}) GUID=0x{bg.Player.Unit.GameObject.Base.Guid:X}");
         _output.WriteLine($"  Position: ({bgPos.X:F2}, {bgPos.Y:F2}, {bgPos.Z:F2})");
         _output.WriteLine($"  HP: {bg.Player.Unit.Health}/{bg.Player.Unit.MaxHealth}");
 
+<<<<<<< HEAD
         if (_bot.ForegroundBot != null)
         {
             var fg = _bot.ForegroundBot;
+=======
+        if (_bot.IsFgActionable)
+        {
+            var fg = _bot.ForegroundBot;
+            Assert.NotNull(fg);
+>>>>>>> cpp_physics_system
             Assert.Equal("InWorld", fg.ScreenState);
             Assert.False(string.IsNullOrWhiteSpace(fg.CharacterName));
             Assert.False(string.IsNullOrWhiteSpace(fg.AccountName));
             Assert.NotEqual(0UL, fg.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL);
             Assert.NotNull(fg.Player?.Unit?.GameObject?.Base?.Position);
+<<<<<<< HEAD
             Assert.True(IsStrictAlive(fg), "FG should be strict-alive at basic-loop login check.");
+=======
+            Assert.True(LiveBotFixture.IsStrictAlive(fg), "FG should be strict-alive at basic-loop login check.");
+>>>>>>> cpp_physics_system
 
             var fgPos = fg.Player!.Unit!.GameObject!.Base!.Position!;
             _output.WriteLine($"FG Bot: {fg.CharacterName} ({fg.AccountName}) GUID=0x{fg.Player.Unit.GameObject.Base.Guid:X}");
@@ -88,7 +118,19 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
+<<<<<<< HEAD
         await EnsureStrictAliveAsync(_bot.BgAccountName!, "BG");
+=======
+        var setupTasks = new List<Task>
+        {
+            _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG")
+        };
+
+        if (_bot.IsFgActionable)
+            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
+
+        await Task.WhenAll(setupTasks);
+>>>>>>> cpp_physics_system
         await _bot.RefreshSnapshotsAsync();
 
         var bgPos = _bot.BackgroundBot?.Player?.Unit?.GameObject?.Base?.Position;
@@ -96,6 +138,7 @@ public class BasicLoopTests
         var initialZ = bgPos.Z;
         _output.WriteLine($"BG initial Z: {initialZ:F2}");
 
+<<<<<<< HEAD
         var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
         _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
 
@@ -106,10 +149,26 @@ public class BasicLoopTests
         {
             await EnsureStrictAliveAsync(_bot.FgAccountName!, "FG");
             var (fgStable, fgFinalZ) = await _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 6000);
+=======
+        if (_bot.IsFgActionable)
+        {
+            _output.WriteLine("[PARITY] Running BG and FG Z-stabilization checks in parallel.");
+            var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
+            var fgStabTask = _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 3000);
+            await Task.WhenAll(bgStabTask, fgStabTask);
+
+            var (bgStable, bgFinalZ) = await bgStabTask;
+            _output.WriteLine($"BG final Z: {bgFinalZ:F2}, stable={bgStable}, delta={Math.Abs(bgFinalZ - initialZ):F2}");
+            Assert.True(bgFinalZ > -500, $"BG physics broken: Z={bgFinalZ:F2} below world floor threshold.");
+            Assert.True(bgStable, $"BG Z failed to stabilize: start={initialZ:F2}, end={bgFinalZ:F2}.");
+
+            var (fgStable, fgFinalZ) = await fgStabTask;
+>>>>>>> cpp_physics_system
             _output.WriteLine($"FG final Z: {fgFinalZ:F2}, stable={fgStable}");
             Assert.True(fgFinalZ > -500, $"FG physics broken: Z={fgFinalZ:F2} below world floor threshold.");
             Assert.True(fgStable, $"FG Z failed to stabilize: end={fgFinalZ:F2}.");
         }
+<<<<<<< HEAD
     }
 
     [SkippableFact]
@@ -400,4 +459,14 @@ public class BasicLoopTests
             || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
             || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
     }
+=======
+        else
+        {
+            var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
+            _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
+            Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
+            Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
+        }
+    }
+>>>>>>> cpp_physics_system
 }

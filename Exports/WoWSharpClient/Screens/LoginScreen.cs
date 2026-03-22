@@ -63,7 +63,10 @@ namespace WoWSharpClient.Screens
 
         public void DeleteCharacter(ulong characterGuid)
         {
-
+            _ = woWClient.SendCharacterDeleteAsync(characterGuid);
+            // Do NOT reset HasReceivedCharacterList/HasRequestedCharacterList here.
+            // HandleCharDelete resets them on SMSG_CHAR_DELETE success, preventing
+            // premature CMSG_CHAR_ENUM spam before the server processes the delete.
         }
         public List<CharacterSelect> CharacterSelects { get; } = [];
     }

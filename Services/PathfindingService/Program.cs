@@ -49,9 +49,18 @@ namespace PathfindingService
             }
             else
             {
+<<<<<<< HEAD
                 Console.WriteLine("[PathfindingService] WARNING: Could not find nav data root containing mmaps/maps/vmaps. FindPath may fail.");
                 if (!string.IsNullOrWhiteSpace(previousDataDir))
                     Console.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
+=======
+                Console.Error.WriteLine("[PathfindingService] FATAL: Could not find nav data root containing mmaps/maps/vmaps.");
+                if (!string.IsNullOrWhiteSpace(previousDataDir))
+                    Console.Error.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
+                Console.Error.WriteLine("[PathfindingService] Set WWOW_DATA_DIR to a directory containing mmaps/, maps/, and vmaps/ subdirectories.");
+                Environment.Exit(1);
+                return;
+>>>>>>> cpp_physics_system
             }
 
             CreateHostBuilder(args)
@@ -61,6 +70,7 @@ namespace PathfindingService
 
         private static string? ResolveNavigationDataDirectory(string? existingDataDir)
         {
+<<<<<<< HEAD
             static bool HasNavData(string root)
             {
                 if (string.IsNullOrWhiteSpace(root))
@@ -101,11 +111,123 @@ namespace PathfindingService
             {
                 if (HasNavData(candidate))
                     return Path.GetFullPath(candidate);
+=======
+            var candidates = new List<string>();
+            AddCandidate(candidates, existingDataDir);
+
+            var baseDir = NormalizePath(AppContext.BaseDirectory);
+            var currentDir = NormalizePath(Directory.GetCurrentDirectory());
+
+            AddCommonOutputCandidates(candidates, baseDir);
+            AddCommonOutputCandidates(candidates, currentDir);
+            AddCandidate(candidates, @"D:\World of Warcraft");
+
+            foreach (var ancestor in EnumerateAncestors(baseDir))
+                AddCommonOutputCandidates(candidates, ancestor);
+
+            if (!string.Equals(baseDir, currentDir, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var ancestor in EnumerateAncestors(currentDir))
+                    AddCommonOutputCandidates(candidates, ancestor);
+            }
+
+            foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (HasNavData(candidate))
+                    return candidate;
+>>>>>>> cpp_physics_system
             }
 
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        private static void AddCommonOutputCandidates(List<string> candidates, string? root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                return;
+
+            AddCandidate(candidates, root);
+            AddCandidate(candidates, Path.Combine(root, "Data"));  // Centralized data dir at repo root
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "net8.0"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "x64"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Release", "net8.0"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Release", "x64"));
+            AddCandidate(candidates, Path.Combine(root, "Tests", "Bot", "Debug", "net8.0"));
+        }
+
+        private static void AddCandidate(List<string> candidates, string? candidate)
+        {
+            var normalized = NormalizePath(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                candidates.Add(normalized);
+        }
+
+        private static string NormalizePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            try
+            {
+                return Path.GetFullPath(path.Trim().Trim('"'));
+            }
+            catch
+            {
+                return path.Trim().Trim('"');
+            }
+        }
+
+        private static IEnumerable<string> EnumerateAncestors(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                yield break;
+
+            DirectoryInfo? current;
+            try
+            {
+                current = new DirectoryInfo(path);
+            }
+            catch
+            {
+                yield break;
+            }
+
+            while (current != null)
+            {
+                yield return current.FullName;
+                current = current.Parent;
+            }
+        }
+
+        private static bool HasNavData(string root)
+        {
+            static bool HasEntries(string path)
+            {
+                try
+                {
+                    return Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any();
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+
+            var mmapsDir = Path.Combine(root, "mmaps");
+            var mapsDir = Path.Combine(root, "maps");
+            var vmapsDir = Path.Combine(root, "vmaps");
+
+            return HasEntries(mmapsDir)
+                && HasEntries(mapsDir)
+                && HasEntries(vmapsDir);
+        }
+
+>>>>>>> cpp_physics_system
         /// <summary>
         /// Launches the PathfindingService as a separate process.
         /// Used by StateManager when the service isn't already running.
@@ -164,6 +286,15 @@ namespace PathfindingService
                     builder.AddEnvironmentVariables();
                     if (args != null)
                         builder.AddCommandLine(args);
+                })
+                .ConfigureLogging(logging =>
+                {
+                    // Avoid the Windows EventLog provider in the test harness/published output.
+                    // The repo only needs console/debug logging here, and EventLog pulls in an
+                    // assembly that is not copied into the local Bot output.
+                    logging.ClearProviders();
+                    logging.AddConsole();
+                    logging.AddDebug();
                 })
                 .ConfigureServices((hostContext, services) =>
                 {

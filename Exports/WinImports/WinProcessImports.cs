@@ -23,17 +23,8 @@ public static class WinProcessImports
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, int processId);
 
-    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-    public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress,
-       uint dwSize, uint flAllocationType, uint flProtect);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress,
-       byte[] lpBuffer, uint nSize, out IntPtr lpNumberOfBytesWritten);
-
-    [DllImport("kernel32.dll")]
-    public static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes,
-       uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, out IntPtr lpThreadId);
+    // Canonical P/Invoke declarations for process injection (typed-enum variants).
+    // VirtualAllocEx, WriteProcessMemory, CreateRemoteThread are declared below (lines 74+).
 
     [DllImport("kernel32.dll")]
     public static extern bool CreateProcess(
@@ -295,9 +286,9 @@ public static class WinProcessImports
                     var allocatedMemory = VirtualAllocEx(
                         processHandle,
                         IntPtr.Zero,
-                        allocSize,
-                        (uint)(MemoryAllocationType.MEM_COMMIT | MemoryAllocationType.MEM_RESERVE),
-                        (uint)MemoryProtectionType.PAGE_READWRITE);
+                        (int)allocSize,
+                        MemoryAllocationType.MEM_COMMIT | MemoryAllocationType.MEM_RESERVE,
+                        MemoryProtectionType.PAGE_READWRITE);
 
                     if (allocatedMemory == IntPtr.Zero)
                     {

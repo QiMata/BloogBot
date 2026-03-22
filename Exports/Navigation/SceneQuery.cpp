@@ -312,6 +312,57 @@ bool SceneQuery::LineOfSight(uint32_t mapId, const G3D::Vector3& from, const G3D
         catch (...) {}
     }
 
+    // Dynamic objects LOS (Darkmoon Faire tents, closed doors, world event structures, etc.)
+    // DynamicObjectRegistry is updated each physics tick — current positions are always fresh.
+    {
+        auto* dynReg = DynamicObjectRegistry::Instance();
+        if (dynReg)
+        {
+            try
+            {
+                G3D::AABox rayBox(
+                    G3D::Vector3(std::min(from.x, to.x) - 1.0f, std::min(from.y, to.y) - 1.0f, std::min(from.z, to.z) - 1.0f),
+                    G3D::Vector3(std::max(from.x, to.x) + 1.0f, std::max(from.y, to.y) + 1.0f, std::max(from.z, to.z) + 1.0f));
+
+                std::vector<CapsuleCollision::Triangle> dynTris;
+                dynReg->QueryTriangles(mapId, rayBox, dynTris);
+
+                if (!dynTris.empty())
+                {
+                    G3D::Vector3 rayStart(from.x, from.y, from.z);
+                    G3D::Vector3 dir = G3D::Vector3(to.x, to.y, to.z) - rayStart;
+                    float rayLen = dir.magnitude();
+                    if (rayLen > 1e-6f)
+                    {
+                        dir = dir * (1.0f / rayLen);
+                        for (const auto& tri : dynTris)
+                        {
+                            G3D::Vector3 a(tri.a.x, tri.a.y, tri.a.z);
+                            G3D::Vector3 b(tri.b.x, tri.b.y, tri.b.z);
+                            G3D::Vector3 c(tri.c.x, tri.c.y, tri.c.z);
+                            G3D::Vector3 edge1 = b - a;
+                            G3D::Vector3 edge2 = c - a;
+                            G3D::Vector3 pvec = dir.cross(edge2);
+                            float det = edge1.dot(pvec);
+                            if (std::fabs(det) < 1e-7f) continue;
+                            float invDet = 1.0f / det;
+                            G3D::Vector3 tvec = rayStart - a;
+                            float u = tvec.dot(pvec) * invDet;
+                            if (u < 0.0f || u > 1.0f) continue;
+                            G3D::Vector3 qvec = tvec.cross(edge1);
+                            float v = dir.dot(qvec) * invDet;
+                            if (v < 0.0f || u + v > 1.0f) continue;
+                            float tHit = edge2.dot(qvec) * invDet;
+                            if (tHit >= 0.0f && tHit <= rayLen)
+                                return false;
+                        }
+                    }
+                }
+            }
+            catch (...) {}
+        }
+    }
+
     return true;
 }
 
@@ -425,6 +476,10 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 // --- SceneCache management ---
 void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 {
+<<<<<<< HEAD
+=======
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
+>>>>>>> cpp_physics_system
     auto it = m_sceneCaches.find(mapId);
     if (it != m_sceneCaches.end())
     {
@@ -439,12 +494,20 @@ void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 
 SceneCache* SceneQuery::GetSceneCache(uint32_t mapId)
 {
+<<<<<<< HEAD
+=======
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
+>>>>>>> cpp_physics_system
     auto it = m_sceneCaches.find(mapId);
     return (it != m_sceneCaches.end()) ? it->second : nullptr;
 }
 
 void SceneQuery::ClearSceneCaches()
 {
+<<<<<<< HEAD
+=======
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
+>>>>>>> cpp_physics_system
     for (auto& [id, cache] : m_sceneCaches)
         delete cache;
     m_sceneCaches.clear();
@@ -480,13 +543,56 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 {
     EnsureMapLoaded(mapId);
 
+<<<<<<< HEAD
     // Scene cache fast path: pre-processed triangles with spatial index
     if (auto* cache = GetSceneCache(mapId))
         return cache->GetGroundZ(x, y, z, maxSearchDist);
+=======
+    // Underground interiors (Undercity, mines, caves) can be 40-50y below the
+    // terrain surface. The default 10y search distance fails to find the WMO
+    // floor when the query starts underground. Increase search distance for
+    // positions significantly below sea level.
+    if (z < -10.0f && maxSearchDist < 60.0f)
+        maxSearchDist = 60.0f;
+
+    // Scene cache fast path: pre-processed triangles with spatial index.
+    // More precise than raw VMAP ray on slopes due to exact barycentric interpolation.
+    // Falls through to VMAP+ADT+BIH for positions not covered by scene cache
+    // (e.g., Undercity underground at Z < -10).
+    if (auto* cache = GetSceneCache(mapId))
+    {
+        float sceneZ = cache->GetGroundZ(x, y, z, maxSearchDist);
+
+        // Also check dynamic objects (elevators, doors) — their meshes
+        // aren't in the pre-cached scene file.
+        float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+
+        // If only one source has a valid result, return it
+        if (dynZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
+            // Scene cache returned a result — but verify it's valid.
+            // If invalid (underground gap), fall through to VMAP+BIH.
+            if (sceneZ > PhysicsConstants::INVALID_HEIGHT + 1.0f)
+                return sceneZ;
+            // else: fall through to VMAP+ADT+BIH below
+        } else if (sceneZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
+            return dynZ;
+        } else {
+            // Both valid — pick closest to query Z within acceptance window
+            float zMax = z + maxSearchDist;
+            float zMin = z - maxSearchDist;
+            bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
+            bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
+            if (sceneOk && dynOk)
+                return (std::fabs(sceneZ - z) <= std::fabs(dynZ - z)) ? sceneZ : dynZ;
+            if (dynOk) return dynZ;
+            return sceneZ;
+        }
+    }
+>>>>>>> cpp_physics_system
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
-    //   - Outdoor: ADT ground is closest, VMAP roof is above (filtered by z+0.5)
+    //   - Outdoor: ADT ground is closest, VMAP roof is above (farther from z)
     //   - Underground interiors: BIH WMO floor is closest, ADT terrain above is farther
     //   - Multi-level buildings: correct floor is closest to current Z
     float vmapZ = PhysicsConstants::INVALID_HEIGHT;
@@ -533,6 +639,113 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     consider(vmapZ);
     consider(adtZ);
     consider(bihZ);
+
+    // 4. Dynamic objects (elevators, doors) — not in static VMAP/ADT data
+    float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+    consider(dynZ);
+
+    return bestZ;
+}
+
+float SceneQuery::GetCapsuleSupportZ(
+    uint32_t mapId,
+    float x,
+    float y,
+    float currentZ,
+    float queryZ,
+    float maxSearchDist,
+    float radius)
+{
+    // Validate support against the capsule footprint instead of only the center point.
+    // This avoids false "no support" results on stairs, ramps, ledges, and triangle seams
+    // where the center sample is empty but the capsule is still legitimately supported.
+    const float safeRadius = std::max(0.05f, radius);
+    const float innerRadius = std::max(0.05f, safeRadius * 0.55f);
+    const float outerRadius = safeRadius;
+    const float innerDiag = innerRadius * 0.70710678f;
+    const float outerDiag = outerRadius * 0.70710678f;
+    const float maxRise = PhysicsConstants::STEP_HEIGHT + 0.35f;
+    const float maxDrop = maxSearchDist + 0.25f;
+
+    struct OffsetSample
+    {
+        float ox;
+        float oy;
+    };
+
+    const OffsetSample offsets[] = {
+        { 0.0f, 0.0f },
+        { innerRadius, 0.0f }, { -innerRadius, 0.0f }, { 0.0f, innerRadius }, { 0.0f, -innerRadius },
+        { innerDiag, innerDiag }, { innerDiag, -innerDiag }, { -innerDiag, innerDiag }, { -innerDiag, -innerDiag },
+        { outerRadius, 0.0f }, { -outerRadius, 0.0f }, { 0.0f, outerRadius }, { 0.0f, -outerRadius },
+        { outerDiag, outerDiag }, { outerDiag, -outerDiag }, { -outerDiag, outerDiag }, { -outerDiag, -outerDiag }
+    };
+
+    const float raisedQueryZ = std::max(queryZ, currentZ + 0.35f);
+    const float queryHeights[] = {
+        currentZ + 0.05f,
+        raisedQueryZ,
+        raisedQueryZ + 0.45f,
+        raisedQueryZ + 0.90f
+    };
+
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+    float bestDelta = std::numeric_limits<float>::max();
+    float bestOffsetSq = std::numeric_limits<float>::max();
+
+    for (const auto& offset : offsets)
+    {
+        const float sampleX = x + offset.ox;
+        const float sampleY = y + offset.oy;
+        const float offsetSq = (offset.ox * offset.ox) + (offset.oy * offset.oy);
+
+        float sampleBestZ = PhysicsConstants::INVALID_HEIGHT;
+        float sampleBestDelta = std::numeric_limits<float>::max();
+
+        for (const float sampleQueryZ : queryHeights)
+        {
+            const float candidateZ = GetGroundZ(mapId, sampleX, sampleY, sampleQueryZ, maxSearchDist);
+            if (candidateZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+                continue;
+
+            const float deltaFromCurrent = candidateZ - currentZ;
+            if (deltaFromCurrent > maxRise || deltaFromCurrent < -maxDrop)
+                continue;
+
+            const float absDelta = std::fabs(deltaFromCurrent);
+            if (sampleBestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f || absDelta < sampleBestDelta - 1e-4f)
+            {
+                sampleBestZ = candidateZ;
+                sampleBestDelta = absDelta;
+            }
+            else if (std::fabs(absDelta - sampleBestDelta) <= 1e-4f && candidateZ > sampleBestZ)
+            {
+                sampleBestZ = candidateZ;
+            }
+        }
+
+        if (sampleBestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            continue;
+
+        if (bestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f || sampleBestDelta < bestDelta - 1e-4f)
+        {
+            bestZ = sampleBestZ;
+            bestDelta = sampleBestDelta;
+            bestOffsetSq = offsetSq;
+        }
+        else if (std::fabs(sampleBestDelta - bestDelta) <= 1e-4f)
+        {
+            if (offsetSq < bestOffsetSq - 1e-4f)
+            {
+                bestZ = sampleBestZ;
+                bestOffsetSq = offsetSq;
+            }
+            else if (std::fabs(offsetSq - bestOffsetSq) <= 1e-4f && sampleBestZ > bestZ)
+            {
+                bestZ = sampleBestZ;
+            }
+        }
+    }
 
     return bestZ;
 }
@@ -670,6 +883,58 @@ float SceneQuery::GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float
     return bestZ;
 }
 
+float SceneQuery::GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
+{
+    auto* dynReg = DynamicObjectRegistry::Instance();
+    if (!dynReg) return PhysicsConstants::INVALID_HEIGHT;
+
+    // Build a thin vertical column AABB at (x,y) for broad-phase filtering
+    float zMin = z - maxSearchDist;
+    float zMax = z + 0.5f;
+    const float xyPad = 0.01f;
+    G3D::AABox column(
+        G3D::Vector3(x - xyPad, y - xyPad, zMin),
+        G3D::Vector3(x + xyPad, y + xyPad, zMax));
+
+    std::vector<CapsuleCollision::Triangle> dynTris;
+    dynReg->QueryTriangles(mapId, column, dynTris);
+    if (dynTris.empty()) return PhysicsConstants::INVALID_HEIGHT;
+
+    // Vertical ray: find best (highest) Z at (x,y) using barycentric interpolation
+    // Same math as SceneCache::GetGroundZ
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+    for (const auto& tri : dynTris)
+    {
+        // Quick XY AABB reject
+        float txMin = std::min({tri.a.x, tri.b.x, tri.c.x});
+        float txMax = std::max({tri.a.x, tri.b.x, tri.c.x});
+        float tyMin = std::min({tri.a.y, tri.b.y, tri.c.y});
+        float tyMax = std::max({tri.a.y, tri.b.y, tri.c.y});
+        if (x < txMin || x > txMax || y < tyMin || y > tyMax) continue;
+
+        // Barycentric test: is (x,y) inside triangle XY projection?
+        float v0x = tri.c.x - tri.a.x, v0y = tri.c.y - tri.a.y;
+        float v1x = tri.b.x - tri.a.x, v1y = tri.b.y - tri.a.y;
+        float v2x = x - tri.a.x,       v2y = y - tri.a.y;
+        float d00 = v0x * v0x + v0y * v0y;
+        float d01 = v0x * v1x + v0y * v1y;
+        float d02 = v0x * v2x + v0y * v2y;
+        float d11 = v1x * v1x + v1y * v1y;
+        float d12 = v1x * v2x + v1y * v2y;
+        float denom = d00 * d11 - d01 * d01;
+        if (std::fabs(denom) < 1e-12f) continue;
+        float invDenom = 1.0f / denom;
+        float u = (d11 * d02 - d01 * d12) * invDenom;
+        float v = (d00 * d12 - d01 * d02) * invDenom;
+        if (u < -1e-6f || v < -1e-6f || (u + v) > 1.0f + 1e-6f) continue;
+
+        float triZ = tri.a.z + u * (tri.c.z - tri.a.z) + v * (tri.b.z - tri.a.z);
+        if (triZ >= zMin && triZ <= zMax && triZ > bestZ)
+            bestZ = triZ;
+    }
+    return bestZ;
+}
+
 SceneQuery::LiquidInfo SceneQuery::EvaluateLiquidAt(uint32_t mapId, float x, float y, float z)
 {
     using namespace PhysicsLiquid;
@@ -687,8 +952,15 @@ SceneQuery::LiquidInfo SceneQuery::EvaluateLiquidAt(uint32_t mapId, float x, flo
                 out.level = cell.level;
                 out.type = cell.type;
                 out.fromVmap = (cell.flags & 0x02) != 0;
+<<<<<<< HEAD
                 // Determine swimming based on z vs liquid level
                 out.isSwimming = (z < cell.level - 0.5f);
+=======
+                // Determine swimming: player is submerged when below the water surface.
+                // Must match PhysicsLiquid::Evaluate logic (immersion > 0.0f = z < level).
+                // Previous 0.5f threshold created a dead zone where the bot stood on water.
+                out.isSwimming = (z < cell.level);
+>>>>>>> cpp_physics_system
             }
         }
         return out;

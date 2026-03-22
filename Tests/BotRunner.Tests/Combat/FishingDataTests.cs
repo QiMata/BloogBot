@@ -1,5 +1,11 @@
 using BotRunner.Combat;
+<<<<<<< HEAD
 using GameData.Core.Interfaces;
+=======
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
+>>>>>>> cpp_physics_system
 using Moq;
 
 namespace BotRunner.Tests.Combat
@@ -21,6 +27,29 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(expectedSpellId, FishingData.GetBestFishingSpellId(skill));
         }
 
+<<<<<<< HEAD
+=======
+        [Fact]
+        public void GetBestKnownFishingSpellId_PrefersHighestKnownRank()
+        {
+            uint result = FishingData.GetBestKnownFishingSpellId(
+            [
+                FishingData.FishingRank1,
+                FishingData.FishingRank2,
+                FishingData.FishingRank4
+            ]);
+
+            Assert.Equal(FishingData.FishingRank4, result);
+        }
+
+        [Fact]
+        public void ResolveCastableFishingSpellId_FallsBackToSkillRank_WhenKnownListMissing()
+        {
+            uint result = FishingData.ResolveCastableFishingSpellId(null, 80);
+            Assert.Equal(FishingData.FishingRank2, result);
+        }
+
+>>>>>>> cpp_physics_system
         [Theory]
         [InlineData(FishingData.FishingPole, true)]
         [InlineData(FishingData.StrongFishingPole, true)]
@@ -58,6 +87,27 @@ namespace BotRunner.Tests.Combat
         }
 
         [Fact]
+<<<<<<< HEAD
+=======
+        public void FindUsableLureInBags_ReturnsLocationOfBestLure()
+        {
+            var om = new Mock<IObjectManager>();
+            var bait = CreateMockItem(FishingData.NightcrawlerBait);
+            var bauble = CreateMockItem(FishingData.ShinyBauble);
+
+            om.Setup(o => o.GetItem(0, 0)).Returns(bauble.Object);
+            om.Setup(o => o.GetItem(2, 5)).Returns(bait.Object);
+
+            var result = FishingData.FindUsableLureInBags(om.Object);
+
+            Assert.NotNull(result);
+            Assert.Equal(2, result.Value.bag);
+            Assert.Equal(5, result.Value.slot);
+            Assert.Equal(FishingData.NightcrawlerBait, result.Value.itemId);
+        }
+
+        [Fact]
+>>>>>>> cpp_physics_system
         public void FindUsableLure_FindsLureInExtraBag()
         {
             var om = new Mock<IObjectManager>();
@@ -131,6 +181,93 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(356u, FishingData.FishingSkillId);
         }
 
+<<<<<<< HEAD
+=======
+        [Fact]
+        public void HasFishingPoleEquipped_ReturnsTrueWhenPoleIsEquipped()
+        {
+            var om = new Mock<IObjectManager>();
+            om.Setup(o => o.GetEquippedItems()).Returns(
+            [
+                CreateMockItem(FishingData.FishingPole).Object
+            ]);
+
+            Assert.True(FishingData.HasFishingPoleEquipped(om.Object));
+        }
+
+        [Fact]
+        public void IsFishingPool_ReturnsTrueForFishingHoleType()
+        {
+            var go = new Mock<IWoWGameObject>();
+            go.Setup(g => g.TypeId).Returns((uint)GameObjectType.FishingHole);
+            go.Setup(g => g.Position).Returns(new Position(0, 0, 0));
+
+            Assert.True(FishingData.IsFishingPool(go.Object));
+        }
+
+        [Fact]
+        public void FindNearestFishingPool_ReturnsClosestVisiblePool()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var closePool = CreateMockGameObject(180582, (uint)GameObjectType.FishingHole, new Position(-975.7f, -3835.2f, 0f));
+            var farPool = CreateMockGameObject(180683, (uint)GameObjectType.FishingHole, new Position(-900f, -3700f, 0f));
+            var om = new Mock<IObjectManager>();
+            om.Setup(o => o.GameObjects).Returns([farPool.Object, closePool.Object]);
+
+            var result = FishingData.FindNearestFishingPool(om.Object, playerPosition, 40f);
+
+            Assert.NotNull(result);
+            Assert.Equal(closePool.Object.Guid, result.Guid);
+        }
+
+        [Fact]
+        public void GetPoolApproachPosition_KeepsDesiredDistanceFromPool()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var poolPosition = new Position(-975.7f, -3835.2f, 0f);
+
+            var approach = FishingData.GetPoolApproachPosition(playerPosition, poolPosition, 14f);
+
+            Assert.InRange(approach.DistanceTo(poolPosition), 13.9f, 14.1f);
+            Assert.Equal(playerPosition.Z, approach.Z);
+        }
+
+        [Fact]
+        public void GetPoolApproachCandidates_KeepDesiredDistanceAcrossOffsets()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var poolPosition = new Position(-975.7f, -3835.2f, 0f);
+
+            var candidates = FishingData.GetPoolApproachCandidates(playerPosition, poolPosition, 18f);
+
+            // Multi-ring candidates: 0.7×, 1.0×, 1.3× desired distance with Z-elevation compensation.
+            // 13 angle offsets × 3 distance rings = 39 candidates.
+            Assert.Equal(39, candidates.Length);
+            Assert.Equal(playerPosition.Z, candidates[0].Z);
+            Assert.NotEqual(candidates[0].Y, candidates[1].Y);
+
+            // First 13 candidates are the 1.0× ring — should be near desired distance (Z-adjusted planar).
+            // Allow wider tolerance for Z-compensation: planarDist ≠ 3D distance when Z differs.
+            float minDist = candidates.Min(c => c.DistanceTo(poolPosition));
+            float maxDist = candidates.Max(c => c.DistanceTo(poolPosition));
+            Assert.InRange(minDist, 10f, 20f);   // 0.7× ring (Z-adjusted)
+            Assert.InRange(maxDist, 20f, 30f);    // 1.3× ring (Z-adjusted)
+        }
+
+        [Fact]
+        public void GetPoolCastTarget_PullsTargetBackTowardPlayer()
+        {
+            var playerPosition = new Position(0f, 0f, 0f);
+            var poolPosition = new Position(20f, 0f, 0f);
+
+            var castTarget = FishingData.GetPoolCastTarget(playerPosition, poolPosition, 4f);
+
+            Assert.Equal(16f, castTarget.X, 3);
+            Assert.Equal(0f, castTarget.Y, 3);
+            Assert.Equal(poolPosition.Z, castTarget.Z, 3);
+        }
+
+>>>>>>> cpp_physics_system
         private static Mock<IObjectManager> CreateEmptyObjectManager()
         {
             var om = new Mock<IObjectManager>();
@@ -143,6 +280,21 @@ namespace BotRunner.Tests.Combat
             var mock = new Mock<IWoWItem>();
             mock.Setup(i => i.ItemId).Returns(itemId);
             mock.Setup(i => i.Name).Returns($"Item_{itemId}");
+<<<<<<< HEAD
+=======
+            mock.Setup(i => i.StackCount).Returns(1);
+            return mock;
+        }
+
+        private static Mock<IWoWGameObject> CreateMockGameObject(uint entry, uint typeId, Position position)
+        {
+            var mock = new Mock<IWoWGameObject>();
+            mock.Setup(g => g.Guid).Returns(((ulong)entry << 8) | typeId);
+            mock.Setup(g => g.Entry).Returns(entry);
+            mock.Setup(g => g.TypeId).Returns(typeId);
+            mock.Setup(g => g.Position).Returns(position);
+            mock.Setup(g => g.Name).Returns($"Pool_{entry}");
+>>>>>>> cpp_physics_system
             return mock;
         }
     }

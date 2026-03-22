@@ -38,13 +38,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<GossipErrorData> _gossipErrors;
         private readonly IObservable<GossipServiceData> _serviceDiscovered;
 
+        // Self-subscriptions that keep state-tracking .Do() side effects active
+        // even when no external code subscribes to the public observables.
+        private readonly IDisposable _gossipMenuSub;
+        private readonly IDisposable _completionSub;
+        private readonly IDisposable _textUpdateSub;
+
         public GossipNetworkClientComponent(IWorldClient worldClient, ILogger<GossipNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             // Base gossip menu stream
-            _gossipMenus = SafeOpcodeStream(Opcode.SMSG_GOSSIP_MESSAGE)
+            var gossipMenuBase = SafeOpcodeStream(Opcode.SMSG_GOSSIP_MESSAGE)
                 .Select(ParseGossipMenu)
                 .Do(menu =>
                 {
@@ -59,6 +65,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish()
                 .RefCount();
+
+            _gossipMenus = gossipMenuBase;
 
             // Completion stream updates state; emission for closed menus comes from projection
             var completion = SafeOpcodeStream(Opcode.SMSG_GOSSIP_COMPLETE)
@@ -127,6 +135,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(o => new GossipServiceData(_currentNpcGuid ?? 0, o.ServiceType, o))
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe so that the .Do() side effects (_currentMenu, _isGossipWindowOpen, etc.)
+            // always fire when packets arrive, even if no external code subscribes.
+            _gossipMenuSub = gossipMenuBase.Subscribe(_ => { });
+            _completionSub = completion.Subscribe(_ => { });
+            _textUpdateSub = textUpdates.Subscribe(_ => { });
         }
 
         #region IGossipNetworkClientComponent Properties
@@ -246,7 +260,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                     break;
                 case GossipNavigationStrategy.Custom:
-                    _logger.LogWarning("Custom navigation strategy not implemented");
+                    _logger.LogDebug("Custom navigation strategy selected; callers must handle navigation externally");
                     break;
             }
         }
@@ -263,8 +277,42 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public async Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, CancellationToken cancellationToken = default)
         {
-            // Placeholder � select first reward (index 0)
-            await SelectGossipOptionAsync(0, cancellationToken);
+            await SelectOptimalQuestRewardAsync(strategy, Array.Empty<QuestRewardChoice>(), cancellationToken);
+        }
+
+        public async Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, IReadOnlyList<QuestRewardChoice> availableRewards, CancellationToken cancellationToken = default)
+        {
+            uint selectedIndex = SelectRewardIndex(strategy, availableRewards);
+            _logger.LogInformation("Quest reward selection: strategy={Strategy}, available={Count}, selectedIndex={Index}",
+                strategy, availableRewards.Count, selectedIndex);
+            await SelectGossipOptionAsync(selectedIndex, cancellationToken);
+        }
+
+        internal static uint SelectRewardIndex(QuestRewardSelectionStrategy strategy, IReadOnlyList<QuestRewardChoice> rewards)
+        {
+            if (rewards.Count == 0)
+                return 0;
+
+            return strategy switch
+            {
+                QuestRewardSelectionStrategy.HighestValue =>
+                    rewards.OrderByDescending(r => r.VendorValue).First().Index,
+
+                QuestRewardSelectionStrategy.BestForClass =>
+                    (rewards.FirstOrDefault(r => r.SuitableForClass) ?? rewards[0]).Index,
+
+                QuestRewardSelectionStrategy.BestStatUpgrade =>
+                    rewards.OrderByDescending(r => r.StatScore).First().Index,
+
+                QuestRewardSelectionStrategy.MostNeeded =>
+                    rewards.OrderByDescending(r => r.SuitableForClass)
+                           .ThenByDescending(r => r.StatScore)
+                           .ThenByDescending(r => r.VendorValue)
+                           .First().Index,
+
+                // FirstReward and Custom both fall through to index 0
+                _ => rewards[0].Index,
+            };
         }
 
         public async Task AcceptAllAvailableQuestsAsync(QuestAcceptanceFilter? filter = null, CancellationToken cancellationToken = default)
@@ -476,6 +524,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+
+            _gossipMenuSub?.Dispose();
+            _completionSub?.Dispose();
+            _textUpdateSub?.Dispose();
+
             GC.SuppressFinalize(this);
         }
         #endregion

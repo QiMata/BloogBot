@@ -135,6 +135,84 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     }
 
     // ==========================================================================
+    // AGGREGATE DRIFT GATES (NPT-MISS-003)
+    // ==========================================================================
+
+    /// <summary>
+    /// NPT-MISS-003: Hard regression gate across ALL recordings.
+    /// Computes aggregate clean-frame metrics and fails if any threshold is exceeded.
+    /// Excludes recording artifacts and SPLINE_ELEVATION transitions.
+    /// Reports top offenders with recording name, frame index, and XYZ error vector.
+    /// </summary>
+    [Fact]
+    public void AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds()
+    {
+        var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
+        if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings found or engine not initialized"); return; }
+
+        // Collect clean frames from all recordings (exclude artifacts + SPLINE_ELEVATION).
+        // Skip warm-up frames and geometry-gap frames:
+        // - First WARM_UP_FRAMES per recording: engine needs time to converge in a new zone
+        // - Frames with >GEOMETRY_GAP_THRESHOLD dZ error: missing underground geometry
+        //   (e.g. Undercity is underground but navmesh only has surface-level data)
+        const int WARM_UP_FRAMES = 5;
+        const float GEOMETRY_GAP_THRESHOLD = 10.0f;
+        var allClean = new List<CalibrationResult.FrameDetail>();
+        int geometryGapCount = 0;
+        foreach (var (name, _, result) in allResults)
+        {
+            var clean = result.CleanFrames.Where(f => f.Frame >= WARM_UP_FRAMES).ToList();
+            var geoGaps = clean.Where(f => MathF.Abs(f.ErrorZ) > GEOMETRY_GAP_THRESHOLD).Count();
+            geometryGapCount += geoGaps;
+            var filtered = clean.Where(f => MathF.Abs(f.ErrorZ) <= GEOMETRY_GAP_THRESHOLD).ToList();
+            _output.WriteLine($"  {name}: {filtered.Count} clean / {result.FrameCount} total " +
+                $"(artifacts={result.ArtifactCount}, splineElev={result.SplineElevationCount}, warmUp={WARM_UP_FRAMES}, geoGap={geoGaps})");
+            allClean.AddRange(filtered);
+        }
+        if (geometryGapCount > 0)
+            _output.WriteLine($"  ** {geometryGapCount} frames excluded as geometry gaps (|dZ|>{GEOMETRY_GAP_THRESHOLD}y — missing underground/WMO data)");
+
+        Assert.True(allClean.Count > 0, "No clean frames across all recordings — check data availability");
+
+        // Compute aggregate metrics
+        var sorted = allClean.Select(f => f.PosError).OrderBy(e => e).ToList();
+        float avgError = allClean.Average(f => f.PosError);
+        int p99Idx = Math.Clamp((int)(sorted.Count * 99 / 100.0), 0, sorted.Count - 1);
+        float p99Error = sorted[p99Idx];
+        float worstError = sorted[^1];
+
+        _output.WriteLine($"\n=== AGGREGATE CLEAN METRICS (n={allClean.Count}) ===");
+        _output.WriteLine($"  avg={avgError:F4}y  p99={p99Error:F4}y  worst={worstError:F4}y");
+        _output.WriteLine($"  Thresholds: avg<{Tolerances.AggregateCleanAvg}  p99<{Tolerances.AggregateCleanP99}  worst<{Tolerances.WorstCleanFrame}");
+
+        // Report top 10 worst clean frames for triage
+        var top10 = allClean.OrderByDescending(f => f.PosError).Take(10).ToList();
+        _output.WriteLine($"\n  Top 10 worst clean frames:");
+        foreach (var f in top10)
+        {
+            _output.WriteLine(
+                $"    [{f.RecordingName}] frame={f.Frame,5} err={f.PosError:F3}y " +
+                $"dX={f.ErrorX:+0.000;-0.000} dY={f.ErrorY:+0.000;-0.000} dZ={f.ErrorZ:+0.000;-0.000} " +
+                $"mode={f.MovementMode,-10} flags=0x{f.MoveFlags:X8}");
+        }
+
+        // Hard assertions — fail the build on drift regression
+        Assert.True(avgError < Tolerances.AggregateCleanAvg,
+            $"Aggregate clean-frame avg error {avgError:F4}y exceeds {Tolerances.AggregateCleanAvg}y threshold. " +
+            $"Worst: [{top10[0].RecordingName}] frame {top10[0].Frame} err={top10[0].PosError:F3}y");
+
+        Assert.True(p99Error < Tolerances.AggregateCleanP99,
+            $"Aggregate clean-frame P99 error {p99Error:F4}y exceeds {Tolerances.AggregateCleanP99}y threshold. " +
+            $"Worst: [{top10[0].RecordingName}] frame {top10[0].Frame} err={top10[0].PosError:F3}y");
+
+        Assert.True(worstError < Tolerances.WorstCleanFrame,
+            $"Worst clean frame error {worstError:F4}y exceeds {Tolerances.WorstCleanFrame}y threshold. " +
+            $"Frame: [{top10[0].RecordingName}] frame {top10[0].Frame} " +
+            $"sim=({top10[0].SimX:F3},{top10[0].SimY:F3},{top10[0].SimZ:F3}) " +
+            $"rec=({top10[0].RecX:F3},{top10[0].RecY:F3},{top10[0].RecZ:F3})");
+    }
+
+    // ==========================================================================
     // TRANSITION ANALYSIS
     // ==========================================================================
 
@@ -245,6 +323,22 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             _output.WriteLine($"    raw=0x{f.RawMoveFlags:X8}→0x{f.RawNextMoveFlags:X8}  dt={f.Dt:F4}  groundZ={f.EngineGroundZ:F3}");
             _output.WriteLine($"    sim=({f.SimX:F3},{f.SimY:F3},{f.SimZ:F3}) rec=({f.RecX:F3},{f.RecY:F3},{f.RecZ:F3}) " +
                 $"dX={f.ErrorX:F3} dY={f.ErrorY:F3} dZ={f.ErrorZ:F3}");
+        }
+
+        // Top 10 worst per mode (non-transport)
+        foreach (var mode in new[] { "ground", "air", "swim", "transition" })
+        {
+            var modeFrames = cleanFrames.Where(f => f.MovementMode == mode).OrderByDescending(f => f.PosError).Take(10).ToList();
+            if (modeFrames.Count == 0) continue;
+            _output.WriteLine($"\n  === TOP 10 WORST CLEAN {mode.ToUpper()} FRAMES ===");
+            foreach (var f in modeFrames)
+            {
+                _output.WriteLine($"  [{f.RecordingName}] frame={f.Frame,5} err={f.PosError:F3}y hErr={f.HorizError:F3}y vErr={f.VertError:F3}y " +
+                    $"trans={f.Transition,-16}");
+                _output.WriteLine($"    raw=0x{f.RawMoveFlags:X8}→0x{f.RawNextMoveFlags:X8}  dt={f.Dt:F4}  groundZ={f.EngineGroundZ:F3}");
+                _output.WriteLine($"    sim=({f.SimX:F3},{f.SimY:F3},{f.SimZ:F3}) rec=({f.RecX:F3},{f.RecY:F3},{f.RecZ:F3}) " +
+                    $"dX={f.ErrorX:F3} dY={f.ErrorY:F3} dZ={f.ErrorZ:F3}");
+            }
         }
 
         // Verify landing frames are within tolerance
@@ -509,7 +603,7 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
                 for (int h = 0; h < hitCount && h < 10; h++)
                 {
                     var hit = hits[h];
-                    string walkable = hit.NormalZ >= 0.57f ? "WALKABLE" : "wall";
+                    string walkable = hit.NormalZ >= PhysicsTestConstants.WalkableMinNormalZ ? "WALKABLE" : "wall";
                     string pen = hit.StartPenetrating ? "PEN" : "   ";
                     _output.WriteLine($"    [{h}] {pen} dist={hit.Distance:F3} pt=({hit.PointX:F2},{hit.PointY:F2},{hit.PointZ:F2}) " +
                         $"nrm=({hit.NormalX:F3},{hit.NormalY:F3},{hit.NormalZ:F3}) inst={hit.InstanceId} {walkable}");
@@ -638,15 +732,16 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
         TryPreloadMap(1, _output); // Kalimdor
 
-        // Worst SS ground frames from RunningJumps recording (all map 1)
+        // Worst ground frames from TransitionAnalysis — engine groundZ is 0.3-0.52y BELOW recording
+        // All Orgrimmar (map 1), all pure vertical error, all negative dZ (sim below rec)
         var probePositions = new (int frame, float recX, float recY, float recZ, float simZ)[]
         {
-            (1124, 1647.234f, -4359.724f, 21.845f, 23.005f),  // sim 1.16 ABOVE
-            (2143, 1669.694f, -4361.419f, 29.903f, 28.902f),  // sim 1.0 BELOW
-            (1396, 1651.655f, -4370.454f, 22.791f, 21.882f),  // sim 0.91 BELOW
-            (432,  1632.217f, -4371.956f, 30.447f, 29.550f),  // sim 0.90 BELOW
-            (886,  1629.926f, -4376.795f, 30.379f, 29.494f),  // sim 0.88 BELOW
-            (2196, 1670.547f, -4358.827f, 29.964f, 29.105f),  // sim 0.86 BELOW
+            (1727, 1637.264f, -4374.140f, 29.369f, 28.850f),  // sim 0.52 BELOW (worst)
+            (1785, 1637.267f, -4373.962f, 29.359f, 28.851f),  // sim 0.51 BELOW
+            (2227, 1671.257f, -4356.295f, 29.856f, 29.443f),  // sim 0.41 BELOW
+            (998,  1651.753f, -4374.463f, 24.705f, 24.299f),  // sim 0.41 BELOW
+            (1425, 1660.734f, -4332.938f, 61.669f, 61.266f),  // sim 0.40 BELOW
+            (839,  1625.772f, -4380.119f, 29.320f, 28.921f),  // sim 0.40 BELOW
         };
 
         foreach (var (frame, recX, recY, recZ, simZ) in probePositions)
@@ -665,6 +760,49 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         }
     }
 
+    [Fact]
+    public void GroundZ_SceneCacheVsVmap_Diagnostic()
+    {
+        if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
+        TryPreloadMap(1, _output); // Kalimdor
+
+        // Worst ground frames from replay — engine groundZ is 0.4-0.9y BELOW recording
+        var probePositions = new (int frame, float recX, float recY, float recZ, float simZ)[]
+        {
+            (1727, 1637.264f, -4374.140f, 29.369f, 28.850f),
+            (2227, 1671.257f, -4356.295f, 29.856f, 29.443f),
+            (998,  1651.753f, -4374.463f, 24.705f, 24.299f),
+            (1425, 1660.734f, -4332.938f, 61.669f, 61.266f),
+            (839,  1625.772f, -4380.119f, 29.320f, 28.921f),
+        };
+
+        _output.WriteLine("Comparing scene cache vs raw VMAP getHeight at worst-error positions:");
+        _output.WriteLine("(VMAP init may take 30-60s on first call)\n");
+
+        foreach (var (frame, recX, recY, recZ, simZ) in probePositions)
+        {
+            // Query from recorded Z and recorded Z + 2 (MaNGOS style)
+            foreach (float qz in new[] { recZ, recZ + 2.0f })
+            {
+                float bestZ = NavigationInterop.GetGroundZBypassCache(
+                    1, recX, recY, qz, 10.0f,
+                    out float vmapZ, out float adtZ, out float bihZ, out float sceneCacheZ);
+
+                _output.WriteLine($"Frame {frame} (qz={qz:F2}): scene={sceneCacheZ:F3} vmap={vmapZ:F3} adt={adtZ:F3} bih={bihZ:F3} best={bestZ:F3} rec={recZ:F3} gap={MathF.Abs(bestZ - recZ):F3}");
+            }
+
+            // Enumerate ALL surfaces at this position (no Z filter)
+            var zValues = new float[32];
+            var instanceIds = new uint[32];
+            int surfaceCount = NavigationInterop.EnumerateAllSurfacesAt(1, recX, recY, zValues, instanceIds, 32);
+            _output.WriteLine($"  ALL surfaces at ({recX:F3},{recY:F3}): {surfaceCount} found");
+            for (int i = 0; i < surfaceCount; i++)
+                _output.WriteLine($"    surface[{i}]: Z={zValues[i]:F4} instanceId={instanceIds[i]} err_to_rec={MathF.Abs(zValues[i] - recZ):F4}");
+
+            _output.WriteLine("");
+        }
+    }
+
     private void AssertPrecision(CalibrationResult result, float avgTolerance, float p99Tolerance)
     {
         if (result.FrameCount == 0) return;
@@ -678,5 +816,286 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         Assert.True(result.SteadyStateP99 < p99Tolerance,
             $"Steady-state P99 position error {result.SteadyStateP99:F4}y exceeds {p99Tolerance}y tolerance " +
             $"(overall P99={result.P99:F4}y, max={result.MaxPositionError:F4}y)");
+    }
+
+    // ==========================================================================
+    // WMO DOODAD EXTRACTION
+    // ==========================================================================
+
+    [Fact(Skip = "One-time utility — 359 .doodads files already extracted. StormLib.dll not available at runtime.")]
+    public void ExtractWmoDoodads_FromMpq()
+    {
+        if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
+
+        // Locate WoW client Data directory
+        string[] possiblePaths = [
+            @"D:\World of Warcraft\Data",
+            @"C:\World of Warcraft\Data",
+            @"E:\World of Warcraft\Data",
+        ];
+        string? mpqDataDir = possiblePaths.FirstOrDefault(System.IO.Directory.Exists);
+        if (mpqDataDir == null)
+        {
+            _output.WriteLine("SKIP: WoW client Data directory not found");
+            return;
+        }
+
+        // Find vmaps directory
+        string baseDir = AppContext.BaseDirectory;
+        string vmapsDir = System.IO.Path.Combine(baseDir, "vmaps");
+        if (!System.IO.Directory.Exists(vmapsDir))
+        {
+            _output.WriteLine($"SKIP: vmaps directory not found at {vmapsDir}");
+            return;
+        }
+
+        _output.WriteLine($"MPQ Data: {mpqDataDir}");
+        _output.WriteLine($"vmaps:    {vmapsDir}");
+
+        int result = NavigationInterop.ExtractWmoDoodads(mpqDataDir, vmapsDir);
+        _output.WriteLine($"Result: {result} .doodads files written");
+        Assert.True(result >= 0, $"ExtractWmoDoodads failed with result {result}");
+        Assert.True(result > 0, "No .doodads files were extracted");
+
+        // Verify some key files exist
+        string[] expectedWmos = ["Orgrimmar.wmo.doodads", "Stormwind.wmo.doodads"];
+        foreach (var name in expectedWmos)
+        {
+            // Case-insensitive search
+            var match = System.IO.Directory.GetFiles(vmapsDir, "*.doodads")
+                .FirstOrDefault(f => System.IO.Path.GetFileName(f)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                _output.WriteLine($"  Found: {System.IO.Path.GetFileName(match)}");
+            else
+                _output.WriteLine($"  Missing: {name} (may not match vmaps naming)");
+        }
+    }
+
+    /// <summary>
+    /// Diagnostic: probe GetGroundZ for Ragefire Chasm (map 389) to verify
+    /// the physics engine can find collision geometry in the instance.
+    /// </summary>
+    [Fact]
+    public void RFC_GroundZ_Diagnostic()
+    {
+        const uint mapId = 389;
+        // RFC entrance coordinates (where bots get teleported)
+        float x = 3.0f, y = -11.0f, z = -15.0f;
+
+        _output.WriteLine($"=== Ragefire Chasm (map {mapId}) GetGroundZ Diagnostic ===");
+        _output.WriteLine($"Probe position: ({x}, {y}, {z})");
+
+        // Query GetGroundZ from various heights
+        float[] queryHeights = { z - 5, z - 2, z - 1, z, z + 1, z + 2, z + 5, z + 10 };
+        int validHits = 0;
+        foreach (float qz in queryHeights)
+        {
+            float gz = NavigationInterop.GetGroundZ(mapId, x, y, qz, 20.0f);
+            bool valid = gz > -100000f;
+            if (valid) validHits++;
+            _output.WriteLine($"  GetGroundZ(z={qz:F2}, maxDist=20) = {gz:F4} {(valid ? "VALID" : "MISS")}");
+        }
+
+        // Probe all DungeonWaypoints.RagefireChasm positions (corrected to real dungeon layout)
+        _output.WriteLine($"\n=== Dungeon Waypoint positions ===");
+        (float ix, float iy, float iz)[] interiorPoints = {
+            (3f, -11f, -18f),           // WP1: entrance
+            (-23f, -61f, -21f),         // WP2: first corridor
+            (-70f, -33f, -18f),         // WP3: earthborers
+            (-106f, -38f, -30f),        // WP4: approaching Oggleflint
+            (-130f, -35f, -33f),        // WP5: near Oggleflint
+            (-148f, 28f, -39f),         // WP6: Oggleflint's area
+            (-177f, 75f, -22f),         // WP7: ascending past Oggleflint
+            (-209f, 56f, -14f),         // WP8: lava chambers
+            (-223f, 87f, -25f),         // WP9: Searing Blade territory
+            (-245f, 150f, -19f),        // WP10: Taragaman
+            (-270f, 97f, -25f),         // WP11: deep corridor
+            (-300f, 154f, -25f),        // WP12: deep corridor
+            (-340f, 214f, -21f),        // WP13: approaching Jergosh
+            (-377f, 209f, -22f),        // WP14: Jergosh
+            (-385f, 146f, 8f),          // WP15: Bazzalan
+        };
+        foreach (var (ix, iy, iz) in interiorPoints)
+        {
+            float gz = NavigationInterop.GetGroundZ(mapId, ix, iy, iz, 20.0f);
+            bool valid = gz > -100000f;
+            if (valid) validHits++;
+            _output.WriteLine($"  GetGroundZ({ix:F1},{iy:F1},z={iz:F1}) = {gz:F4} {(valid ? "VALID" : "MISS")}");
+        }
+
+        _output.WriteLine($"\nTotal valid ground hits: {validHits}/{queryHeights.Length + interiorPoints.Length}");
+        Assert.True(validHits > 0, "Physics engine found NO ground in RFC (map 389) — VMAP collision data missing or not loading");
+    }
+
+    /// <summary>
+    /// Diagnostic: run PhysicsStepV2 inside RFC with MOVEFLAG_FORWARD set.
+    /// Verifies the physics engine actually moves the capsule horizontally
+    /// AND provides wall collision (collide-and-slide) in the dungeon.
+    /// </summary>
+    [Fact]
+    public void RFC_PhysicsStep_Movement_Diagnostic()
+    {
+        const uint mapId = 389;
+        // RFC entrance — face south into the dungeon (orientation ~4.7 rad ≈ south)
+        float startX = 3.0f, startY = -11.0f, startZ = -15.0f;
+        float facing = 4.7f; // roughly south
+
+        // First, find actual ground Z at this position
+        float groundZ = NavigationInterop.GetGroundZ(mapId, startX, startY, startZ, 20.0f);
+        _output.WriteLine($"=== RFC PhysicsStep Movement Diagnostic ===");
+        _output.WriteLine($"Start: ({startX}, {startY}, {startZ}), facing={facing:F2}");
+        _output.WriteLine($"GetGroundZ at start = {groundZ:F4} (valid={groundZ > -100000f})");
+
+        // Use ground Z if valid, otherwise use start Z
+        float useZ = groundZ > -100000f ? groundZ + 0.1f : startZ;
+
+        // Simulate 30 frames (~1 second) of forward movement
+        float posX = startX, posY = startY, posZ = useZ;
+        float vx = 0, vy = 0, vz = 0;
+        float prevGroundZ = groundZ > -100000f ? groundZ : -200000f;
+        int framesWithGround = 0;
+        int framesWithMovement = 0;
+
+        for (int frame = 0; frame < 30; frame++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x1, // MOVEFLAG_FORWARD
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Pitch = 0,
+                Vx = vx,
+                Vy = vy,
+                Vz = vz,
+                WalkSpeed = 2.5f,
+                RunSpeed = 7.0f,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                FlightSpeed = 7.0f,
+                TurnSpeed = 3.14f,
+                FallTime = 0,
+                FallStartZ = useZ,
+                Height = 2.0313f,
+                Radius = 0.3064f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0, PrevGroundNy = 0, PrevGroundNz = 1,
+                MapId = mapId,
+                DeltaTime = 0.0333f,  // ~30 FPS
+                FrameCounter = (uint)frame,
+                StepUpBaseZ = -200000f,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float dz = output.Z - posZ;
+            float dist2D = MathF.Sqrt(dx * dx + dy * dy);
+            bool hasGround = output.GroundZ > -50000f;
+            if (hasGround) framesWithGround++;
+            if (dist2D > 0.001f) framesWithMovement++;
+
+            _output.WriteLine($"  Frame {frame:D2}: pos=({output.X:F2},{output.Y:F2},{output.Z:F2}) " +
+                $"delta2D={dist2D:F4} dz={dz:F4} groundZ={output.GroundZ:F2} " +
+                $"vel=({output.Vx:F2},{output.Vy:F2},{output.Vz:F2}) " +
+                $"flags=0x{output.MoveFlags:X} {(hasGround ? "GROUND" : "NO_GROUND")}");
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            vx = output.Vx;
+            vy = output.Vy;
+            vz = output.Vz;
+            prevGroundZ = hasGround ? output.GroundZ : prevGroundZ;
+        }
+
+        float totalDist = MathF.Sqrt((posX - startX) * (posX - startX) + (posY - startY) * (posY - startY));
+        _output.WriteLine($"\nFinal: ({posX:F2},{posY:F2},{posZ:F2}), total 2D dist={totalDist:F2}");
+        _output.WriteLine($"Frames with ground: {framesWithGround}/30");
+        _output.WriteLine($"Frames with movement: {framesWithMovement}/30");
+
+        Assert.True(framesWithGround > 0, "Physics engine found no ground in any frame — VMAP collision data not loading for PhysicsStep");
+        Assert.True(framesWithMovement > 0, "Physics engine returned zero horizontal delta in all frames — movement not working in RFC");
+    }
+
+    /// <summary>
+    /// Diagnostic: test wall collision in RFC. Walk the capsule toward a known wall
+    /// and verify the physics engine blocks/deflects the movement.
+    /// </summary>
+    [Fact]
+    public void RFC_WallCollision_Diagnostic()
+    {
+        const uint mapId = 389;
+        // Start in first corridor, face directly into the east wall
+        // The corridor runs roughly north-south at x≈-23, y≈-61
+        // Face east (orientation 0) to walk into the wall
+        float startX = -23f, startY = -61f, startZ = -21f;
+        float facing = 0f; // east — into the wall
+
+        float groundZ = NavigationInterop.GetGroundZ(mapId, startX, startY, startZ, 20.0f);
+        _output.WriteLine($"=== RFC Wall Collision Diagnostic ===");
+        _output.WriteLine($"Start: ({startX}, {startY}, {startZ}), facing={facing:F2} (east into wall)");
+        _output.WriteLine($"GetGroundZ = {groundZ:F4}");
+
+        float useZ = groundZ > -100000f ? groundZ + 0.1f : startZ;
+        float posX = startX, posY = startY, posZ = useZ;
+        float vx = 0, vy = 0, vz = 0;
+        float prevGroundZ = groundZ > -100000f ? groundZ : -200000f;
+        int wallBlockedFrames = 0;
+
+        for (int frame = 0; frame < 60; frame++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x1, // MOVEFLAG_FORWARD
+                X = posX, Y = posY, Z = posZ,
+                Orientation = facing,
+                Vx = vx, Vy = vy, Vz = vz,
+                WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f, SwimBackSpeed = 2.5f, FlightSpeed = 7.0f, TurnSpeed = 3.14f,
+                Height = 2.0313f, Radius = 0.3064f,
+                PrevGroundZ = prevGroundZ,
+                PrevGroundNx = 0, PrevGroundNy = 0, PrevGroundNz = 1,
+                MapId = mapId,
+                DeltaTime = 0.0333f,
+                FrameCounter = (uint)frame,
+                FallStartZ = useZ,
+                StepUpBaseZ = -200000f,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            float dx = output.X - posX;
+            float dy = output.Y - posY;
+            float dist2D = MathF.Sqrt(dx * dx + dy * dy);
+            bool hasGround = output.GroundZ > -50000f;
+            if (dist2D < 0.001f && hasGround) wallBlockedFrames++;
+
+            if (frame < 10 || frame % 10 == 0 || dist2D < 0.001f)
+                _output.WriteLine($"  Frame {frame:D2}: pos=({output.X:F2},{output.Y:F2},{output.Z:F2}) " +
+                    $"delta2D={dist2D:F4} groundZ={output.GroundZ:F2} " +
+                    $"flags=0x{output.MoveFlags:X} {(dist2D < 0.001f ? "BLOCKED" : "MOVED")}");
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+            vx = output.Vx;
+            vy = output.Vy;
+            vz = output.Vz;
+            prevGroundZ = hasGround ? output.GroundZ : prevGroundZ;
+        }
+
+        float totalDist = MathF.Sqrt((posX - startX) * (posX - startX) + (posY - startY) * (posY - startY));
+        _output.WriteLine($"\nTotal 2D distance moved: {totalDist:F2} (expected: <2y if wall blocks)");
+        _output.WriteLine($"Frames where wall blocked movement: {wallBlockedFrames}/60");
+
+        // If no wall collision: bot would move 7 y/s * 2s = 14y east (through the wall)
+        // If wall collision works: bot should be blocked at <2y total distance
+        _output.WriteLine($"\nIf totalDist > 5: wall collision NOT working (bot walked through wall)");
+        _output.WriteLine($"If totalDist < 2: wall collision IS working (bot was blocked by wall)");
     }
 }

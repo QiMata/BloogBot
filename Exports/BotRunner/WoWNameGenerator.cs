@@ -40,6 +40,79 @@ namespace BotRunner
             throw new ArgumentException($"Unknown class code: {code}");
         }
 
+        /// <summary>
+        /// Resolves the character class from the WWOW_CHARACTER_CLASS env var (if set),
+        /// then falls back to parsing positions [2:4] of the account name.
+        /// Returns Warrior as default if neither source provides a valid code.
+        /// </summary>
+        public static Class ResolveClass(string? accountName)
+        {
+            var envClass = Environment.GetEnvironmentVariable("WWOW_CHARACTER_CLASS");
+            if (!string.IsNullOrEmpty(envClass))
+            {
+                if (Enum.TryParse<Class>(envClass, ignoreCase: true, out var parsed))
+                    return parsed;
+                // Try as 2-letter code
+                foreach (var kvp in ClassCodeMap)
+                    if (kvp.Value.Equals(envClass, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Key;
+            }
+
+            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
+            {
+                var code = accountName.Substring(2, 2);
+                foreach (var kvp in ClassCodeMap)
+                    if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Key;
+            }
+
+            return Class.Warrior;
+        }
+
+        /// <summary>
+        /// Resolves the character race from the WWOW_CHARACTER_RACE env var (if set),
+        /// then falls back to parsing positions [0:2] of the account name.
+        /// Returns Orc as default if neither source provides a valid code.
+        /// </summary>
+        public static Race ResolveRace(string? accountName)
+        {
+            var envRace = Environment.GetEnvironmentVariable("WWOW_CHARACTER_RACE");
+            if (!string.IsNullOrEmpty(envRace))
+            {
+                if (Enum.TryParse<Race>(envRace, ignoreCase: true, out var parsed))
+                    return parsed;
+                foreach (var kvp in RaceCodeMap)
+                    if (kvp.Value.Equals(envRace, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Key;
+            }
+
+            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 2)
+            {
+                var code = accountName[..2];
+                foreach (var kvp in RaceCodeMap)
+                    if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase))
+                        return kvp.Key;
+            }
+
+            return Race.Orc;
+        }
+
+        /// <summary>
+        /// Resolves the character gender from the WWOW_CHARACTER_GENDER env var (if set),
+        /// then falls back to the class-based default.
+        /// The env var is set from CharacterSettings.CharacterGender in StateManagerSettings.json.
+        /// </summary>
+        public static Gender ResolveGender(Class @class)
+        {
+            var envGender = Environment.GetEnvironmentVariable("WWOW_CHARACTER_GENDER");
+            if (!string.IsNullOrEmpty(envGender))
+            {
+                if (Enum.TryParse<Gender>(envGender, ignoreCase: true, out var parsed))
+                    return parsed;
+            }
+            return DetermineGender(@class);
+        }
+
         public static Gender DetermineGender(Class @class)
         {
             return @class switch

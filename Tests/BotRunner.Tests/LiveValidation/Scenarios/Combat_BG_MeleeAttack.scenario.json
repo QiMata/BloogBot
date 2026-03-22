@@ -1,0 +1,34 @@
+{
+  "name": "Combat_BG_MeleeAttack",
+  "description": "BG bot engages mobs with melee combat in Valley of Trials",
+  "settings": null,
+  "enableCoordinator": false,
+  "minBots": 1,
+  "botEntryTimeoutSeconds": 30,
+  "setup": [
+    {
+      "account": "$BG",
+      "cleanSlate": true,
+      "gmCommands": [".gm on"],
+      "learnSpells": [6673],
+      "addItems": [
+        { "id": 25, "count": 1 },
+        { "id": 2129, "count": 1 }
+      ],
+      "teleport": { "mapId": 1, "x": -284, "y": -4383, "z": 60 }
+    }
+  ],
+  "action": {
+    "account": "$BG",
+    "type": "StartMeleeAttack",
+    "parameters": []
+  },
+  "observe": {
+    "timeoutSeconds": 60,
+    "pollIntervalMs": 3000,
+    "logIntervalSeconds": 15
+  },
+  "assertions": {
+    "actionTypeSeen": "StartMeleeAttack"
+  }
+}

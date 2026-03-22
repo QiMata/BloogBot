@@ -1,4 +1,8 @@
 using System;
+<<<<<<< HEAD
+=======
+using System.Diagnostics;
+>>>>>>> cpp_physics_system
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -9,6 +13,7 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
+<<<<<<< HEAD
 /// Crafting profession integration test (First Aid) - dual-client validation.
 ///
 /// Each bot (BG + FG) independently:
@@ -20,6 +25,18 @@ namespace BotRunner.Tests.LiveValidation;
 ///   dotnet test --filter "FullyQualifiedName~CraftingProfessionTests" --configuration Release
 /// </summary>
 [RequiresMangosStack]
+=======
+/// BG-first First Aid crafting baseline.
+///
+/// Current production path under test:
+/// - Exports/BotRunner/BotRunnerService.ActionDispatch.cs
+/// - Exports/BotRunner/BotRunnerService.Sequences.Combat.cs
+/// - Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs
+///
+/// FG parity is intentionally excluded here. Foreground crafting still depends on Lua spell-name
+/// resolution and is not the behavior surface we are overhauling first.
+/// </summary>
+>>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class CraftingProfessionTests
 {
@@ -28,6 +45,7 @@ public class CraftingProfessionTests
 
     private const uint FirstAidApprentice = 3273;
     private const uint LinenBandageRecipe = 3275;
+<<<<<<< HEAD
     private const uint LinenCloth = 2589;
     private const uint LinenBandageItem = 1251;
 
@@ -41,6 +59,11 @@ public class CraftingProfessionTests
     private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
     private const uint StandStateMask = 0xFF;
     private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
+=======
+    private const uint LinenClothItem = LiveBotFixture.TestItems.LinenCloth;
+    private const uint LinenBandageItem = 1251;
+    private const int CraftTimeoutMs = 8000;
+>>>>>>> cpp_physics_system
 
     public CraftingProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -53,6 +76,7 @@ public class CraftingProfessionTests
     [SkippableFact]
     public async Task FirstAid_LearnAndCraft_ProducesLinenBandage()
     {
+<<<<<<< HEAD
         bool bgPassed;
 
         // === BG Bot ===
@@ -171,10 +195,62 @@ public class CraftingProfessionTests
 
         // Step 3: Cast recipe and verify Linen Bandage appears in bag snapshot.
         _output.WriteLine($"  [{label}] Casting Linen Bandage recipe (spell {LinenBandageRecipe})");
+=======
+        var metrics = await RunCraftingScenarioAsync(_bot.BgAccountName!, "BG");
+
+        Assert.True(metrics.ClothPrepared, "BG: Exactly one Linen Cloth should be staged before the craft cast.");
+        Assert.True(metrics.Crafted, "BG: Casting Linen Bandage should yield a Linen Bandage in bag contents.");
+        Assert.Equal(1, metrics.ClothSlotsBefore);
+        Assert.Equal(0, metrics.BandageSlotsBefore);
+        Assert.Equal(0, metrics.ClothSlotsAfter);
+        Assert.Equal(1, metrics.BandageSlotsAfter);
+        Assert.Equal(1, metrics.BagItemCountAfter);
+        Assert.InRange(metrics.CraftLatencyMs, 1, CraftTimeoutMs);
+    }
+
+    private async Task<CraftingMetrics> RunCraftingScenarioAsync(string account, string label)
+    {
+        await _bot.EnsureCleanSlateAsync(account, label);
+
+        _output.WriteLine($"[{label}] Clearing bags for deterministic craft verification.");
+        await _bot.BotClearInventoryAsync(account);
+
+        _output.WriteLine($"[{label}] Teaching First Aid apprentice + Linen Bandage recipe.");
+        await _bot.BotLearnSpellAsync(account, FirstAidApprentice);
+        await _bot.BotLearnSpellAsync(account, LinenBandageRecipe);
+
+        var spellsKnown = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => snapshot.Player?.SpellList?.Contains(FirstAidApprentice) == true
+                && snapshot.Player?.SpellList?.Contains(LinenBandageRecipe) == true,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 250,
+            progressLabel: $"{label} first-aid spells");
+
+        _output.WriteLine($"[{label}] Staging exactly one Linen Cloth.");
+        await _bot.BotAddItemAsync(account, LinenClothItem, 1);
+
+        var clothPrepared = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItemSlots(snapshot, LinenClothItem) == 1
+                && CountItemSlots(snapshot, LinenBandageItem) == 0,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 250,
+            progressLabel: $"{label} linen cloth");
+
+        await _bot.RefreshSnapshotsAsync();
+        var before = await _bot.GetSnapshotAsync(account);
+        var clothSlotsBefore = CountItemSlots(before, LinenClothItem);
+        var bandageSlotsBefore = CountItemSlots(before, LinenBandageItem);
+
+        _output.WriteLine($"[{label}] Casting Linen Bandage recipe via ActionType.CastSpell.");
+        var craftTimer = Stopwatch.StartNew();
+>>>>>>> cpp_physics_system
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
             ActionType = ActionType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)LinenBandageRecipe } }
+<<<<<<< HEAD
         }, delayMs: 3500);
 
         await _bot.RefreshSnapshotsAsync();
@@ -197,10 +273,35 @@ public class CraftingProfessionTests
         }
 
         _output.WriteLine($"  [{label}] Bandage slots before={bandageSlotsBefore}, after={bandageSlotsAfter}, crafted={crafted}");
+=======
+        }, delayMs: 500);
+
+        var crafted = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItemSlots(snapshot, LinenBandageItem) == 1
+                && CountItemSlots(snapshot, LinenClothItem) == 0,
+            TimeSpan.FromMilliseconds(CraftTimeoutMs),
+            pollIntervalMs: 200,
+            progressLabel: $"{label} linen bandage");
+
+        craftTimer.Stop();
+
+        await _bot.RefreshSnapshotsAsync();
+        var after = await _bot.GetSnapshotAsync(account);
+        var clothSlotsAfter = CountItemSlots(after, LinenClothItem);
+        var bandageSlotsAfter = CountItemSlots(after, LinenBandageItem);
+        var bagItemCountAfter = after?.Player?.BagContents?.Count ?? 0;
+
+        _output.WriteLine(
+            $"[{label}] craft metrics: spellListSynced={spellsKnown}, clothPrepared={clothPrepared}, crafted={crafted}, " +
+            $"cloth {clothSlotsBefore}->{clothSlotsAfter}, bandage {bandageSlotsBefore}->{bandageSlotsAfter}, " +
+            $"bagItems={bagItemCountAfter}, latencyMs={craftTimer.ElapsedMilliseconds}");
+>>>>>>> cpp_physics_system
 
         if (!crafted)
             _bot.DumpSnapshotDiagnostics(after, label);
 
+<<<<<<< HEAD
         return crafted;
     }
 
@@ -242,4 +343,31 @@ public class CraftingProfessionTests
         var dz = z1 - z2;
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
     }
+=======
+        return new CraftingMetrics(
+            spellsKnown,
+            clothPrepared,
+            crafted,
+            clothSlotsBefore,
+            bandageSlotsBefore,
+            clothSlotsAfter,
+            bandageSlotsAfter,
+            bagItemCountAfter,
+            (int)craftTimer.ElapsedMilliseconds);
+    }
+
+    private static int CountItemSlots(WoWActivitySnapshot? snapshot, uint itemId)
+        => snapshot?.Player?.BagContents?.Values.Count(value => value == itemId) ?? 0;
+
+    private sealed record CraftingMetrics(
+        bool SpellsKnown,
+        bool ClothPrepared,
+        bool Crafted,
+        int ClothSlotsBefore,
+        int BandageSlotsBefore,
+        int ClothSlotsAfter,
+        int BandageSlotsAfter,
+        int BagItemCountAfter,
+        int CraftLatencyMs);
+>>>>>>> cpp_physics_system
 }

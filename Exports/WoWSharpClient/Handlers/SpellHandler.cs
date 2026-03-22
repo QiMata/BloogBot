@@ -27,7 +27,8 @@ namespace WoWSharpClient.Handlers
                     spells.Add(new GameData.Core.Models.Spell(spellID, 0, "", "", ""));
                 }
 
-                WoWSharpObjectManager.Instance.Spells = spells;
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                    WoWSharpObjectManager.Instance.Spells = spells;
                 Log.Information($"[SpellHandler] Loaded {spellCount} spells from SMSG_INITIAL_SPELLS");
 
                 ushort cooldownCount = reader.ReadUInt16();
@@ -60,11 +61,71 @@ namespace WoWSharpClient.Handlers
             try
             {
                 uint spellId = reader.ReadUInt32();
+<<<<<<< HEAD
                 var existing = WoWSharpObjectManager.Instance.Spells;
                 if (existing != null && !existing.Exists(s => s.Id == spellId))
                 {
                     existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
                     Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+=======
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                {
+                    var existing = WoWSharpObjectManager.Instance.Spells;
+                    if (existing != null && !existing.Exists(s => s.Id == spellId))
+                    {
+                        existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
+                        Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+                    }
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Parses SMSG_SUPERCEDED_SPELL (0x12C).
+        /// Format: uint16 oldSpellId, uint16 newSpellId
+        /// Replaces the previous spell rank with the newly learned rank.
+        /// </summary>
+        public static void HandleSupercededSpell(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint oldSpellId = reader.ReadUInt16();
+                uint newSpellId = reader.ReadUInt16();
+
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                {
+                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var removed = existing.RemoveAll(s => s.Id == oldSpellId);
+                    if (!existing.Exists(s => s.Id == newSpellId))
+                        existing.Add(new GameData.Core.Models.Spell(newSpellId, 0, "", "", ""));
+
+                    Log.Information("[SpellHandler] Superseded spell: {OldSpellId} -> {NewSpellId} (removed={Removed}, total={Count})",
+                        oldSpellId, newSpellId, removed, existing.Count);
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Parses SMSG_REMOVED_SPELL (0x203).
+        /// Format: uint16 spellId
+        /// Removes a no-longer-known spell from the local spell list.
+        /// </summary>
+        public static void HandleRemovedSpell(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt16();
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                {
+                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var removed = existing.RemoveAll(s => s.Id == spellId);
+                    Log.Information("[SpellHandler] Removed spell: {SpellId} (removed={Removed}, total={Count})",
+                        spellId, removed, existing.Count);
+>>>>>>> cpp_physics_system
                 }
             }
             catch (EndOfStreamException) { }
@@ -227,6 +288,18 @@ namespace WoWSharpClient.Handlers
                 reader.ReadUInt32(); // reserved, always 0
                 uint spellId = reader.ReadUInt32();
                 uint blockedAmount = reader.ReadUInt32();
+
+                // Log melee swings involving the local player for combat diagnostics
+                var localPlayer = WoWSharpObjectManager.Instance.Player;
+                bool isOurAttack = localPlayer != null && attackerGuid == localPlayer.Guid;
+                bool isAttackOnUs = localPlayer != null && targetGuid == localPlayer.Guid;
+                if (isOurAttack || isAttackOnUs)
+                {
+                    Log.Warning("[SpellHandler] ATTACKER_STATE_UPDATE: {Dir} attacker=0x{Attacker:X} target=0x{Target:X} " +
+                        "damage={Damage} hitInfo=0x{HitInfo:X} spell={SpellId} blocked={Blocked}",
+                        isOurAttack ? "OUR_SWING" : "HIT_ON_US",
+                        attackerGuid, targetGuid, totalDamage, hitInfo, spellId, blockedAmount);
+                }
 
                 WoWSharpEventEmitter.Instance.FireOnAttackerStateUpdate(
                     hitInfo, attackerGuid, targetGuid, totalDamage, spellId, blockedAmount);
@@ -472,7 +545,14 @@ namespace WoWSharpClient.Handlers
 
                 var player = WoWSharpObjectManager.Instance.Player;
                 if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
+<<<<<<< HEAD
                     localPlayer.IsAutoAttacking = true;
+=======
+                {
+                    localPlayer.IsAutoAttacking = true;
+                    localPlayer.TargetGuid = targetGuid;
+                }
+>>>>>>> cpp_physics_system
             }
             catch (EndOfStreamException) { }
         }
@@ -490,17 +570,52 @@ namespace WoWSharpClient.Handlers
                 ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
 
                 var player = WoWSharpObjectManager.Instance.Player;
+<<<<<<< HEAD
                 if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
                     localPlayer.IsAutoAttacking = false;
+=======
+                if (player is Models.WoWLocalPlayer localPlayer)
+                {
+                    bool isUs = attackerGuid == localPlayer.Guid;
+                    Log.Information("[SpellHandler] SMSG_ATTACKSTOP: attacker=0x{Attacker:X} target=0x{Target:X} isLocalPlayer={IsUs} wasAutoAttacking={WasAuto}",
+                        attackerGuid, targetGuid, isUs, localPlayer.IsAutoAttacking);
+                    if (isUs)
+                        localPlayer.IsAutoAttacking = false;
+                }
+>>>>>>> cpp_physics_system
             }
             catch (EndOfStreamException) { }
         }
 
         /// <summary>
+<<<<<<< HEAD
         /// Handles SMSG_GAMEOBJECT_CUSTOM_ANIM (0x0B3).
         /// Format: uint64 guid, uint32 anim
         /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact (CMSG_GAMEOBJ_USE)
         /// so the catch happens instantly without requiring external polling.
+=======
+        /// SMSG_CANCEL_COMBAT (0x14E) — server cancels all combat state.
+        /// Sent when a mob evades or combat is otherwise terminated server-side.
+        /// Empty payload — just clears IsAutoAttacking so the bot re-sends
+        /// CMSG_ATTACKSWING on the next melee tick.
+        /// </summary>
+        public static void HandleCancelCombat(Opcode opcode, byte[] data)
+        {
+            var player = WoWSharpObjectManager.Instance.Player;
+            if (player is Models.WoWLocalPlayer localPlayer)
+            {
+                localPlayer.IsAutoAttacking = false;
+                Log.Warning("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking (possible mob evade)");
+            }
+        }
+
+        /// <summary>
+        /// Handles SMSG_GAMEOBJECT_CUSTOM_ANIM (0x0B3).
+        /// Format: uint64 guid, uint32 anim
+        /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact
+        /// (CMSG_GAMEOBJ_USE) so the task-owned loot window can open, but we do not
+        /// auto-loot here. FishingTask is responsible for consuming the loot window.
+>>>>>>> cpp_physics_system
         /// </summary>
         public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data)
         {
@@ -514,6 +629,7 @@ namespace WoWSharpClient.Handlers
 
                 var om = WoWSharpObjectManager.Instance;
                 var obj = om.GetObjectByGuid(guid);
+<<<<<<< HEAD
                 if (obj is not Models.WoWGameObject go) return;
 
                 // Fish bite: anim 0 on a bobber created by our player
@@ -531,10 +647,107 @@ namespace WoWSharpClient.Handlers
                         await Task.Delay(500);
                         om.ReleaseLoot(guid);
                         Log.Information("[FishBite] Released loot for bobber 0x{Guid:X}", guid);
+=======
+
+                Log.Information("[CustomAnim] Guid=0x{Guid:X} Anim={Anim} ObjFound={Found} ObjType={Type}",
+                    guid, anim, obj != null, obj?.GetType().Name ?? "null");
+
+                if (obj is not Models.WoWGameObject go)
+                {
+                    // Dump tracked game objects for diagnosis
+                    var gameObjs = om.Objects.OfType<Models.WoWGameObject>().ToArray();
+                    Log.Warning("[CustomAnim] Guid=0x{Guid:X} not found as WoWGameObject. Tracked GOs: {Count}", guid, gameObjs.Length);
+                    foreach (var tracked in gameObjs.Take(10))
+                        Log.Warning("[CustomAnim]   GO 0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId}", tracked.Guid, tracked.DisplayId, tracked.TypeId);
+                    return;
+                }
+
+                // Fish bite: anim 0 on a bobber created by our player.
+                // CreatedBy may be 0x0 if the CREATE_OBJECT packet omitted the field from its update mask
+                // (common on MaNGOS for dynamically spawned objects like fishing bobbers).
+                // Fallback: accept any bobber (DisplayId 668, TypeId 17) with anim=0 when CreatedBy is missing.
+                bool isPlayerCreated = go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid;
+                bool isBobber = go.DisplayId == 668 && go.TypeId == 17;
+                bool isFallbackBobber = go.CreatedBy.FullGuid == 0UL && isBobber;
+
+                Log.Information("[CustomAnim] GO match: DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} PlayerGuid=0x{PlayerGuid:X} isPlayerCreated={IsPlayer} isFallbackBobber={IsFallback}",
+                    go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, om.PlayerGuid.FullGuid, isPlayerCreated, isFallbackBobber);
+
+                if (anim == 0 && (isPlayerCreated || isFallbackBobber))
+                {
+                    Log.Information("[FishBite] Bobber 0x{Guid:X} - scheduling auto-interact", guid);
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(75).ConfigureAwait(false);
+                        ((GameData.Core.Interfaces.IObjectManager)om).ForceStopImmediate();
+                        om.InteractWithGameObject(guid);
+>>>>>>> cpp_physics_system
                     });
                 }
             }
             catch (EndOfStreamException) { }
         }
+<<<<<<< HEAD
+=======
+
+
+
+        /// <summary>
+        /// Parses MSG_CHANNEL_START (0x139).
+        /// Format: uint32 spellId, int32 duration (ms)
+        /// Sets ChannelingId on the local player so IsChanneling becomes true.
+        /// </summary>
+        public static void HandleChannelStart(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt32();
+                int durationMs = reader.ReadInt32();
+
+                var om = WoWSharpObjectManager.Instance;
+                if (om.Player is Models.WoWUnit player)
+                {
+                    player.ChannelingId = spellId;
+                    Log.Information("[SpellHandler] CHANNEL_START: spell={SpellId} duration={Duration}ms",
+                        spellId, durationMs);
+                }
+            }
+            catch (EndOfStreamException) { }
+            catch (Exception ex)
+            {
+                Log.Warning("[SpellHandler] Error parsing MSG_CHANNEL_START: {Message}", ex.Message);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Parses MSG_CHANNEL_UPDATE (0x13A).
+        /// Format: int32 remainingTime (ms). When 0, channel ended.
+        /// </summary>
+        public static void HandleChannelUpdate(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                int remainingTimeMs = reader.ReadInt32();
+
+                var om = WoWSharpObjectManager.Instance;
+                if (om.Player is Models.WoWUnit player && remainingTimeMs <= 0)
+                {
+                    Log.Information("[SpellHandler] CHANNEL_UPDATE: channel ended (remaining={Remaining}ms, was channeling spell={SpellId})",
+                        remainingTimeMs, player.ChannelingId);
+                    player.ChannelingId = 0;
+                }
+            }
+            catch (EndOfStreamException) { }
+            catch (Exception ex)
+            {
+                Log.Warning("[SpellHandler] Error parsing MSG_CHANNEL_UPDATE: {Message}", ex.Message);
+            }
+        }
+>>>>>>> cpp_physics_system
     }
 }
+

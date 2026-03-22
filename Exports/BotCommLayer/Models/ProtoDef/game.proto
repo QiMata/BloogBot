@@ -74,6 +74,9 @@ message WoWUnit {
     repeated uint32 auraApplications = 28;
     uint32 auraState = 29;
     uint32 petNumber = 30;
+    float boundingRadius = 31;     // UNIT_FIELD_BOUNDINGRADIUS — collision radius
+    float combatReach = 32;        // UNIT_FIELD_COMBATREACH — melee attack range component
+    uint32 unitReaction = 33;      // UnitReaction enum (0=Hated..7=Exalted) — from IWoWUnit.UnitReaction
 }
 
 // Definition for WoWPlayer, extending WoWUnit
@@ -173,6 +176,7 @@ message GameObjectSnapshot {
     string name = 9;
     float distanceToPlayer = 10;   // Yards from player to this object
     float scale = 11;              // Object scale (from OBJECT_FIELD_SCALE_X descriptor)
+    uint32 animProgress = 12;      // Animation progress (0-255); for transports, correlates with path position
 }
 
 // Snapshot of a nearby unit (NPC or other player) for pathing/collision validation.

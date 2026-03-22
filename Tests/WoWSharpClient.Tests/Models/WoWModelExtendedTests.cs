@@ -117,7 +117,11 @@ namespace WoWSharpClient.Tests.Models
             Assert.Equal(12, player.BankBagSlots.Length);
             Assert.Equal(24, player.VendorBuybackSlots.Length);
             Assert.Equal(64, player.KeyringSlots.Length);
+<<<<<<< HEAD
             Assert.Equal(102, player.SkillInfo.Length);
+=======
+            Assert.Equal(128, player.SkillInfo.Length);
+>>>>>>> cpp_physics_system
             Assert.Equal(64, player.ExploredZones.Length);
             Assert.Equal(20, player.CombatRating.Length);
         }
@@ -152,6 +156,11 @@ namespace WoWSharpClient.Tests.Models
             var player = new WoWLocalPlayer(new HighGuid(1));
             Assert.False(player.InGhostForm);
 
+<<<<<<< HEAD
+=======
+            // Buff fallback path requires Health > 0 (Health==0 without ghost flag returns false)
+            player.Health = 100;
+>>>>>>> cpp_physics_system
             player.Buffs.Add(new Spell(8326, 0, "Ghost", "", ""));
             Assert.True(player.InGhostForm);
         }
@@ -249,7 +258,11 @@ namespace WoWSharpClient.Tests.Models
         }
 
         [Fact]
+<<<<<<< HEAD
         public void CanResurrect_RequiresDeadAndCorpsePosition()
+=======
+        public void CanResurrect_RequiresGhostFormAndCorpsePosition()
+>>>>>>> cpp_physics_system
         {
             var player = new WoWLocalPlayer(new HighGuid(1));
 
@@ -257,11 +270,20 @@ namespace WoWSharpClient.Tests.Models
             player.Health = 100;
             Assert.False(player.CanResurrect);
 
+<<<<<<< HEAD
             // Dead but no corpse position — cannot resurrect
             player.Health = 0;
             Assert.False(player.CanResurrect);
 
             // Dead with corpse position — CAN resurrect
+=======
+            // Dead with ghost flag but no corpse position — cannot resurrect
+            player.Health = 0;
+            player.PlayerFlags = PlayerFlags.PLAYER_FLAGS_GHOST;
+            Assert.False(player.CanResurrect);
+
+            // Ghost with corpse position — CAN resurrect
+>>>>>>> cpp_physics_system
             player.CorpsePosition = new Position(100, 200, 300);
             Assert.True(player.CanResurrect);
         }

@@ -8,10 +8,14 @@ using System.Threading;
 
 namespace BotCommLayer
 {
-    public class ProtobufSocketClient<TRequest, TResponse>
+    public class ProtobufSocketClient<TRequest, TResponse> : IDisposable
         where TRequest : IMessage<TRequest>, new()
         where TResponse : IMessage<TResponse>, new()
     {
+<<<<<<< HEAD
+=======
+        private bool _disposed;
+>>>>>>> cpp_physics_system
         private TcpClient? _client;
         private NetworkStream? _stream;
         private readonly ILogger? _logger;
@@ -81,6 +85,19 @@ namespace BotCommLayer
 
         public TResponse SendMessage(TRequest request)
         {
+<<<<<<< HEAD
+=======
+            return SendMessage(request, readTimeoutOverrideMs: null, writeTimeoutOverrideMs: null);
+        }
+
+        protected TResponse SendMessage(TRequest request, int readTimeoutMs, int writeTimeoutMs)
+        {
+            return SendMessage(request, (int?)readTimeoutMs, (int?)writeTimeoutMs);
+        }
+
+        private TResponse SendMessage(TRequest request, int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
+        {
+>>>>>>> cpp_physics_system
             if (_stream == null && _ipAddress == null)
             {
                 throw new InvalidOperationException("Client is not connected. Cannot send message.");
@@ -88,8 +105,14 @@ namespace BotCommLayer
 
             lock (_lock)
             {
+                var previousReadTimeout = _stream?.ReadTimeout;
+                var previousWriteTimeout = _stream?.WriteTimeout;
                 try
                 {
+<<<<<<< HEAD
+=======
+                    ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
+>>>>>>> cpp_physics_system
                     return SendMessageInternal(request);
                 }
                 catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
@@ -101,6 +124,10 @@ namespace BotCommLayer
                         try
                         {
                             Connect();
+<<<<<<< HEAD
+=======
+                            ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
+>>>>>>> cpp_physics_system
                             _logger?.LogInformation($"Reconnected to {_ipAddress}:{_port}. Retrying message.");
                             return SendMessageInternal(request);
                         }
@@ -114,9 +141,40 @@ namespace BotCommLayer
                     _logger?.LogError($"Error sending message: {ex}");
                     throw;
                 }
+                finally
+                {
+                    RestoreTimeouts(previousReadTimeout, previousWriteTimeout);
+                }
             }
         }
 
+<<<<<<< HEAD
+=======
+        private void ApplyTimeoutOverrides(int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
+        {
+            if (_stream == null)
+                return;
+
+            if (readTimeoutOverrideMs.HasValue)
+                _stream.ReadTimeout = readTimeoutOverrideMs.Value;
+
+            if (writeTimeoutOverrideMs.HasValue)
+                _stream.WriteTimeout = writeTimeoutOverrideMs.Value;
+        }
+
+        private void RestoreTimeouts(int? previousReadTimeout, int? previousWriteTimeout)
+        {
+            if (_stream == null)
+                return;
+
+            if (previousReadTimeout.HasValue)
+                _stream.ReadTimeout = previousReadTimeout.Value;
+
+            if (previousWriteTimeout.HasValue)
+                _stream.WriteTimeout = previousWriteTimeout.Value;
+        }
+
+>>>>>>> cpp_physics_system
         private TResponse SendMessageInternal(TRequest request)
         {
             if (_stream == null)
@@ -157,6 +215,16 @@ namespace BotCommLayer
         {
             _stream?.Close();
             _client?.Close();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Close();
+            _stream?.Dispose();
+            _client?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

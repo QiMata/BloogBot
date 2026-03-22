@@ -54,6 +54,15 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Operation, string Error)> _tradeErrors;
         private readonly IObservable<TradeWindowData> _tradeWindowUpdates;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _tradeRequestsSub;
+        private readonly IDisposable _tradesOpenedSub;
+        private readonly IDisposable _tradesClosedSub;
+        private readonly IDisposable _offeredMoneyChangesSub;
+        private readonly IDisposable _tradeWindowUpdatesSub;
+        private readonly IDisposable _tradeItemSlotsChangedSub;
+        private readonly IDisposable _tradeErrorsSub;
+
         public TradeNetworkClientComponent(IWorldClient worldClient, ILogger<TradeNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
@@ -140,6 +149,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _tradeRequestsSub = _tradeRequests.Subscribe(_ => { });
+            _tradesOpenedSub = _tradesOpened.Subscribe(_ => { });
+            _tradesClosedSub = _tradesClosed.Subscribe(_ => { });
+            _offeredMoneyChangesSub = _offeredMoneyChanges.Subscribe(_ => { });
+            _tradeWindowUpdatesSub = _tradeWindowUpdates.Subscribe(_ => { });
+            _tradeItemSlotsChangedSub = _tradeItemSlotsChanged.Subscribe(_ => { });
+            _tradeErrorsSub = _tradeErrors.Subscribe(_ => { });
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
@@ -568,6 +586,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         public override void Dispose()
         {
             if (_disposed) return;
+
+            _tradeRequestsSub?.Dispose();
+            _tradesOpenedSub?.Dispose();
+            _tradesClosedSub?.Dispose();
+            _offeredMoneyChangesSub?.Dispose();
+            _tradeWindowUpdatesSub?.Dispose();
+            _tradeItemSlotsChangedSub?.Dispose();
+            _tradeErrorsSub?.Dispose();
 
             _localTradeItemSlotChanged.OnCompleted();
             _localMoneyOfferedChanged.OnCompleted();

@@ -1,8 +1,16 @@
 using Communication;
 using GameData.Core.Enums;
+<<<<<<< HEAD
 using Serilog;
 using System;
 using System.Collections.Generic;
+=======
+using GameData.Core.Models;
+using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+>>>>>>> cpp_physics_system
 using System.Threading;
 using Xas.FluentBehaviourTree;
 
@@ -12,7 +20,11 @@ namespace BotRunner
     {
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
+<<<<<<< HEAD
             var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
+=======
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+>>>>>>> cpp_physics_system
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 
@@ -28,8 +40,30 @@ namespace BotRunner
                         builder.Splice(BuildGoToSequence((float)actionEntry.Item2[0], (float)actionEntry.Item2[1], (float)actionEntry.Item2[2], (float)actionEntry.Item2[3]));
                         break;
                     case CharacterAction.InteractWith:
+<<<<<<< HEAD
                         builder.Splice(BuildInteractWithSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
+=======
+                    {
+                        var interactGuid = UnboxGuid(actionEntry.Item2[0]);
+                        // Try GameObjects first; fall back to NPC interaction via AgentFactory
+                        var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
+                        if (isGameObject)
+                        {
+                            builder.Splice(BuildInteractWithSequence(interactGuid));
+                        }
+                        else
+                        {
+                            builder.Do($"Interact With NPC {interactGuid:X}", time =>
+                            {
+                                _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        break;
+                    }
+>>>>>>> cpp_physics_system
 
                     case CharacterAction.SelectGossip:
                         builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
@@ -39,17 +73,89 @@ namespace BotRunner
                         builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
                         break;
 
+<<<<<<< HEAD
                     case CharacterAction.AcceptQuest:
                         builder.Splice(AcceptQuestSequence);
+=======
+                    case CharacterAction.VisitFlightMaster:
+                        builder.Do("Queue Flight Master Visit Task", time =>
+                        {
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG taxi discovery coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FlightMasterVisitTask)
+                                _botTasks.Push(new Tasks.FlightMasterVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
+                    case CharacterAction.AcceptQuest:
+                        // With params: [0]=npcGuid, [1]=questId — packet-based via AgentFactory
+                        // Without params: legacy QuestFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var questNpcGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var questId = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Accept Quest {questId} from NPC {questNpcGuid:X}", time =>
+                            {
+                                _objectManager.AcceptQuestFromNpcAsync(questNpcGuid, questId, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(AcceptQuestSequence);
+                        }
+>>>>>>> cpp_physics_system
                         break;
                     case CharacterAction.DeclineQuest:
                         builder.Splice(DeclineQuestSequence);
                         break;
+<<<<<<< HEAD
+=======
+                    case CharacterAction.AbandonQuest:
+                        // Params: [0]=questLogSlot (byte index in quest log)
+                        if (actionEntry.Item2.Count >= 1)
+                        {
+                            var questSlot = (byte)(int)actionEntry.Item2[0];
+                            builder.Do("Abandon Quest", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    _ = factory.QuestAgent.RemoveQuestFromLogAsync(questSlot);
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        break;
+>>>>>>> cpp_physics_system
                     case CharacterAction.SelectReward:
                         builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.CompleteQuest:
+<<<<<<< HEAD
                         builder.Splice(CompleteQuestSequence);
+=======
+                        // With params: [0]=npcGuid, [1]=questId, optional [2]=rewardIndex
+                        // Without params: legacy QuestFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var turnInNpcGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var turnInQuestId = (uint)(int)actionEntry.Item2[1];
+                            uint turnInReward = actionEntry.Item2.Count >= 3 ? (uint)(int)actionEntry.Item2[2] : 0u;
+                            builder.Do($"Complete Quest {turnInQuestId} at NPC {turnInNpcGuid:X}", time =>
+                            {
+                                _objectManager.TurnInQuestAsync(turnInNpcGuid, turnInQuestId, turnInReward, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(CompleteQuestSequence);
+                        }
+>>>>>>> cpp_physics_system
                         break;
 
                     case CharacterAction.TrainSkill:
@@ -59,6 +165,19 @@ namespace BotRunner
                         builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
                         break;
 
+<<<<<<< HEAD
+=======
+                    case CharacterAction.VisitTrainer:
+                        builder.Do("Queue Trainer Visit Task", time =>
+                        {
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG trainer coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.TrainerVisitTask)
+                                _botTasks.Push(new Tasks.TrainerVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
+>>>>>>> cpp_physics_system
                     case CharacterAction.OfferTrade:
                         builder.Splice(BuildOfferTradeSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
@@ -131,6 +250,12 @@ namespace BotRunner
                     case CharacterAction.StartMeleeAttack:
                         builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
+<<<<<<< HEAD
+=======
+                    case CharacterAction.StartRangedAttack:
+                        builder.Splice(BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        break;
+>>>>>>> cpp_physics_system
                     case CharacterAction.StopAttack:
                         builder.Splice(StopAttackSequence);
                         break;
@@ -138,6 +263,49 @@ namespace BotRunner
                         var castTargetGuid = actionEntry.Item2.Count > 1 ? UnboxGuid(actionEntry.Item2[1]) : 0UL;
                         builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
+<<<<<<< HEAD
+=======
+                    case CharacterAction.StartFishing:
+                    {
+                        var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2);
+                        builder.Do("Queue Fishing Task", time =>
+                        {
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
+                                _botTasks.Push(new Tasks.FishingTask(context, fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+                    case CharacterAction.StartGatheringRoute:
+                    {
+                        int gatheringRouteSpellId = (int)actionEntry.Item2[0];
+                        var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
+                        // Optional [2] = maxRouteLoops (int), then [3+] = float positions.
+                        // If [2] is an int (not a float), treat it as maxRouteLoops; otherwise positions start at [2].
+                        int routeLoops = 1;
+                        int positionStartIndex = 2;
+                        if (actionEntry.Item2.Count > 2 && actionEntry.Item2[2] is int loopParam)
+                        {
+                            routeLoops = Math.Max(1, loopParam);
+                            positionStartIndex = 3;
+                        }
+                        var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(positionStartIndex));
+                        builder.Do("Queue Gathering Route Task", time =>
+                        {
+                            if (routePositions.Count == 0 || allowedEntries.Count == 0)
+                            {
+                                Log.Warning("[BOT RUNNER] Ignoring StartGatheringRoute with invalid parameters. positions={Count} entries={EntryCount}",
+                                    routePositions.Count, allowedEntries.Count);
+                                return BehaviourTreeStatus.Success;
+                            }
+
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
+                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+>>>>>>> cpp_physics_system
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
                         break;
@@ -174,12 +342,34 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.BuyItem:
+<<<<<<< HEAD
                         builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+=======
+                        // With vendorGuid: [0]=vendorGuid, [1]=itemId, [2]=quantity — packet-based
+                        // Without: [0]=slotId, [1]=quantity — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 3)
+                        {
+                            var buyVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var buyItemId = (uint)(int)actionEntry.Item2[1];
+                            var buyQuantity = (uint)(int)actionEntry.Item2[2];
+                            builder.Do($"Buy Item {buyItemId} x{buyQuantity} from vendor {buyVendorGuid:X}", time =>
+                            {
+                                _objectManager.BuyItemFromVendorAsync(buyVendorGuid, buyItemId, buyQuantity, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        }
+>>>>>>> cpp_physics_system
                         break;
                     case CharacterAction.BuybackItem:
                         builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         break;
                     case CharacterAction.SellItem:
+<<<<<<< HEAD
                         builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
                         break;
                     case CharacterAction.RepairItem:
@@ -187,6 +377,75 @@ namespace BotRunner
                         break;
                     case CharacterAction.RepairAllItems:
                         builder.Splice(RepairAllItemsSequence);
+=======
+                        // With vendorGuid: [0]=vendorGuid, [1]=bagId, [2]=slotId, [3]=quantity — packet-based
+                        // Without: [0]=bagId, [1]=slotId, [2]=quantity — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 4)
+                        {
+                            var sellVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var sellBagId = (byte)(int)actionEntry.Item2[1];
+                            var sellSlotId = (byte)(int)actionEntry.Item2[2];
+                            var sellQuantity = (uint)(int)actionEntry.Item2[3];
+                            builder.Do($"Sell Item bag={sellBagId} slot={sellSlotId} x{sellQuantity} to vendor {sellVendorGuid:X}", time =>
+                            {
+                                _objectManager.SellItemToVendorAsync(sellVendorGuid, sellBagId, sellSlotId, sellQuantity, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                        }
+                        break;
+                    case CharacterAction.RepairItem:
+                        // With vendorGuid: [0]=vendorGuid, [1]=repairSlot — packet-based
+                        // Without: [0]=repairSlot — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var repairItemVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var repairSlot = (int)actionEntry.Item2[1];
+                            builder.Do($"Repair slot {repairSlot} at vendor {repairItemVendorGuid:X}", time =>
+                            {
+                                // Use RepairAllItems as the packet path — individual slot repair
+                                // is not supported by the packet API; repair-all is the server norm.
+                                _objectManager.RepairAllItemsAsync(repairItemVendorGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
+                        }
+                        break;
+                    case CharacterAction.RepairAllItems:
+                        // With vendorGuid: [0]=vendorGuid — packet-based
+                        // Without: legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 1)
+                        {
+                            var repairVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            builder.Do($"Repair All Items at vendor {repairVendorGuid:X}", time =>
+                            {
+                                _objectManager.RepairAllItemsAsync(repairVendorGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(RepairAllItemsSequence);
+                        }
+                        break;
+
+                    case CharacterAction.VisitVendor:
+                        builder.Do("Queue Vendor Visit Task", time =>
+                        {
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.VendorVisitTask)
+                                _botTasks.Push(new Tasks.VendorVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
+>>>>>>> cpp_physics_system
                         break;
 
                     case CharacterAction.DismissBuff:
@@ -225,10 +484,34 @@ namespace BotRunner
 
                     case CharacterAction.SendChat:
                         var chatMsg = (string)actionEntry.Item2[0];
+<<<<<<< HEAD
+=======
+
+                        // Internal bot command: .targetself sets CMSG_SET_SELECTION to the
+                        // player's own GUID without sending anything to server chat.
+                        // This enables GM commands like .setskill that require a selected target.
+                        if (chatMsg.Equals(".targetself", StringComparison.OrdinalIgnoreCase))
+                        {
+                            builder.Do("Target Self", time =>
+                            {
+                                var player = _objectManager.Player;
+                                if (player == null) return BehaviourTreeStatus.Failure;
+                                _objectManager.SetTarget(player.Guid);
+                                Log.Information("[BOT RUNNER] Self-targeted (GUID=0x{Guid:X})", player.Guid);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+
+>>>>>>> cpp_physics_system
                         builder.Do($"Send Chat: {chatMsg}", time =>
                         {
                             var player = _objectManager.Player;
                             var isDeadOrGhost = player != null && IsDeadOrGhostState(player);
+<<<<<<< HEAD
+=======
+                            DiagLog($"SENDCHAT-ACTION: chatMsg='{chatMsg}' dead={isDeadOrGhost} health={player?.Health ?? 0}");
+>>>>>>> cpp_physics_system
                             if (isDeadOrGhost)
                             {
                                 Log.Information("[BOT RUNNER] Skipping chat while dead/ghost: {ChatMessage}", chatMsg);
@@ -237,6 +520,10 @@ namespace BotRunner
 
                             Log.Information($"[BOT RUNNER] Sending chat message: {chatMsg}");
                             _objectManager.SendChatMessage(chatMsg);
+<<<<<<< HEAD
+=======
+                            DiagLog($"SENDCHAT-SENT: '{chatMsg}'");
+>>>>>>> cpp_physics_system
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -289,17 +576,33 @@ namespace BotRunner
                         builder.Do("Retrieve Corpse", time =>
                         {
                             var player = _objectManager.Player;
+<<<<<<< HEAD
                             if (player != null)
                             {
                                 if (IsGhostState(player))
                                 {
                                     var corpsePos = player.CorpsePosition;
+=======
+                            DiagLog($"[RETRIEVE_DIAG] player={player != null} playerFlags=0x{(player != null ? (uint)player.PlayerFlags : 0u):X} hp={player?.Health ?? -1u}/{player?.MaxHealth ?? -1u}");
+                            if (player != null)
+                            {
+                                var ghostResult = IsGhostState(player);
+                                DiagLog($"[RETRIEVE_DIAG] IsGhostState={ghostResult} HasGhostFlag={HasGhostFlag(player)}");
+                                if (ghostResult)
+                                {
+                                    var corpsePos = player.CorpsePosition;
+                                    DiagLog($"[RETRIEVE_DIAG] corpsePos=({corpsePos?.X:F1},{corpsePos?.Y:F1},{corpsePos?.Z:F1})");
+>>>>>>> cpp_physics_system
                                     if (IsZeroPosition(corpsePos) && _lastKnownAlivePosition != null)
                                     {
                                         corpsePos = new GameData.Core.Models.Position(
                                             _lastKnownAlivePosition.X,
                                             _lastKnownAlivePosition.Y,
                                             _lastKnownAlivePosition.Z);
+<<<<<<< HEAD
+=======
+                                        DiagLog($"[RETRIEVE_DIAG] using fallback corpsePos=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
+>>>>>>> cpp_physics_system
                                     }
 
                                     if (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0)
@@ -308,21 +611,45 @@ namespace BotRunner
                                         {
                                             Log.Information("[BOT RUNNER] Queueing pathfinding corpse run to ({X:F0}, {Y:F0}, {Z:F0})",
                                                 corpsePos.X, corpsePos.Y, corpsePos.Z);
+<<<<<<< HEAD
                                             _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
                                         }
                                         return BehaviourTreeStatus.Success;
                                     }
+=======
+                                            DiagLog($"[RETRIEVE_DIAG] PUSHING RetrieveCorpseTask corpse=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
+                                            _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
+                                        }
+                                        else
+                                        {
+                                            DiagLog("[RETRIEVE_DIAG] RetrieveCorpseTask already on stack");
+                                        }
+                                        return BehaviourTreeStatus.Success;
+                                    }
+                                    else
+                                    {
+                                        DiagLog("[RETRIEVE_DIAG] corpsePos is ZERO, skipping task push");
+                                    }
+>>>>>>> cpp_physics_system
                                 }
 
                                 var reclaimDelay = player.CorpseRecoveryDelaySeconds;
                                 if (reclaimDelay > 0)
                                 {
                                     Log.Information("[BOT RUNNER] Corpse reclaim cooldown active ({Seconds}s remaining); waiting.", reclaimDelay);
+<<<<<<< HEAD
+=======
+                                    DiagLog($"[RETRIEVE_DIAG] reclaimDelay={reclaimDelay}s — NOT pushing task");
+>>>>>>> cpp_physics_system
                                     return BehaviourTreeStatus.Success;
                                 }
                             }
 
                             Log.Information("[BOT RUNNER] Retrieving corpse (CMSG_RECLAIM_CORPSE direct)");
+<<<<<<< HEAD
+=======
+                            DiagLog("[RETRIEVE_DIAG] fallthrough to direct RetrieveCorpse()");
+>>>>>>> cpp_physics_system
                             _objectManager.RetrieveCorpse();
                             return BehaviourTreeStatus.Success;
                         });
@@ -354,6 +681,81 @@ namespace BotRunner
                         break;
                     }
 
+<<<<<<< HEAD
+=======
+                    case CharacterAction.CheckMail:
+                    {
+                        var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
+                        builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
+                        {
+                            Log.Information("[BOT RUNNER] Collecting mail from mailbox {Guid:X}", mailboxGuid);
+                            _objectManager.CollectAllMailAsync(mailboxGuid, CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+                    case CharacterAction.ConvertToRaid:
+                        builder.Do("Convert Party to Raid", time =>
+                        {
+                            _objectManager.ConvertToRaid();
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
+                    case CharacterAction.ChangeRaidSubgroup:
+                    {
+                        // Params: [0] = string playerName, [1] = int subGroup (0-7)
+                        var rsgName = actionEntry.Item2.Count > 0 ? (string)actionEntry.Item2[0] : "";
+                        var rsgGroup = actionEntry.Item2.Count > 1 ? (byte)(int)actionEntry.Item2[1] : (byte)0;
+                        builder.Do($"Change Raid Subgroup: {rsgName} → group {rsgGroup}", time =>
+                        {
+                            _objectManager.ChangeRaidSubgroup(rsgName, rsgGroup);
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+                    case CharacterAction.StartDungeoneering:
+                    {
+                        // Params: [0] = isLeader (int, 1=leader 0=follower)
+                        //         [1] = target map ID (int, e.g. 389 for RFC)
+                        // Optional: [2..N] = float waypoints (x,y,z triples)
+                        // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
+                        bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
+                        uint targetMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0;
+                        var waypointPositions = actionEntry.Item2.Count > 2
+                            ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(2))
+                            : null;
+
+                        builder.Do("Queue Dungeoneering Task", time =>
+                        {
+                            var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
+                            if (existingTask != null)
+                            {
+                                // Task already running — skip duplicate dispatch
+                            }
+                            else
+                            {
+                                // Use target map ID from coordinator (reliable), falling back to
+                                // player's current MapId (may be stale during instance loading).
+                                uint mapId = targetMapId != 0
+                                    ? targetMapId
+                                    : (_objectManager.Player?.MapId ?? 0);
+                                var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(mapId);
+                                IReadOnlyList<GameData.Core.Models.Position>? waypoints = waypointPositions?.Count > 0
+                                    ? waypointPositions
+                                    : mapWaypoints;
+
+                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints));
+                            }
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+>>>>>>> cpp_physics_system
                     default:
                         break;
                 }
@@ -361,5 +763,36 @@ namespace BotRunner
 
             return builder.End().Build();
         }
+<<<<<<< HEAD
+=======
+
+        private static List<uint> ParseGatheringEntries(string csv)
+            => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(token => uint.TryParse(token, out var entry) ? entry : 0u)
+                .Where(entry => entry != 0)
+                .Distinct()
+                .ToList();
+
+        private static List<Position> ParseGatheringRoutePositions(IEnumerable<object> rawParameters)
+        {
+            var floats = rawParameters
+                .Select(parameter => parameter switch
+                {
+                    float floatParam => (float?)floatParam,
+                    int intParam => intParam,
+                    long longParam => longParam,
+                    _ => null
+                })
+                .Where(value => value.HasValue)
+                .Select(value => value!.Value)
+                .ToList();
+
+            var positions = new List<Position>(floats.Count / 3);
+            for (int index = 0; index + 2 < floats.Count; index += 3)
+                positions.Add(new Position(floats[index], floats[index + 1], floats[index + 2]));
+
+            return positions;
+        }
+>>>>>>> cpp_physics_system
     }
 }

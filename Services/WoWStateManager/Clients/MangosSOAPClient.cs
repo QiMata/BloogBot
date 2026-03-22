@@ -91,6 +91,18 @@
                 if (!string.IsNullOrEmpty(faultString))
                 {
                     _logger.LogWarning($"SOAP fault for '{gmCommand}': {faultString}");
+<<<<<<< HEAD
+=======
+
+                    // "There is no such command." = command doesn't exist in MaNGOS command table — always a bug.
+                    if (faultString.Contains("no such command", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"GM command not found in MaNGOS command table: '{gmCommand}'. " +
+                            $"SOAP fault: {faultString}. Fix the command or remove it.");
+                    }
+
+>>>>>>> cpp_physics_system
                     return $"FAULT: {faultString}";
                 }
 

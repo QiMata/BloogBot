@@ -1,0 +1,31 @@
+{
+  "name": "GroupFormation_Basic",
+  "description": "FG bot invites BG bot, BG accepts — verify group formed",
+  "settings": null,
+  "enableCoordinator": false,
+  "minBots": 2,
+  "botEntryTimeoutSeconds": 60,
+  "setup": [
+    {
+      "account": "$FG",
+      "cleanSlate": true,
+      "gmCommands": [".gm on"],
+      "teleport": { "mapId": 1, "x": 1629.4, "y": -4373.4, "z": 34.2 }
+    },
+    {
+      "account": "$BG",
+      "cleanSlate": true,
+      "gmCommands": [".gm on"],
+      "teleport": { "mapId": 1, "x": 1629.4, "y": -4373.4, "z": 34.2 }
+    }
+  ],
+  "action": null,
+  "observe": {
+    "timeoutSeconds": 30,
+    "pollIntervalMs": 2000,
+    "logIntervalSeconds": 10
+  },
+  "assertions": {
+    "groupFormed": true
+  }
+}

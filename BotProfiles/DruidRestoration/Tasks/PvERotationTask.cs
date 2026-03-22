@@ -11,6 +11,11 @@ namespace DruidRestoration.Tasks
     /// </summary>
     public class PvERotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 druid base spell ranges
+        private const float WrathBaseRange = 30f;
+        private const float MoonfireBaseRange = 30f;
+        private const float HealBaseRange = 40f;
+
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
@@ -26,7 +31,7 @@ namespace DruidRestoration.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null)
                 return;
 
-            if (Update(30))
+            if (Update(GetSpellRange(WrathBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -40,6 +45,7 @@ namespace DruidRestoration.Tasks
             // Group healing: heal party members before DPS
             if (IsInGroup)
             {
+<<<<<<< HEAD
                 if (TryCastHeal(Rejuvenation, 80, 40)) return;
                 if (TryCastHeal(HealingTouch, 55, 40)) return;
             }
@@ -47,11 +53,20 @@ namespace DruidRestoration.Tasks
             {
                 TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
                 TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
+=======
+                if (TryCastHeal(Rejuvenation, 80, GetSpellRange(HealBaseRange))) return;
+                if (TryCastHeal(HealingTouch, 55, GetSpellRange(HealBaseRange))) return;
+            }
+            else
+            {
+                TryCastSpell(Rejuvenation, condition: ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
+                TryCastSpell(HealingTouch, condition: ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
+>>>>>>> cpp_physics_system
             }
 
             // offensive abilities
-            TryCastSpell(Moonfire, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
-            TryCastSpell(Wrath, 0, 30);
+            TryCastSpell(Moonfire, 0f, GetSpellRange(MoonfireBaseRange), !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
+            TryCastSpell(Wrath, 0f, GetSpellRange(WrathBaseRange));
         }
     }
 }

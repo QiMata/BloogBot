@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="Moq" Version="4.20.70" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+<<<<<<< HEAD:Tests/WWoW.RecordedTests.PathingTests.Tests/WWoW.RecordedTests.PathingTests.Tests.csproj
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\WWoW.RecordedTests.PathingTests\WWoW.RecordedTests.PathingTests.csproj" />
+    <ProjectReference Include="..\..\WWoW.RecordedTests.Shared\WWoW.RecordedTests.Shared.csproj" />
+  </ItemGroup>
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\..\test.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>
+=======
+  <ItemGroup>
+    <ProjectReference Include="..\..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\..\test.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>
+>>>>>>> cpp_physics_system:Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj

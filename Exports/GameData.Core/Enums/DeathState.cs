@@ -1,10 +1,17 @@
 ﻿namespace GameData.Core.Enums;
 
+/// <summary>
+/// MaNGOS death state enumeration (shared between creatures and players).
+/// For players: ALIVE → JUST_DIED → CORPSE (ghost form, corpse in world) → DEAD (corpse despawned).
+/// Player transitions: CORPSE while ghost timer active (corpseRecoveryDelaySeconds > 0),
+/// DEAD once corpse despawns (death timer expired). Use Health == 0 + ghost flag for runtime checks.
+/// For creatures: ALIVE → JUST_DIED → CORPSE (lootable) → DEAD (despawned).
+/// </summary>
 public enum DeathState
 {
-    ALIVE = 0,     ///< show as alive
-    JUST_DIED = 1,     ///< temporary state at die, for creature auto converted to CORPSE, for player at next update call
-    CORPSE = 2,     ///< corpse state, for player this also meaning that player not leave corpse
-    DEAD = 3,     ///< for creature despawned state (corpse despawned), for player CORPSE/DEAD not clear way switches (FIXME), and use m_deathtimer > 0 check for real corpse state
-    JUST_ALIVED = 4      ///< temporary state at resurrection, for creature auto converted to ALIVE, for player at next update call
+    ALIVE = 0,          // Living — Health > 0, no ghost flag
+    JUST_DIED = 1,      // Transient frame after death. Creature: auto-converts to CORPSE. Player: converts at next update.
+    CORPSE = 2,         // Player: ghost form active, corpse object exists in world, can retrieve. Creature: lootable corpse.
+    DEAD = 3,           // Player: corpse despawned (death timer expired), must use spirit healer. Creature: fully despawned.
+    JUST_ALIVED = 4     // Transient frame after resurrection. Auto-converts to ALIVE at next update.
 };

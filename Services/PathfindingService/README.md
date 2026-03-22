@@ -76,6 +76,7 @@ Services/PathfindingService/
 +-- Repository/
 |   +-- Navigation.cs               # P/Invoke wrapper for pathfinding
 |   +-- Physics.cs                  # P/Invoke wrapper for physics + LoS
+|   +-- RequestScopedDynamicObjectOverlay.cs # Request-scoped dynamic object overlay lifecycle
 +-- README.md                       # This documentation
 ```
 
@@ -121,6 +122,8 @@ public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, 
 {
     private readonly Navigation _navigation = new();
     private readonly Physics _physics = new();
+    private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay =
+        new(new NativeDynamicObjectOverlayRegistry());
     
     protected override PathfindingResponse HandleRequest(PathfindingRequest request)
     {
@@ -134,6 +137,12 @@ public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, 
     }
 }
 ```
+
+Current rollout note: `CalculatePathRequest.nearby_objects` is now consumed inside the service. Each path request mounts a request-scoped synthetic-guid overlay into the native dynamic-object registry, executes the native path call, and unregisters those synthetic entries in `finally`. Other registry-sensitive native calls currently run behind the same gate so path overlays cannot leak across concurrent requests.
+
+Current native-validator note: the service can optionally validate returned segments through `ValidateWalkableSegment`, and that native path now uses capsule-footprint support probes plus a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. Native `FindPath` now also honors the public `smoothPath` contract (`true=smooth`, `false=straight`), threads grounded segment ends through validation, and attempts grounded lateral detour candidates before midpoint-only refinement so more blocked short routes are repaired natively before the service considers bounded repair. Default rollout still stays behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until longer multi-segment routes and shoreline drift diagnostics are covered.
+
+Current shoreline-diagnostic note: `[PATH_DIAG]` logging now treats short routes (`<=40y`) as first-class evidence. Logged path responses include an explicit reason plus formatted `path=[...]` and `rawPath=[...]` corner chains so live Ratchet fishing failures can be compared against later bot-side execution traces instead of only seeing corner counts.
 
 ### Navigation Repository
 
@@ -212,7 +221,21 @@ var request = new PathfindingRequest
         MapId = 0,
         Start = new Position { X = 100, Y = 200, Z = 50 },
         End = new Position { X = 500, Y = 600, Z = 55 },
-        Straight = false
+        Straight = false,
+        NearbyObjects =
+        {
+            new DynamicObjectProto
+            {
+                Guid = 0x1001,
+                DisplayId = 17,
+                X = 140,
+                Y = 240,
+                Z = 50,
+                Orientation = 0.5f,
+                Scale = 1.0f,
+                GoState = 1,
+            }
+        }
     }
 };
 
@@ -251,8 +274,11 @@ Computes an A* path between two points:
 | `Start` | Position | Starting coordinates (X, Y, Z) |
 | `End` | Position | Destination coordinates |
 | `Straight` | bool | If true, attempts direct path without navmesh |
+| `NearbyObjects` | repeated `DynamicObjectProto` | Request-scoped live collidable objects to validate against the static route |
 
-**Response**: List of `Position` waypoints
+**Response**: List of `Position` waypoints plus `result` / `raw_corner_count` metadata.
+
+Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max), and the service mounts those objects into a request-scoped overlay for the duration of the native path call. The service validates returned segments against that overlay, retries alternate native mode when needed, and runs a bounded repair pass before surfacing `native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, or `no_path`. A native `ValidateWalkableSegment` bridge is now available for capsule/support classification and result mapping (`repaired_segment_validation`, `blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`), but default service use remains behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until support-surface probes stop false-negative blocking on long corpse-run routes.
 
 ### LineOfSightRequest
 

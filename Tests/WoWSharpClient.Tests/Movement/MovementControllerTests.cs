@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
 using Pathfinding;
+using System.Reflection;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
@@ -225,19 +226,19 @@ namespace WoWSharpClient.Tests.Movement
         // ======== HEARTBEAT TIMING ========
 
         [Fact]
-        public void Heartbeat_SentAfter500ms()
+        public void Heartbeat_SentAfterPacketInterval()
         {
             // Start moving
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 1000); // Sends START_FORWARD
             _sentPackets.Clear();
 
-            // 400ms later — no heartbeat yet
-            _controller.Update(0.05f, 1400);
+            // 150ms later — no heartbeat yet (PACKET_INTERVAL_MS = 200)
+            _controller.Update(0.05f, 1150);
             Assert.Empty(_sentPackets);
 
-            // 500ms total — heartbeat fires
-            _controller.Update(0.05f, 1500);
+            // 200ms total — heartbeat fires
+            _controller.Update(0.05f, 1200);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -263,19 +264,19 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000); // Sends START_FORWARD
             _sentPackets.Clear();
 
-            // At t=1200, start strafing (flag change → sends immediately)
+            // At t=1100, start strafing (flag change → sends immediately)
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT;
-            _controller.Update(0.05f, 1200);
+            _controller.Update(0.05f, 1100);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_START_STRAFE_LEFT, _sentPackets[0].opcode);
             _sentPackets.Clear();
 
-            // At t=1600 (400ms since last packet) — no heartbeat
-            _controller.Update(0.05f, 1600);
+            // At t=1250 (150ms since last packet) — no heartbeat
+            _controller.Update(0.05f, 1250);
             Assert.Empty(_sentPackets);
 
-            // At t=1700 (500ms since last packet) — heartbeat
-            _controller.Update(0.05f, 1700);
+            // At t=1300 (200ms since last packet) — heartbeat
+            _controller.Update(0.05f, 1300);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -447,15 +448,31 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void SendStopPacket_SendsMsgMoveStop_AndClearsFlags()
+        public void SendStopPacket_SendsMsgMoveStop_AfterForwardMovementWasSent()
         {
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
 
             _controller.SendStopPacket(5000);
 
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
             Assert.Equal(MovementFlags.MOVEFLAG_NONE, _player.MovementFlags);
+        }
+
+        [Fact]
+        public void SendStopPacket_PreservesFallingFlags_WhenClearingForwardIntent()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
+
+            _controller.SendStopPacket(5000);
+
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+            Assert.Equal(MovementFlags.MOVEFLAG_FALLINGFAR, _player.MovementFlags);
         }
 
         // ======== STATE MANAGEMENT ========
@@ -468,13 +485,20 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000);
             _sentPackets.Clear();
 
-            // Reset
+            // Reset — schedules a stop packet to clear server-side movement flags
             _controller.Reset();
 
-            // After reset, no packet should be sent when standing still
+            // First update after reset sends MSG_MOVE_STOP to inform the server
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _controller.Update(0.05f, 2000);
 
+            Assert.Equal(2, _sentPackets.Count);
+            Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
+
+            // Second update should be clean — no additional packets
+            _sentPackets.Clear();
+            _controller.Update(0.05f, 3000);
             Assert.Empty(_sentPackets);
         }
 
@@ -625,7 +649,9 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void PhysicsContinuityState_RoundTripped()
         {
-            // First tick: physics returns ground state
+            // First tick: physics returns ground state.
+            // Ground is within MaxGroundZDropPerFrame (5y) of initial player Z (50)
+            // to avoid triggering the slope guard.
             PhysicsInput? secondInput = null;
             int callCount = 0;
             _mockPhysics
@@ -638,9 +664,9 @@ namespace WoWSharpClient.Tests.Movement
                     {
                         NewPosX = input.PosX,
                         NewPosY = input.PosY,
-                        NewPosZ = 45f,
+                        NewPosZ = 47f,
                         IsGrounded = true,
-                        GroundZ = 44.5f,
+                        GroundZ = 46.5f,
                         GroundNx = 0.1f, GroundNy = 0.0f, GroundNz = 0.995f,
                         PendingDepenX = 0.01f, PendingDepenY = 0.02f, PendingDepenZ = 0.03f,
                         StandingOnInstanceId = 42,
@@ -658,7 +684,7 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1050);
 
             Assert.NotNull(secondInput);
-            Assert.Equal(44.5f, secondInput.PrevGroundZ);
+            Assert.Equal(46.5f, secondInput.PrevGroundZ);
             Assert.Equal(0.1f, secondInput.PrevGroundNx, 3);
             Assert.Equal(0.995f, secondInput.PrevGroundNz, 3);
             Assert.Equal(0.01f, secondInput.PendingDepenX, 3);
@@ -699,6 +725,11 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void FallVelocity_PreservedBetweenTicks()
         {
+            // Start the player with FALLINGFAR already set, so wasGrounded=false
+            // on tick 1. This avoids false freefall prevention (which requires
+            // wasGrounded=true → nowFalling=true transition with a path).
+            // Set GroundZ close to initial Z (50) to avoid triggering the slope guard
+            // (MaxGroundZDropPerFrame = 5y threshold).
             PhysicsInput? secondInput = null;
             int callCount = 0;
             _mockPhysics
@@ -714,13 +745,14 @@ namespace WoWSharpClient.Tests.Movement
                         NewPosZ = input.PosZ - 0.5f, // Falling
                         NewVelX = 0, NewVelY = 0, NewVelZ = -5.0f, // Falling velocity
                         IsGrounded = false,
+                        GroundZ = 49.5f, // Ground nearby but not under feet
                         GroundNz = 1,
                         MovementFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR),
                         FallTime = callCount == 1 ? 100 : 200,
                     };
                 });
 
-            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
 
             _controller.Update(0.05f, 1000);
             _controller.Update(0.05f, 1050);
@@ -728,6 +760,64 @@ namespace WoWSharpClient.Tests.Movement
             Assert.NotNull(secondInput);
             Assert.Equal(-5.0f, secondInput.VelZ, 1);
             Assert.Equal(100u, (uint)secondInput.FallTime);
+        }
+
+        [Fact]
+        public void SetPath_StartsAtFirstWaypoint()
+        {
+            var path = new[]
+            {
+                new Position(110f, 210f, 51f),
+                new Position(120f, 220f, 52f),
+            };
+
+            _controller.SetPath(path);
+
+            var waypoint = _controller.CurrentWaypoint;
+            Assert.NotNull(waypoint);
+            Assert.Equal(110f, waypoint!.X);
+            Assert.Equal(210f, waypoint.Y);
+            Assert.Equal(51f, waypoint.Z);
+        }
+
+        [Fact]
+        public void SetTargetWaypoint_SimilarTarget_DoesNotRebuildActiveSingleSegmentPath()
+        {
+            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
+            var initialPath = GetCurrentPath(_controller);
+            Assert.NotNull(initialPath);
+            Assert.Equal(2, initialPath!.Length);
+
+            // Simulate movement since last tick; if path is rebuilt, this position becomes new segment start.
+            _player.Position = new Position(101f, 201f, 51f);
+            _controller.SetTargetWaypoint(new Position(130.2f, 230.1f, 70.4f));
+
+            var refreshedPath = GetCurrentPath(_controller);
+            Assert.Same(initialPath, refreshedPath);
+            Assert.Equal(100f, refreshedPath![0].X);
+            Assert.Equal(200f, refreshedPath[0].Y);
+            Assert.Equal(50f, refreshedPath[0].Z);
+        }
+
+        [Fact]
+        public void SetTargetWaypoint_DifferentTarget_RebuildsSingleSegmentPathFromCurrentPosition()
+        {
+            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
+            var initialPath = GetCurrentPath(_controller);
+            Assert.NotNull(initialPath);
+
+            _player.Position = new Position(101f, 201f, 51f);
+            _controller.SetTargetWaypoint(new Position(140f, 240f, 72f));
+
+            var rebuiltPath = GetCurrentPath(_controller);
+            Assert.NotNull(rebuiltPath);
+            Assert.NotSame(initialPath, rebuiltPath);
+            Assert.Equal(101f, rebuiltPath![0].X);
+            Assert.Equal(201f, rebuiltPath[0].Y);
+            Assert.Equal(51f, rebuiltPath[0].Z);
+            Assert.Equal(140f, rebuiltPath[1].X);
+            Assert.Equal(240f, rebuiltPath[1].Y);
+            Assert.Equal(72f, rebuiltPath[1].Z);
         }
 
         // ======== COMPOUND TRANSITIONS ========
@@ -758,23 +848,30 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 0);
             Assert.Single(_sentPackets);
 
-            // t=250: no heartbeat
-            _controller.Update(0.05f, 250);
+            // t=100: no heartbeat (PACKET_INTERVAL_MS = 200)
+            _controller.Update(0.05f, 100);
             Assert.Single(_sentPackets);
 
-            // t=500: first heartbeat
-            _controller.Update(0.05f, 500);
+            // t=200: first heartbeat
+            _controller.Update(0.05f, 200);
             Assert.Equal(2, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
 
-            // t=750: no heartbeat
-            _controller.Update(0.05f, 750);
+            // t=300: no heartbeat
+            _controller.Update(0.05f, 300);
             Assert.Equal(2, _sentPackets.Count);
 
-            // t=1000: second heartbeat
-            _controller.Update(0.05f, 1000);
+            // t=400: second heartbeat
+            _controller.Update(0.05f, 400);
             Assert.Equal(3, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
+        }
+
+        private static Position[]? GetCurrentPath(MovementController controller)
+        {
+            var field = typeof(MovementController).GetField("_currentPath", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            return field!.GetValue(controller) as Position[];
         }
     }
 }

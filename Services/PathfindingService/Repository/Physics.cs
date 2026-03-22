@@ -99,11 +99,20 @@ namespace PathfindingService.Repository
         {
             if (_mapsPreloaded) return;
             Console.WriteLine($"[Physics]   Preloading navigation maps...");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Console.WriteLine($"[Physics]   Loading map 0 (Eastern Kingdoms)...");
             PreloadMap(0);
+            Console.WriteLine($"[Physics]   Map 0 loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            sw.Restart();
+            Console.WriteLine($"[Physics]   Loading map 1 (Kalimdor)...");
             PreloadMap(1);
+            Console.WriteLine($"[Physics]   Map 1 loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            sw.Restart();
+            Console.WriteLine($"[Physics]   Loading map 389 (Ragefire Chasm)...");
             PreloadMap(389);
+            Console.WriteLine($"[Physics]   Map 389 loaded in {sw.Elapsed.TotalSeconds:F1}s");
             _mapsPreloaded = true;
-            Console.WriteLine($"[Physics]   Maps preloaded successfully!");
+            Console.WriteLine($"[Physics]   All maps preloaded successfully!");
         }
 
         // ===============================
@@ -120,8 +129,14 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern PhysicsOutput PhysicsStepV2(ref PhysicsInput input);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetPhysicsLogLevel(int level, uint mask);
+
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
         private static extern bool NativeLineOfSight(uint mapId, XYZ from, XYZ to);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
+        private static extern float NativeGetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
         // ===============================
         // PUBLIC METHODS
@@ -134,10 +149,26 @@ namespace PathfindingService.Repository
             return SanitizeOutput(input, output);
         }
 
+        /// <summary>
+        /// Sets the C++ physics engine log level at runtime.
+        /// level: 0=ERR, 1=INFO, 2=DBG, 3=TRACE. mask: category bitmask (0=keep current).
+        /// </summary>
+        public void EnablePhysicsLogging(int level, uint mask = 0)
+        {
+            SetPhysicsLogLevel(level, mask);
+        }
+
         // For backwards compatibility - maps to CalculatePath
         public bool LineOfSight(uint mapId, XYZ from, XYZ to)
         {
             return NativeLineOfSight(mapId, from, to);
+        }
+
+        public (float groundZ, bool found) GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10.0f)
+        {
+            float result = NativeGetGroundZ(mapId, x, y, z, maxSearchDist);
+            bool found = !float.IsNaN(result) && result > -200000f;
+            return (result, found);
         }
 
         // ===============================
@@ -170,6 +201,17 @@ namespace PathfindingService.Repository
     // ===============================
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct DynamicObjectInfo
+    {
+        public ulong guid;
+        public uint displayId;
+        public float x, y, z;
+        public float orientation;
+        public float scale;
+        public uint goState;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct PhysicsInput
     {
         public uint moveFlags;
@@ -187,6 +229,7 @@ namespace PathfindingService.Repository
         public ulong transportGuid;
         public float transportX, transportY, transportZ, transportO;
         public uint fallTime;
+        public float fallStartZ;
         public float height;
         public float radius;
         [MarshalAs(UnmanagedType.I1)]
@@ -219,6 +262,8 @@ namespace PathfindingService.Repository
         public float deltaTime;
         public uint frameCounter;
         public uint physicsFlags;
+        public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint stepUpAge;          // frames since step-up detected
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -250,8 +295,19 @@ namespace PathfindingService.Repository
 		public float standingOnLocalZ;
 
         public float fallDistance;
+        public float fallStartZ;
         public float fallTime;
         public int currentSplineIndex;
         public float splineProgress;
+
+        // Wall contact feedback (mirrors PhysicsBridge.h)
+        [MarshalAs(UnmanagedType.I1)]
+        public bool hitWall;         // true if horizontal movement was blocked by a wall
+        public float wallNormalX;    // world-space wall surface normal
+        public float wallNormalY;
+        public float wallNormalZ;
+        public float blockedFraction; // 0=fully blocked, 1=no block
+        public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint stepUpAge;          // frames since step-up detected
     }
 }

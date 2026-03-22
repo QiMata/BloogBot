@@ -69,7 +69,11 @@ namespace BotRunner
         private IBehaviourTreeNode BuildSetGroupLootSequence(GroupLootSetting setting) => new BehaviourTreeBuilder()
             .Sequence("Set Group Loot Sequence")
                 // Ensure the bot is in a group and has permission to change loot rules
+<<<<<<< HEAD
                 .Condition("Can Set Loot Rules", time => _objectManager.PartyLeaderGuid == _objectManager.Player.Guid)
+=======
+                .Condition("Can Set Loot Rules", time => _objectManager.Player != null && _objectManager.PartyLeaderGuid == _objectManager.Player.Guid)
+>>>>>>> cpp_physics_system
 
                 // Set the group loot rule
                 .Do("Set Group Loot", time =>
@@ -262,7 +266,11 @@ namespace BotRunner
         private IBehaviourTreeNode BuildKickPlayerSequence(ulong playerGuid) => new BehaviourTreeBuilder()
             .Sequence("Kick Player Sequence")
                 // Ensure the bot has permission to kick players and the target is valid
+<<<<<<< HEAD
                 .Condition("Can Kick Player", time => _objectManager.Player.Guid == _objectManager.PartyLeaderGuid)
+=======
+                .Condition("Can Kick Player", time => _objectManager.Player != null && _objectManager.Player.Guid == _objectManager.PartyLeaderGuid)
+>>>>>>> cpp_physics_system
 
                 // Kick the player from the group
                 .Do("Kick Player", time =>
@@ -309,7 +317,11 @@ namespace BotRunner
         private IBehaviourTreeNode DisbandGroupSequence => new BehaviourTreeBuilder()
             .Sequence("Disband Group Sequence")
                 // Ensure the bot is the leader of the group
+<<<<<<< HEAD
                 .Condition("Is Group Leader", time => _objectManager.Player.Guid == _objectManager.PartyLeaderGuid)
+=======
+                .Condition("Is Group Leader", time => _objectManager.Player != null && _objectManager.Player.Guid == _objectManager.PartyLeaderGuid)
+>>>>>>> cpp_physics_system
 
                 // Disband the group
                 .Do("Disband Group", time =>

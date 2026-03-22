@@ -73,6 +73,23 @@ When compiled in **Debug** configuration:
    - Error codes displayed with descriptions
    - hostfxr error callback enabled
 
+### Console Visibility Control
+
+Console allocation is controlled by the `WWOW_LOADER_CONSOLE` environment variable:
+- **Default (unset):** Console is allocated for visible diagnostics.
+- **`WWOW_LOADER_CONSOLE=0`** (or `n`/`N`): Console is suppressed. Diagnostics still flow to `loader_debug.log` in the Loader.dll directory.
+
+This allows test runs and headless deployments to suppress the console window without source edits.
+
+### Teardown Diagnostics
+
+On `DLL_PROCESS_DETACH`, the loader:
+1. Signals a shutdown event (available for managed code to observe).
+2. Closes the hostfxr context.
+3. Waits up to 5 seconds for the bootstrap thread to exit, logging the result (clean exit, timeout, or unexpected).
+4. Releases the console and shutdown event handles.
+5. Logs teardown completion to `loader_debug.log`.
+
 ### Thread Safety
 
 Runs CLR hosting in a separate thread to avoid blocking the main process.

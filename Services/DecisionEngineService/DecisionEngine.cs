@@ -20,6 +20,9 @@ namespace DecisionEngineService
 
         public DecisionEngine(string binFileDirectory, SQLiteDatabase db)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(binFileDirectory);
+            ArgumentNullException.ThrowIfNull(db);
+
             _binFileDirectory = binFileDirectory;
             _db = db;
             _model = LoadModelFromDatabase();

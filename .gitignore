@@ -252,11 +252,17 @@ Tests/PathfindingService.Tests/Data/terrain.MPQ
 # Session handoff loop
 .session-history/
 next-session-prompt.md
+docs/next-session-prompt.md
 
 # Root artifact files (accidental output)
 nul
 vendor_section.txt
 Log.txt
+<<<<<<< HEAD
+=======
+Loader.dll
+tmp/
+>>>>>>> cpp_physics_system
 
 # Diagnostic/debug files from physics development
 *_diag.txt
@@ -277,7 +283,50 @@ Bot/Debug/net8.0/*.txt
 Bot/Debug/net8.0/WWoWLogs/
 Services/ForegroundBotRunner/Resources/FastCall.dll
 
-Exports/Loader/cmake_build_x86/
-Exports/Navigation/cmake_build_x64/
-Exports/Navigation/cmake_build_x86/
+# CMake build directories (any project, any arch)
+**/cmake_build_*/
 
+
+# Local physics calibration outputs
+logs/
+tmp_physics*.log
+temp-physics*.log
+physics_replay*.log
+diag_output.txt
+Exports/Navigation/cmake_ninja_x64/
+
+# AI CLI wrapper scripts
+.ai/
+
+# .NET SDK local sentinels and telemetry
+.dotnet/
+
+# JetBrains / IDE run configurations
+.run/
+
+# C++ module/IFC intermediates (MSVC C++20 modules)
+*.iobj
+*.ipdb
+*.ifc
+*.ifc.dt
+*.ifc.dt.*
+*.lib.recipe
+
+# Stale root scripts (deleted, prevent re-creation)
+Build-ArchitectureCompatibleComponents.ps1
+build-injection-dlls.bat
+copy_nav_dll.ps1
+create_account.ps1
+install-protoc.ps1
+run-loop.bat
+run-loop.ps1
+run-tests.ps1
+setup.ps1
+tools/scan_durotar_*.ps1
+
+# Test output logs
+TestResults/
+**/LiveLogs/
+
+# Centralized navmesh/vmap/map data directory (large binary files)
+Data/

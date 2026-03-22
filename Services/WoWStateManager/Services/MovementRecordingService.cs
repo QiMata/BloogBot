@@ -211,14 +211,41 @@ namespace WoWStateManager.Services
             }
         }
 
-        private string SaveRecording(MovementRecording recording)
+        /// <summary>
+        /// Resolves the recordings directory. Priority:
+        /// 1. WWOW_RECORDINGS_DIR env var
+        /// 2. Repo path: walk up from assembly location to find Tests/Navigation.Physics.Tests/Recordings
+        /// 3. Fallback: Documents/BloogBot/MovementRecordings
+        /// </summary>
+        private static string ResolveRecordingsDirectory()
         {
-            // Create recordings directory in Documents
-            var recordingsDir = Path.Combine(
+            var envDir = Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR");
+            if (!string.IsNullOrEmpty(envDir) && Directory.Exists(envDir))
+                return envDir;
+
+            var asmDir = Path.GetDirectoryName(typeof(MovementRecordingService).Assembly.Location);
+            if (!string.IsNullOrEmpty(asmDir))
+            {
+                var dir = new DirectoryInfo(asmDir);
+                while (dir != null)
+                {
+                    var candidate = Path.Combine(dir.FullName, "Tests", "Navigation.Physics.Tests", "Recordings");
+                    if (Directory.Exists(candidate))
+                        return candidate;
+                    dir = dir.Parent;
+                }
+            }
+
+            return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "BloogBot",
                 "MovementRecordings"
             );
+        }
+
+        private string SaveRecording(MovementRecording recording)
+        {
+            var recordingsDir = ResolveRecordingsDirectory();
             Directory.CreateDirectory(recordingsDir);
 
             // Generate filename

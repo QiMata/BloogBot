@@ -105,11 +105,11 @@ public class PhysicsConstantsValidationTests(PhysicsEngineFixture fixture)
     [Fact]
     public void PhysicsConstants_WalkableThresholdMatchesSlopeAngle()
     {
-        // cos(60�) should equal WalkableMinNormalZ
-        float cos60 = MathF.Cos(60.0f * MathF.PI / 180.0f);
+        // cos(50°) should equal WalkableMinNormalZ (WoW client value at 0x0080DFFC)
+        float cos50 = MathF.Cos(50.0f * MathF.PI / 180.0f);
 
-        Assert.True(MathF.Abs(cos60 - PhysicsTestConstants.WalkableMinNormalZ) < 0.01f,
-            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(60�) ({cos60})");
+        Assert.True(MathF.Abs(cos50 - PhysicsTestConstants.WalkableMinNormalZ) < 0.01f,
+            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(50°) ({cos50})");
     }
 
     [Fact]
@@ -158,5 +158,34 @@ public class PhysicsConstantsValidationTests(PhysicsEngineFixture fixture)
         // Should be able to jump over small obstacles but not buildings
         Assert.True(maxJumpHeight >= 1.0f, $"Jump should clear 1-yard obstacles, max height = {maxJumpHeight}");
         Assert.True(maxJumpHeight <= 5.0f, $"Jump shouldn't clear buildings, max height = {maxJumpHeight}");
+    }
+
+    [Fact]
+    public void PhysicsConstants_WalkableTanMatchesCosine()
+    {
+        // tan(50 degrees) should equal WalkableTanMaxSlope
+        float tan50 = MathF.Tan(50.0f * MathF.PI / 180.0f);
+
+        Assert.True(MathF.Abs(tan50 - PhysicsTestConstants.WalkableTanMaxSlope) < 0.01f,
+            $"WalkableTanMaxSlope ({PhysicsTestConstants.WalkableTanMaxSlope}) should equal tan(50) ({tan50})");
+    }
+
+    [Fact]
+    public void PhysicsConstants_TerminalVelocityIsReasonable()
+    {
+        // Terminal velocity should be much larger than jump velocity
+        Assert.True(PhysicsTestConstants.TerminalVelocity > PhysicsTestConstants.JumpVelocity * 3,
+            $"Terminal velocity ({PhysicsTestConstants.TerminalVelocity}) should greatly exceed jump velocity");
+        Assert.True(PhysicsTestConstants.TerminalVelocity < 200.0f,
+            $"Terminal velocity ({PhysicsTestConstants.TerminalVelocity}) should be reasonable");
+    }
+
+    [Fact]
+    public void PhysicsConstants_FallStartVelocityIsSmallNegative()
+    {
+        Assert.True(PhysicsTestConstants.FallStartVelocity < 0,
+            "FallStartVelocity should be negative (downward)");
+        Assert.True(PhysicsTestConstants.FallStartVelocity > -1.0f,
+            $"FallStartVelocity ({PhysicsTestConstants.FallStartVelocity}) should be a small nudge, not a large push");
     }
 }

@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using ForegroundBotRunner.Mem.Hooks;
 using Serilog;
 
 namespace ForegroundBotRunner.Mem
@@ -13,6 +15,9 @@ namespace ForegroundBotRunner.Mem
     {
         [DllImport("user32.dll")]
         private static extern nint SetWindowLong(nint hWnd, int nIndex, nint dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern nint GetWindowLong(nint hWnd, int nIndex);
 
         [DllImport("user32.dll")]
         private static extern int CallWindowProc(nint lpPrevWndFunc, nint hWnd, int Msg, int wParam, int lParam);
@@ -40,7 +45,7 @@ namespace ForegroundBotRunner.Mem
             int lParam
         );
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(
             int hWnd,
             uint Msg,
@@ -51,6 +56,7 @@ namespace ForegroundBotRunner.Mem
         private const uint WM_KEYDOWN = 0x0100;
         private const uint WM_KEYUP = 0x0101;
         private const int VK_SPACE = 0x20;
+        private const int VK_W = 0x57;
 
         [DllImport("kernel32.dll")]
         private static extern uint GetCurrentThreadId();
@@ -70,9 +76,73 @@ namespace ForegroundBotRunner.Mem
 
         // Set to true to disable the window hook (for Warden testing)
         // When disabled, RunOnMainThread will execute directly (WARNING: may cause threading issues)
-        private static readonly bool DISABLE_WINDOW_HOOK = false; // Re-enabled: thread safety required for Lua calls
+        private static readonly bool DISABLE_WINDOW_HOOK = false;
 
-        private static bool _hookInstalled = false;
+        private static volatile bool _hookInstalled = false;
+
+        /// <summary>Our WndProc function pointer — cached for hook-still-installed verification.</summary>
+        private static nint _ourCallbackPtr;
+
+        /// <summary>Cached WoW log directory — avoids Process.GetCurrentProcess() on every log write.
+        /// Process.GetCurrentProcess().MainModule throws Win32Exception on WoW's main thread,
+        /// flooding the first-chance exception handler and potentially destabilizing the process.</summary>
+        private static string? _cachedLogDir;
+
+        /// <summary>Cached main thread ID — captured from WndProc on its first invocation,
+        /// which guarantees it's WoW's actual main thread (window message pump thread).
+        /// Avoids Process.GetCurrentProcess().Threads[0].Id which creates disposable Process
+        /// objects, leaks thread handles, and throws Win32Exception on every call.</summary>
+        private static uint _mainThreadId;
+
+        /// <summary>
+        /// When true, WndProc will NOT execute queued actions/delegates. Callers of
+        /// RunOnMainThread will timeout. Set this during map/instance transitions to
+        /// prevent Lua calls from crashing WoW when its internal state is unstable.
+        /// </summary>
+        public static volatile bool Paused = false;
+
+        /// <summary>True once the object manager has been valid at least once (i.e., we connected to world server).</summary>
+        private static volatile bool _objMgrWasValid = false;
+
+        /// <summary>Last ContinentId seen by WndProc — used to detect map changes on the main thread.</summary>
+        private static uint _wndProcLastContId = 0xFFFFFFFF;
+
+        /// <summary>
+        /// True once we've actually been in a valid map (continentId less than 0xFF).
+        /// Distinguished from _objMgrWasValid which is set when ManagerBase is non-zero
+        /// (happens at charselect too). inTransition blocking only applies after we've
+        /// been in a real map — otherwise charselect Lua calls are permanently blocked.
+        /// </summary>
+        private static volatile bool _hasEnteredWorldOnce = false;
+
+        /// <summary>
+        /// Reset the world-entry tracking flags. Call this when the bot detects a full disconnect
+        /// (back at login/charselect). Without this reset, the inTransition heuristic
+        /// permanently blocks all WM_USER processing after a disconnect because
+        /// _hasEnteredWorldOnce=true + continentId=0xFFFFFFFF = inTransition=true forever.
+        /// </summary>
+        public static void ResetObjMgrValidState()
+        {
+            _objMgrWasValid = false;
+            _hasEnteredWorldOnce = false;
+            DiagLogStatic("ResetObjMgrValidState: _objMgrWasValid=false, _hasEnteredWorldOnce=false (full disconnect recovery)");
+        }
+
+        /// <summary>
+        /// Packet-driven connection state machine. When set, provides deterministic
+        /// IsLuaSafe/IsObjectManagerValid checks instead of heuristic ContinentId reads.
+        /// </summary>
+        private static ConnectionStateMachine? _connectionState;
+
+        /// <summary>
+        /// Register the connection state machine for deterministic Lua safety checks.
+        /// Call this from ForegroundBotWorker after initializing the state machine.
+        /// </summary>
+        public static void SetConnectionStateMachine(ConnectionStateMachine stateMachine)
+        {
+            _connectionState = stateMachine;
+            DiagLogStatic($"ConnectionStateMachine registered (state={stateMachine.CurrentState})");
+        }
 
         static ThreadSynchronizer()
         {
@@ -83,13 +153,32 @@ namespace ForegroundBotRunner.Mem
                 return;
             }
 
+            // Cache the log directory FIRST — before any DiagLogStatic calls.
+            // This avoids Process.GetCurrentProcess().MainModule calls later (which
+            // throw Win32Exception on WoW's main thread and flood first-chance handler).
+            try
+            {
+                string wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+                _cachedLogDir = Path.Combine(wowDir, "WWoWLogs");
+                Directory.CreateDirectory(_cachedLogDir);
+            }
+            catch
+            {
+                _cachedLogDir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                try { Directory.CreateDirectory(_cachedLogDir); } catch { }
+            }
+
             EnumWindows(FindWindowProc, nint.Zero);
             newCallback = WndProc;
-            oldCallback = SetWindowLong(windowHandle, GWL_WNDPROC, Marshal.GetFunctionPointerForDelegate(newCallback));
+            _ourCallbackPtr = Marshal.GetFunctionPointerForDelegate(newCallback);
+            oldCallback = SetWindowLong(windowHandle, GWL_WNDPROC, _ourCallbackPtr);
             _hookInstalled = true;
+            // NOTE: Do NOT cache _mainThreadId here — the static constructor runs on
+            // the LoadLibrary thread, NOT WoW's main thread. _mainThreadId is captured
+            // on the first WndProc invocation (which IS the main thread).
 
             // Log initialization result
-            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X}");
+            DiagLogStatic($"ThreadSynchronizer INIT: windowHandle=0x{windowHandle:X}, oldCallback=0x{oldCallback:X}, ourCallback=0x{_ourCallbackPtr:X} (mainThreadId deferred to WndProc)");
             if (windowHandle == 0)
             {
                 DiagLogStatic("WARNING: Window handle not found! WM_USER messages will not be delivered.");
@@ -105,13 +194,15 @@ namespace ForegroundBotRunner.Mem
                 return;
             }
 
-            if (GetCurrentThreadId() == Process.GetCurrentProcess().Threads[0].Id)
+            if (GetCurrentThreadId() == _mainThreadId)
             {
                 action();
                 return;
             }
-            actionQueue.Enqueue(action);
-            SendUserMessage();
+            // Wrap the Action as a Func<int> so it goes through the delegate queue
+            // with signal-based wait. This ensures the action completes before we return,
+            // matching the synchronous contract even with PostMessage delivery.
+            RunOnMainThread<int>(() => { action(); return 0; });
         }
 
         // Diagnostic logging counter
@@ -126,7 +217,7 @@ namespace ForegroundBotRunner.Mem
                 return function();
             }
 
-            if (GetCurrentThreadId() == Process.GetCurrentProcess().Threads[0].Id)
+            if (GetCurrentThreadId() == _mainThreadId)
                 return function();
 
             // Use a signal to wait for the result to be ready
@@ -135,6 +226,12 @@ namespace ForegroundBotRunner.Mem
 
             lock (_queueLock)
             {
+                // Stale delegate warning: if queue has items older than 5s, WoW's main thread
+                // is likely blocked (loading screen, modal dialog, Warden scan). Log for diagnosis.
+                if (delegateQueue.Count > 50)
+                {
+                    DiagLogStatic($"WARNING: delegateQueue depth={delegateQueue.Count} — WoW main thread may be blocked");
+                }
                 delegateQueue.Enqueue((function, signal, resultHolder));
             }
             SendUserMessage();
@@ -143,8 +240,27 @@ namespace ForegroundBotRunner.Mem
             if (!signal.Wait(TimeSpan.FromSeconds(5)))
             {
                 _timeoutCount++;
+
+                // Verify WndProc hook is still installed — if something overwrote it,
+                // WM_USER messages no longer reach our callback.
+                string hookStatus = "unknown";
+                try
+                {
+                    nint currentProc = GetWindowLong((nint)windowHandle, GWL_WNDPROC);
+                    if (currentProc == _ourCallbackPtr)
+                        hookStatus = "INTACT";
+                    else if (currentProc == oldCallback)
+                        hookStatus = $"REVERTED to original 0x{oldCallback:X}";
+                    else
+                        hookStatus = $"HIJACKED to 0x{currentProc:X} (ours=0x{_ourCallbackPtr:X})";
+                }
+                catch (Exception ex) { hookStatus = $"CHECK_FAILED: {ex.Message}"; }
+
+                var csm = _connectionState;
+                var csmInfo = csm != null ? $"state={csm.CurrentState} luaSafe={csm.IsLuaSafe}" : "not registered";
+
                 Log.Error($"[THREAD] Timeout waiting for main thread (timeout #{_timeoutCount}, success #{_successCount})");
-                DiagLogStatic($"TIMEOUT #{_timeoutCount} waiting for main thread (windowHandle=0x{windowHandle:X})");
+                DiagLogStatic($"TIMEOUT #{_timeoutCount} waiting for main thread — hook={hookStatus}, paused={Paused}, csm=[{csmInfo}], windowHandle=0x{windowHandle:X}, queueDepth={delegateQueue.Count}");
                 return default!;
             }
 
@@ -158,30 +274,154 @@ namespace ForegroundBotRunner.Mem
             return default!;
         }
 
-        // Simple diagnostic logging to file
+        // Simple diagnostic logging to file — uses cached log dir to avoid
+        // Process.GetCurrentProcess() calls on WoW's main thread.
         private static void DiagLogStatic(string message)
         {
             try
             {
-                string wowDir;
-                try { wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory; }
-                catch { wowDir = AppContext.BaseDirectory; }
-                var logsDir = Path.Combine(wowDir, "WWoWLogs");
-                try { Directory.CreateDirectory(logsDir); } catch { }
-                var logPath = Path.Combine(logsDir, "thread_synchronizer_debug.log");
+                var dir = _cachedLogDir;
+                if (dir == null)
+                {
+                    // Fallback only during earliest init before cache is set
+                    dir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                    try { Directory.CreateDirectory(dir); } catch { }
+                }
+                var logPath = Path.Combine(dir, "thread_synchronizer_debug.log");
                 File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
             }
             catch { }
         }
 
+        /// <summary>
+        /// Crash-safe log: writes to D:/World of Warcraft/WWoWLogs/crash_trace.log with immediate flush.
+        /// Use this to trace what happens right before a native ACCESS_VIOLATION kills the process.
+        /// </summary>
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var dir = _cachedLogDir ?? Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                var logPath = Path.Combine(dir, "crash_trace.log");
+                using var sw = new StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
+
+        [HandleProcessCorruptedStateExceptions]
         private static int WndProc(nint hWnd, int msg, int wParam, int lParam)
         {
             try
             {
+                // Capture the main thread ID on first WndProc call — guaranteed to be
+                // WoW's window message pump thread.
+                if (_mainThreadId == 0)
+                {
+                    _mainThreadId = GetCurrentThreadId();
+                    DiagLogStatic($"WndProc: captured mainThreadId={_mainThreadId}");
+                }
+
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
 
+                // Safety gate: determine if Lua execution is safe on WoW's main thread.
+                // Primary: ConnectionStateMachine (packet-driven, deterministic).
+                // Fallback: heuristic ManagerBase + ContinentId reads (legacy path).
+                bool shouldBlock;
+                var csm = _connectionState;
+                if (csm != null)
+                {
+                    // Packet-driven: trust the state machine's deterministic IsLuaSafe.
+                    // Also respect ManagerBase and ContinentId as hard safety nets (catches
+                    // edge cases where packets haven't arrived yet but memory is already
+                    // torn down — e.g. cross-map teleport race window).
+                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                    if (managerBaseValid)
+                        _objMgrWasValid = true;
+
+                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
+                    if (managerBaseValid && isValidMap)
+                        _hasEnteredWorldOnce = true;
+                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
+
+                    // Detect map changes on the main thread (e.g., map 1 → 389 for RFC).
+                    // The background thread's Paused flag may not be set yet — this catches
+                    // the race where a WM_USER fires during a teleport before SimplePolling
+                    // can set Paused=true.
+                    bool mapJustChanged = false;
+                    if (continentId != _wndProcLastContId && isValidMap
+                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
+                    {
+                        mapJustChanged = true;
+                        Paused = true;
+                        Statics.ObjectManager.BeginTeleportPause();
+                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing");
+                    }
+                    if (continentId != _wndProcLastContId)
+                        _wndProcLastContId = continentId;
+
+                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
+                }
+                else
+                {
+                    // Legacy heuristic path (before ConnectionStateMachine is registered).
+                    // _objMgrWasValid tracks if ManagerBase was ever non-zero (world server connected).
+                    // _hasEnteredWorldOnce tracks if we've actually been in a valid map.
+                    // Transition blocking only applies after _hasEnteredWorldOnce — otherwise
+                    // Lua calls at charselect (needed for login, realm selection) are blocked.
+                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                    if (managerBaseValid)
+                        _objMgrWasValid = true;
+
+                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
+
+                    // Track when we've actually been in a valid map (includes instance maps > 0xFF)
+                    if (managerBaseValid && isValidMap)
+                        _hasEnteredWorldOnce = true;
+
+                    // Only block for transitions AFTER we've been in a real map.
+                    // At initial charselect, _hasEnteredWorldOnce is false → Lua calls proceed.
+                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
+
+                    // Detect map changes on the main thread (legacy path)
+                    bool mapJustChanged = false;
+                    if (continentId != _wndProcLastContId && isValidMap
+                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
+                    {
+                        mapJustChanged = true;
+                        Paused = true;
+                        Statics.ObjectManager.BeginTeleportPause();
+                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing (legacy)");
+                    }
+                    if (continentId != _wndProcLastContId)
+                        _wndProcLastContId = continentId;
+
+                    shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
+                }
+                if (shouldBlock)
+                {
+                    var csmState = csm?.CurrentState.ToString() ?? "n/a";
+                    DrainQueues($"paused={Paused} csmState={csmState}");
+                    return 0;
+                }
+
                 while (actionQueue.Count > 0)
-                    actionQueue.Dequeue()?.Invoke();
+                {
+                    try
+                    {
+                        actionQueue.Dequeue()?.Invoke();
+                    }
+                    catch (AccessViolationException)
+                    {
+                        CrashTrace("WndProc: ACCESS_VIOLATION in action — auto-pausing");
+                        Paused = true;
+                        DrainQueues("ACCESS_VIOLATION in action");
+                        return 0;
+                    }
+                }
 
                 // Process delegate queue with proper signaling
                 while (true)
@@ -198,8 +438,27 @@ namespace ForegroundBotRunner.Mem
                     {
                         item.resultHolder[0] = item.function?.DynamicInvoke()!;
                     }
+                    catch (AccessViolationException)
+                    {
+                        CrashTrace("WndProc: ACCESS_VIOLATION in delegate — auto-pausing");
+                        Paused = true;
+                        item.resultHolder[0] = null!;
+                        item.signal.Set();
+                        DrainQueues("ACCESS_VIOLATION in delegate");
+                        return 0;
+                    }
                     catch (Exception ex)
                     {
+                        // DynamicInvoke wraps exceptions in TargetInvocationException
+                        if (ex.InnerException is AccessViolationException)
+                        {
+                            CrashTrace("WndProc: ACCESS_VIOLATION (wrapped) in delegate — auto-pausing");
+                            Paused = true;
+                            item.resultHolder[0] = null!;
+                            item.signal.Set();
+                            DrainQueues("ACCESS_VIOLATION wrapped in delegate");
+                            return 0;
+                        }
                         Log.Error($"[THREAD] Error invoking delegate: {ex.Message}");
                         item.resultHolder[0] = null!;
                     }
@@ -210,12 +469,36 @@ namespace ForegroundBotRunner.Mem
                 }
                 return 0;
             }
+            catch (AccessViolationException)
+            {
+                CrashTrace("WndProc: ACCESS_VIOLATION (outer) — auto-pausing");
+                Paused = true;
+                DrainQueues("ACCESS_VIOLATION outer");
+                return 0;
+            }
             catch (Exception e)
             {
                 Log.Error($"[THREAD]{e.Message} {e.StackTrace}");
             }
 
             return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
+        }
+
+        /// <summary>Drains all queued work, signaling delegates with null results.</summary>
+        private static void DrainQueues(string reason)
+        {
+            CrashTrace($"WndProc: BLOCKED ({reason}) — dropping {actionQueue.Count}+{delegateQueue.Count}");
+            while (actionQueue.Count > 0)
+                actionQueue.Dequeue();
+            lock (_queueLock)
+            {
+                while (delegateQueue.Count > 0)
+                {
+                    var item = delegateQueue.Dequeue();
+                    item.resultHolder[0] = null!;
+                    item.signal.Set();
+                }
+            }
         }
 
         private static bool FindWindowProc(nint hWnd, nint lParam)
@@ -232,7 +515,18 @@ namespace ForegroundBotRunner.Mem
             return true;
         }
 
-        private static void SendUserMessage() => SendMessage(windowHandle, WM_USER, 0, 0);
+        // PostMessage instead of SendMessage: PostMessage puts WM_USER in the regular message queue,
+        // processed only during GetMessage/PeekMessage in WoW's main game loop — between frames when
+        // game state is stable. SendMessage dispatches via the "sent message" queue which can fire
+        // during nested SendMessage/PeekMessage calls inside packet processing, potentially executing
+        // our Lua calls while WoW is mid-transfer-teardown (before ContinentId even changes).
+        private static void SendUserMessage()
+        {
+            if (!PostMessage(windowHandle, WM_USER, 0, 0))
+            {
+                DiagLogStatic($"PostMessage FAILED! windowHandle=0x{windowHandle:X} error={Marshal.GetLastWin32Error()}");
+            }
+        }
 
         /// <summary>
         /// Simulates a spacebar press+release to trigger a jump.
@@ -243,6 +537,26 @@ namespace ForegroundBotRunner.Mem
             if (windowHandle == 0) return;
             PostMessage(windowHandle, WM_KEYDOWN, VK_SPACE, 0x00390001); // scancode 0x39 for space
             PostMessage(windowHandle, WM_KEYUP, VK_SPACE, unchecked((int)0xC0390001)); // release with bit 31+30 set
+        }
+
+        /// <summary>
+        /// Sends a W key press via PostMessage to trigger forward movement.
+        /// Used for ghost-form movement where native SetControlBit crashes WoW.exe.
+        /// Only sends KEYDOWN — KEYUP is sent by StopGhostMovement when needed.
+        /// </summary>
+        public static void SimulateForwardKeyPress()
+        {
+            if (windowHandle == 0) return;
+            PostMessage(windowHandle, WM_KEYDOWN, VK_W, 0x00110001); // scancode 0x11 for W
+        }
+
+        /// <summary>
+        /// Releases the W key to stop ghost forward movement.
+        /// </summary>
+        public static void SimulateForwardKeyRelease()
+        {
+            if (windowHandle == 0) return;
+            PostMessage(windowHandle, WM_KEYUP, VK_W, unchecked((int)0xC0110001));
         }
     }
 }

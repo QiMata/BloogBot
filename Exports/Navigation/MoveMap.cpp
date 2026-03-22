@@ -57,89 +57,61 @@ namespace MMAP
 
 	EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
-	void getMapName(unsigned int mapId, string& result)
+	/// Returns the DLL-relative mmaps base path (legacy fallback).
+	static string getDllRelativeMmapsPath()
 	{
-		string mapIdStr = "";
-		if (mapId < 10)
-		{
-			mapIdStr = mapIdStr.append("00");
-		}
-		else if (mapId < 100)
-		{
-			mapIdStr = mapIdStr.append("0");
-		}
-		string mapIdStr2 = NumberToString(mapId);
-		mapIdStr = mapIdStr.append(mapIdStr2);
-		mapIdStr = mapIdStr.append(".mmap");
-
 		WCHAR DllPath[MAX_PATH] = { 0 };
 		GetModuleFileNameW((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
 		wstring ws(DllPath);
 		string pathAndFile(ws.begin(), ws.end());
-		char* c = const_cast<char*>(pathAndFile.c_str());
-		int strLength = strlen(c);
 		int lastOccur = 0;
-		for (int i = 0; i < strLength; i++)
+		for (int i = 0; i < (int)pathAndFile.size(); i++)
 		{
-			if (c[i] == '\\') lastOccur = i;
+			if (pathAndFile[i] == '\\') lastOccur = i;
 		}
-		string pathToMmap = pathAndFile.substr(0, lastOccur + 1);
-		pathToMmap = pathToMmap.append("mmaps\\");
-		string pathToMmapFile = pathToMmap.append(mapIdStr);
-		c = const_cast<char*>(pathToMmapFile.c_str());
-		strLength = strlen(c);
-
-		str_replace(pathToMmapFile, "\\", "\\\\");
-
-		result = pathToMmapFile;
+		string basePath = pathAndFile.substr(0, lastOccur + 1);
+		basePath.append("mmaps\\");
+		return basePath;
 	}
 
-	void getTileName(unsigned int mapId, int x, int y, string& result)
+	/// Builds the full path for a .mmap file given a base mmaps directory.
+	void getMapName(unsigned int mapId, string& result, const string& basePath)
 	{
-		string tileName = "";
+		string mapIdStr;
 		if (mapId < 10)
-		{
-			tileName = tileName.append("00");
-		}
+			mapIdStr = "00" + NumberToString(mapId);
 		else if (mapId < 100)
-		{
-			tileName = tileName.append("0");
-		}
+			mapIdStr = "0" + NumberToString(mapId);
+		else
+			mapIdStr = NumberToString(mapId);
+		mapIdStr.append(".mmap");
+
+		string effectiveBase = basePath.empty() ? getDllRelativeMmapsPath() : basePath;
+		result = effectiveBase + mapIdStr;
+	}
+
+	/// Builds the full path for a .mmtile file given a base mmaps directory.
+	void getTileName(unsigned int mapId, int x, int y, string& result, const string& basePath)
+	{
+		string tileName;
+		if (mapId < 10)
+			tileName = "00";
+		else if (mapId < 100)
+			tileName = "0";
 		tileName.append(NumberToString(mapId));
 
 		if (x < 10)
-		{
-			tileName = tileName.append("0");
-		}
+			tileName.append("0");
 		tileName.append(NumberToString(x));
 
 		if (y < 10)
-		{
-			tileName = tileName.append("0");
-		}
+			tileName.append("0");
 		tileName.append(NumberToString(y));
 
 		tileName.append(".mmtile");
 
-		WCHAR DllPath[MAX_PATH] = { 0 };
-		GetModuleFileNameW((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
-		wstring ws(DllPath);
-		string pathAndFile(ws.begin(), ws.end());
-
-		char* c = const_cast<char*>(pathAndFile.c_str());
-		int strLength = strlen(c);
-		int lastOccur = 0;
-		for (int i = 0; i < strLength; i++)
-		{
-			if (c[i] == '\\') lastOccur = i;
-		}
-		string pathToMmap = pathAndFile.substr(0, lastOccur + 1);
-		pathToMmap = pathToMmap.append("mmaps\\");
-		string pathToMmapFile = pathToMmap.append(tileName);
-
-		str_replace(pathToMmapFile, "\\", "\\\\");
-
-		result = pathToMmapFile;
+		string effectiveBase = basePath.empty() ? getDllRelativeMmapsPath() : basePath;
+		result = effectiveBase + tileName;
 	}
 
 	// ######################## MMapFactory ########################
@@ -170,8 +142,8 @@ namespace MMAP
 		if (loadedMMaps.find(mapId) != loadedMMaps.end())
 			return true;
 
-		string fileName = "";
-		getMapName(mapId, fileName);
+		string fileName;
+		getMapName(mapId, fileName, m_mmapsBasePath);
 		FILE* file = fopen(fileName.c_str(), "rb");
 		if (!file)
 			return false;
@@ -203,16 +175,19 @@ namespace MMAP
 
 	bool MMapManager::loadMap(unsigned int mapId, int x, int y)
 	{
-		loadMapData(mapId);
+		if (!loadMapData(mapId))
+			return false;
 
 		MMapData* mmap = loadedMMaps[mapId];
+		if (!mmap)
+			return false;
 
 		unsigned int packedGridPos = packTileID(x, y);
 		if (mmap->mmapLoadedTiles.find(packedGridPos) != mmap->mmapLoadedTiles.end())
 			return true;
 
-		string fileName = "";
-		getTileName(mapId, x, y, fileName);
+		string fileName;
+		getTileName(mapId, x, y, fileName, m_mmapsBasePath);
 
 		FILE* file = fopen(fileName.c_str(), "rb");
 		if (!file)

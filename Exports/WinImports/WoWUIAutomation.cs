@@ -57,7 +57,7 @@ public static class WoWUIAutomation
 
     // Virtual key codes
     public const ushort VK_W = 0x57;
-    public const ushort VK_A = 0x53;
+    public const ushort VK_A = 0x41;
     public const ushort VK_S = 0x53;
     public const ushort VK_D = 0x44;
     public const ushort VK_SPACE = 0x20;

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿using ForegroundBotRunner.Frames;
+=======
+using ForegroundBotRunner.Frames;
+>>>>>>> cpp_physics_system
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
@@ -16,11 +20,14 @@ using System.IO;
 
 namespace ForegroundBotRunner.Statics
 {
-    public class ObjectManager : IObjectManager
+    public partial class ObjectManager : IObjectManager
     {
         // Diagnostic logging for debugging (writes to WWoWLogs folder)
         private static readonly string DiagnosticLogPath;
+
+
         private static readonly object DiagnosticLogLock = new();
+
         static ObjectManager()
         {
             string wowDir;
@@ -31,6 +38,8 @@ namespace ForegroundBotRunner.Statics
             DiagnosticLogPath = Path.Combine(logsDir, "object_manager_debug.log");
             try { File.WriteAllText(DiagnosticLogPath, $"=== ObjectManager Debug Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
         }
+
+
         private static void DiagLog(string message)
         {
             try
@@ -40,59 +49,89 @@ namespace ForegroundBotRunner.Statics
             catch { }
         }
 
+        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.
+        /// Uses cached DiagnosticLogPath directory to avoid Process.GetCurrentProcess() calls.</summary>
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = Path.Combine(Path.GetDirectoryName(DiagnosticLogPath)!, "crash_trace.log");
+                using var sw = new StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [ObjMgr] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
+
         // LUA SCRIPTS
-        private const string WandLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
-        private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
-        private const string AutoAttackLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Attack') end";
-        private const string TurnOffAutoAttackLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Attack') end";
-        private const int OBJECT_TYPE_OFFSET = 0x14;
 
-        // Vanilla 1.12.1 callback signature: int __thiscall callback(int filter, ulong guid)
-        // ThisCall convention: filter comes first, guid second (opposite of non-Vanilla clients)
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate int EnumerateVisibleObjectsCallbackVanilla(int filter, ulong guid);
 
-        public HighGuid PlayerGuid { get; internal set; } = new HighGuid(new byte[4], new byte[4]);
-        private volatile bool _ingame1 = true;
-        private readonly bool _ingame2 = true;
-        public LoginStates LoginState
-        {
-            get
-            {
-                try
-                {
-                    var loginStateStr = MemoryManager.ReadString(Offsets.CharacterScreen.LoginState);
-                    if (string.IsNullOrWhiteSpace(loginStateStr))
-                    {
-                        return LoginStates.login; // Default to login screen if state is empty
-                    }
-                    if (Enum.TryParse<LoginStates>(loginStateStr, out var state))
-                    {
-                        return state;
-                    }
-                    return LoginStates.login; // Default to login if parsing fails
-                }
-                catch
-                {
-                    return LoginStates.login; // Default to login on error
-                }
-            }
-        }
-        private readonly EnumerateVisibleObjectsCallbackVanilla CallbackDelegate;
-        private readonly nint callbackPtr;
-        private readonly IWoWActivitySnapshot _characterState;
-        public IEnumerable<IWoWObject> Objects
-        {
-            get
-            {
-                lock (_objectsLock)
-                {
-                    return [.. ObjectsBuffer.Cast<IWoWObject>()]; // safe snapshot
-                }
-            }
-        }
-        internal IList<WoWObject> ObjectsBuffer = [];
+        // LUA SCRIPTS
 
+
+        /// <summary>
+        /// Wraps Functions.LuaCall in ThreadSynchronizer.RunOnMainThread.
+        /// All Lua calls MUST execute on WoW's main thread — calling from a background
+        /// thread (e.g., BotRunnerService) silently fails.
+        /// </summary>
+
+
+        /// <summary>
+        /// Wraps Functions.LuaCall in ThreadSynchronizer.RunOnMainThread.
+        /// All Lua calls MUST execute on WoW's main thread — calling from a background
+        /// thread (e.g., BotRunnerService) silently fails.
+        /// </summary>
+        internal static void MainThreadLuaCall(string lua) =>
+            ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCall(lua));
+
+        /// <summary>
+        /// Wraps Functions.LuaCallWithResult in ThreadSynchronizer.RunOnMainThread.
+        /// Returns the Lua result array; blocks until the main thread processes the call.
+        /// </summary>
+
+
+        /// <summary>
+        /// Wraps Functions.LuaCallWithResult in ThreadSynchronizer.RunOnMainThread.
+        /// Returns the Lua result array; blocks until the main thread processes the call.
+        /// </summary>
+
+
+        /// <summary>
+        /// Wraps Functions.LuaCallWithResult in ThreadSynchronizer.RunOnMainThread.
+        /// Returns the Lua result array; blocks until the main thread processes the call.
+        /// </summary>
+
+
+        /// <summary>
+        /// Wraps Functions.LuaCallWithResult in ThreadSynchronizer.RunOnMainThread.
+        /// Returns the Lua result array; blocks until the main thread processes the call.
+        /// </summary>
+        private static string[] MainThreadLuaCallWithResult(string lua) =>
+            ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCallWithResult(lua));
+
+        // Login screen implementations for BotRunnerService integration
+
+
+        // Login screen implementations for BotRunnerService integration
+
+
+        // Login screen implementations for BotRunnerService integration
+
+
+        // Login screen implementations for BotRunnerService integration
+        private readonly FgLoginScreen _fgLoginScreen;
+
+
+        private readonly FgRealmSelectScreen _fgRealmSelectScreen;
+
+
+        private readonly FgCharacterSelectScreen _fgCharacterSelectScreen;
+
+        private readonly ILootFrame _fgLootFrame;
+
+
+
+<<<<<<< HEAD
         private readonly object _objectsLock = new();
         public IWoWEventHandler EventHandler { get; }
 
@@ -116,6 +155,8 @@ namespace ForegroundBotRunner.Statics
         private readonly FgRealmSelectScreen _fgRealmSelectScreen;
         private readonly FgCharacterSelectScreen _fgCharacterSelectScreen;
 
+=======
+>>>>>>> cpp_physics_system
         public ObjectManager(IWoWEventHandler eventHandler, IWoWActivitySnapshot parProbe)
         {
             EventHandler = eventHandler;
@@ -124,7 +165,12 @@ namespace ForegroundBotRunner.Statics
             _fgLoginScreen = new FgLoginScreen(
                 () => GetCurrentScreenState(),
                 (user, pass) => DefaultServerLogin(user, pass),
+<<<<<<< HEAD
                 () => ResetLogin());
+=======
+                () => ResetLogin(),
+                () => DismissGlueDialog());
+>>>>>>> cpp_physics_system
             _fgRealmSelectScreen = new FgRealmSelectScreen(
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
@@ -133,56 +179,23 @@ namespace ForegroundBotRunner.Statics
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
                 lua => MainThreadLuaCall(lua));
+<<<<<<< HEAD
+=======
+            _fgLootFrame = new FgLootFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
+>>>>>>> cpp_physics_system
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);
 
             eventHandler.OnEvent += OnEvent;
 
-            // SIMPLIFIED: Disable the EnumerateVisibleObjects callback loop.
-            // We now use static memory addresses only for login detection.
-            // The callback loop is still available but not used for critical state detection.
-            // Task.Factory.StartNew(async () => await StartEnumeration());
-
-            // Instead, start a simple polling loop that only reads static memory addresses
+            // Start a simple polling loop that only reads static memory addresses
             Task.Factory.StartNew(async () => await StartSimplePollingLoop());
         }
 
-        public IWoWLocalPlayer Player { get; internal set; }
 
-        public IWoWLocalPet Pet { get; private set; }
-
-        /// <summary>
-        /// Event fired when the player first enters the world after login.
-        /// This fires from the enumeration thread (inside ThreadSynchronizer) when HasEnteredWorld becomes true.
-        /// Subscribers should use this to immediately send snapshots while the player is definitely in-world.
-        /// </summary>
-        public event EventHandler? OnEnteredWorld;
-
-        // These filter from ObjectsBuffer (which is populated by EnumerateVisibleObjects callback)
-        public IEnumerable<IWoWGameObject> GameObjects => Objects.OfType<IWoWGameObject>();
-        public IEnumerable<IWoWUnit> Units => Objects.OfType<IWoWUnit>();
-        public IEnumerable<IWoWPlayer> Players => Objects.OfType<IWoWPlayer>();
-        public IEnumerable<IWoWItem> Items => Objects.OfType<IWoWItem>();
-        public IEnumerable<IWoWContainer> Containers => Objects.OfType<IWoWContainer>();
-        public ulong StarTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Star, true);
-        public ulong CircleTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Circle, true);
-        public ulong DiamondTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Diamond, true);
-        public ulong TriangleTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Triangle, true);
-        public ulong MoonTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Moon, true);
-        public ulong SquareTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Square, true);
-        public ulong CrossTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Cross, true);
-        public ulong SkullTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Skull, true);
-
-        // Note: Memory offset 0xB4B424 (IsIngame) returns 0 on this WoW client version (Elysium).
-        // Note: Functions.GetPlayerGuid() returns an object manager index (e.g., 5), not the actual GUID.
-        // Reading the player GUID directly from memory: [ManagerBase] + PlayerGuidOffset
-        private static int _guidLogCount = 0;
-
-        // Cached player GUID - updated via ThreadSynchronizer to ensure main thread context
-        // Functions.GetPlayerGuid() only works reliably from the main WoW thread
-        private static ulong _cachedPlayerGuid = 0;
-        private static readonly object _guidCacheLock = new();
         private ulong GetPlayerGuidFromMemory()
         {
             try
@@ -222,12 +235,24 @@ namespace ForegroundBotRunner.Statics
                 return 0;
             }
         }
-        // CRITICAL: Use Functions.GetPlayerGuid() instead of memory reads!
-        // GetPlayerGuidFromMemory() returns 0 most of the time because ManagerBase pointer is null.
-        // Functions.GetPlayerGuid() calls the WoW function which works correctly.
-        // Note: The returned value (e.g., 5) is an object manager index, but non-zero means logged in.
-        // IMPORTANT: GetPlayerGuid() only works reliably from the main WoW thread!
-        // We cache the result to avoid synchronization overhead on every check.
+        /// <summary>
+        /// Walk the WoW object manager linked list in memory to find an object by GUID.
+        /// Does NOT require ThreadSynchronizer — pure memory reads, safe from any thread.
+        /// Used as a fallback when Functions.GetObjectPtr() via ThreadSynchronizer fails
+        /// (e.g., during world entry when WoW's message loop isn't processing WM_USER yet).
+        /// </summary>
+
+        /// <summary>
+        /// Walk the WoW object manager linked list in memory to find an object by GUID.
+        /// Does NOT require ThreadSynchronizer — pure memory reads, safe from any thread.
+        /// Used as a fallback when Functions.GetObjectPtr() via ThreadSynchronizer fails
+        /// (e.g., during world entry when WoW's message loop isn't processing WM_USER yet).
+        /// </summary>
+
+
+        // Counter for IsLoggedIn calls to limit logging
+
+
         // Counter for IsLoggedIn calls to limit logging
         private static int _isLoggedInCallCount = 0;
 
@@ -237,116 +262,29 @@ namespace ForegroundBotRunner.Statics
         /// This prevents WM_USER messages from interfering with the login handshake.
         /// Set by ForegroundBotWorker before clicking EnterWorld, cleared after world load or disconnect.
         /// </summary>
+<<<<<<< HEAD
         public static volatile bool PauseNativeCallsDuringWorldEntry = false;
         private static DateTime? _enterWorldStartedAt;
+=======
+>>>>>>> cpp_physics_system
 
-        public bool IsLoggedIn
-        {
-            get
-            {
-                _isLoggedInCallCount++;
-
-                // Fast path: if we have a cached GUID, we're logged in
-                lock (_guidCacheLock)
-                {
-                    if (_cachedPlayerGuid != 0) return true;
-                }
-
-                // During world entry phase, use memory-only to avoid ThreadSynchronizer interference
-                if (PauseNativeCallsDuringWorldEntry)
-                {
-                    // Memory-only detection: read GUID from memory
-                    var memGuid = GetPlayerGuidFromMemory();
-                    if (memGuid != 0)
-                    {
-                        lock (_guidCacheLock)
-                        {
-                            _cachedPlayerGuid = memGuid;
-                            if (_isLoggedInCallCount <= 10)
-                            {
-                                DiagLog($"IsLoggedIn[MemoryOnly]: Cached GUID={memGuid} from memory (PauseNative={PauseNativeCallsDuringWorldEntry})");
-                            }
-                        }
-                        return true;
-                    }
-                    return false;
-                }
-
-                // Slow path: check via main thread and cache the result (Mode 2+)
-                try
-                {
-                    var guid = ThreadSynchronizer.RunOnMainThread(() => Functions.GetPlayerGuid());
-                    if (guid != 0)
-                    {
-                        lock (_guidCacheLock)
-                        {
-                            _cachedPlayerGuid = guid;
-                            DiagLog($"IsLoggedIn: Cached GUID={guid} via ThreadSynchronizer");
-                        }
-                        return true;
-                    }
-                    else
-                    {
-                        // Log GUID=0 result periodically (first 10, then every 20th call)
-                        if (_isLoggedInCallCount <= 10 || _isLoggedInCallCount % 20 == 0)
-                        {
-                            DiagLog($"IsLoggedIn[{_isLoggedInCallCount}]: GetPlayerGuid returned 0 (not logged in)");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    DiagLog($"IsLoggedIn: ThreadSynchronizer error: {ex.Message}");
-                }
-
-                return false;
-            }
-        }
 
         /// <summary>
-        /// Clears the cached player GUID. Call this when logout is detected.
+        /// Flag to pause ThreadSynchronizer-based native calls during the critical EnterWorld phase.
+        /// When true, IsLoggedIn and other checks will use memory-only detection.
+        /// This prevents WM_USER messages from interfering with the login handshake.
+        /// Set by ForegroundBotWorker before clicking EnterWorld, cleared after world load or disconnect.
         /// </summary>
-        internal static void ClearCachedGuid()
-        {
-            lock (_guidCacheLock)
-            {
-                if (_cachedPlayerGuid != 0)
-                {
-                    DiagLog($"ClearCachedGuid: Clearing cached GUID={_cachedPlayerGuid}");
-                    _cachedPlayerGuid = 0;
-                }
-            }
-        }
 
-        /// <summary>
-        /// Updates the cached player GUID. Call this when a valid GUID is detected.
-        /// </summary>
-        internal static void UpdateCachedGuid(ulong guid)
-        {
-            if (guid == 0) return;
-            lock (_guidCacheLock)
-            {
-                if (_cachedPlayerGuid != guid)
-                {
-                    DiagLog($"UpdateCachedGuid: Updating cached GUID from {_cachedPlayerGuid} to {guid}");
-                    _cachedPlayerGuid = guid;
-                }
-            }
-        }
+
+        // Volatile to ensure visibility across threads (enumeration thread sets, main loop reads)
+
 
         // Volatile to ensure visibility across threads (enumeration thread sets, main loop reads)
         private volatile bool _hasEnteredWorld;
-        public bool HasEnteredWorld
-        {
-            get => _hasEnteredWorld;
-            set => _hasEnteredWorld = value;
-        }
 
-        /// <summary>
-        /// Returns true if the world is currently loading (ContinentID = 0xFF)
-        /// </summary>
-        public bool IsLoadingWorld => MemoryManager.ReadUint(Offsets.Map.ContinentId) == 0xFF;
 
+<<<<<<< HEAD
         /// <summary>
         /// Gets the current ContinentId from memory.
         /// Used for screen state detection.
@@ -450,13 +388,12 @@ namespace ForegroundBotRunner.Statics
             !IsLoadingWorld &&
             Player != null &&
             HasEnteredWorld;
+=======
+>>>>>>> cpp_physics_system
 
         private static int _antiAfkLogCounter = 0;
-        public void AntiAfk()
-        {
-            var tickCount = Environment.TickCount;
-            MemoryManager.WriteInt(MemoryAddresses.LastHardwareAction, tickCount);
 
+<<<<<<< HEAD
             // Log every 20th call (every 10 seconds at 500ms intervals) to verify it's working
             if (++_antiAfkLogCounter % 20 == 1)
             {
@@ -1113,29 +1050,22 @@ namespace ForegroundBotRunner.Statics
                 args.EventName != "VARIABLES_LOADED") return;
             _ingame1 = true;
         }
+=======
+>>>>>>> cpp_physics_system
 
         /// <summary>
-        /// SIMPLIFIED: Simple polling loop that only reads static memory addresses for login detection.
-        /// Does NOT use EnumerateVisibleObjects callback - only memory reads.
-        /// NOTE: This runs on a background thread. For WoW API calls that need the main thread,
-        /// we use ThreadSynchronizer. However, for initial detection we just use memory reads
-        /// which work from any thread.
+        /// Maps spell name → list of spell IDs from the client spell DB (0x00C0D788 pointer chain).
+        /// Built once (non-null DB pointer required). Used to translate LEARNED_SPELL arg1 names
+        /// into IDs. Different ranks share a name (e.g. Deflection ranks 1-5 = IDs 16462-16466).
         /// </summary>
-        // Track consecutive failed login checks to debounce reset (avoid resetting on brief GUID=0 glitches)
-        private int _consecutiveLoggedOutCount = 0;
-        private const int LOGOUT_DEBOUNCE_THRESHOLD = 10; // Require 10 consecutive checks (~5 seconds)
 
-        // Track previous state for change detection (for LoginStateMonitor)
-        private bool _prevIsConnected = true;
-        private LoginStates _prevLoginState = LoginStates.login;
-        private uint _prevContinentId = 0xFFFFFFFF;
-        private volatile bool _isContinentTransition;
 
         /// <summary>
-        /// True when the client is in a continent/map transition (ContinentId == 0xFF or 0xFFFFFFFF
-        /// while HasEnteredWorld). Object pointers are invalid during this period — do NOT access
-        /// WoWObject properties. Checked by MovementRecorder and snapshot builders to avoid crashes.
+        /// Maps spell name → list of spell IDs from the client spell DB (0x00C0D788 pointer chain).
+        /// Built once (non-null DB pointer required). Used to translate LEARNED_SPELL arg1 names
+        /// into IDs. Different ranks share a name (e.g. Deflection ranks 1-5 = IDs 16462-16466).
         /// </summary>
+<<<<<<< HEAD
         public bool IsContinentTransition => _isContinentTransition;
 
         internal async Task StartSimplePollingLoop()
@@ -2418,5 +2348,8 @@ namespace ForegroundBotRunner.Statics
             SetFacing((float)newFacing);
         }
 
+=======
+        private Dictionary<string, List<uint>> _spellNameToIds = new(StringComparer.OrdinalIgnoreCase);
+>>>>>>> cpp_physics_system
     }
 }

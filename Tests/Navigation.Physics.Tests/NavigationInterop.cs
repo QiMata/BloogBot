@@ -150,6 +150,7 @@ public static partial class NavigationInterop
         public ulong TransportGuid;
         public float TransportX, TransportY, TransportZ, TransportO;
         public uint FallTime;
+        public float FallStartZ;
         public float Height;
         public float Radius;
         [MarshalAs(UnmanagedType.I1)]
@@ -169,6 +170,8 @@ public static partial class NavigationInterop
         public float DeltaTime;
         public uint FrameCounter;
         public uint PhysicsFlags;
+        public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint StepUpAge;          // frames since step-up detected
     }
 
     public const uint PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -193,9 +196,16 @@ public static partial class NavigationInterop
         public uint StandingOnInstanceId;
         public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
         public float FallDistance;
+        public float FallStartZ;
         public float FallTime;
         public int CurrentSplineIndex;
         public float SplineProgress;
+        [MarshalAs(UnmanagedType.I1)]
+        public bool HitWall;
+        public float WallNormalX, WallNormalY, WallNormalZ;
+        public float BlockedFraction;
+        public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint StepUpAge;          // frames since step-up detected
     }
 
     // ==========================================================================
@@ -271,6 +281,86 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
+
+    [DllImport(NavigationDll, EntryPoint = "FindPath", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr FindPathNative(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end,
+        [MarshalAs(UnmanagedType.I1)] bool smoothPath,
+        out int length);
+
+    [DllImport(NavigationDll, EntryPoint = "PathArrFree", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void PathArrFree(IntPtr pathArr);
+
+    public enum SegmentValidationResult : uint
+    {
+        Clear = 0,
+        BlockedGeometry = 1,
+        MissingSupport = 2,
+        StepUpTooHigh = 3,
+        StepDownTooFar = 4,
+    }
+
+    /// <summary>
+    /// Validates whether an agent-sized capsule can traverse the segment while remaining
+    /// on a supported surface, using the same step-up / step-down thresholds as the
+    /// native movement stack.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ValidateWalkableSegment", CallingConvention = CallingConvention.Cdecl)]
+    public static extern SegmentValidationResult ValidateWalkableSegment(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end,
+        float radius,
+        float height,
+        out float resolvedEndZ,
+        out float supportDelta,
+        out float travelFraction);
+
+    public static Vector3[] FindPath(uint mapId, in Vector3 start, in Vector3 end, bool smoothPath)
+    {
+        var pathPtr = IntPtr.Zero;
+        try
+        {
+            pathPtr = FindPathNative(mapId, start, end, smoothPath, out var length);
+            if (pathPtr == IntPtr.Zero || length <= 0)
+                return [];
+
+            var path = new Vector3[length];
+            var stride = Marshal.SizeOf<Vector3>();
+            for (var i = 0; i < length; i++)
+            {
+                var currentPtr = IntPtr.Add(pathPtr, i * stride);
+                path[i] = Marshal.PtrToStructure<Vector3>(currentPtr);
+            }
+
+            return path;
+        }
+        finally
+        {
+            if (pathPtr != IntPtr.Zero)
+                PathArrFree(pathPtr);
+        }
+    }
+
+    /// <summary>
+    /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.
+    /// Forces VMAP initialization if not already loaded.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetGroundZBypassCache", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetGroundZBypassCache(
+        uint mapId, float x, float y, float z, float maxSearchDist,
+        out float vmapZ, out float adtZ, out float bihZ, out float sceneCacheZ);
+
+    /// <summary>
+    /// Diagnostic: enumerate ALL surfaces (triangles) at (x,y) from scene cache.
+    /// No Z acceptance window filtering — returns all surfaces at any height.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "EnumerateAllSurfacesAt", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EnumerateAllSurfacesAt(
+        uint mapId, float x, float y,
+        [Out] float[] zValues, [Out] uint[] instanceIds, int maxResults);
 
     // ==========================================================================
     // GEOMETRY QUERY FUNCTIONS (for testing)
@@ -446,4 +536,19 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetScenesDir(string dir);
+<<<<<<< HEAD
+=======
+
+    // ==========================================================================
+    // WMO DOODAD EXTRACTION
+    // ==========================================================================
+
+    /// <summary>
+    /// Extract WMO doodad placement data from MPQ archives.
+    /// Reads raw .wmo files from MPQ, writes .doodads files to vmaps directory.
+    /// Returns number of .doodads files written, or -1 on error.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ExtractWmoDoodads", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern int ExtractWmoDoodads(string mpqDataDir, string vmapsDir);
+>>>>>>> cpp_physics_system
 }

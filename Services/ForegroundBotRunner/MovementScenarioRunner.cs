@@ -56,6 +56,12 @@ namespace ForegroundBotRunner
         // Use Z slightly above terrain to avoid underground
         private const float SlopeX = 290f, SlopeY = -4660f, SlopeZ = 18f;
 
+        // Valley of Trials slope: the BG Navigation_LongPath route
+        // This crosses terrain where ADT oscillates between surface (~52) and gullies (~30-40),
+        // causing BG bot Z oscillation. FG recording captures WoW client's actual Z behavior.
+        private const float VotSlopeStartX = -284f, VotSlopeStartY = -4383f, VotSlopeStartZ = 60f;
+        private const float VotSlopeEndX = -350f, VotSlopeEndY = -4450f;
+
         public async Task RunAllScenariosAsync(CancellationToken ct)
         {
             try { File.WriteAllText(DiagnosticLogPath, $"=== Scenario Runner Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
@@ -173,6 +179,43 @@ namespace ForegroundBotRunner
                     {
                         _objectManager.StartMovement(ControlBits.Front);
                         await Task.Delay(5000, ct2);
+                        _objectManager.StopMovement(ControlBits.Front);
+                    }, ct);
+
+                // Valley of Trials slope: the problematic BG Navigation_LongPath route
+                // Walking southwest on sloped terrain where ADT has gullies causing BG bot Z oscillation
+                await RunScenario("11_vot_slope_southwest", "Valley of Trials slope route (SW, ~100y, matches BG Navigation_LongPath)",
+                    setup: async ct2 =>
+                    {
+                        await TeleportAndSettle(VotSlopeStartX, VotSlopeStartY, VotSlopeStartZ, ct2);
+                        // Face toward destination: atan2(endY-startY, endX-startX)
+                        float facing = MathF.Atan2(VotSlopeEndY - VotSlopeStartY, VotSlopeEndX - VotSlopeStartX);
+                        if (facing < 0) facing += 2 * MathF.PI;
+                        SetFacing(facing);
+                        await Settle(ct2);
+                    },
+                    execute: async ct2 =>
+                    {
+                        // Run time: ~100y at 7.0 speed = ~14s + buffer
+                        _objectManager.StartMovement(ControlBits.Front);
+                        await Task.Delay(18000, ct2);
+                        _objectManager.StopMovement(ControlBits.Front);
+                    }, ct);
+
+                // Return trip (NE uphill) to capture the reverse slope behavior
+                await RunScenario("12_vot_slope_northeast", "Valley of Trials slope route (NE uphill, return path)",
+                    setup: async ct2 =>
+                    {
+                        await TeleportAndSettle(VotSlopeEndX, VotSlopeEndY, VotSlopeStartZ, ct2);
+                        float facing = MathF.Atan2(VotSlopeStartY - VotSlopeEndY, VotSlopeStartX - VotSlopeEndX);
+                        if (facing < 0) facing += 2 * MathF.PI;
+                        SetFacing(facing);
+                        await Settle(ct2);
+                    },
+                    execute: async ct2 =>
+                    {
+                        _objectManager.StartMovement(ControlBits.Front);
+                        await Task.Delay(18000, ct2);
                         _objectManager.StopMovement(ControlBits.Front);
                     }, ct);
 

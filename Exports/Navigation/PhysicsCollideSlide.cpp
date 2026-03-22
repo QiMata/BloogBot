@@ -147,11 +147,19 @@ SlideResult CollideAndSlide(
         float minDist = FLT_MAX;
         
         for (const auto& hit : hits) {
-            if (!hit.hit || hit.startPenetrating) 
+            if (!hit.hit || hit.startPenetrating)
                 continue;
-            if (horizontalOnly && hit.region != SceneHit::CapsuleRegion::Side) 
-                continue;
-            if (hit.distance < 1e-6f) 
+            if (horizontalOnly) {
+                // In horizontal mode, always accept Side hits. For Bottom/Top hits,
+                // only accept if the hit normal has a significant horizontal component.
+                // This prevents bots from phasing through objects at foot level that
+                // register as Bottom capsule contacts but act as horizontal barriers.
+                if (hit.region != SceneHit::CapsuleRegion::Side) {
+                    float hMag = std::sqrt(hit.normal.x * hit.normal.x + hit.normal.y * hit.normal.y);
+                    if (hMag < 0.3f) continue;  // Skip purely vertical contacts (floor/ceiling)
+                }
+            }
+            if (hit.distance < 1e-6f)
                 continue;
             if (hit.distance < minDist) {
                 minDist = hit.distance;
@@ -268,11 +276,51 @@ SlideResult CollideAndSlide(
                 }
             }
 
-            // Crease blocked or invalid - we're stuck in a corner
-            result.distanceRemaining = remaining;
-            result.hitCorner = true;
-            PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] STUCK in corner - stopping");
-            break;
+            // Crease blocked or invalid — try sliding along individual constraint
+            // normals before giving up (Quake-style corner escape).
+            {
+                bool escapedCorner = false;
+                for (size_t ci = 0; ci < constraintNormals.size(); ++ci) {
+                    G3D::Vector3 slideDir = ComputeSlideTangent(originalDirN2D, constraintNormals[ci]);
+                    float slideMag = slideDir.magnitude();
+                    if (slideMag < 1e-6f) continue;
+                    slideDir = slideDir * (1.0f / slideMag);
+
+                    // Ensure this slide doesn't violate any OTHER constraint
+                    bool blocked = false;
+                    for (size_t cj = 0; cj < constraintNormals.size(); ++cj) {
+                        if (ci == cj) continue;
+                        if (IsDirectionBlocked(slideDir, constraintNormals[cj])) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) continue;
+
+                    // Also reject if the slide opposes the original direction
+                    if (slideDir.dot(originalDirN2D) <= 0.0f) continue;
+
+                    currentDir = slideDir;
+                    if (horizontalOnly) {
+                        currentDir.z = 0.0f;
+                        currentDir = currentDir.directionOrZero();
+                    }
+                    targetPosition = currentPosition + currentDir * remaining;
+                    escapedCorner = true;
+                    PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] corner escape via slide along constraint normal");
+                    break;
+                }
+
+                result.hitCorner = true;
+                if (escapedCorner) {
+                    continue;  // retry with the new slide direction
+                }
+
+                // All individual slides blocked too — truly stuck
+                result.distanceRemaining = remaining;
+                PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] STUCK in corner - stopping");
+                break;
+            }
         }
 
         // Single constraint - compute slide using PhysX-style collisionResponse
@@ -331,13 +379,6 @@ SlideResult CollideAndSlide(
             result.distanceRemaining = remaining;
             PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] No valid slide direction - stopping");
             break;
-        }
-
-        // Check if slide direction is blocked by any previous constraint
-        for (size_t i = 0; i < constraintNormals.size() - 1; ++i) {
-            if (IsDirectionBlocked(slideDir, constraintNormals[i])) {
-                break;
-            }
         }
 
         result.finalVelocity = slideDir;

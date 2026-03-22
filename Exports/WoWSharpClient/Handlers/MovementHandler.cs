@@ -50,11 +50,28 @@ namespace WoWSharpClient.Handlers
                                 "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
                                 teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
 
+<<<<<<< HEAD
                             WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+=======
+                            // Only process as a player teleport if the GUID matches our player.
+                            // MSG_MOVE_TELEPORT can also be sent for creatures (MaNGOS sends these
+                            // when mobs are moved). Processing creature teleports as player teleports
+                            // triggers NotifyTeleportIncoming → _isBeingTeleported=true → movement
+                            // state reset → auto-attack heartbeat disruption → mob evades.
+                            var teleportPlayer = WoWSharpObjectManager.Instance.Player;
+                            bool isPlayerTeleport = teleportPlayer != null && teleportPlayer.Guid == teleportGuid;
+
+                            if (isPlayerTeleport)
+                            {
+                                WoWSharpObjectManager.Instance.NotifyTeleportIncoming(teleportData.Z);
+                            }
+
+>>>>>>> cpp_physics_system
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     teleportGuid,
                                     WoWSharpObjectManager.ObjectUpdateOperation.Update,
+<<<<<<< HEAD
                                     WoWObjectType.Player,
                                     teleportData,
                                     []
@@ -78,7 +95,43 @@ namespace WoWSharpClient.Handlers
 
                             WoWSharpEventEmitter.Instance.FireOnTeleport(
                                 new RequiresAcknowledgementArgs(teleportGuid, 0)
+=======
+                                    isPlayerTeleport ? WoWObjectType.Player : WoWObjectType.Unit,
+                                    teleportData,
+                                    []
+                                )
+>>>>>>> cpp_physics_system
                             );
+
+                            // Directly update player position so MovementController uses the
+                            // teleported position in its very next heartbeat/stop packet.
+                            if (isPlayerTeleport)
+                            {
+                                teleportPlayer!.Position.X = teleportData.X;
+                                teleportPlayer.Position.Y = teleportData.Y;
+                                teleportPlayer.Position.Z = teleportData.Z;
+                                Log.Information(
+                                    "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
+                                    teleportData.X, teleportData.Y, teleportData.Z);
+                            }
+
+                            // Only ACK player teleports. Creature MSG_MOVE_TELEPORT packets
+                            // must NOT be ACKed — doing so sets _isBeingTeleported=true in
+                            // EventEmitter_OnTeleport, which blocks MovementController updates
+                            // and disrupts auto-attack heartbeats → mob evades. (BT-COMBAT-002)
+                            if (isPlayerTeleport)
+                            {
+                                var teleportCounter = WoWSharpObjectManager.Instance.IncrementTeleportSequence();
+                                WoWSharpEventEmitter.Instance.FireOnTeleport(
+                                    new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
+                                );
+                            }
+                            else
+                            {
+                                Log.Debug(
+                                    "[MovementHandler] Skipping teleport ACK for non-player GUID {Guid:X}",
+                                    teleportGuid);
+                            }
                             break;
                         }
                         case Opcode.MSG_MOVE_TELEPORT_ACK:
@@ -89,7 +142,9 @@ namespace WoWSharpClient.Handlers
                             movementUpdateData.MovementCounter = movementCounter;
 
                             // Queue the position update so the local player position reflects the teleport.
-                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+                            // Pass destination Z from packet so _teleportZ clamp is set to the correct
+                            // post-teleport height (not the pre-teleport position captured from _player.Position.Z).
+                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming(movementUpdateData.Z);
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     guid,
@@ -148,25 +203,45 @@ namespace WoWSharpClient.Handlers
                             break;
                         case Opcode.SMSG_MOVE_KNOCK_BACK:
                             WoWSharpEventEmitter.Instance.FireOnForceMoveKnockBack(
-                                ParseGuidCounterPacket(reader)
+                                ParseKnockBackPacket(reader)
                             );
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
+                        {
                             ulong splineRunGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineRunGuid} Now running");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineRunGuid);
+                            if (unit != null)
+                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_WALK_MODE;
+                            Log.Information("[SPLINE] {Guid:X} set run mode", splineRunGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE:
+                        {
                             ulong splineWalkGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineWalkGuid} Now walking");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineWalkGuid);
+                            if (unit != null)
+                                unit.MovementFlags |= MovementFlags.MOVEFLAG_WALK_MODE;
+                            Log.Information("[SPLINE] {Guid:X} set walk mode", splineWalkGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_ROOT:
+                        {
                             ulong splineMoveRootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineMoveRootGuid} Now rooted");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveRootGuid);
+                            if (unit != null)
+                                unit.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
+                            Log.Information("[SPLINE] {Guid:X} rooted", splineMoveRootGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_UNROOT:
+                        {
                             ulong splineMoveUnrootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineMoveUnrootGuid} Now unrooted");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveUnrootGuid);
+                            if (unit != null)
+                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
+                            Log.Information("[SPLINE] {Guid:X} unrooted", splineMoveUnrootGuid);
                             break;
+                        }
                         case Opcode.MSG_MOVE_TIME_SKIPPED:
                             WoWSharpEventEmitter.Instance.FireOnMoveTimeSkipped(
                                 ParseGuidCounterPacket(reader)
@@ -227,6 +302,23 @@ namespace WoWSharpClient.Handlers
                                 ParseMessageMove(reader)
                             );
                             break;
+                        case Opcode.MSG_MOVE_ROOT:
+                        case Opcode.MSG_MOVE_UNROOT:
+                        case Opcode.MSG_MOVE_WATER_WALK:
+                            ParseMessageMove(reader);
+                            break;
+                        case Opcode.MSG_MOVE_SET_RUN_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.RunSpeed = speed
+                            );
+                            break;
+                        case Opcode.MSG_MOVE_SET_SWIM_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.SwimSpeed = speed
+                            );
+                            break;
                         case Opcode.MSG_MOVE_START_BACKWARD:
                             WoWSharpEventEmitter.Instance.FireOnCharacterStartBackwards(
                                 ParseMessageMove(reader)
@@ -264,14 +356,59 @@ namespace WoWSharpClient.Handlers
             return new(guid, counter, speed);
         }
 
+        /// <summary>
+        /// SMSG_MOVE_KNOCK_BACK: packed_guid + counter + vsin + vcos + hspeed + vspeed.
+        /// WoW.exe inbound handler at 0x5E59B0. The sin/cos define the XY direction
+        /// of the knockback, hspeed is horizontal magnitude, vspeed is vertical launch.
+        /// </summary>
+        private static KnockBackArgs ParseKnockBackPacket(BinaryReader reader)
+        {
+            var guid = ReaderUtils.ReadPackedGuid(reader);
+            var counter = reader.ReadUInt32();
+            var vSin = reader.ReadSingle();
+            var vCos = reader.ReadSingle();
+            var hSpeed = reader.ReadSingle();
+            var vSpeed = reader.ReadSingle();
+
+            return new KnockBackArgs(guid, counter, vSin, vCos, hSpeed, vSpeed);
+        }
+
         private static ulong ParseMessageMove(BinaryReader reader)
         {
+            var (packedGuid, movementData) = ParseMessageMoveData(reader);
+            QueueMovementUpdate(packedGuid, movementData);
+            return packedGuid;
+        }
+
+        private static ulong ParseMessageMoveWithTrailingSpeed(
+            BinaryReader reader,
+            Action<MovementBlockUpdate, float> applySpeed
+        )
+        {
+            var (packedGuid, movementData) = ParseMessageMoveData(reader);
+
+            if (reader.BaseStream.Length - reader.BaseStream.Position >= sizeof(float))
+            {
+                float speed = reader.ReadSingle();
+                movementData.MovementBlockUpdate ??= new MovementBlockUpdate();
+                applySpeed(movementData.MovementBlockUpdate, speed);
+            }
+
+            QueueMovementUpdate(packedGuid, movementData);
+            return packedGuid;
+        }
+
+        private static (ulong PackedGuid, MovementInfoUpdate MovementData) ParseMessageMoveData(
+            BinaryReader reader
+        )
+        {
             var packedGuid = ReaderUtils.ReadPackedGuid(reader);
-
-            // Parse raw movement data
             var movementData = MovementPacketHandler.ParseMovementInfo(reader);
+            return (packedGuid, movementData);
+        }
 
-            // Queue an update for the object's movement
+        private static void QueueMovementUpdate(ulong packedGuid, MovementInfoUpdate movementData)
+        {
             WoWSharpObjectManager.Instance.QueueUpdate(
                 new WoWSharpObjectManager.ObjectStateUpdate(
                     packedGuid,
@@ -281,8 +418,6 @@ namespace WoWSharpClient.Handlers
                     []
                 )
             );
-
-            return packedGuid;
         }
 
         private static void ParseCompressedMove(BinaryReader reader)

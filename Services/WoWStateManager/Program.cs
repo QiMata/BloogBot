@@ -50,11 +50,20 @@ namespace WoWStateManager
 
         /// <summary>
         /// Gets the path to the status file (in the PathfindingService directory).
+        /// Checks base directory first (unified net8.0 output), then ../x64/ fallback.
         /// </summary>
         public static string GetStatusFilePath()
         {
-            var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-            return Path.Combine(x64Dir, "pathfinding_status.json");
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var basePath = Path.Combine(baseDir, "pathfinding_status.json");
+            if (File.Exists(basePath)) return basePath;
+
+            var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
+            var x64Path = Path.Combine(x64Dir, "pathfinding_status.json");
+            if (File.Exists(x64Path)) return x64Path;
+
+            // Default to base dir (where PathfindingService will write it)
+            return basePath;
         }
 
         /// <summary>
@@ -167,28 +176,56 @@ namespace WoWStateManager
         {
             try
             {
-                // PathfindingService is x64 — lives in Bot/{Config}/x64/, not Bot/{Config}/net8.0/
-                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                // Try same directory first (unified net8.0 output), fall back to ../x64/
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
+                var dllPath = Path.Combine(baseDir, "PathfindingService.dll");
+                var serviceDir = baseDir;
 
                 if (!File.Exists(dllPath))
                 {
-                    Console.WriteLine($"PathfindingService.dll not found at: {dllPath}");
+                    dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                    serviceDir = x64Dir;
+                }
+
+                if (!File.Exists(dllPath))
+                {
+                    Console.WriteLine($"PathfindingService.dll not found at: {Path.Combine(baseDir, "PathfindingService.dll")} or {Path.Combine(x64Dir, "PathfindingService.dll")}");
                     Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
                     return null;
                 }
 
+                var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = "dotnet",
                     Arguments = $"\"{dllPath}\"",
                     UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = x64Dir
+                    CreateNoWindow = !showWindows,
+                    RedirectStandardOutput = !showWindows,
+                    RedirectStandardError = !showWindows,
+                    WorkingDirectory = serviceDir
                 };
 
                 var process = Process.Start(processInfo);
-                Console.WriteLine($"PathfindingService launched from {x64Dir} (PID: {process?.Id}).");
+                Console.WriteLine($"PathfindingService launched from {serviceDir} (PID: {process?.Id}).");
+
+                // Forward PathfindingService stdout/stderr so C++ physics diagnostics are visible
+                if (!showWindows && process != null)
+                {
+                    process.OutputDataReceived += (s, e) =>
+                    {
+                        if (!string.IsNullOrEmpty(e.Data))
+                            Console.WriteLine($"[PathfindingService-OUT] {e.Data}");
+                    };
+                    process.ErrorDataReceived += (s, e) =>
+                    {
+                        if (!string.IsNullOrEmpty(e.Data))
+                            Console.WriteLine($"[PathfindingService-ERR] {e.Data}");
+                    };
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                }
                 return process;
             }
             catch (Exception ex)
@@ -261,55 +298,37 @@ namespace WoWStateManager
                 if (tcpConnected)
                 {
                     var status = PathfindingServiceStatus.ReadFromFile();
-                    if (status?.IsReady == true)
+                    if (status != null)
                     {
-                        _serviceState = PathfindingServiceState.Ready;
-                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                        var mapsStr = status.LoadedMaps.Count > 0
-                            ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
-                            : "";
-                        Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
-                        return;
-                    }
-                    else if (status != null)
-                    {
-                        // Check if status file is stale (from a different process)
-                        bool isStaleStatus = false;
-                        try
+                        bool statusMatchesLiveService = IsStatusFromLivePathfindingProcess(status, weStartedProcess);
+                        if (status.IsReady && statusMatchesLiveService)
                         {
-                            var runningProcess = Process.GetProcessById(status.ProcessId);
-                            // Process exists but check if it's actually PathfindingService
-                            isStaleStatus = runningProcess.HasExited;
-                        }
-                        catch
-                        {
-                            // Process not found - status file is stale
-                            isStaleStatus = true;
-                        }
-
-                        if (isStaleStatus)
-                        {
-                            // Status file is from a dead process but TCP is connected -
-                            // the running service is ready but didn't update the file
                             _serviceState = PathfindingServiceState.Ready;
                             var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                            Console.WriteLine($"PathfindingService READY after {elapsed:F1}s (status file stale from PID {status.ProcessId}, TCP connected).");
+                            var mapsStr = status.LoadedMaps.Count > 0
+                                ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
+                                : "";
+                            Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
                             return;
                         }
 
-                        // Status file exists but not ready yet - show current status periodically
+                        // Status exists but not usable yet (still loading or stale/mismatched PID)
                         if (attempt % (5000 / delayMs) == 0)
                         {
-                            Console.WriteLine($"  PathfindingService status: {status.StatusMessage}");
+                            if (!statusMatchesLiveService)
+                            {
+                                Console.WriteLine(
+                                    $"  PathfindingService status ignored (stale/mismatched PID {status.ProcessId}). Waiting for live ready status...");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"  PathfindingService status: {status.StatusMessage}");
+                            }
                         }
                     }
-                    else
+                    else if (attempt % (5000 / delayMs) == 0)
                     {
-                        // No status file but TCP connected - service is ready
-                        _serviceState = PathfindingServiceState.Ready;
-                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                        Console.WriteLine($"PathfindingService READY after {elapsed:F1}s (TCP connected, no status file).");
-                        return;
+                        Console.WriteLine("  PathfindingService status file not found yet. Waiting for ready status...");
                     }
                 }
 
@@ -329,91 +348,27 @@ namespace WoWStateManager
                 "Proceeding without pathfinding. Navigation will fall back to direct movement.");
         }
 
-        private static void EnsurePathfindingServiceIsAvailable()
-        {
-            if (!IsPathfindingServiceRunning())
-            {
-                Console.WriteLine("PathfindingService is not running. Launching...");
-                LaunchPathfindingServiceExecutable();
-
-                // Wait for the service to become available
-                Console.WriteLine("Waiting for PathfindingService to become available...");
-                WaitForPathfindingServiceToStart();
-            }
-            else
-            {
-                Console.WriteLine("PathfindingService is already running.");
-            }
-        }
-
-        private static void LaunchPathfindingServiceExecutable()
+        private static bool IsStatusFromLivePathfindingProcess(PathfindingServiceStatus status, bool weStartedProcess)
         {
             try
             {
-                // PathfindingService is x64 — lives in Bot/{Config}/x64/
-                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-                var exePath = Path.Combine(x64Dir, "PathfindingService.exe");
-                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                var process = Process.GetProcessById(status.ProcessId);
+                if (process.HasExited)
+                    return false;
 
-                ProcessStartInfo psi;
-                if (File.Exists(exePath))
-                {
-                    psi = new ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        WorkingDirectory = x64Dir,
-                        UseShellExecute = true,
-                        CreateNoWindow = false
-                    };
-                }
-                else if (File.Exists(dllPath))
-                {
-                    psi = new ProcessStartInfo
-                    {
-                        FileName = "dotnet",
-                        Arguments = $"\"{dllPath}\"",
-                        WorkingDirectory = x64Dir,
-                        UseShellExecute = true,
-                        CreateNoWindow = false
-                    };
-                }
-                else
-                {
-                    Console.WriteLine($"PathfindingService not found at: {exePath} or {dllPath}");
-                    Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
-                    return;
-                }
+                // If we launched the service, require exact PID match to avoid stale-status false positives.
+                if (weStartedProcess && _pathfindingProcess != null)
+                    return process.Id == _pathfindingProcess.Id;
 
-                Process.Start(psi);
-                Console.WriteLine($"PathfindingService process started from {x64Dir}.");
+                // For pre-existing service, we can't know PID upfront; require plausible process identity.
+                var processName = process.ProcessName;
+                return processName.Contains("dotnet", StringComparison.OrdinalIgnoreCase)
+                    || processName.Contains("PathfindingService", StringComparison.OrdinalIgnoreCase);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"Failed to launch PathfindingService: {ex.Message}");
+                return false;
             }
-        }
-
-        private static void WaitForPathfindingServiceToStart()
-        {
-            const int maxWaitTimeMs = 30000; // 30 seconds
-            const int checkIntervalMs = 1000; // 1 second
-            int elapsedMs = 0;
-
-            while (elapsedMs < maxWaitTimeMs)
-            {
-                if (IsPathfindingServiceRunning())
-                {
-                    Console.WriteLine($"PathfindingService is now available after {elapsedMs / 1000} seconds.");
-                    return;
-                }
-
-                Console.WriteLine($"Waiting for PathfindingService... ({elapsedMs / 1000}s/{maxWaitTimeMs / 1000}s)");
-                Thread.Sleep(checkIntervalMs);
-                elapsedMs += checkIntervalMs;
-            }
-
-            Console.WriteLine($"Warning: PathfindingService did not become available within {maxWaitTimeMs / 1000} seconds.");
-            Console.WriteLine("Continuing anyway - clients will use retry logic to connect.");
         }
 
         private static bool IsPathfindingServiceRunning()
@@ -481,6 +436,13 @@ namespace WoWStateManager
                     // Avoid default Windows EventLog provider dependency in test/runtime environments.
                     logging.ClearProviders();
                     logging.AddConsole();
+<<<<<<< HEAD
+=======
+                    // Ensure all categories (including CharacterStateSocketListener / DungeoneeringCoordinator)
+                    // log at Information level. Without this, ClearProviders + AddConsole defaults to Warning
+                    // for some provider-category combos, hiding coordinator state transitions from test output.
+                    logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Information);
+>>>>>>> cpp_physics_system
                 })
                 .ConfigureServices((hostContext, services) =>
                 {

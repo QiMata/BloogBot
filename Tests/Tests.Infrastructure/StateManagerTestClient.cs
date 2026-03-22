@@ -34,11 +34,24 @@ public class StateManagerTestClient : IDisposable
 
     /// <summary>
     /// Connect to StateManager. Call once before using query/forward methods.
+<<<<<<< HEAD
+=======
+    /// Enables TCP keepalive to prevent the OS from silently dropping an idle connection.
+>>>>>>> cpp_physics_system
     /// </summary>
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         _tcp = new TcpClient();
         await _tcp.ConnectAsync(_host, _port, ct);
+<<<<<<< HEAD
+=======
+
+        // Enable TCP keepalive so the connection survives long idle periods
+        _tcp.Client.SetSocketOption(
+            SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        _tcp.NoDelay = true;
+
+>>>>>>> cpp_physics_system
         _stream = _tcp.GetStream();
     }
 
@@ -128,6 +141,7 @@ public class StateManagerTestClient : IDisposable
         if (_stream == null)
             throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
 
+<<<<<<< HEAD
         await _requestGate.WaitAsync(ct);
         try
         {
@@ -156,6 +170,37 @@ public class StateManagerTestClient : IDisposable
             var response = new StateChangeResponse();
             response.MergeFrom(responsePayload);
             return response;
+=======
+        // Per-request timeout: prevent indefinite hangs when StateManager is overloaded
+        // (e.g. 10 BG bots hammering port 5002 while we query port 8088).
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        var linked = timeoutCts.Token;
+
+        await _requestGate.WaitAsync(linked);
+        try
+        {
+            return await SendRequestCoreAsync(request, linked);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Per-request timeout hit — reconnect and retry once
+            await ReconnectAsync(ct);
+            using var retryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            retryCts.CancelAfter(TimeSpan.FromSeconds(30));
+            return await SendRequestCoreAsync(request, retryCts.Token);
+        }
+        catch (IOException) when (!ct.IsCancellationRequested)
+        {
+            // Connection was lost — attempt a single reconnect
+            await ReconnectAsync(ct);
+            return await SendRequestCoreAsync(request, ct);
+        }
+        catch (SocketException) when (!ct.IsCancellationRequested)
+        {
+            await ReconnectAsync(ct);
+            return await SendRequestCoreAsync(request, ct);
+>>>>>>> cpp_physics_system
         }
         finally
         {
@@ -163,6 +208,51 @@ public class StateManagerTestClient : IDisposable
         }
     }
 
+<<<<<<< HEAD
+=======
+    private async Task<StateChangeResponse> SendRequestCoreAsync(AsyncRequest request, CancellationToken ct)
+    {
+        byte[] requestBytes;
+        lock (_lock)
+        {
+            requestBytes = request.ToByteArray();
+        }
+
+        var lengthPrefix = BitConverter.GetBytes(requestBytes.Length);
+
+        // Send length + payload
+        await _stream!.WriteAsync(lengthPrefix, ct);
+        await _stream.WriteAsync(requestBytes, ct);
+        await _stream.FlushAsync(ct);
+
+        // Read response length
+        var responseLengthBuf = new byte[4];
+        await ReadExactAsync(_stream, responseLengthBuf, 4, ct);
+        var responseLength = BitConverter.ToInt32(responseLengthBuf, 0);
+
+        // Read response payload
+        var responsePayload = new byte[responseLength];
+        await ReadExactAsync(_stream, responsePayload, responseLength, ct);
+
+        var response = new StateChangeResponse();
+        response.MergeFrom(responsePayload);
+        return response;
+    }
+
+    private async Task ReconnectAsync(CancellationToken ct)
+    {
+        _stream?.Dispose();
+        _tcp?.Dispose();
+
+        _tcp = new TcpClient();
+        await _tcp.ConnectAsync(_host, _port, ct);
+        _tcp.Client.SetSocketOption(
+            SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        _tcp.NoDelay = true;
+        _stream = _tcp.GetStream();
+    }
+
+>>>>>>> cpp_physics_system
     private static async Task ReadExactAsync(NetworkStream stream, byte[] buffer, int count, CancellationToken ct)
     {
         int totalRead = 0;

@@ -99,6 +99,17 @@ enum ActionType {
     GATHER_NODE = 61;
     SEND_CHAT = 62;
     SET_FACING = 63;
+    VISIT_VENDOR = 64;
+    VISIT_TRAINER = 65;
+    VISIT_FLIGHT_MASTER = 66;
+    START_FISHING = 67;
+    START_GATHERING_ROUTE = 68;
+    CHECK_MAIL = 69;
+    START_PHYSICS_RECORDING = 70;
+    STOP_PHYSICS_RECORDING = 71;
+    START_DUNGEONEERING = 72;
+    CONVERT_TO_RAID = 73;
+    CHANGE_RAID_SUBGROUP = 74;
 }
 
 message ActionMap {
@@ -155,6 +166,18 @@ message RequestParameter {
     }
 }
 
+// Connection lifecycle state — deterministic, packet-driven.
+// Replaces string-based screenState for machine consumption.
+enum BotConnectionState {
+    BOT_DISCONNECTED = 0;
+    BOT_AUTHENTICATING = 1;
+    BOT_CHAR_SELECT = 2;
+    BOT_ENTERING_WORLD = 3;
+    BOT_IN_WORLD = 4;
+    BOT_TRANSFERRING = 5;       // Cross-map teleport / loading screen
+    BOT_LOGGING_OUT = 6;
+}
+
 message WoWActivitySnapshot {
     uint32 timestamp = 1;
     string accountName = 2;
@@ -169,4 +192,11 @@ message WoWActivitySnapshot {
     uint64 partyLeaderGuid = 11;  // GUID of the party leader (0 if not in a group)
     repeated string recentChatMessages = 12;    // Recent chat messages (GM command responses, system messages)
     repeated string recentErrors = 13;          // Recent error/UI messages from the game client
+<<<<<<< HEAD
 }
+=======
+    BotConnectionState connectionState = 14;    // Deterministic connection lifecycle state
+    bool isObjectManagerValid = 15;             // Safe to read game objects / send actions
+    bool isMapTransition = 16;                  // Loading screen or cross-map teleport in progress
+}
+>>>>>>> cpp_physics_system

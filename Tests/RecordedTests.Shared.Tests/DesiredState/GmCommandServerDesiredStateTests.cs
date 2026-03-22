@@ -23,7 +23,7 @@ public class GmCommandServerDesiredStateTests
 
         var commands = new[]
         {
-            new GmCommandServerDesiredState.GmCommandStep(".teleport name Stormwind", "Teleport"),
+            new GmCommandServerDesiredState.GmCommandStep(".tele Stormwind", "Teleport"),
             new GmCommandServerDesiredState.GmCommandStep(".character level 10", "Set level")
         };
 
@@ -46,7 +46,7 @@ public class GmCommandServerDesiredStateTests
 
         var commands = new[]
         {
-            new GmCommandServerDesiredState.GmCommandStep(".teleport name Stormwind")
+            new GmCommandServerDesiredState.GmCommandStep(".tele Stormwind")
         };
 
         var desiredState = new GmCommandServerDesiredState("TestState", commands);
@@ -89,7 +89,7 @@ public class GmCommandServerDesiredStateTests
 
         var commands = new[]
         {
-            new GmCommandServerDesiredState.GmCommandStep(".teleport name Stormwind")
+            new GmCommandServerDesiredState.GmCommandStep(".tele Stormwind")
         };
 
         var desiredState = new GmCommandServerDesiredState("TestState", commands);
@@ -115,7 +115,7 @@ public class GmCommandServerDesiredStateTests
 
         var commands = new[]
         {
-            new GmCommandServerDesiredState.GmCommandStep(".teleport name Stormwind")
+            new GmCommandServerDesiredState.GmCommandStep(".tele Stormwind")
         };
 
         var desiredState = new GmCommandServerDesiredState("TestState", commands);

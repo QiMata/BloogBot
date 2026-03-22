@@ -47,6 +47,17 @@ namespace ForegroundBotRunner
 
         // Track whether SignalEventManager hooks have been initialized after entering world
         private bool _hooksInitialized = false;
+<<<<<<< HEAD
+=======
+
+        // Timestamp of world entry — polls are deferred for 2s to let WoW's UI frame system stabilize
+        private DateTime _worldEntryTime = DateTime.MinValue;
+
+        // Packet-driven connection state machine
+        private readonly ConnectionStateMachine _connectionState = new();
+        private uint _lastObservedContinentId = 0xFFFFFFFF;
+        private static readonly ushort FishingCustomAnimOpcode = (ushort)Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM;
+>>>>>>> cpp_physics_system
 
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
@@ -95,6 +106,18 @@ namespace ForegroundBotRunner
                 }
             }
             catch { /* Ignore logging errors */ }
+        }
+
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = Path.Combine(Path.GetDirectoryName(DiagnosticLogPath)!, "crash_trace.log");
+                using var sw = new StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Worker] {message}");
+                sw.Flush();
+            }
+            catch { }
         }
 
         public ForegroundBotWorker(IConfiguration configuration, ILoggerFactory loggerFactory, PathfindingClient? pathfindingClient = null)
@@ -221,12 +244,22 @@ namespace ForegroundBotRunner
                             var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
                             var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
                             var playerName = _objectManager?.Player?.Name ?? "(null)";
+<<<<<<< HEAD
                             DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, HasEnteredWorld={hasEnteredWorld}, Player={playerName}");
+=======
+                            var connState = _connectionState.CurrentState;
+                            var pktSend = PacketLogger.SendCount;
+                            var pktRecv = PacketLogger.RecvCount;
+                            var rawLoginState = ForegroundBotRunner.Mem.MemoryManager.ReadString(ForegroundBotRunner.Mem.Offsets.CharacterScreen.LoginState) ?? "(null)";
+                            var maxChars = ObjectManager.MaxCharacterCount;
+                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, LoginState='{rawLoginState}', HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}, MaxChars={maxChars}");
+>>>>>>> cpp_physics_system
                         }
 
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too
                         _objectManager?.AntiAfk();
 
+<<<<<<< HEAD
                         // Initialize SignalEventManager hooks once after entering world.
                         // These inject assembly into WoW's event system and must NOT run during
                         // the world server handshake (causes disconnect).
@@ -262,6 +295,148 @@ namespace ForegroundBotRunner
                         if (_objectManager?.HasEnteredWorld == true
                             && _objectManager?.IsContinentTransition != true)
                         {
+=======
+                        // At character select with characters present + not already entering world:
+                        // click "Enter World" button directly via Lua. Skip cinematics too.
+                        if (!ObjectManager.PauseNativeCallsDuringWorldEntry
+                            && _objectManager?.HasEnteredWorld != true
+                            && _objectManager?.GetCurrentScreenState() == WoWScreenState.CharacterSelect
+                            && ObjectManager.MaxCharacterCount > 0
+                            && loopCount % 6 == 3) // Every 3s, rate-limited
+                        {
+                            try
+                            {
+                                DiagLog($"[FG-ENTER] CharSelect with {ObjectManager.MaxCharacterCount} char(s). Clicking Enter World button...");
+                                ObjectManager.MainThreadLuaCall("if GameMovieFinished then GameMovieFinished() end");
+                                ObjectManager.MainThreadLuaCall(
+                                    "if CharSelectEnterWorldButton and CharSelectEnterWorldButton:IsVisible() then " +
+                                    "CharSelectEnterWorldButton:Click() end");
+                            }
+                            catch (Exception ex) { DiagLog($"[FG-ENTER] Error: {ex.Message}"); }
+                        }
+
+                        // Initialize SignalEventManager hooks once after entering world.
+                        // These inject assembly into WoW's event system and must NOT run during
+                        // the world server handshake (causes disconnect).
+                        if (_objectManager?.HasEnteredWorld == true && !_hooksInitialized)
+                        {
+                            ObjectManager.PauseNativeCallsDuringWorldEntry = false;
+                            DiagLog("RESUMED native calls - now InWorld");
+
+                            // NOTE: WardenDisabler.Initialize() is NOT called — Warden is disabled
+                            // server-side (Warden.WinEnabled=0 in mangosd.conf). The hook at
+                            // 0x006CA22E causes ILLEGAL_INSTRUCTION crashes when enabled.
+                            // Re-enable only when connecting to a Warden-enabled server.
+
+                            // Suppress Lua error popups — they block subsequent Lua calls
+                            try
+                            {
+                                Mem.Functions.LuaCall("seterrorhandler(function() end)");
+                                DiagLog("Lua error handler suppressed");
+                            }
+                            catch (Exception ex)
+                            {
+                                DiagLog($"Failed to suppress Lua errors: {ex.Message}");
+                            }
+
+                            // Set WWOW_DISABLE_PACKET_HOOKS=1 to skip ALL hook installation (crash diagnostics)
+                            var disableHooks = Environment.GetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS");
+
+                            try
+                            {
+                                if (disableHooks == "1")
+                                {
+                                    DiagLog("SignalEventManager hooks SKIPPED (WWOW_DISABLE_PACKET_HOOKS=1)");
+                                }
+                                else
+                                {
+                                    SignalEventManager.InitializeHooks();
+                                    DiagLog("SignalEventManager hooks initialized");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                DiagLog($"SignalEventManager hook init error: {ex.Message}");
+                            }
+
+                            // Initialize packet capture hooks
+                            try
+                            {
+                                PacketLogger.OnPacketCaptured += _connectionState.ProcessPacket;
+                                PacketLogger.OnPacketCaptured += HandleCapturedPacket;
+                                if (disableHooks == "1")
+                                {
+                                    DiagLog("PacketLogger hooks SKIPPED (WWOW_DISABLE_PACKET_HOOKS=1)");
+                                }
+                                else
+                                {
+                                    PacketLogger.InitializeHooks();
+                                }
+                                _connectionState.ForceState(
+                                    ConnectionStateMachine.State.InWorld,
+                                    "initial world entry detected via HasEnteredWorld");
+                                Mem.ThreadSynchronizer.SetConnectionStateMachine(_connectionState);
+                                DiagLog($"PacketLogger hooks initialized (send={PacketLogger.IsActive}, recv={PacketLogger.IsRecvActive})");
+                            }
+                            catch (Exception ex)
+                            {
+                                DiagLog($"PacketLogger hook init error: {ex.Message}");
+                            }
+
+                            _hooksInitialized = true;
+                            _worldEntryTime = DateTime.UtcNow;
+                        }
+
+                        // Poll MovementRecorder and run automated scenarios when in world.
+                        // Check ContinentId directly (not just IsContinentTransition) to catch
+                        // transitions before ObjectManager's separate poll loop detects them.
+                        var workerContId = _objectManager?.ContinentId ?? 0xFFFFFFFF;
+                        bool workerInTransition = _objectManager?.IsContinentTransition == true
+                            || workerContId == 0xFFFFFFFF || workerContId == 0xFF;
+
+                        // Infer inbound packets from ContinentId changes for the state machine.
+                        // This is a safety net when the recv hook misses opcodes (e.g., SMSG_LOGIN_VERIFY_WORLD
+                        // is not captured by the FG recv hook during instance transitions).
+                        if (_hooksInitialized && workerContId != _lastObservedContinentId)
+                        {
+                            bool wasInTransition = _lastObservedContinentId == 0xFF || _lastObservedContinentId == 0xFFFFFFFF;
+                            bool nowValid = workerContId != 0xFF && workerContId != 0xFFFFFFFF;
+                            bool nowInTransition = workerContId == 0xFF || workerContId == 0xFFFFFFFF;
+
+                            if (nowInTransition && !wasInTransition)
+                            {
+                                // Entering loading screen = SMSG_TRANSFER_PENDING received
+                                PacketLogger.RecordInboundPacket(0x003F); // SMSG_TRANSFER_PENDING
+                                DiagLog($"ContinentId→0x{workerContId:X}: inferred SMSG_TRANSFER_PENDING");
+                            }
+                            else if (wasInTransition && nowValid)
+                            {
+                                // Loading complete, new map = SMSG_LOGIN_VERIFY_WORLD
+                                // Cross-map: 0xFFFFFFFF → valid. Same-continent: 0xFF → valid.
+                                PacketLogger.RecordInboundPacket(0x0236); // SMSG_LOGIN_VERIFY_WORLD
+                                DiagLog($"ContinentId→0x{workerContId:X}: inferred SMSG_LOGIN_VERIFY_WORLD (map transition complete)");
+                            }
+                            else if (workerContId == 0xFFFFFFFF && _lastObservedContinentId < 0xFF)
+                            {
+                                // Was in world, now at charselect = logout/disconnect
+                                PacketLogger.RecordInboundPacket(0x004D); // SMSG_LOGOUT_COMPLETE
+                                DiagLog($"ContinentId→0xFFFFFFFF: inferred SMSG_LOGOUT_COMPLETE");
+                            }
+                            _lastObservedContinentId = workerContId;
+                        }
+                        if (_objectManager?.HasEnteredWorld == true && !workerInTransition)
+                        {
+                            // Defer polls for 2s after world entry — WoW's UI frame system
+                            // (CreateFrame, FrameXML) needs time to stabilize after the loading screen.
+                            // Without this, the first CreateFrame call in EnsureChatHook can native-crash.
+                            if ((DateTime.UtcNow - _worldEntryTime).TotalSeconds < 2.0)
+                            {
+                                await Task.Delay(500, stoppingToken);
+                                continue;
+                            }
+
+                            CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
+>>>>>>> cpp_physics_system
                             _movementRecorder?.Poll();
 
                             // Launch automated movement scenarios (once)
@@ -331,6 +506,7 @@ namespace ForegroundBotRunner
             return Task.CompletedTask;
         }
 
+<<<<<<< HEAD
         /// <summary>
         /// Subscribe to WoWEventHandler events for state resets on disconnect/logout.
         /// BotRunnerService handles login flow via ILoginScreen/ICharacterSelectScreen.
@@ -338,11 +514,51 @@ namespace ForegroundBotRunner
         /// </summary>
         private void SubscribeToStateResetEvents(WoWEventHandler eventHandler)
         {
+=======
+        private void HandleCapturedPacket(PacketDirection direction, ushort opcode, int size)
+        {
+            if (direction != PacketDirection.Recv || opcode != FishingCustomAnimOpcode)
+                return;
+
+            var objectManager = _objectManager;
+            if (objectManager?.HasEnteredWorld != true)
+                return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    for (var attempt = 0; attempt < 6; attempt++)
+                    {
+                        await Task.Delay(75 + (attempt * 50)).ConfigureAwait(false);
+                        if (objectManager.TryAutoInteractFishingBobberFromPacket())
+                            return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"HandleCapturedPacket fishing custom anim failed: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Subscribe to WoWEventHandler events for state resets on disconnect/logout.
+        /// BotRunnerService handles login flow via ILoginScreen/ICharacterSelectScreen.
+        /// These handlers only reset ObjectManager-level state that FG needs.
+        /// </summary>
+        private void SubscribeToStateResetEvents(WoWEventHandler eventHandler)
+        {
+>>>>>>> cpp_physics_system
             eventHandler.OnDisconnect += (_, _) =>
             {
                 DiagLog("EVENT: OnDisconnect - resetting state");
                 _logger.LogWarning("Disconnected from server");
                 ObjectManager.PauseNativeCallsDuringWorldEntry = false;
+<<<<<<< HEAD
+=======
+                Mem.ThreadSynchronizer.ResetObjMgrValidState();
+>>>>>>> cpp_physics_system
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {
@@ -355,6 +571,10 @@ namespace ForegroundBotRunner
             {
                 DiagLog("EVENT: OnLogout - resetting world state");
                 _logger.LogInformation("Player logout detected");
+<<<<<<< HEAD
+=======
+                Mem.ThreadSynchronizer.ResetObjMgrValidState();
+>>>>>>> cpp_physics_system
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {
@@ -402,6 +622,7 @@ namespace ForegroundBotRunner
                 _logger.LogWarning("Cannot initialize BotRunnerService - missing dependencies");
                 return;
             }
+<<<<<<< HEAD
 
             // Create PathfindingClient from configuration if not injected.
             // Never pass a null client into ClassContainer: corpse retrieval must remain pathfinding-driven.
@@ -451,6 +672,57 @@ namespace ForegroundBotRunner
             var section = configuration.GetSection("BotBehavior");
             if (!section.Exists()) return config;
 
+=======
+
+            // Create PathfindingClient from configuration if not injected.
+            // Never pass a null client into ClassContainer: corpse retrieval must remain pathfinding-driven.
+            if (_pathfindingClient == null)
+            {
+                try
+                {
+                    var pfIp = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+                    var pfPort = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
+                    _pathfindingClient = new PathfindingClient(pfIp, pfPort, _loggerFactory.CreateLogger<PathfindingClient>());
+                    DiagLog($"Created PathfindingClient: {pfIp}:{pfPort}");
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"Failed to create PathfindingClient: {ex.Message}");
+                    _logger.LogWarning(ex, "Failed to create PathfindingClient from config; using fallback client instance.");
+                    _pathfindingClient = new PathfindingClient();
+                    DiagLog("Created fallback PathfindingClient() after config failure");
+                }
+            }
+
+            var pathfindingClient = _pathfindingClient ?? new PathfindingClient();
+            if (_pathfindingClient == null)
+            {
+                DiagLog("PathfindingClient was null at container creation; using fallback PathfindingClient()");
+                _pathfindingClient = pathfindingClient;
+            }
+
+            var container = CreateClassContainer(_accountName, pathfindingClient);
+
+            _botRunner = new BotRunnerService(
+                _objectManager,
+                _stateUpdateClient,
+                container,
+                agentFactoryAccessor: null, // FG has no network agents
+                accountName: _accountName,
+                behaviorConfig: LoadBehaviorConfig(_configuration));
+
+            _botRunner.Start();
+            DiagLog("BotRunnerService started");
+            _logger.LogInformation("BotRunnerService started - handling login, snapshots, and actions");
+        }
+
+        private static BotBehaviorConfig LoadBehaviorConfig(IConfiguration configuration)
+        {
+            var config = new BotBehaviorConfig();
+            var section = configuration.GetSection("BotBehavior");
+            if (!section.Exists()) return config;
+
+>>>>>>> cpp_physics_system
             if (float.TryParse(section["MaxPullRange"], out var v1)) config.MaxPullRange = v1;
             if (int.TryParse(section["TargetLevelRangeBelow"], out var v2)) config.TargetLevelRangeBelow = v2;
             if (int.TryParse(section["TargetLevelRangeAbove"], out var v3)) config.TargetLevelRangeAbove = v3;
@@ -465,6 +737,7 @@ namespace ForegroundBotRunner
 
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
+<<<<<<< HEAD
             BotProfiles.Common.BotBase botProfile;
 
             if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
@@ -490,6 +763,23 @@ namespace ForegroundBotRunner
             {
                 botProfile = new WarriorArms.WarriorArms();
             }
+=======
+            var @class = WoWNameGenerator.ResolveClass(accountName);
+
+            BotProfiles.Common.BotBase botProfile = @class switch
+            {
+                Class.Warrior => new WarriorArms.WarriorArms(),
+                Class.Paladin => new PaladinRetribution.PaladinRetribution(),
+                Class.Rogue => new RogueCombat.RogueCombat(),
+                Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
+                Class.Priest => new PriestDiscipline.PriestDiscipline(),
+                Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
+                Class.Mage => new MageArcane.MageArcane(),
+                Class.Warlock => new WarlockAffliction.WarlockAffliction(),
+                Class.Druid => new DruidRestoration.DruidRestoration(),
+                _ => new WarriorArms.WarriorArms()
+            };
+>>>>>>> cpp_physics_system
 
             return new ClassContainer(
                 botProfile.Name,
@@ -506,6 +796,11 @@ namespace ForegroundBotRunner
             _logger.LogInformation("ForegroundBotWorker stop requested...");
 
             _botRunner?.Stop();
+<<<<<<< HEAD
+=======
+            PacketLogger.OnPacketCaptured -= _connectionState.ProcessPacket;
+            PacketLogger.OnPacketCaptured -= HandleCapturedPacket;
+>>>>>>> cpp_physics_system
 
             // Stop any ongoing movement recording
             if (_movementRecorder?.IsRecording == true)

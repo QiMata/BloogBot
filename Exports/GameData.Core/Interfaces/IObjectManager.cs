@@ -50,6 +50,14 @@ namespace GameData.Core.Interfaces
         string GlueDialogText { get; }
         LoginStates LoginState { get; }
         bool HasEnteredWorld { get; }
+
+        /// <summary>
+        /// True when the game client is in a map transition (loading screen, cross-map teleport,
+        /// continent change). Object pointers are invalid during this period — callers MUST NOT
+        /// dereference WoWObject properties. FG returns true from ContinentId/PauseDuringTeleport;
+        /// BG always returns false (protocol-based, no memory pointers).
+        /// </summary>
+        bool IsInMapTransition => false;
 #if NET8_0_OR_GREATER
         public void Face(Position pos)
         {
@@ -146,6 +154,7 @@ namespace GameData.Core.Interfaces
         void LeaveGroup();
         void DisbandGroup();
         void ConvertToRaid();
+        void ChangeRaidSubgroup(string playerName, byte subGroup);
         bool HasPendingGroupInvite();
         bool HasLootRollWindow(int itemId);
         void LootPass(int itemId);
@@ -176,6 +185,10 @@ namespace GameData.Core.Interfaces
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);
         void CastSpell(int spellId, int rank = -1, bool castOnSelf = false);
+<<<<<<< HEAD
+=======
+        void CastSpellAtLocation(int spellId, float x, float y, float z);
+>>>>>>> cpp_physics_system
         void CastSpellOnGameObject(int spellId, ulong gameObjectGuid);
         void InteractWithGameObject(ulong gameObjectGuid);
         bool CanCastSpell(int spellId, ulong targetGuid);
@@ -272,5 +285,35 @@ namespace GameData.Core.Interfaces
 #else
         Task CraftAvailableRecipesAsync(CancellationToken ct = default);
 #endif
+<<<<<<< HEAD
+=======
+
+        // Quest — FG: Lua quest frame, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default);
+        Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default);
+#endif
+
+        // NPC interaction — FG: right-click via native, BG: CMSG_GOSSIP_HELLO / CMSG_QUESTGIVER_HELLO via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default);
+#endif
+
+        // Vendor buy/sell/repair — FG: Lua MerchantFrame, BG: CMSG packets via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default);
+        Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default);
+        Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default);
+#endif
+>>>>>>> cpp_physics_system
     }
 }

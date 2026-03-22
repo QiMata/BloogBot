@@ -1,0 +1,32 @@
+{
+  "name": "Fishing_BG_Ratchet",
+  "description": "BG bot fishes at Ratchet dock",
+  "settings": null,
+  "enableCoordinator": false,
+  "minBots": 1,
+  "botEntryTimeoutSeconds": 30,
+  "setup": [
+    {
+      "account": "$BG",
+      "cleanSlate": true,
+      "gmCommands": [".gm on"],
+      "learnSpells": [7620],
+      "addItems": [{ "id": 6256, "count": 1 }],
+      "setSkills": [{ "id": 356, "current": 75, "max": 75 }],
+      "teleport": { "mapId": 1, "x": -988.5, "y": -3834.0, "z": 5.7 }
+    }
+  ],
+  "action": {
+    "account": "$BG",
+    "type": "StartFishing",
+    "parameters": []
+  },
+  "observe": {
+    "timeoutSeconds": 60,
+    "pollIntervalMs": 3000,
+    "logIntervalSeconds": 15
+  },
+  "assertions": {
+    "actionTypeSeen": "StartFishing"
+  }
+}

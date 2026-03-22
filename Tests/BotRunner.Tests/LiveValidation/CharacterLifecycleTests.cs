@@ -10,6 +10,7 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
+<<<<<<< HEAD
 /// Character lifecycle integration tests.
 ///
 /// Snapshot-driven goals:
@@ -18,12 +19,19 @@ namespace BotRunner.Tests.LiveValidation;
 /// 3) Death test must show strict alive -> dead/ghost -> strict alive transitions.
 /// </summary>
 [RequiresMangosStack]
+=======
+/// Snapshot validation for the lowest-level inventory add-item path that many
+/// other live tests depend on.
+/// See docs/CharacterLifecycleTests.md for the owning production code paths.
+/// </summary>
+>>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class CharacterLifecycleTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
+<<<<<<< HEAD
     private const uint LinenCloth = 2589;
     private const uint MinorHealingPotion = 118;
 
@@ -31,6 +39,8 @@ public class CharacterLifecycleTests
     private const uint StandStateMask = 0xFF;
     private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
+=======
+>>>>>>> cpp_physics_system
     public CharacterLifecycleTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -45,6 +55,7 @@ public class CharacterLifecycleTests
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
+<<<<<<< HEAD
         var bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
 
         var fgPassed = false;
@@ -57,10 +68,34 @@ public class CharacterLifecycleTests
         }
         else
         {
+=======
+
+        bool bgPassed;
+        bool fgPassed = false;
+        var hasFg = _bot.IsFgActionable;
+
+        if (hasFg)
+        {
+            var fgAccount = _bot.FgAccountName!;
+            Assert.NotNull(fgAccount);
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG add-item scenarios in parallel.");
+
+            var bgTask = RunAddItemScenarioAsync(bgAccount, "BG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
+            var fgTask = RunAddItemScenarioAsync(fgAccount, "FG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
+        }
+        else
+        {
+            bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
+>>>>>>> cpp_physics_system
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
         Assert.True(bgPassed, "BG bot: expected Linen Cloth to appear in bag snapshot after .additem.");
+<<<<<<< HEAD
         if (_bot.ForegroundBot != null)
             Assert.True(fgPassed, "FG bot: expected Linen Cloth to appear in bag snapshot after .additem.");
     }
@@ -156,6 +191,12 @@ public class CharacterLifecycleTests
         else
         {
             _output.WriteLine("FG Bot: NOT AVAILABLE");
+=======
+        if (hasFg)
+        {
+            Assert.True(fgPassed, "FG bot: expected Linen Cloth to appear in bag snapshot after .additem. " +
+                "If FG ObjectManager item enumeration is broken, fix it instead of hiding the failure.");
+>>>>>>> cpp_physics_system
         }
     }
 
@@ -166,7 +207,11 @@ public class CharacterLifecycleTests
         int count,
         string itemName)
     {
+<<<<<<< HEAD
         await EnsureStrictAliveAsync(account, label);
+=======
+        await _bot.EnsureStrictAliveAsync(account, label);
+>>>>>>> cpp_physics_system
         await _bot.RefreshSnapshotsAsync();
 
         var baseline = await _bot.GetSnapshotAsync(account);
@@ -186,7 +231,13 @@ public class CharacterLifecycleTests
             baseline = await _bot.GetSnapshotAsync(account);
             if (baseline?.Player == null)
                 return false;
+<<<<<<< HEAD
             beforeSlotsForItem = CountBagSlotsForItem(baseline.Player, itemId);
+=======
+
+            beforeSlotsForItem = CountBagSlotsForItem(baseline.Player, itemId);
+            Assert.Equal(0, beforeSlotsForItem);
+>>>>>>> cpp_physics_system
             _output.WriteLine($"  [{label}] {itemName} slots after cleanup: {beforeSlotsForItem}");
         }
 
@@ -206,6 +257,7 @@ public class CharacterLifecycleTests
         return appeared && afterSlotsForItem > 0;
     }
 
+<<<<<<< HEAD
     private async Task<bool> RunDeathScenarioAsync(string account, string characterName, string label)
     {
         await EnsureStrictAliveAsync(account, label);
@@ -288,6 +340,8 @@ public class CharacterLifecycleTests
         return false;
     }
 
+=======
+>>>>>>> cpp_physics_system
     private async Task<bool> WaitForBagItemPresenceAsync(string account, uint itemId, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
@@ -308,6 +362,7 @@ public class CharacterLifecycleTests
     private static int CountBagSlotsForItem(Game.WoWPlayer? player, uint itemId)
         => player?.BagContents?.Values.Count(v => v == itemId) ?? 0;
 
+<<<<<<< HEAD
     private static bool IsDeadOrGhost(WoWActivitySnapshot? snap, out string reason)
     {
         reason = string.Empty;
@@ -358,11 +413,17 @@ public class CharacterLifecycleTests
             || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
     }
 
+=======
+>>>>>>> cpp_physics_system
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
     {
         Assert.Equal(ResponseResult.Success, trace.DispatchResult);
 
+<<<<<<< HEAD
         var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
+=======
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
+>>>>>>> cpp_physics_system
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 }

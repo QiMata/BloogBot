@@ -1,4 +1,8 @@
 using BotRunner.Movement;
+<<<<<<< HEAD
+=======
+using GameData.Core.Constants;
+>>>>>>> cpp_physics_system
 using GameData.Core.Models;
 using Serilog;
 using System;
@@ -24,7 +28,11 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages moving the bot to the specified location.</returns>
         private IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float tolerance)
         {
+<<<<<<< HEAD
             var navPath = new NavigationPath(_container.PathfindingClient);
+=======
+            NavigationPath? navPath = null;
+>>>>>>> cpp_physics_system
             DateTime? noPathSinceUtc = null;
             DateTime lastNoPathLogUtc = DateTime.MinValue;
 
@@ -35,6 +43,22 @@ namespace BotRunner
                     if (_objectManager.Player?.Position == null)
                         return BehaviourTreeStatus.Running;
 
+<<<<<<< HEAD
+=======
+                    if (navPath == null)
+                    {
+                        var (radius, height) = RaceDimensions.GetCapsuleForRace(
+                            _objectManager.Player.Race, _objectManager.Player.Gender);
+                        var pfClient = _container.PathfindingClient;
+                        navPath = new NavigationPath(pfClient,
+                            capsuleRadius: radius,
+                            capsuleHeight: height,
+                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                            race: _objectManager.Player.Race,
+                            gender: _objectManager.Player.Gender);
+                    }
+
+>>>>>>> cpp_physics_system
                     var target = new Position(x, y, z);
                     var dist = _objectManager.Player.Position.DistanceTo(target);
                     var arrivalDist = tolerance > 0 ? tolerance : 3f;
@@ -46,6 +70,7 @@ namespace BotRunner
                         return BehaviourTreeStatus.Success;
                     }
 
+<<<<<<< HEAD
                     // Keep GoTo pathfinding-driven so movement mirrors corpse-run behavior and avoids
                     // long stuck-forward loops when direct steering has no valid route.
                     var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false);
@@ -74,6 +99,57 @@ namespace BotRunner
 
                     _objectManager.MoveToward(waypoint, facing);
                     return BehaviourTreeStatus.Running;
+=======
+                    // Phase 7: keep acceptance radii tuned to actual movement speed.
+                    if (_objectManager.Player.RunSpeed > 0)
+                        navPath.UpdateCharacterSpeed(_objectManager.Player.RunSpeed);
+
+                    // Keep GoTo pathfinding-driven so movement mirrors corpse-run behavior and avoids
+                    // long stuck-forward loops when direct steering has no valid route.
+                    // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
+                    // detection when the bot is genuinely blocked by geometry.
+                    bool hitWall = false;
+                    float wnx = 0f, wny = 0f, bf = 1f;
+                    if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
+                    {
+                        hitWall = wsOm.PhysicsHitWall;
+                        var wn = wsOm.PhysicsWallNormal2D;
+                        wnx = wn.X; wny = wn.Y;
+                        bf = wsOm.PhysicsBlockedFraction;
+                    }
+                    try {
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
+                        if (waypoint == null)
+                        {
+                            _objectManager.StopAllMovement();
+                            noPathSinceUtc ??= DateTime.UtcNow;
+
+                            if (DateTime.UtcNow - lastNoPathLogUtc > TimeSpan.FromSeconds(5))
+                            {
+                                var noPathSeconds = (int)(DateTime.UtcNow - noPathSinceUtc.Value).TotalSeconds;
+                                Log.Warning("[GOTO] No route to ({X:F1},{Y:F1},{Z:F1}) for {Seconds}s; waiting for path.",
+                                    target.X, target.Y, target.Z, noPathSeconds);
+                                lastNoPathLogUtc = DateTime.UtcNow;
+                            }
+
+                            return BehaviourTreeStatus.Running;
+                        }
+
+                        noPathSinceUtc = null;
+
+                        // Calculate facing toward next waypoint
+                        var dx = waypoint.X - _objectManager.Player.Position.X;
+                        var dy = waypoint.Y - _objectManager.Player.Position.Y;
+                        var facing = MathF.Atan2(dy, dx);
+
+                        _objectManager.MoveToward(waypoint, facing);
+                        return BehaviourTreeStatus.Running;
+                    }
+                    catch (Exception)
+                    {
+                        return BehaviourTreeStatus.Running;
+                    }
+>>>>>>> cpp_physics_system
                 })
             .End()
             .Build();
@@ -112,7 +188,13 @@ namespace BotRunner
         {
             DateTime? interactedAt = null;
             bool looted = false;
+<<<<<<< HEAD
             const double GatherChannelSeconds = 5.0;
+=======
+            DateTime? targetClearedAt = null;
+            const double GatherChannelSeconds = 5.0;
+            const double PostGatherCooldownSeconds = 3.0;
+>>>>>>> cpp_physics_system
 
             return new BehaviourTreeBuilder()
                 .Sequence("Gather Node Sequence")
@@ -153,6 +235,18 @@ namespace BotRunner
                                 _objectManager.CastSpellOnGameObject(gatherSpellId, guid);
                             }
 
+<<<<<<< HEAD
+=======
+                            // Clear target immediately after the interaction/cast has been sent.
+                            // For FG: CGGameObject_C::OnRightClick registers a game object interaction
+                            // state machine that holds a pointer to the node. When the node despawns
+                            // (~3s after gather), the callback dereferences that pointer → ERROR #132
+                            // (ACCESS_VIOLATION at 0x006F876A reading 0x0000001E).
+                            // The gather spell is already in flight; clearing target does not cancel it.
+                            _objectManager.SetTarget(0);
+                            Log.Information("[GATHER] Target pre-cleared (crash prevention) for node 0x{Guid:X}", guid);
+
+>>>>>>> cpp_physics_system
                             interactedAt = DateTime.UtcNow;
                         }
 
@@ -184,6 +278,30 @@ namespace BotRunner
                         looted = true;
                         return BehaviourTreeStatus.Success;
                     })
+<<<<<<< HEAD
+=======
+                    .Do("Post-Gather Cooldown", time =>
+                    {
+                        // Clear target on the first tick, then hold Running for PostGatherCooldownSeconds.
+                        // WoW.exe (FG) crashes with ACCESS_VIOLATION (ERROR #132, 0x006F876A) when the
+                        // game object interaction state machine still holds a reference to a despawned node.
+                        // SetTarget(0) + 3s wait gives the engine time to release the object reference.
+                        if (targetClearedAt == null)
+                        {
+                            _objectManager.SetTarget(0);
+                            Log.Information("[GATHER] Target cleared; holding {Secs}s post-gather cooldown (node 0x{Guid:X})",
+                                PostGatherCooldownSeconds, guid);
+                            targetClearedAt = DateTime.UtcNow;
+                            return BehaviourTreeStatus.Running;
+                        }
+
+                        if ((DateTime.UtcNow - targetClearedAt.Value).TotalSeconds < PostGatherCooldownSeconds)
+                            return BehaviourTreeStatus.Running;
+
+                        Log.Information("[GATHER] Post-gather cooldown complete (node 0x{Guid:X})", guid);
+                        return BehaviourTreeStatus.Success;
+                    })
+>>>>>>> cpp_physics_system
                 .End()
                 .Build();
         }

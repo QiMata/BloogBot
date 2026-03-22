@@ -53,6 +53,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Recipient, string Subject)> _mailSentResults;
         private readonly IObservable<(string Operation, string Error)> _mailErrors;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _mailListCountsSub;
+        private readonly IDisposable _mailSentResultsSub;
+        private readonly IDisposable _mailErrorsSub;
+
         // Optional streams (no direct opcode mapping known) -> Never/Empty to satisfy interface
         private readonly IObservable<(uint MailId, uint Amount)> _moneyTakenResults;
         private readonly IObservable<(uint MailId, uint ItemId, uint Quantity)> _itemTakenResults;
@@ -102,6 +107,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _mailboxWindowOpenings = Observable.Empty<ulong>();
             _mailboxWindowClosings = Observable.Empty<Unit>();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _mailListCountsSub = _mailListCounts.Subscribe(_ => { });
+            _mailSentResultsSub = _mailSentResults.Subscribe(_ => { });
+            _mailErrorsSub = _mailErrors.Subscribe(_ => { });
         }
 
         #region IMailNetworkClientComponent (reactive properties)
@@ -119,8 +129,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         /// <summary>
-        /// Opens mailbox interaction. CMSG_GOSSIP_HELLO: mailboxGuid(8).
-        /// Stores the mailbox GUID for subsequent operations.
+        /// Opens mailbox interaction. CMSG_GAMEOBJ_USE: mailboxGuid(8).
+        /// Mailboxes are game objects — CMSG_GOSSIP_HELLO is for NPCs only.
+        /// Server responds with SMSG_SHOW_MAILBOX, enabling CMSG_GET_MAIL_LIST.
         /// </summary>
         public async Task OpenMailboxAsync(ulong mailboxGuid, CancellationToken cancellationToken = default)
         {
@@ -131,7 +142,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var payload = new byte[8];
                 BitConverter.GetBytes(mailboxGuid).CopyTo(payload, 0);
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_GOSSIP_HELLO, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_GAMEOBJ_USE, payload, cancellationToken);
 
                 lock (_stateLock)
                 {
@@ -468,9 +479,48 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
                 await OpenMailboxAsync(mailboxGuid, cancellationToken);
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(200, cancellationToken);
                 await GetMailListAsync(cancellationToken);
-                await Task.Delay(100, cancellationToken);
+
+                // Wait for SMSG_MAIL_LIST_RESULT to populate _mailbox cache.
+                // Poll the cache instead of Rx to handle both registered and unregistered handler cases.
+                for (int i = 0; i < 20; i++)
+                {
+                    await Task.Delay(250, cancellationToken);
+                    lock (_stateLock)
+                    {
+                        if (_mailbox.Count > 0) break;
+                    }
+                }
+                _logger.LogInformation("QuickCollectAllMail: waited for mail list, cache has {Count} mails",
+                    _mailbox.Count);
+
+                // Take money and items from each mail in the cache
+                List<MailInfo> snapshot;
+                lock (_stateLock)
+                {
+                    snapshot = new List<MailInfo>(_mailbox);
+                }
+                _logger.LogInformation("QuickCollectAllMail: {Count} mails in cache to process", snapshot.Count);
+
+                foreach (var mail in snapshot)
+                {
+                    if (mail.Money > 0)
+                    {
+                        _logger.LogInformation("Taking {Money} copper from mail {MailId}", mail.Money, mail.MailId);
+                        await TakeMoneyFromMailAsync(mail.MailId, cancellationToken);
+                        await Task.Delay(200, cancellationToken);
+                    }
+
+                    if (mail.Attachments is { Length: > 0 })
+                    {
+                        _logger.LogInformation("Taking item from mail {MailId} (itemId={ItemId})",
+                            mail.MailId, mail.Attachments[0].ItemId);
+                        await TakeItemFromMailAsync(mail.MailId, 0, cancellationToken);
+                        await Task.Delay(200, cancellationToken);
+                    }
+                }
+
                 await CloseMailboxAsync(cancellationToken);
             }
             catch (Exception ex)
@@ -793,6 +843,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void Dispose()
         {
             if (_disposed) return;
+            _mailListCountsSub?.Dispose();
+            _mailSentResultsSub?.Dispose();
+            _mailErrorsSub?.Dispose();
             _disposed = true;
             _logger.LogDebug("MailNetworkClientComponent disposed");
         }

@@ -34,6 +34,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         // Reactive opcode-backed streams (publish/refcount like other components)
         private readonly IObservable<uint> _respecConfirmations;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _respecConfirmationsSub;
+
         /// <summary>
         /// Initializes a new instance of the TalentNetworkClientComponent class.
         /// </summary>
@@ -52,6 +55,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Do(HandleRespecConfirmationRequest)
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _respecConfirmationsSub = _respecConfirmations.Subscribe(_ => { });
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
@@ -646,6 +652,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
 
             _logger.LogDebug("Disposing TalentNetworkClientComponent");
+
+            _respecConfirmationsSub?.Dispose();
 
             // Clear events to prevent memory leaks
             TalentWindowOpened = null;

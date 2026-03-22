@@ -90,28 +90,50 @@ public class PhysicsEngineFixture : IDisposable
     }
 
     /// <summary>
-    /// Sets WWOW_DATA_DIR if not already set, pointing to the build output
-    /// that contains mmaps/, vmaps/, maps/ subdirectories.
+    /// Sets WWOW_DATA_DIR if not already set, searching common locations
+    /// for the directory containing mmaps/, vmaps/, maps/ subdirectories.
     /// </summary>
     public static void EnsureDataDir()
     {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
             return;
 
-        var candidates = new[]
-        {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
-            @"E:\repos\BloogBot\Bot\Debug\net8.0",
-        };
+        var baseDir = AppContext.BaseDirectory.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        foreach (var dir in candidates)
+        // Walk up from test output to find repo root, then check candidate directories.
+        var dir = baseDir;
+        while (!string.IsNullOrEmpty(dir))
         {
-            if (Directory.Exists(Path.Combine(dir, "mmaps")))
+            // Highest priority: centralized Data/ directory at repo root
+            var dataDir = Path.Combine(dir, "Data");
+            if (Directory.Exists(Path.Combine(dataDir, "mmaps")))
             {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dir);
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dataDir);
                 return;
             }
+
+            var botDebug = Path.Combine(dir, "Bot", "Debug", "net8.0");
+            var botRelease = Path.Combine(dir, "Bot", "Release", "net8.0");
+            if (Directory.Exists(Path.Combine(botDebug, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botDebug);
+                return;
+            }
+            if (Directory.Exists(Path.Combine(botRelease, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botRelease);
+                return;
+            }
+            var parent = Path.GetDirectoryName(dir);
+            if (parent == dir) break;
+            dir = parent;
+        }
+
+        // Original fallback: check AppContext.BaseDirectory directly.
+        if (Directory.Exists(Path.Combine(baseDir, "mmaps")))
+        {
+            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", baseDir);
         }
     }
 

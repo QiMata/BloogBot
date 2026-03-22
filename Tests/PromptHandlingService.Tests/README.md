@@ -89,25 +89,27 @@ public class ActionGenerationTests
 
 ## Running Tests
 
+All commands enforce a 10-minute session timeout via `test.runsettings` to prevent test host hangs.
+
 ### Command Line
 
 ```bash
-# Run all tests
-dotnet test Tests/PromptHandlingService.Tests
+# Default deterministic run (skips Integration-tagged tests)
+dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"
 
-# Run with verbose output
-dotnet test Tests/PromptHandlingService.Tests -v normal
+# Transfer-history contract tests
+dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~TransferHistory|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"
 
-# Run with coverage
-dotnet test Tests/PromptHandlingService.Tests --collect:"XPlat Code Coverage"
+# Prompt function tests (requires local Ollama)
+dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests" --logger "console;verbosity=minimal"
 
-# Run specific test
-dotnet test Tests/PromptHandlingService.Tests --filter "FullyQualifiedName~ResponseParsingTests"
+# Repository smoke tests (requires MaNGOS database)
+dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"
 ```
 
 ### Visual Studio
 
-1. Open Test Explorer (Test ? Test Explorer)
+1. Open Test Explorer (Test > Test Explorer)
 2. Click "Run All" or select specific tests
 
 ## Dependencies

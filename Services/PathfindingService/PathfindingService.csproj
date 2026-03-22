@@ -25,7 +25,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
-    <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
   </ItemGroup>
 
   <ItemGroup>

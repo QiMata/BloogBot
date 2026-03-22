@@ -12,6 +12,7 @@ namespace PromptHandlingService.Tests
         private readonly Uri _ollamaUri = new("http://localhost:11434");
         private const string ModelName = "deepseek-r1";
 
+        [Fact(Skip = "Integration: requires local Ollama")]
         public async Task ParsePromptIntent_GMCommand_ReturnsCorrectHandOffString()
         {
             // Arrange
@@ -51,6 +52,7 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Send to GMCommandRunner: I want to run Molten Core", result);
         }
 
+        [Fact(Skip = "Integration: requires local Ollama")]
         public async Task ParsePromptIntent_MechanicsExplanation_ReturnsCorrectHandOffString()
         {
             // Arrange
@@ -67,6 +69,7 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Send to MechanicsExplainerRunner: Explain how threat works in World of Warcraft", result);
         }
 
+        [Fact(Skip = "Integration: requires local Ollama")]
         public async Task ParsePromptIntent_DataQuery_ReturnsCorrectHandOffString()
         {
             // Arrange
@@ -83,6 +86,7 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Send to DataQueryRunner: Fetch stats for item 12345", result);
         }
 
+        [Fact(Skip = "Integration: requires local Ollama")]
         public async Task ParsePromptIntent_Miscellaneous_ReturnsCorrectHandOffString()
         {
             // Arrange

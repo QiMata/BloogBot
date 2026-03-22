@@ -212,7 +212,7 @@ public static class PhysicsSweepCoordinates
             CenterY: -2120.0f,
             CenterZ: -50.0f,
             SweepRadius: 30.0f,
-            Description: "Thousand Needles mesa slopes - near 60° limit",
+            Description: "Thousand Needles mesa slopes - near 50° walkable limit",
             ExpectedSlopeRange: (50, 65));
 
         /// <summary>
@@ -823,7 +823,7 @@ public static class PhysicsSweepCoordinates
 
     /// <summary>
     /// Returns locations specifically useful for walkability threshold calibration.
-    /// Focus on slopes near the 60° boundary.
+    /// Focus on slopes near the 50° walkable boundary.
     /// </summary>
     public static IEnumerable<SweepLocation> GetWalkabilityCalibrationLocations()
     {

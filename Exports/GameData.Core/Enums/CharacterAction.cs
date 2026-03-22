@@ -43,6 +43,7 @@ public enum CharacterAction
     DisbandGroup,       // Disband the current group.
 
     StartMeleeAttack,   // Start melee auto-attack on a target.
+    StartRangedAttack,  // Start ranged auto-attack (bow/gun/thrown) on a target.
     StopAttack,         // Cease any ongoing attack.
     CastSpell,          // Cast or channel a spell on a target or location.
     StopCast,           // Stop casting a spell.
@@ -79,4 +80,13 @@ public enum CharacterAction
     GatherNode,         // Gather a resource node (herb/ore) by GUID.
     SendChat,           // Send a chat message (used for GM commands).
     SetFacing,          // Set the character's facing orientation (radians).
+    VisitVendor,        // Queue VendorVisitTask for nearby vendor automation.
+    VisitTrainer,       // Queue TrainerVisitTask for nearby class-trainer automation.
+    VisitFlightMaster,  // Queue FlightMasterVisitTask for nearby taxi-node discovery.
+    StartFishing,       // Queue FishingTask to resolve fishing rank and wait for the fishing cycle.
+    StartGatheringRoute,// Queue GatheringRouteTask to walk natural node coordinates and gather the first visible match.
+    CheckMail,          // Open nearby mailbox, list mail, and take money/items from all pending mail.
+    StartDungeoneering, // Queue DungeoneeringTask to navigate dungeon waypoints, pull encounters, and clear the dungeon.
+    ConvertToRaid,      // Convert the current party to a raid group (leader only).
+    ChangeRaidSubgroup, // Move a player to a specific raid subgroup (0-7). Params: string playerName, int subGroup.
 }

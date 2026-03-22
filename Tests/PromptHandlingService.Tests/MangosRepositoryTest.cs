@@ -9,7 +9,8 @@ namespace PromptHandlingService.Tests
     public class MangosRepositoryTest
     {
 
-        public static void TestGetAreaTriggerBgEntrances()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAreaTriggerBgEntrances()
         {
             int count = MangosRepository.GetRowCountForTable("areatrigger_bg_entrance");
             List<AreaTriggerBgEntrance> areaTriggerBgEntrances = MangosRepository.GetAreaTriggerBgEntrances();
@@ -28,7 +29,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAreaTriggerInvolvedRelations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAreaTriggerInvolvedRelations()
         {
             int count = MangosRepository.GetRowCountForTable("areatrigger_involvedrelation");
             List<AreaTriggerInvolvedRelation> areaTriggerInvolvedRelations = MangosRepository.GetAreaTriggerInvolvedRelations();
@@ -40,7 +42,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAreaTriggerTaverns()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAreaTriggerTaverns()
         {
             int count = MangosRepository.GetRowCountForTable("areatrigger_tavern");
             List<AreaTriggerTavern> areaTriggerTaverns = MangosRepository.GetAreaTriggerTaverns();
@@ -52,7 +55,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAreaTriggerTeleports()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAreaTriggerTeleports()
         {
             int count = MangosRepository.GetRowCountForTable("areatrigger_teleport");
             List<AreaTriggerTeleport> areaTriggerTeleports = MangosRepository.GetAreaTriggerTeleports();
@@ -78,7 +82,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAreaTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAreaTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("area_template");
             List<AreaTemplate> areaTemplates = MangosRepository.GetAreaTemplates();
@@ -97,7 +102,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAuctionHouseBots()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAuctionHouseBots()
         {
             int count = MangosRepository.GetRowCountForTable("auctionhousebot");
             List<AuctionHouseBot> autoHouseBot = MangosRepository.GetAuctionHouseBots();
@@ -111,7 +117,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetAutoBroadcasts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetAutoBroadcasts()
         {
             int count = MangosRepository.GetRowCountForTable("autobroadcast");
             List<AutoBroadcast> autoBroadcasts = MangosRepository.GetAutoBroadcasts();
@@ -120,7 +127,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetBattlegroundEvents()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetBattlegroundEvents()
         {
             int count = MangosRepository.GetRowCountForTable("battleground_events");
             List<BattlegroundEvent> battlegroundEvent = MangosRepository.GetBattlegroundEvents();
@@ -134,7 +142,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetBattlegroundTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetBattlegroundTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("battleground_template");
             List<BattlegroundTemplate> battlegroundTemplates = MangosRepository.GetBattlegroundTemplates();
@@ -158,7 +167,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetBattlemasterEntries()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetBattlemasterEntries()
         {
             int count = MangosRepository.GetRowCountForTable("battlemaster_entry");
             List<BattlemasterEntry> battlemasterEntries = MangosRepository.GetBattlemasterEntries();
@@ -170,7 +180,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetBroadcastTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetBroadcastTexts()
         {
             int count = MangosRepository.GetRowCountForTable("broadcast_text");
             List<BroadcastText> broadcastTexts = MangosRepository.GetBroadcastTexts();
@@ -192,7 +203,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCinematicWaypoints()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCinematicWaypoints()
         {
             int count = MangosRepository.GetRowCountForTable("cinematic_waypoints");
             List<CinematicWaypoint> cinematicWaypoints = MangosRepository.GetCinematicWaypoints();
@@ -207,7 +219,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Humains start", cinematicWaypoints[0].Comment);
         }
 
-        public static void TestGetCommands()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCommands()
         {
             int count = MangosRepository.GetRowCountForTable("command");
             List<Command> commands = MangosRepository.GetCommands();
@@ -219,7 +232,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Syntax: .wareffortget \"[ResourceName]\"", commands[0].Help);
         }
 
-        public static void TestGetConditions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetConditions()
         {
             int count = MangosRepository.GetRowCountForTable("conditions");
             List<Condition> conditions = MangosRepository.GetConditions();
@@ -233,7 +247,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, conditions[0].Flags);
         }
 
-        public static void TestGetCreatures()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatures()
         {
             int count = MangosRepository.GetRowCountForTable("creature");
             List<Creature> creatures = MangosRepository.GetCreatures();
@@ -263,7 +278,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, creatures[0].PatchMax);
         }
 
-        public static void TestGetCreatureAddons()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureAddons()
         {
             int count = MangosRepository.GetRowCountForTable("creature_addon");
             List<CreatureAddon> creatureAddons = MangosRepository.GetCreatureAddons();
@@ -281,7 +297,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("1244", creatureAddons[0].Auras);
         }
 
-        public static void TestGetCreatureAIEvents()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureAIEvents()
         {
             int count = MangosRepository.GetRowCountForTable("creature_ai_events");
             List<CreatureAIEvent> creatureAIEvents = MangosRepository.GetCreatureAIEvents();
@@ -305,7 +322,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Syndicate Footpad - Flee at 15% HP", creatureAIEvents[0].Comment);
         }
 
-        public static void TestGetCreatureBattlegrounds()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureBattlegrounds()
         {
             int count = MangosRepository.GetRowCountForTable("creature_battleground");
             List<CreatureBattleground> creatureBattlegrounds = MangosRepository.GetCreatureBattlegrounds();
@@ -317,7 +335,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, creatureBattlegrounds[0].Event2);
         }
 
-        public static void TestGetCreatureEquipTemplate()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureEquipTemplate()
         {
             int count = MangosRepository.GetRowCountForTable("creature_equip_template");
             List<CreatureEquipTemplate> creatureEquipTemplates = MangosRepository.GetCreatureEquipTemplate();
@@ -331,7 +350,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, creatureEquipTemplates[0].Equipentry3);
         }
 
-        public static void TestGetCreatureEquipTemplateRaws()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureEquipTemplateRaws()
         {
             int count = MangosRepository.GetRowCountForTable("creature_equip_template_raw");
             List<CreatureEquipTemplateRaw> creatureEquipTemplateRaws = MangosRepository.GetCreatureEquipTemplateRaws();
@@ -351,7 +371,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(26, creatureEquipTemplateRaws[0].Equipslot3);
         }
 
-        public static void TestGetCreatureAIScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureAIScripts()
         {
             int count = MangosRepository.GetRowCountForTable("creature_ai_scripts");
             List<CreatureAIScript> creatureAIScripts = MangosRepository.GetCreatureAIScripts();
@@ -380,7 +401,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Kobold Vermin - Say Text", creatureAIScripts[0].Comments);
         }
 
-        public static void TestGetCreatureInvolvedRelations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureInvolvedRelations()
         {
             int count = MangosRepository.GetRowCountForTable("creature_involvedrelation");
             List<CreatureInvolvedRelation> creatureInvolvedRelations = MangosRepository.GetCreatureInvolvedRelations();
@@ -392,7 +414,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(33u, creatureInvolvedRelations[0].Quest);
         }
 
-        public static void TestGetCreatureLinkings()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureLinkings()
         {
             int count = MangosRepository.GetRowCountForTable("creature_linking");
             List<CreatureLinking> creatureLinkings = MangosRepository.GetCreatureLinkings();
@@ -404,7 +427,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(3073u, creatureLinkings[0].Flag);
         }
 
-        public static void TestGetCreatureLinkingTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureLinkingTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("creature_linking_template");
             List<CreatureLinkingTemplate> creatureLinkingTemplates = MangosRepository.GetCreatureLinkingTemplates();
@@ -419,7 +443,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("creature_loot_template");
             List<CreatureLootTemplate> creatureLootTemplates = MangosRepository.GetCreatureLootTemplates();
@@ -438,7 +463,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureModelInfos()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureModelInfos()
         {
             int count = MangosRepository.GetRowCountForTable("creature_model_info");
             List<CreatureModelInfo> creatureModelInfos = MangosRepository.GetCreatureModelInfos();
@@ -454,7 +480,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureMovements()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureMovements()
         {
             int count = MangosRepository.GetRowCountForTable("creature_movement");
             // Act: Retrieve the list of creature movements
@@ -483,7 +510,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureMovementScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureMovementScripts()
         {
             int count = MangosRepository.GetRowCountForTable("creature_movement_scripts");
             List<CreatureMovementScript> creatureMovementScripts = MangosRepository.GetCreatureMovementScripts();
@@ -514,7 +542,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureMovementSpecials()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureMovementSpecials()
         {
             int count = MangosRepository.GetRowCountForTable("creature_movement_special");
             List<CreatureMovementSpecial> creatureMovementSpecials = MangosRepository.GetCreatureMovementSpecials();
@@ -523,7 +552,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureMovementTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureMovementTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("creature_movement_template");
             List<CreatureMovementTemplate> creatureMovementTemplates = MangosRepository.GetCreatureMovementTemplates();
@@ -550,7 +580,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureOnKillReputations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureOnKillReputations()
         {
             int count = MangosRepository.GetRowCountForTable("creature_onkill_reputation");
             List<CreatureOnKillReputation> creatureOnKillReputations = MangosRepository.GetCreatureOnKillReputations();
@@ -570,7 +601,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureQuestRelations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureQuestRelations()
         {
             int count = MangosRepository.GetRowCountForTable("creature_questrelation");
             List<CreatureQuestRelation> creatureQuestRelations = MangosRepository.GetCreatureQuestRelations();
@@ -583,7 +615,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureSpells()
         {
             int count = MangosRepository.GetRowCountForTable("creature_spells");
             List<CreatureSpell> creatureSpells = MangosRepository.GetCreatureSpells();
@@ -699,7 +732,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureSpellsScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureSpellsScripts()
         {
             int count = MangosRepository.GetRowCountForTable("creature_spells_scripts");
             List<CreatureSpellScript> creatureSpellsScripts = MangosRepository.GetCreatureSpellsScripts();
@@ -730,7 +764,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetCreatureTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("creature_template");
             List<CreatureTemplate> creatureTemplates = MangosRepository.GetCreatureTemplates();
@@ -814,7 +849,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, creatureTemplates[0].ScriptName);
         }
 
-        public static void TestGetCreatureTemplateAddons()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCreatureTemplateAddons()
         {
             int count = MangosRepository.GetRowCountForTable("creature_template_addon");
             List<CreatureTemplateAddon> creatureTemplateAddons = MangosRepository.GetCreatureTemplateAddons();
@@ -832,7 +868,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, creatureTemplateAddons[0].Auras); // Example auras, adjust as needed
         }
 
-        public static void TestGetCustomTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetCustomTexts()
         {
             int count = MangosRepository.GetRowCountForTable("custom_texts");
             List<CustomText> customTexts = MangosRepository.GetCustomTexts();
@@ -841,7 +878,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetDisenchantLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetDisenchantLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("disenchant_loot_template");
             List<DisenchantLootTemplate> disenchantLootTemplates = MangosRepository.GetDisenchantLootTemplates();
@@ -859,7 +897,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, disenchantLootTemplates[0].PatchMax);
         }
 
-        public static void TestGetEventScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetEventScripts()
         {
             int count = MangosRepository.GetRowCountForTable("event_scripts");
             List<EventScript> eventScripts = MangosRepository.GetEventScripts();
@@ -889,7 +928,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, eventScripts[0].Comments);
         }
 
-        public static void TestGetExplorationBaseXPs()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetExplorationBaseXPs()
         {
             int count = MangosRepository.GetRowCountForTable("exploration_basexp");
             List<ExplorationBaseXP> explorationBaseXPs = MangosRepository.GetExplorationBaseXPs();
@@ -903,7 +943,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(640u, explorationBaseXPs[59].Basexp); // Example XP for level 60
         }
 
-        public static void TestGetFactions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetFactions()
         {
             int count = MangosRepository.GetRowCountForTable("faction");
             List<Faction> factions = MangosRepository.GetFactions();
@@ -947,7 +988,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, factions[0].Description8);
         }
 
-        public static void TestGetFactionTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetFactionTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("faction_template");
             List<FactionTemplate> factionTemplates = MangosRepository.GetFactionTemplates();
@@ -971,7 +1013,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetFishingLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetFishingLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("fishing_loot_template");
             List<FishingLootTemplate> fishingLootTemplates = MangosRepository.GetFishingLootTemplates();
@@ -990,7 +1033,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetForbiddenItems()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetForbiddenItems()
         {
             int count = MangosRepository.GetRowCountForTable("forbidden_items");
             List<ForbiddenItem> forbiddenItems = MangosRepository.GetForbiddenItems();
@@ -1002,7 +1046,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(1u, forbiddenItems[0].AfterOrBefore);
         }
 
-        public static void TestGetGameObjects()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjects()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject");
             List<GameObject> gameObjects = MangosRepository.GetGameObjects();
@@ -1030,7 +1075,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, gameObjects[0].PatchMax);
         }
 
-        public static void TestGetGameObjectBattlegrounds()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectBattlegrounds()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_battleground");
             List<GameObjectBattleground> gameObjectBattlegrounds = MangosRepository.GetGameObjectBattlegrounds();
@@ -1042,7 +1088,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, gameObjectBattlegrounds[0].Event2);
         }
 
-        public static void TestGetGameObjectInvolvedRelations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectInvolvedRelations()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_involvedrelation");
             List<GameObjectInvolvedRelation> relations = MangosRepository.GetGameObjectInvolvedRelations();
@@ -1054,7 +1101,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, relations[0].Patch);
         }
 
-        public static void TestGetGameObjectLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_loot_template");
             List<GameObjectLootTemplate> lootTemplates = MangosRepository.GetGameObjectLootTemplates();
@@ -1072,7 +1120,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, lootTemplates[0].PatchMax);
         }
 
-        public static void TestGetGameObjectQuestRelations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectQuestRelations()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_questrelation");
             List<GameObjectQuestRelation> questRelations = MangosRepository.GetGameObjectQuestRelations();
@@ -1084,7 +1133,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, questRelations[0].Patch);
         }
 
-        public static void TestGetGameObjectRequirements()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectRequirements()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_requirement");
             List<GameObjectRequirement> requirements = MangosRepository.GetGameObjectRequirements();
@@ -1096,7 +1146,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(15536u, requirements[0].ReqGuid);
         }
 
-        public static void TestGetGameObjectScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectScripts()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_scripts");
             List<GameObjectScript> scripts = MangosRepository.GetGameObjectScripts();
@@ -1126,7 +1177,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Ouverture Grille Ombrecroc cellule ashcrombe", scripts[0].Comments);
         }
 
-        public static void TestGetGameObjectTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameObjectTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("gameobject_template");
             List<GameObjectTemplate> gameObjectTemplates = MangosRepository.GetGameObjectTemplates();
@@ -1171,7 +1223,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, gameObjectTemplates[0].Data[23]);
         }
 
-        public static void TestGetGameEvents()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameEvents()
         {
             int count = MangosRepository.GetRowCountForTable("game_event");
             List<GameEvent> gameEvents = MangosRepository.GetGameEvents();
@@ -1191,7 +1244,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, gameEvents[0].PatchMax);
         }
 
-        public static void TestGetGameEventCreatures()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameEventCreatures()
         {
             int count = MangosRepository.GetRowCountForTable("game_event_creature");
             List<GameEventCreature> gameEventCreatures = MangosRepository.GetGameEventCreatures();
@@ -1202,7 +1256,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(159, gameEventCreatures[0].Event);
         }
 
-        public static void TestGetGameEventCreatureDatas()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameEventCreatureDatas()
         {
             int count = MangosRepository.GetRowCountForTable("game_event_creature_data");
             List<GameEventCreatureData> gameEventCreatureDataList = MangosRepository.GetGameEventCreatureDatas();
@@ -1218,7 +1273,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(27u, gameEventCreatureDataList[0].Event);
         }
 
-        public static void TestGetGameEventGameObjects()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameEventGameObjects()
         {
             int count = MangosRepository.GetRowCountForTable("game_event_gameobject");
             List<GameEventGameObject> gameEventGameObjectList = MangosRepository.GetGameEventGameObjects();
@@ -1229,7 +1285,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(1, gameEventGameObjectList[0].Event);
         }
 
-        public static void TestGetGameEventQuests()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameEventQuests()
         {
             int count = MangosRepository.GetRowCountForTable("game_event_quest");
             List<GameEventQuest> gameEventQuestList = MangosRepository.GetGameEventQuests();
@@ -1241,7 +1298,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(2u, gameEventQuestList[0].Patch);
         }
 
-        public static void TestGetGameGraveyardZones()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameGraveyardZones()
         {
             int count = MangosRepository.GetRowCountForTable("game_graveyard_zone");
             List<GameGraveyardZone> gameGraveyardZones = MangosRepository.GetGameGraveyardZones();
@@ -1253,7 +1311,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(469u, gameGraveyardZones[0].Faction);
         }
 
-        public static void TestGetGameTeles()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameTeles()
         {
             int count = MangosRepository.GetRowCountForTable("game_tele");
             List<GameTele> gameTeles = MangosRepository.GetGameTeles();
@@ -1269,7 +1328,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("RuinsOfAndorhal", gameTeles[0].Name);
         }
 
-        public static void TestGetGameWeathers()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGameWeathers()
         {
             int count = MangosRepository.GetRowCountForTable("game_weather");
             List<GameWeather> gameWeathers = MangosRepository.GetGameWeathers();
@@ -1277,7 +1337,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, gameWeathers.Count);
         }
 
-        public static void TestGetGMSubSurveys()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGMSubSurveys()
         {
             int count = MangosRepository.GetRowCountForTable("gm_subsurveys");
             List<GMSubSurvey> gmSubSurveys = MangosRepository.GetGMSubSurveys();
@@ -1285,7 +1346,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, gmSubSurveys.Count);
         }
 
-        public static void TestGetGMSurveys()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGMSurveys()
         {
             int count = MangosRepository.GetRowCountForTable("gm_surveys");
             List<GMSurvey> gmSurveys = MangosRepository.GetGmSurveys();
@@ -1293,7 +1355,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, gmSurveys.Count);
         }
 
-        public static void TestGetGMTickets()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGMTickets()
         {
             int count = MangosRepository.GetRowCountForTable("gm_tickets");
             List<GMTicket> gmTickets = MangosRepository.GetGmTickets();
@@ -1301,7 +1364,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, gmTickets.Count);
         }
 
-        public static void TestGetGossipMenus()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGossipMenus()
         {
             int count = MangosRepository.GetRowCountForTable("gossip_menu");
             List<GossipMenu> gossipMenus = MangosRepository.GetGossipMenus();
@@ -1313,7 +1377,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(90u, gossipMenus[0].ConditionId);
         }
 
-        public static void TestGetGossipMenuOptions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGossipMenuOptions()
         {
             int count = MangosRepository.GetRowCountForTable("gossip_menu_option");
             List<GossipMenuOption> gossipMenuOptions = MangosRepository.GetGossipMenuOptions();
@@ -1337,7 +1402,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, gossipMenuOptions[0].ConditionId);
         }
 
-        public static void TestGetGossipScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetGossipScripts()
         {
             int count = MangosRepository.GetRowCountForTable("gossip_scripts");
             List<GossipScript> gossipScripts = MangosRepository.GetGossipScripts();
@@ -1367,7 +1433,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Azuregos - Set Faction to Enemy", gossipScripts[0].Comments);
         }
 
-        public static void TestGetInstanceBuffRemovals()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetInstanceBuffRemovals()
         {
             int count = MangosRepository.GetRowCountForTable("instance_buff_removal");
             List<InstanceBuffRemoval> instanceBuffRemovals = MangosRepository.GetInstanceBuffRemovals();
@@ -1375,7 +1442,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, instanceBuffRemovals.Count);
         }
 
-        public static void TestGetInstanceCreatureKills()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetInstanceCreatureKills()
         {
             int count = MangosRepository.GetRowCountForTable("instance_creature_kills");
             List<InstanceCreatureKills> instanceCreatureKills = MangosRepository.GetInstanceCreatureKills();
@@ -1383,7 +1451,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, instanceCreatureKills.Count);
         }
 
-        public static void TestGetInstanceCustomCounters()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetInstanceCustomCounters()
         {
             int count = MangosRepository.GetRowCountForTable("instance_custom_counters");
             List<InstanceCustomCounter> instanceCustomCounters = MangosRepository.GetInstanceCustomCounters();
@@ -1391,7 +1460,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, instanceCustomCounters.Count);
         }
 
-        public static void TestGetInstanceWipes()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetInstanceWipes()
         {
             int count = MangosRepository.GetRowCountForTable("instance_wipes");
             List<InstanceWipe> instanceWipes = MangosRepository.GetInstanceWipes();
@@ -1399,7 +1469,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, instanceWipes.Count);
         }
 
-        public static void TestGetItemDisplayInfo()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetItemDisplayInfo()
         {
             int count = MangosRepository.GetRowCountForTable("item_display_info");
             List<ItemDisplayInfo> itemDisplayInfos = MangosRepository.GetItemDisplayInfo();
@@ -1410,7 +1481,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("INV_Robe_02", itemDisplayInfos[0].Field5); // Example value
         }
 
-        public static void TestGetItemEnchantmentTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetItemEnchantmentTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("item_enchantment_template");
             List<ItemEnchantmentTemplate> enchantmentTemplates = MangosRepository.GetItemEnchantmentTemplates();
@@ -1422,7 +1494,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(4.53f, enchantmentTemplates[0].Chance);
         }
 
-        public static void TestGetItemLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetItemLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("item_loot_template");
             List<ItemLootTemplate> lootTemplates = MangosRepository.GetItemLootTemplates();
@@ -1440,7 +1513,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, lootTemplates[0].PatchMax);
         }
 
-        public static void TestGetItemRequiredTargets()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetItemRequiredTargets()
         {
             int count = MangosRepository.GetRowCountForTable("item_required_target");
             List<ItemRequiredTarget> requiredTargets = MangosRepository.GetItemRequiredTargets();
@@ -1452,7 +1526,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(2530u, requiredTargets[0].TargetEntry);
         }
 
-        public static void TestGetItemTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetItemTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("item_template");
             List<ItemTemplate> itemTemplates = MangosRepository.GetItemTemplates();
@@ -1588,7 +1663,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0, itemTemplates[4].Spells[4].Cooldown);
         }
 
-        public static void TestGetLocalesArea()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesArea()
         {
             int count = MangosRepository.GetRowCountForTable("locales_area");
             List<LocalesArea> localesAreas = MangosRepository.GetLocalesArea();
@@ -1606,7 +1682,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Дун Морог", localesAreas[0].NameLoc8);
         }
 
-        public static void TestGetLocalesBroadcastTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesBroadcastTexts()
         {
             int count = MangosRepository.GetRowCountForTable("locales_broadcast_text");
             List<LocalesBroadcastText> broadcastTexts = MangosRepository.GetLocalesBroadcastTexts();
@@ -1633,7 +1710,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(18019, broadcastTexts[0].VerifiedBuild);
         }
 
-        public static void TestGetLocalesCreatures()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesCreatures()
         {
             int count = MangosRepository.GetRowCountForTable("locales_creature");
             List<LocalesCreature> creatures = MangosRepository.GetLocalesCreatures();
@@ -1660,7 +1738,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, creatures[0].SubnameLoc8);
         }
 
-        public static void TestGetLocalesGameObjects()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesGameObjects()
         {
             int count = MangosRepository.GetRowCountForTable("locales_gameobject");
             List<LocalesGameObject> gameObjects = MangosRepository.GetLocalesGameObjects();
@@ -1678,7 +1757,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Статуя старого льва", gameObjects[0].NameLoc8);
         }
 
-        public static void TestGetLocalesGossipMenuOptions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesGossipMenuOptions()
         {
             int count = MangosRepository.GetRowCountForTable("locales_gossip_menu_option");
             List<LocalesGossipMenuOption> gossipMenuOptions = MangosRepository.GetLocalesGossipMenuOptions();
@@ -1706,7 +1786,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, gossipMenuOptions[0].BoxTextLoc8);
         }
 
-        public static void TestGetLocalesItems()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesItems()
         {
             int count = MangosRepository.GetRowCountForTable("locales_item");
             List<LocalesItem> localesItems = MangosRepository.GetLocalesItems();
@@ -1733,7 +1814,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, localesItems[0].DescriptionLoc8);
         }
 
-        public static void TestGetLocalesPageTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesPageTexts()
         {
             int count = MangosRepository.GetRowCountForTable("locales_page_text");
             List<LocalesPageText> localesPageTexts = MangosRepository.GetLocalesPageTexts();
@@ -1751,7 +1833,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Здравствуй, Морган!\r\n\r\nДела в Златоземье идут бойко, так бойко, что у меня не было времени отправить тебе товар! \r\n\r\nЯ нанял человека, который принесет эту записку, доставить тебе пачку больших восковых свечей (тех, что кобольды обычно носят на голове). \r\n\r\nБудь добр, отблагодари этого человека и заплати ему как следует.", localesPageTexts[0].TextLoc8);
         }
 
-        public static void TestGetLocalesPointsOfInterest()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesPointsOfInterest()
         {
             int count = MangosRepository.GetRowCountForTable("locales_points_of_interest");
             List<LocalesPointsOfInterest> pointsOfInterest = MangosRepository.GetLocalesPointsOfInterest();
@@ -1769,7 +1852,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Таверна \"Гордость льва\"", pointsOfInterest[0].IconNameLoc8);
         }
 
-        public static void TestGetLocalesQuest()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetLocalesQuest()
         {
             int count = MangosRepository.GetRowCountForTable("locales_quest");
             List<LocalesQuest> localesQuests = MangosRepository.GetLocalesQuest();
@@ -1851,7 +1935,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, localesQuests[0].ObjectiveText4Loc8);
         }
 
-        public static void TestGetMailLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetMailLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("mail_loot_template");
             List<MailLootTemplate> lootTemplates = MangosRepository.GetMailLootTemplates();
@@ -1869,7 +1954,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, lootTemplates[0].PatchMax);
         }
 
-        public static void TestGetMangosStrings()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetMangosStrings()
         {
             int count = MangosRepository.GetRowCountForTable("mangos_string");
             List<MangosString> mangosStrings = MangosRepository.GetMangosStrings();
@@ -1888,7 +1974,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, mangosStrings[0].ContentLoc8);
         }
 
-        public static void TestGetMapTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetMapTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("map_template");
             List<MapTemplate> mapTemplates = MangosRepository.GetMapTemplates();
@@ -1911,7 +1998,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, mapTemplates[0].ScriptName);
         }
 
-        public static void TestGetMigrations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetMigrations()
         {
             int count = MangosRepository.GetRowCountForTable("migrations");
             List<string> migrations = MangosRepository.GetMigrations();
@@ -1922,7 +2010,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("20180201170354", migrations[1]);
         }
 
-        public static void TestGetNpcGossips()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcGossips()
         {
             int count = MangosRepository.GetRowCountForTable("npc_gossip");
             List<NpcGossip> npcGossips = MangosRepository.GetNpcGossips();
@@ -1933,7 +2022,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(5054u, npcGossips[0].Textid);    // Adjust this value based on your NPC data
         }
 
-        public static void TestGetNpcTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcTexts()
         {
             int count = MangosRepository.GetRowCountForTable("npc_text");
             List<NpcText> npcTexts = MangosRepository.GetNpcTexts();
@@ -1948,7 +2038,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0.0f, npcTexts[0].Probability1);
         }
 
-        public static void TestGetNpcTrainers()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcTrainers()
         {
             int count = MangosRepository.GetRowCountForTable("npc_trainer");
             List<NpcTrainer> npcTrainers = MangosRepository.GetNpcTrainers();
@@ -1964,7 +2055,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(54u, npcTrainers[0].Reqlevel);
         }
 
-        public static void TestGetNpcTrainerTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcTrainerTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("npc_trainer_template");
             List<NpcTrainerTemplate> npcTrainerTemplates = MangosRepository.GetNpcTrainerTemplates();
@@ -1980,7 +2072,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(40u, npcTrainerTemplates[0].Reqlevel);
         }
 
-        public static void TestGetNpcVendors()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcVendors()
         {
             int count = MangosRepository.GetRowCountForTable("npc_vendor");
             List<NpcVendor> npcVendors = MangosRepository.GetNpcVendors();
@@ -1994,7 +2087,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, npcVendors[0].Incrtime);
         }
 
-        public static void TestGetNpcVendorTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetNpcVendorTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("npc_vendor_template");
             List<NpcVendorTemplate> npcVendorTemplates = MangosRepository.GetNpcVendorTemplates();
@@ -2008,7 +2102,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, npcVendorTemplates[0].Incrtime);
         }
 
-        public static void TestGetPageText()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPageText()
         {
             int count = MangosRepository.GetRowCountForTable("page_text");
             List<PageText> pageTexts = MangosRepository.GetPageText();
@@ -2020,7 +2115,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Hello Morgan,\r\n\r\nBusiness in Goldshire is brisk, so brisk that I haven't had time to send you any shipments!  \r\n\r\nI commissioned the person bearing this note to bring you a package of large wax candles (you know, the ones the Kobolds like to wear on their heads?). \r\n\r\nPlease give this person our thanks, and fair payment.", pageTexts[0].Text);  // Example text, adjust as needed
         }
 
-        public static void TestGetPetCreateInfoSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPetCreateInfoSpells()
         {
             int count = MangosRepository.GetRowCountForTable("petcreateinfo_spell");
             List<PetCreateInfoSpell> petCreateInfoSpells = MangosRepository.GetPetCreateInfoSpells();
@@ -2035,7 +2131,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, petCreateInfoSpells[0].Spell4);  // Example spell ID, adjust as needed
         }
 
-        public static void TestGetPetLevelStats()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPetLevelStats()
         {
             int count = MangosRepository.GetRowCountForTable("pet_levelstats");
             List<PetLevelStats> petLevelStats = MangosRepository.GetPetLevelStats();
@@ -2055,7 +2152,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(20u, petLevelStats[0].Spi); // Example Spirit, adjust as needed
         }
 
-        public static void TestGetPetNameGenerations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPetNameGenerations()
         {
             int count = MangosRepository.GetRowCountForTable("pet_name_generation");
             List<PetNameGeneration> petNames = MangosRepository.GetPetNameGenerations();
@@ -2077,7 +2175,8 @@ namespace PromptHandlingService.Tests
             // Continue testing other entries based on your data
         }
 
-        public static void TestGetPickpocketingLoots()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPickpocketingLoots()
         {
             int count = MangosRepository.GetRowCountForTable("pickpocketing_loot_template");
             List<PickpocketingLootTemplate> lootTemplates = MangosRepository.GetPickpocketingLoots();
@@ -2098,7 +2197,8 @@ namespace PromptHandlingService.Tests
             // Continue testing other entries based on your data
         }
 
-        public static void TestGetPlayerBots()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerBots()
         {
             int count = MangosRepository.GetRowCountForTable("playerbot");
             List<PlayerBot> playerBots = MangosRepository.GetPlayerBots();
@@ -2106,7 +2206,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, playerBots.Count);
         }
 
-        public static void TestGetPlayerCreateInfo()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerCreateInfo()
         {
             int count = MangosRepository.GetRowCountForTable("playercreateinfo");
             List<PlayerCreateInfo> playerCreateInfos = MangosRepository.GetPlayerCreateInfo();
@@ -2124,7 +2225,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0.00f, playerCreateInfos[0].Orientation, 2); // Example orientation, adjust as needed
         }
 
-        public static void TestGetPlayerCreateInfoActions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerCreateInfoActions()
         {
             int count = MangosRepository.GetRowCountForTable("playercreateinfo_action");
             List<PlayerCreateInfoAction> playerCreateInfoActions = MangosRepository.GetPlayerCreateInfoActions();
@@ -2139,7 +2241,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(128u, playerCreateInfoActions[0].Type); // Example type, adjust as needed
         }
 
-        public static void TestGetPlayerCreateInfoItems()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerCreateInfoItems()
         {
             int count = MangosRepository.GetRowCountForTable("playercreateinfo_item");
             List<PlayerCreateInfoItem> playerCreateInfoItems = MangosRepository.GetPlayerCreateInfoItems();
@@ -2147,7 +2250,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, playerCreateInfoItems.Count);
         }
 
-        public static void TestGetPlayerCreateInfoSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerCreateInfoSpells()
         {
             int count = MangosRepository.GetRowCountForTable("playercreateinfo_spell");
             List<PlayerCreateInfoSpell> playerCreateInfoSpells = MangosRepository.GetPlayerCreateInfoSpells();
@@ -2161,7 +2265,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Heroic Strike", playerCreateInfoSpells[0].Note); // Example note, adjust as needed
         }
 
-        public static void TestGetPlayerClassLevelStats()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerClassLevelStats()
         {
             int count = MangosRepository.GetRowCountForTable("player_classlevelstats");
             List<PlayerClassLevelStats> classLevelStats = MangosRepository.GetPlayerClassLevelStats();
@@ -2175,7 +2280,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, classLevelStats[0].Basemana);  // Example base mana, adjust as needed
         }
 
-        public static void TestGetPlayerFactionChangeItems()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerFactionChangeItems()
         {
             int count = MangosRepository.GetRowCountForTable("player_factionchange_items");
             List<PlayerFactionChangeItems> factionChangeItems = MangosRepository.GetPlayerFactionChangeItems();
@@ -2188,7 +2294,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Scout's Tabard - Private's Tabard", factionChangeItems[0].Comment);  // Example comment, adjust as needed
         }
 
-        public static void TestGetPlayerFactionChangeMounts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerFactionChangeMounts()
         {
             int count = MangosRepository.GetRowCountForTable("player_factionchange_mounts");
             // Call the method to retrieve faction change mounts
@@ -2203,7 +2310,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Pinto", factionChangeMounts[0].Comment);  // Example Comment, adjust as needed
         }
 
-        public static void TestGetPlayerFactionChangeQuests()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerFactionChangeQuests()
         {
             int count = MangosRepository.GetRowCountForTable("player_factionchange_quests");
             // Call the method to retrieve faction change quests
@@ -2217,7 +2325,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("A Lesson to Learn", factionChangeQuests[0].Comment);  // Example Comment, adjust as needed
         }
 
-        public static void TestGetPlayerFactionChangeReputations()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerFactionChangeReputations()
         {
             int count = MangosRepository.GetRowCountForTable("player_factionchange_reputations");
             // Call the method to retrieve faction change quests
@@ -2230,7 +2339,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(530, factionChangeReputations[0].HordeId);  // Example HordeId, adjust as needed
         }
 
-        public static void TestGetPlayerFactionChangeSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerFactionChangeSpells()
         {
             int count = MangosRepository.GetRowCountForTable("player_factionchange_spells");
             // Call the method to retrieve faction change spells
@@ -2244,7 +2354,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, factionChangeSpells[0].Comment);  // Example comment, adjust as needed
         }
 
-        public static void TestGetPlayerLevelStats()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerLevelStats()
         {
             int count = MangosRepository.GetRowCountForTable("player_levelstats");
             // Call the method to retrieve player level stats
@@ -2263,7 +2374,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(21u, levelStats[0].Spi);  // Example Spirit, adjust as needed
         }
 
-        public static void TestGetPlayerXpForLevel()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPlayerXpForLevel()
         {
             int count = MangosRepository.GetRowCountForTable("player_xp_for_level");
             // Call the method to retrieve player XP for levels
@@ -2276,7 +2388,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(400u, xpForLevels[0].XpForNextLevel);  // Example XP for next level, adjust as needed
         }
 
-        public static void TestGetPointsOfInterest()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPointsOfInterest()
         {
             int count = MangosRepository.GetRowCountForTable("points_of_interest");
             // Call the method to retrieve points of interest
@@ -2294,7 +2407,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Lion's Pride Inn", pointsOfInterest[0].IconName);  // Example icon name, adjust as needed
         }
 
-        public static void TestGetPoolCreatures()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolCreatures()
         {
             int count = MangosRepository.GetRowCountForTable("pool_creature");
             // Call the method to retrieve pool creatures
@@ -2312,7 +2426,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, poolCreatures[0].PatchMax);  // Example patch max, adjust as needed
         }
 
-        public static void TestGetPoolCreatureTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolCreatureTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("pool_creature_template");
             // Call the method to retrieve pool creature templates
@@ -2328,7 +2443,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, poolCreatureTemplates[0].Flags);  // Example flags, adjust as needed
         }
 
-        public static void TestGetPoolGameObjects()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolGameObjects()
         {
             int count = MangosRepository.GetRowCountForTable("pool_gameobject");
             // Call the method to retrieve pool game objects
@@ -2346,7 +2462,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, poolGameObjects[0].PatchMax);  // Example patch max, adjust as needed
         }
 
-        public static void TestGetPoolGameObjectTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolGameObjectTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("pool_gameobject_template");
             // Call the method to retrieve pool game object templates
@@ -2362,7 +2479,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, poolGameObjectTemplates[0].Flags);  // Example flags value, adjust as needed
         }
 
-        public static void TestGetPoolPools()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolPools()
         {
             int count = MangosRepository.GetRowCountForTable("pool_pool");
             // Call the method to retrieve pool pools
@@ -2378,7 +2496,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, poolPools[0].Flags);  // Example Flags value, adjust as needed
         }
 
-        public static void TestGetPoolTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetPoolTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("pool_template");
             // Call the method to retrieve pool templates
@@ -2396,7 +2515,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, poolTemplates[0].PatchMax);  // Example PatchMax value, adjust as needed
         }
 
-        public static void TestGetQuestEndScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetQuestEndScripts()
         {
             int count = MangosRepository.GetRowCountForTable("quest_end_scripts");
             // Call the method to retrieve quest end scripts
@@ -2413,7 +2533,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, questEndScripts[0].Comments);  // Example Comment, adjust as needed
         }
 
-        public static void TestGetQuestGreeting()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetQuestGreeting()
         {
             int count = MangosRepository.GetRowCountForTable("quest_greeting");
             List<QuestGreeting> questGreetings = MangosRepository.GetQuestGreeting();
@@ -2432,7 +2553,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstQuestGreeting.EmoteDelay);
         }
 
-        public static void TestGetQuestStartScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetQuestStartScripts()
         {
             int count = MangosRepository.GetRowCountForTable("quest_start_scripts");
             List<QuestStartScripts> questStartScripts = MangosRepository.GetQuestStartScripts();
@@ -2464,7 +2586,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Quest Cave Mushrooms, Say 2nd Line", firstQuestStartScript.Comments);
         }
 
-        public static void TestGetQuestTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetQuestTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("quest_template");
             List<QuestTemplate> questTemplates = MangosRepository.GetQuestTemplates();
@@ -2603,7 +2726,8 @@ namespace PromptHandlingService.Tests
         }
 
 
-        public static void TestGetReferenceLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetReferenceLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("reference_loot_template");
             // Act
@@ -2626,7 +2750,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, firstLootTemplate.PatchMax);             // Replace with expected patch_max value
         }
 
-        public static void TestGetReputationRewardRates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetReputationRewardRates()
         {
             int count = MangosRepository.GetRowCountForTable("reputation_reward_rate");
             // Act
@@ -2636,7 +2761,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, reputationRewardRates.Count); // Replace with the expected number of spillover templates
         }
 
-        public static void TestGetReputationSpilloverTemplate()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetReputationSpilloverTemplate()
         {
             int count = MangosRepository.GetRowCountForTable("reputation_spillover_template");
             // Act
@@ -2663,7 +2789,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(7u, firstSpilloverTemplate.Rank4);           // Replace with expected rank_4 value
         }
 
-        public static void TestGetReservedNames()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetReservedNames()
         {
             int count = MangosRepository.GetRowCountForTable("reserved_name");
             // Act
@@ -2678,7 +2805,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Blizzard", reservedNames[2]); // Replace with the actual expected name
         }
 
-        public static void TestGetScriptedAreaTriggers()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetScriptedAreaTriggers()
         {
             int count = MangosRepository.GetRowCountForTable("scripted_areatrigger");
             // Act
@@ -2694,7 +2822,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("at_twiggy_flathead", firstTrigger.ScriptName); // Replace with expected script name
         }
 
-        public static void TestGetScriptedEvents()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetScriptedEvents()
         {
             int count = MangosRepository.GetRowCountForTable("scripted_event_id");
             // Act
@@ -2710,7 +2839,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("event_dreadsteed_ritual_start", firstEvent.ScriptName);   // Replace with expected script name
         }
 
-        public static void TestGetScriptEscortData()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetScriptEscortData()
         {
             int count = MangosRepository.GetRowCountForTable("script_escort_data");
             // Act
@@ -2727,7 +2857,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(11u, firstEscortData.EscortFaction);    // Replace with expected escort_faction value
         }
 
-        public static void TestGetScriptTexts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetScriptTexts()
         {
             int count = MangosRepository.GetRowCountForTable("script_texts");
             // Act
@@ -2755,7 +2886,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstScriptText.Emote);                             // Replace with expected emote value
         }
 
-        public static void TestGetScriptWaypoints()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetScriptWaypoints()
         {
             int count = MangosRepository.GetRowCountForTable("script_waypoint");
             List<ScriptWaypoint> waypoints = MangosRepository.GetScriptWaypoints();
@@ -2773,7 +2905,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, firstWaypoint.PointComment);
         }
 
-        public static void TestGetSkillDiscoveryTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSkillDiscoveryTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("skill_discovery_template");
             List<SkillDiscoveryTemplate> skillDiscoveries = MangosRepository.GetSkillDiscoveryTemplates();
@@ -2781,7 +2914,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, skillDiscoveries.Count);
         }
 
-        public static void TestGetSkillExtraItemTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSkillExtraItemTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("skill_extra_item_template");
             List<SkillExtraItemTemplate> skillExtraItems = MangosRepository.GetSkillExtraItemTemplates();
@@ -2789,7 +2923,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(count, skillExtraItems.Count);
         }
 
-        public static void TestGetSkillFishingBaseLevels()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSkillFishingBaseLevels()
         {
             int count = MangosRepository.GetRowCountForTable("skill_fishing_base_level");
             List<SkillFishingBaseLevel> fishingBaseLevels = MangosRepository.GetSkillFishingBaseLevels();
@@ -2802,7 +2937,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(-70, firstFishingBaseLevel.Skill);
         }
 
-        public static void TestGetSkinningLootTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSkinningLootTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("skinning_loot_template");
             List<SkinningLootTemplate> skinningLootTemplates = MangosRepository.GetSkinningLootTemplates();
@@ -2822,7 +2958,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(10u, firstLootTemplate.PatchMax);
         }
 
-        public static void TestGetSoundEntries()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSoundEntries()
         {
             int count = MangosRepository.GetRowCountForTable("sound_entries");
             List<SoundEntries> soundEntries = MangosRepository.GetSoundEntries();
@@ -2835,7 +2972,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Invisibility Impact", firstSoundEntry.Name);
         }
 
-        public static void TestGetSpellAffect()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellAffect()
         {
             int count = MangosRepository.GetRowCountForTable("spell_affect");
             List<SpellAffect> spellAffects = MangosRepository.GetSpellAffect();
@@ -2849,7 +2987,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(12714007uL, firstSpellAffect.SpellFamilyMask);
         }
 
-        public static void TestGetSpellAreas()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellAreas()
         {
             int count = MangosRepository.GetRowCountForTable("spell_area");
             List<SpellArea> spellAreas = MangosRepository.GetSpellAreas();
@@ -2869,7 +3008,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstSpellArea.Autocast);
         }
 
-        public static void TestGetSpellBonusData()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellBonusData()
         {
             int count = MangosRepository.GetRowCountForTable("spell_bonus_data");
             List<SpellBonusData> spellBonusDataList = MangosRepository.GetSpellBonusData();
@@ -2886,7 +3026,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Mage - Blizzard", firstSpellBonusData.Comments);
         }
 
-        public static void TestGetSpellChain()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellChain()
         {
             int count = MangosRepository.GetRowCountForTable("spell_chain");
             List<SpellChain> spellChainList = MangosRepository.GetSpellChain();
@@ -2902,7 +3043,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstSpellChain.ReqSpell);
         }
 
-        public static void TestGetSpellCheck()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellCheck()
         {
             int count = MangosRepository.GetRowCountForTable("spell_check");
             List<SpellCheck> spellCheckList = MangosRepository.GetSpellCheck();
@@ -2924,7 +3066,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Spell::EffectInstaKill", firstSpellCheck.Code);
         }
 
-        public static void TestGetDisabledSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetDisabledSpells()
         {
             int count = MangosRepository.GetRowCountForTable("spell_disabled");
             List<uint> disabledSpells = MangosRepository.GetDisabledSpells();
@@ -2938,7 +3081,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(30003u, disabledSpells[4]);
         }
 
-        public static void TestGetSpellEffectMods()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellEffectMods()
         {
             int count = MangosRepository.GetRowCountForTable("spell_effect_mod");
             List<SpellEffectMod> spellEffectMods = MangosRepository.GetSpellEffectMods();
@@ -2970,7 +3114,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, firstEffectMod.Comment);
         }
 
-        public static void TestGetSpellElixirs()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellElixirs()
         {
             int count = MangosRepository.GetRowCountForTable("spell_elixir");
             List<SpellElixir> spellElixirs = MangosRepository.GetSpellElixirs();
@@ -2983,7 +3128,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstElixir.Mask);
         }
 
-        public static void TestGetSpellFacings()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellFacings()
         {
             int count = MangosRepository.GetRowCountForTable("spell_facing");
             List<SpellFacing> spellFacings = MangosRepository.GetSpellFacings();
@@ -2996,7 +3142,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(1u, firstFacing.Facingcasterflag);
         }
 
-        public static void TestGetSpellGroups()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellGroups()
         {
             int count = MangosRepository.GetRowCountForTable("spell_group");
             List<SpellGroup> spellGroups = MangosRepository.GetSpellGroups();
@@ -3010,7 +3157,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(18125u, firstGroup.SpellId);
         }
 
-        public static void TestGetSpellGroupStackRules()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellGroupStackRules()
         {
             int count = MangosRepository.GetRowCountForTable("spell_group_stack_rules");
             List<SpellGroupStackRules> spellGroupStackRules = MangosRepository.GetSpellGroupStackRules();
@@ -3023,7 +3171,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(1u, firstRule.StackRule);
         }
 
-        public static void TestGetSpellLearnSpells()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellLearnSpells()
         {
             int count = MangosRepository.GetRowCountForTable("spell_learn_spell");
             List<SpellLearnSpell> spellLearnSpells = MangosRepository.GetSpellLearnSpells();
@@ -3037,7 +3186,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(1u, firstLearnSpell.Active);
         }
 
-        public static void TestGetSpellMods()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellMods()
         {
             int count = MangosRepository.GetRowCountForTable("spell_mod");
             List<SpellMod> spellMods = MangosRepository.GetSpellMods();
@@ -3086,7 +3236,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(string.Empty, firstSpellMod.Comment);
         }
 
-        public static void TestGetSpellPetAuras()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellPetAuras()
         {
             int count = MangosRepository.GetRowCountForTable("spell_pet_auras");
             List<SpellPetAura> spellPetAuras = MangosRepository.GetSpellPetAuras();
@@ -3100,7 +3251,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(25228u, firstSpellPetAura.Aura);
         }
 
-        public static void TestGetSpellProcEvents()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellProcEvents()
         {
             int count = MangosRepository.GetRowCountForTable("spell_proc_event");
             List<SpellProcEvent> spellProcEvents = MangosRepository.GetSpellProcEvents();
@@ -3122,7 +3274,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(3u, firstSpellProcEvent.Cooldown);
         }
 
-        public static void TestGetSpellProcItemEnchants()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellProcItemEnchants()
         {
             int count = MangosRepository.GetRowCountForTable("spell_proc_item_enchant");
             List<SpellProcItemEnchant> spellProcItemEnchants = MangosRepository.GetSpellProcItemEnchants();
@@ -3135,7 +3288,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(9.0f, firstItemEnchant.PpmRate);
         }
 
-        public static void TestGetSpellScripts()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellScripts()
         {
             int count = MangosRepository.GetRowCountForTable("spell_scripts");
             List<SpellScript> spellScripts = MangosRepository.GetSpellScripts();
@@ -3167,7 +3321,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Create object : Essence flamboyante enchâssée", firstSpellScript.Comments);
         }
 
-        public static void TestGetSpellScriptTargets()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellScriptTargets()
         {
             int count = MangosRepository.GetRowCountForTable("spell_script_target");
             List<SpellScriptTarget> spellScriptTargets = MangosRepository.GetSpellScriptTargets();
@@ -3181,7 +3336,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(15263u, firstTarget.TargetEntry);
         }
 
-        public static void TestGetSpellTargetPositions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellTargetPositions()
         {
             int count = MangosRepository.GetRowCountForTable("spell_target_position");
             List<SpellTargetPosition> spellTargetPositions = MangosRepository.GetSpellTargetPositions();
@@ -3198,7 +3354,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(4.74f, firstTargetPosition.TargetOrientation);
         }
 
-        public static void TestGetSpellTemplates()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellTemplates()
         {
             int count = MangosRepository.GetRowCountForTable("spell_template");
             List<SpellTemplate> spellTemplates = MangosRepository.GetSpellTemplates();
@@ -3381,7 +3538,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0u, firstSpellTemplate.RequiredAuraVision);
         }
 
-        public static void TestGetSpellThreats()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetSpellThreats()
         {
             int count = MangosRepository.GetRowCountForTable("spell_threat");
             List<SpellThreat> spellThreats = MangosRepository.GetSpellThreats();
@@ -3396,7 +3554,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(0.0f, firstSpellThreat.ApBonus);
         }
 
-        public static void TestGetTaxiPathTransitions()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetTaxiPathTransitions()
         {
             int count = MangosRepository.GetRowCountForTable("taxi_path_transitions");
             List<TaxiPathTransition> taxiPathTransitions = MangosRepository.GetTaxiPathTransitions();
@@ -3412,7 +3571,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal("Everlook, Winterspring -> Valormok, Azshara -> Splintertree Post, Ashenvale", firstTransition.Comment);
         }
 
-        public static void TestGetTransports()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetTransports()
         {
             int count = MangosRepository.GetRowCountForTable("transports");
             List<Transport> transports = MangosRepository.GetTransports();
@@ -3427,7 +3587,8 @@ namespace PromptHandlingService.Tests
             Assert.Equal(350818u, firstTransport.Period);
         }
 
-        public static void TestGetVariables()
+        [Fact(Skip = "Integration: requires MaNGOS database")]
+        public void TestGetVariables()
         {
             int count = MangosRepository.GetRowCountForTable("variables");
             List<Variables> variables = MangosRepository.GetVariables();

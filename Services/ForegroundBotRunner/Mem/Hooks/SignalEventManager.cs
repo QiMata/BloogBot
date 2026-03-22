@@ -6,9 +6,12 @@ namespace ForegroundBotRunner.Mem.Hooks
 {
     public class SignalEventManager
     {
-        private delegate void SignalEventDelegate(string eventName, string format, uint firstArgPtr);
+        // CRITICAL: Delegates use nint (raw pointers) instead of string to prevent
+        // CLR marshaling AVs. String marshaling happens BEFORE the method body,
+        // so try/catch can't protect it. We marshal manually inside the try block.
+        private delegate void SignalEventDelegate(nint eventNamePtr, nint formatPtr, uint firstArgPtr);
 
-        private delegate void SignalEventNoArgsDelegate(string eventName);
+        private delegate void SignalEventNoArgsDelegate(nint eventNamePtr);
 
         // Diagnostic logging path
         private static readonly string DiagnosticLogPath;
@@ -16,6 +19,13 @@ namespace ForegroundBotRunner.Mem.Hooks
         private static int _eventCount = 0;
 
         private static volatile bool _hooksInitialized;
+
+        /// <summary>
+        /// When true, SignalEvent callbacks return immediately without processing.
+        /// Set during map transfers to prevent stale pointer dereferences in
+        /// WoW's event argument data during teardown/rebuild phases.
+        /// </summary>
+        public static volatile bool Paused;
 
         static SignalEventManager()
         {
@@ -91,25 +101,64 @@ namespace ForegroundBotRunner.Mem.Hooks
             signalEventDelegate = new SignalEventDelegate(SignalEventHook);
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventDelegate);
 
-            var instructions = new[]
+            // Get SafeCallback3 from FastCall.dll for SEH protection.
+            // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
+            // SafeCallback3 wraps the managed delegate call with SEH so AVs from stale
+            // WoW memory pointers are caught instead of crashing the process.
+            //
+            // Use NativeLibrary (not GetModuleHandle/GetProcAddress) — the .NET 8
+            // hosting layer may load FastCall.dll from a different path than the OS
+            // module table reports, causing GetProcAddress to fail on the wrong handle.
+            var safeCallback3Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback3@16", "SafeCallback3");
+            DiagLog($"NativeLibrary SafeCallback3 = 0x{(uint)safeCallback3Addr:X8}");
+
+            string[] instructions;
+            if (safeCallback3Addr != nint.Zero)
             {
-                "push ebx",
-                "push esi",
-                "call 0x007040D0",
-                "pushfd",
-                "pushad",
-                "mov eax, ebp",
-                "add eax, 0x10",
-                "push eax",
-                "mov eax, [ebp + 0xC]",
-                "push eax",
-                "mov edi, [edi]",
-                "push edi",
-                $"call 0x{(uint) addrToDetour:X}",
-                "popad",
-                "popfd",
-                $"jmp 0x{(uint) (MemoryAddresses.SignalEventFunPtr + 7):X}"
-            };
+                DiagLog($"SafeCallback3 found at 0x{(uint)safeCallback3Addr:X8} — using SEH-protected detour");
+                instructions =
+                [
+                    "push ebx",
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov eax, ebp",
+                    "add eax, 0x10",
+                    "push eax",                                    // arg3: firstArgPtr
+                    "mov eax, [ebp + 0xC]",
+                    "push eax",                                    // arg2: format
+                    "push edi",                                    // arg1: eventName ptr-to-ptr (deref in managed code)
+                    $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
+                    $"call 0x{(uint)safeCallback3Addr:X}",         // SafeCallback3 — SEH-protected
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)(MemoryAddresses.SignalEventFunPtr + 7):X}"
+                ];
+            }
+            else
+            {
+                DiagLog("WARNING: SafeCallback3 NOT found — falling back to unprotected detour");
+                instructions =
+                [
+                    "push ebx",
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov eax, ebp",
+                    "add eax, 0x10",
+                    "push eax",
+                    "mov eax, [ebp + 0xC]",
+                    "push eax",
+                    "push edi",                                    // eventName ptr-to-ptr
+                    $"call 0x{(uint)addrToDetour:X}",
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)(MemoryAddresses.SignalEventFunPtr + 7):X}"
+                ];
+            }
+
             var signalEventDetour = MemoryManager.InjectAssembly("SignalEventDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventHook", (uint)MemoryAddresses.SignalEventFunPtr, "jmp " + signalEventDetour);
 
@@ -121,8 +170,9 @@ namespace ForegroundBotRunner.Mem.Hooks
                 DiagLog($"SignalEvent hook FAILED at 0x{MemoryAddresses.SignalEventFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
         }
 
-        private static void SignalEventHook(string eventName, string typesArg, uint firstArgPtr)
+        private static void SignalEventHook(nint eventNamePtrPtr, nint formatPtr, uint firstArgPtr)
         {
+<<<<<<< HEAD
             _eventCount++;
             // Log first 20 events unconditionally, then only log interesting events (errors, skills, chat)
             if (_eventCount <= 20
@@ -131,41 +181,91 @@ namespace ForegroundBotRunner.Mem.Hooks
                 || eventName.StartsWith("CHAT_MSG_SKILL")
                 || eventName == "CHAT_MSG_SYSTEM")
                 DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
-
-            var types = typesArg.TrimStart('%').Split('%');
-            var list = new object[types.Length];
-            for (var i = 0; i < types.Length; i++)
+=======
+            // CRITICAL: This runs on WoW's main thread via native assembly detour.
+            // ANY unhandled exception propagates into WoW's native stack → ERROR #132 crash.
+            // Delegates use nint params to prevent CLR marshaling AVs (which happen BEFORE
+            // the method body and can't be caught by try/catch). We marshal manually here.
+            try
             {
-                var tmpPtr = firstArgPtr + (uint)i * 4;
-                if (types[i] == "s")
-                {
-                    var ptr = MemoryManager.ReadInt((nint)tmpPtr);
-                    var str = MemoryManager.ReadString(ptr);
-                    list[i] = str;
-                }
-                else if (types[i] == "f")
-                {
-                    var val = MemoryManager.ReadFloat((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "u")
-                {
-                    var val = MemoryManager.ReadUint((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "d")
-                {
-                    var val = MemoryManager.ReadInt((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "b")
-                {
-                    var val = MemoryManager.ReadInt((nint)tmpPtr);
-                    list[i] = Convert.ToBoolean(val);
-                }
-            }
+                if (Paused) return;
+                _eventCount++;
+>>>>>>> cpp_physics_system
 
-            OnNewEventSignalEvent(eventName, list);
+                // eventNamePtrPtr is a ptr-to-ptr: dereference to get actual string pointer.
+                // This dereference was moved here from the code cave ('mov edi, [edi]')
+                // so it's inside try/catch for SEH safety.
+                nint eventNamePtr = eventNamePtrPtr != nint.Zero
+                    ? Marshal.ReadIntPtr(eventNamePtrPtr)
+                    : nint.Zero;
+                string? eventName = eventNamePtr != nint.Zero
+                    ? Marshal.PtrToStringAnsi(eventNamePtr)
+                    : null;
+                string? typesArg = formatPtr != nint.Zero
+                    ? Marshal.PtrToStringAnsi(formatPtr)
+                    : null;
+
+                if (_eventCount <= 20
+                    || (eventName != null && (eventName.StartsWith("UI_ERROR")
+                        || eventName.StartsWith("UI_INFO")
+                        || eventName.StartsWith("CHAT_MSG_SKILL")
+                        || eventName == "CHAT_MSG_SYSTEM"
+                        || eventName == "LEARNED_SPELL"
+                        || eventName == "UNLEARNED_SPELL")))
+                    DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
+
+                if (string.IsNullOrEmpty(typesArg) || string.IsNullOrEmpty(eventName))
+                {
+                    if (!string.IsNullOrEmpty(eventName))
+                        OnNewEventSignalEvent(eventName, Array.Empty<object>());
+                    return;
+                }
+
+                if (firstArgPtr == 0)
+                {
+                    OnNewEventSignalEvent(eventName, Array.Empty<object>());
+                    return;
+                }
+
+                var types = typesArg.TrimStart('%').Split('%');
+                var list = new object[types.Length];
+                for (var i = 0; i < types.Length; i++)
+                {
+                    var tmpPtr = firstArgPtr + (uint)i * 4;
+                    if (types[i] == "s")
+                    {
+                        var ptr = MemoryManager.ReadInt((nint)tmpPtr);
+                        list[i] = (ptr != 0 ? MemoryManager.ReadString(ptr) : null) ?? "";
+                    }
+                    else if (types[i] == "f")
+                    {
+                        list[i] = MemoryManager.ReadFloat((nint)tmpPtr);
+                    }
+                    else if (types[i] == "u")
+                    {
+                        list[i] = MemoryManager.ReadUint((nint)tmpPtr);
+                    }
+                    else if (types[i] == "d")
+                    {
+                        list[i] = MemoryManager.ReadInt((nint)tmpPtr);
+                    }
+                    else if (types[i] == "b")
+                    {
+                        list[i] = MemoryManager.ReadInt((nint)tmpPtr) != 0;
+                    }
+                    else
+                    {
+                        list[i] = 0;
+                    }
+                }
+
+                OnNewEventSignalEvent(eventName, list);
+            }
+            catch (Exception ex)
+            {
+                try { DiagLog($"SignalEventHook EXCEPTION (swallowed): {ex.GetType().Name}: {ex.Message}"); }
+                catch { }
+            }
         }
 
         static internal void OnNewEventSignalEvent(string parEvent, params object[] parList) =>
@@ -184,6 +284,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             signalEventNoArgsDelegate = new SignalEventNoArgsDelegate(SignalEventNoArgsHook);
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventNoArgsDelegate);
 
+<<<<<<< HEAD
             var instructions = new[]
             {
                 "push esi",
@@ -213,8 +314,85 @@ namespace ForegroundBotRunner.Mem.Hooks
             _eventCount++;
             if (_eventCount <= 20)
                 DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
+=======
+            // Get SafeCallback1 from FastCall.dll for SEH protection
+            var safeCallback1Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback1@8", "SafeCallback1");
 
-            OnNewSignalEventNoArgs?.Invoke(eventName);
+            string[] instructions;
+            if (safeCallback1Addr != nint.Zero)
+            {
+                DiagLog($"SafeCallback1 found at 0x{(uint)safeCallback1Addr:X8} — using SEH-protected detour");
+                instructions =
+                [
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "push edi",                                    // arg1: eventName ptr-to-ptr (deref in managed code)
+                    $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
+                    $"call 0x{(uint)safeCallback1Addr:X}",         // SafeCallback1 — SEH-protected
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
+                ];
+            }
+            else
+            {
+                DiagLog("WARNING: SafeCallback1 NOT found — falling back to unprotected detour");
+                instructions =
+                [
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "push edi",                                    // eventName ptr-to-ptr
+                    $"call 0x{(uint)addrToDetour:X}",
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
+                ];
+            }
+>>>>>>> cpp_physics_system
+
+            var signalEventNoArgsDetour = MemoryManager.InjectAssembly("SignalEventNoArgsDetour", instructions);
+            MemoryManager.InjectAssembly("SignalEventNoArgsHook", (uint)MemoryAddresses.SignalEventNoParamsFunPtr, "jmp " + signalEventNoArgsDetour);
+
+            // Verify hook was written
+            var hookBytes = MemoryManager.ReadBytes((nint)MemoryAddresses.SignalEventNoParamsFunPtr, 5);
+            if (hookBytes != null && hookBytes[0] == 0xE9)
+                DiagLog($"SignalEventNoArgs hook INSTALLED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8} → detour 0x{(uint)signalEventNoArgsDetour:X8}");
+            else
+                DiagLog($"SignalEventNoArgs hook FAILED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
+        }
+
+        private static void SignalEventNoArgsHook(nint eventNamePtrPtr)
+        {
+            try
+            {
+                if (Paused) return;
+                _eventCount++;
+
+                // eventNamePtrPtr is a ptr-to-ptr: dereference inside try/catch for SEH safety.
+                nint eventNamePtr = eventNamePtrPtr != nint.Zero
+                    ? Marshal.ReadIntPtr(eventNamePtrPtr)
+                    : nint.Zero;
+                string? eventName = eventNamePtr != nint.Zero
+                    ? Marshal.PtrToStringAnsi(eventNamePtr)
+                    : null;
+
+                if (_eventCount <= 20
+                    || eventName == "LEARNED_SPELL"
+                    || eventName == "UNLEARNED_SPELL")
+                    DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
+
+                if (!string.IsNullOrEmpty(eventName))
+                    OnNewSignalEventNoArgs?.Invoke(eventName);
+            }
+            catch (Exception ex)
+            {
+                try { DiagLog($"SignalEventNoArgsHook EXCEPTION (swallowed): {ex.GetType().Name}: {ex.Message}"); }
+                catch { }
+            }
         }
 
         internal delegate void SignalEventNoArgsEventHandler(string parEvent, params object[] parArgs);

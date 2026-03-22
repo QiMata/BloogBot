@@ -9,6 +9,10 @@ namespace HunterMarksmanship.Tasks
 {
     public class PvERotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 hunter base spell ranges
+        private const float RangedAttackRange = 35f;
+        private const float HunterDeadZone = 8f;
+
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
 
@@ -21,34 +25,43 @@ namespace HunterMarksmanship.Tasks
             if (!EnsureTarget())
                 return;
 
-            if (Update(34))
+            var rangedRange = GetSpellRange(RangedAttackRange);
+            if (Update(rangedRange))
                 return;
 
             ObjectManager.StopAllMovement();
 
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            var meleeRange = GetMeleeRange(target);
             IWoWItem bow = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
-            bool ranged = bow != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&
-                           ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 34;
+            var distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
+            bool ranged = bow != null && distanceToTarget > HunterDeadZone && distanceToTarget < rangedRange;
 
             if (ranged)
             {
-                var target = ObjectManager.GetTarget(ObjectManager.Player);
-                TryCastSpell(HuntersMark, 0, 34, !target.HasDebuff(HuntersMark));
-                TryCastSpell(ConcussiveShot, 0, 34, !target.HasDebuff(ConcussiveShot));
+                TryCastSpell(HuntersMark, 0f, rangedRange, !target.HasDebuff(HuntersMark));
+                TryCastSpell(ConcussiveShot, 0f, rangedRange, !target.HasDebuff(ConcussiveShot));
                 if (!target.HasDebuff(SerpentSting))
-                    TryCastSpell(SerpentSting, 0, 34);
+                    TryCastSpell(SerpentSting, 0f, rangedRange);
                 else if (ObjectManager.Aggressors.Count() > 1)
-                    TryCastSpell(MultiShot, 0, 34);
+                    TryCastSpell(MultiShot, 0f, rangedRange);
                 else if (ObjectManager.Player.ManaPercent > 60)
-                    TryCastSpell(ArcaneShot, 0, 34);
+                    TryCastSpell(ArcaneShot, 0f, rangedRange);
                 return;
             }
 
             // melee — apply Wing Clip then kite back to ranged distance
+<<<<<<< HEAD
             if (bow != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
                 return;
             TryCastSpell(MongooseBite, 0, 5);
             TryCastSpell(RaptorStrike, 0, 5);
+=======
+            if (bow != null && TryCastSpell(WingClip, 0f, meleeRange, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
+                return;
+            TryCastSpell(MongooseBite, 0f, meleeRange);
+            TryCastSpell(RaptorStrike, 0f, meleeRange);
+>>>>>>> cpp_physics_system
         }
         public override void PerformCombatRotation() => Update();
     }

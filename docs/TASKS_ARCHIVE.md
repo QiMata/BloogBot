@@ -196,3 +196,14 @@ Before ending any session, update this file with:
   - Snapshot parity gap in live combat: `Player.Unit.TargetGuid` and nearby-unit identity visibility are intermittently incomplete/stale during melee engage, which weakens target-state observability and should be fixed in snapshot mapping/ObjectManager parity workstreams.
 
 
+
+
+## Archived Snapshot (2026-02-24 19:43:32) - docs/TASKS.md
+
+- [x] Build and maintain a single behavior matrix covering all character abilities and world interactions.
+- [x] Ensure every matrix row links to the owning local `TASKS.md`.
+- [x] `DeathCorpseRunTests` setup uses `.tele name {NAME} Orgrimmar` before kill.
+- [x] `ValleyOfTrials` setup path removed from corpse-run flow.
+- [x] Add a `Behavior Cards` section in each local `TASKS.md` for owned behaviors.
+- [x] Add explicit continuation instructions so the next agent can resume from the highest-priority unchecked item.
+

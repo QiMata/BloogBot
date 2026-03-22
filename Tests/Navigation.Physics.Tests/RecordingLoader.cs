@@ -30,20 +30,37 @@ public static class RecordingLoader
     /// </summary>
     public static string GetRecordingsDirectory()
     {
-        var candidates = new[]
+        // Priority 1: Walk up from test assembly to find repo Recordings dir
+        var asmDir = Path.GetDirectoryName(typeof(RecordingLoader).Assembly.Location);
+        if (!string.IsNullOrEmpty(asmDir))
         {
-            Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot", "MovementRecordings"),
-        };
-
-        foreach (var dir in candidates)
-        {
-            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                return dir;
+            var dir = new DirectoryInfo(asmDir);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, "Tests", "Navigation.Physics.Tests", "Recordings");
+                if (Directory.Exists(candidate))
+                    return candidate;
+                dir = dir.Parent;
+            }
         }
 
+        // Priority 2: Build output copy
+        var buildCandidate = Path.Combine(AppContext.BaseDirectory, "Recordings");
+        if (Directory.Exists(buildCandidate))
+            return buildCandidate;
+
+        // Priority 3: Env var
+        var envDir = Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR");
+        if (!string.IsNullOrEmpty(envDir) && Directory.Exists(envDir))
+            return envDir;
+
+        // Priority 4: Legacy Documents location
+        var docsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot", "MovementRecordings");
+        if (Directory.Exists(docsDir))
+            return docsDir;
+
         throw new DirectoryNotFoundException(
-            "Movement recordings directory not found. Set WWOW_RECORDINGS_DIR or place recordings in Documents/BloogBot/MovementRecordings/");
+            "Movement recordings directory not found. Place recordings in Tests/Navigation.Physics.Tests/Recordings/ or set WWOW_RECORDINGS_DIR.");
     }
 
     /// <summary>

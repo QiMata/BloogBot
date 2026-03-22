@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <new>
 #include <stdio.h>
 #define NOMINMAX
 #include <windows.h>
@@ -54,19 +55,38 @@ const dtNavMeshQuery* Navigation::GetQueryForMap(uint32_t mapId)
 	return query;
 }
 
-XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool straightPath, int* length)
+XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
+	if (length)
+		*length = 0;
+
 	MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
 
 	InitializeMapsForContinent(manager, mapId);
 
 	PathFinder pathFinder(mapId, 1);
-	pathFinder.setUseStrightPath(straightPath);
+	// Public/native callers pass "smoothPath" semantics:
+	// true  => Detour smooth path
+	// false => straight corner path
+	pathFinder.setUseStrightPath(!smoothPath);
 	pathFinder.calculate(start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
 	PointsArray pointPath = pathFinder.getPath();
-	*length = pointPath.size();
-	XYZ* pathArr = new XYZ[pointPath.size()];
+	if (pointPath.empty())
+	{
+		return nullptr;
+	}
+
+	if (length)
+		*length = static_cast<int>(pointPath.size());
+
+	XYZ* pathArr = new (std::nothrow) XYZ[pointPath.size()];
+	if (pathArr == nullptr)
+	{
+		if (length)
+			*length = 0;
+		return nullptr;
+	}
 
 	for (unsigned int i = 0; i < pointPath.size(); i++)
 	{
@@ -167,9 +187,23 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 		const auto mmapsPath = Navigation::GetMmapsPath();
 		if (!std::filesystem::exists(mmapsPath))
 		{
+<<<<<<< HEAD
 			return;
 		}
 
+=======
+			printf("[Navigation] mmaps path does not exist: %s\n", mmapsPath.c_str());
+			return;
+		}
+
+		// Set the base path on MMapManager so loadMapData/loadMap use the correct directory
+		if (manager->getMmapsBasePath().empty())
+			manager->setMmapsBasePath(mmapsPath);
+
+		printf("[Navigation] Loading map %u tiles from: %s\n", mapId, mmapsPath.c_str());
+		int tileCount = 0;
+
+>>>>>>> cpp_physics_system
 		for (auto& p : std::filesystem::directory_iterator(mmapsPath))
 		{
 			if (!p.is_regular_file())
@@ -205,10 +239,16 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 
 				int x = (xTens * 10) + xOnes;
 				int y = (yTens * 10) + yOnes;
+<<<<<<< HEAD
 				manager->loadMap(mapId, x, y);
+=======
+				if (manager->loadMap(mapId, x, y))
+					tileCount++;
+>>>>>>> cpp_physics_system
 			}
 		}
 
+		printf("[Navigation] Map %u: loaded %d tiles\n", mapId, tileCount);
 		manager->zoneMap.insert(std::pair<unsigned int, bool>(mapId, true));
 	}
 }

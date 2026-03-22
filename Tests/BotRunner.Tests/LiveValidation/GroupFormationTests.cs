@@ -20,7 +20,10 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GroupFormationTests" --configuration Release
 /// </summary>
+<<<<<<< HEAD
 [RequiresMangosStack]
+=======
+>>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class GroupFormationTests
 {
@@ -42,7 +45,16 @@ public class GroupFormationTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG account not available.");
+<<<<<<< HEAD
         global::Tests.Infrastructure.Skip.If(_bot.ForegroundBot == null, "FG snapshot not available; requires dual-client run.");
+=======
+
+        await _bot.EnsureCleanSlateAsync(bgAccount!, "BG");
+        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
+
+        var fgActionable = await _bot.CheckFgActionableAsync();
+        global::Tests.Infrastructure.Skip.If(!fgActionable, "FG bot not actionable after clean-slate probe; requires dual-client run with stable FG.");
+>>>>>>> cpp_physics_system
 
         // Step 1: deterministic clean start from snapshot state (no GM chat disband).
         await EnsureNotGroupedAsync(bgAccount!, "BG");
@@ -60,6 +72,7 @@ public class GroupFormationTests
         var bgName = bgStart.CharacterName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgName), "BG character name missing; cannot send invite by name.");
 
+<<<<<<< HEAD
         // Step 2: FG invites BG by name.
         _output.WriteLine($"[GROUP] FG invites BG by name: {bgName}");
         await _bot.SendActionAndWaitAsync(fgAccount!, new ActionMessage
@@ -78,6 +91,48 @@ public class GroupFormationTests
         // Step 4: assert group state from snapshots.
         var formed = await WaitForGroupFormationAsync(fgAccount!, bgAccount!, timeoutMs: 20000);
         Assert.True(formed.formed, formed.details);
+=======
+        fgActionable = await _bot.CheckFgActionableAsync();
+        global::Tests.Infrastructure.Skip.If(!fgActionable, "FG bot lost actionability before group invite dispatch.");
+
+        // Steps 2-4: invite, accept, verify — retry once if group not formed.
+        // FG invite can silently fail under suite load (Lua frame miss).
+        (bool formed, string details) formResult = (false, "not attempted");
+        for (int groupAttempt = 0; groupAttempt < 2 && !formResult.formed; groupAttempt++)
+        {
+            if (groupAttempt > 0)
+            {
+                _output.WriteLine("[GROUP] Group not formed — retrying invite+accept sequence.");
+                await EnsureNotGroupedAsync(bgAccount!, "BG");
+                await EnsureNotGroupedAsync(fgAccount!, "FG");
+                await Task.Delay(1000);
+            }
+
+            // Step 2: FG invites BG by name.
+            _output.WriteLine($"[GROUP] FG invites BG by name: {bgName} (attempt {groupAttempt + 1})");
+            var inviteResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+            {
+                ActionType = ActionType.SendGroupInvite,
+                Parameters = { new RequestParameter { StringParam = bgName } }
+            });
+            Assert.Equal(ResponseResult.Success, inviteResult);
+            await Task.Delay(1200);
+
+            // Step 3: BG accepts invite.
+            _output.WriteLine("[GROUP] BG accepts invite");
+            var acceptResult = await _bot.SendActionAsync(bgAccount!, new ActionMessage
+            {
+                ActionType = ActionType.AcceptGroupInvite
+            });
+            Assert.Equal(ResponseResult.Success, acceptResult);
+            await Task.Delay(1500);
+
+            // Step 4: assert group state from snapshots.
+            formResult = await WaitForGroupFormationAsync(fgAccount!, bgAccount!, timeoutMs: 20000);
+        }
+
+        Assert.True(formResult.formed, formResult.details);
+>>>>>>> cpp_physics_system
 
         // Step 5: deterministic cleanup and verification.
         await EnsureNotGroupedAsync(bgAccount!, "BG");

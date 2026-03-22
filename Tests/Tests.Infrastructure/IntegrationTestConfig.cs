@@ -24,15 +24,15 @@ public class IntegrationTestConfig
     /// WoW Auth server port.
     /// Override: WWOW_TEST_AUTH_PORT
     /// </summary>
-    public int AuthServerPort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_AUTH_PORT") ?? "3724");
+    public int AuthServerPort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_AUTH_PORT"), out var authPort) ? authPort : 3724;
 
     /// <summary>
     /// WoW World server port.
     /// Override: WWOW_TEST_WORLD_PORT
     /// </summary>
-    public int WorldServerPort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_WORLD_PORT") ?? "8085");
+    public int WorldServerPort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_WORLD_PORT"), out var worldPort) ? worldPort : 8085;
 
     #endregion
 
@@ -49,8 +49,8 @@ public class IntegrationTestConfig
     /// PathfindingService port.
     /// Override: WWOW_TEST_PATHFINDING_PORT
     /// </summary>
-    public int PathfindingServicePort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT") ?? "5001");
+    public int PathfindingServicePort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT"), out var pfPort) ? pfPort : 5001;
 
     #endregion
 
@@ -61,14 +61,28 @@ public class IntegrationTestConfig
     /// Override: WWOW_MANGOS_DIR
     /// </summary>
     public string MangosDirectory { get; init; } =
-        Environment.GetEnvironmentVariable("WWOW_MANGOS_DIR") ?? @"E:\repos\MaNGOS";
+        Environment.GetEnvironmentVariable("WWOW_MANGOS_DIR") ?? @"C:\Mangos\server";
 
     /// <summary>
     /// MySQL port.
     /// Override: WWOW_TEST_MYSQL_PORT
     /// </summary>
     public int MySqlPort { get; init; } =
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_PORT") ?? "3306");
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_PORT"), out var mysqlPort) ? mysqlPort : 3306;
+
+    /// <summary>
+    /// MySQL username for MaNGOS databases.
+    /// Override: WWOW_TEST_MYSQL_USER
+    /// </summary>
+    public string MySqlUser { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_USER") ?? "root";
+
+    /// <summary>
+    /// MySQL password for MaNGOS databases.
+    /// Override: WWOW_TEST_MYSQL_PASSWORD
+    /// </summary>
+    public string MySqlPassword { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_PASSWORD") ?? "root";
 
     /// <summary>
     /// MySQL username for MaNGOS databases.
@@ -89,7 +103,7 @@ public class IntegrationTestConfig
     /// Override: WWOW_TEST_SOAP_PORT
     /// </summary>
     public int SoapPort { get; init; } =
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_SOAP_PORT") ?? "7878");
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_SOAP_PORT"), out var soapPort) ? soapPort : 7878;
 
     #endregion
 

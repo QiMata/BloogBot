@@ -79,8 +79,8 @@ public class CombatCoordinator
             !snapshots.TryGetValue(_backgroundAccount, out var bgSnapshot))
             return null;
 
-        // Both bots must be InWorld
-        if (fgSnapshot.ScreenState != "InWorld" || bgSnapshot.ScreenState != "InWorld")
+        // Both bots must be in world with valid object managers
+        if (!fgSnapshot.IsObjectManagerValid || !bgSnapshot.IsObjectManagerValid)
             return null;
 
         // Resolve character names

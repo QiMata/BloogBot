@@ -100,6 +100,7 @@ struct PhysicsInput
 
     // Falling
     uint32_t fallTime;         // Time spent falling (ms)
+    float fallStartZ;          // Z when fall began (fed back from output; -200000 = not falling)
 
     // Unit properties
     float height;              // Unit height (for collision)
@@ -146,10 +147,17 @@ struct PhysicsInput
     uint32_t frameCounter;
 
     // Behaviour flags (bitfield)
-    // PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
-    //   horizontal movement instead of recalculating from moveFlags + orientation.
-    //   Useful for replay testing with recording-derived velocity.
+    // PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as authoritative
+    //   horizontal velocity (airborne replay paths) instead of
+    //   recalculating from moveFlags + orientation.
+    //   Useful for recording replay calibration with frame-derived velocity.
     uint32_t physicsFlags;
+
+    // Step-up height persistence (fed back from last PhysicsOutput).
+    // After a significant grounded Z rise (stair/ledge), holds the height
+    // for a few frames to bridge navmesh polygon gaps at step edges.
+    float stepUpBaseZ;         // Z height to maintain (-200000 = inactive)
+    uint32_t stepUpAge;        // frames since step-up was detected (0 = just happened)
 };
 
 constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -189,8 +197,9 @@ struct PhysicsOutput
 	float standingOnLocalY;
 	float standingOnLocalZ;
 
-    // Fall damage info
-    float fallDistance;
+    // Fall tracking
+    float fallDistance;         // Total Z drop on landing (positive = downward); 0 while airborne
+    float fallStartZ;          // Z when current fall began; -200000 if grounded
     float fallTime;
 
     // Spline progress
@@ -198,4 +207,17 @@ struct PhysicsOutput
     float splineProgress;      // 0.0 to 1.0 between current and next point
 
     // Removed: ramp interpolation diagnostics. Ramp state is no longer persisted across frames.
+
+    // Wall contact feedback — set from the SIDE pass of GroundMoveElevatedSweep.
+    // Path layer uses these to detect when the bot is stuck against a wall and trigger
+    // escalating recovery or dynamic obstacle rerouting.
+    bool hitWall;            // true if horizontal movement was blocked by a non-walkable surface
+    float wallNormalX;       // world-space surface normal of the wall hit
+    float wallNormalY;
+    float wallNormalZ;
+    float blockedFraction;   // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
+
+    // Step-up height persistence — carry forward to next frame's input.
+    float stepUpBaseZ;         // Z height to maintain (-200000 = inactive)
+    uint32_t stepUpAge;        // frames since step-up was detected
 };

@@ -1,149 +1,166 @@
-﻿# Master Tasks
+# Master Tasks
 
-## Role
-- `docs/TASKS.md` is the master coordination list for every local `TASKS.md`.
-- Local files hold project implementation details; this file holds priority, sequencing, and shared rules.
-- When priorities conflict, this file wins until explicitly updated.
+## Rules
+1. **Use ONE continuous session.** Auto-compaction handles context limits.
+2. Execute one local `TASKS.md` at a time in queue order.
+3. Move completed items to `docs/ARCHIVE.md`.
+4. **The MaNGOS server is ALWAYS live.** Never defer live validation tests.
+5. **Compare to VMaNGOS server code** when implementing packet-based functionality.
+6. Every implementation slice must add or update focused unit tests.
+7. After each shipped delta, commit and push before ending the pass.
 
-## Master Coordination Rules
-1. Keep every local `TASKS.md` aligned with this file in the same work session.
-2. Keep commands simple and one-line where possible.
-3. Never blanket-kill `dotnet`; cleanup must be repo-scoped.
-4. Every timeout/failure/cancel path must include deterministic teardown evidence.
-5. Move completed items to the matching `TASKS_ARCHIVE.md` during the same session.
+---
 
-## Global P0: Branch Stabilization And Merge Readiness
-1. Commit boundary and checkpoint
-- [ ] Capture current working tree into a branch checkpoint commit (no broad reset/revert).
-- [ ] Include updated master task priority + ownership in the same checkpoint.
+## P3 - Fishing Parity (Low Priority)
 
-2. Mainline synchronization
-- [ ] Fetch latest `origin/main`.
-- [ ] Merge `origin/main` into current branch and resolve conflicts.
-- [ ] Push merged branch so follow-up test fixes stack on a clean, merge-ready base.
+**FishingTask is implemented and passing live validation for both BG and FG.** Remaining work is packet-level optimization, not core mechanics.
 
-3. Post-merge smoke gate
-- [ ] Confirm corpse-run setup still teleports to Orgrimmar before kill.
-- [ ] Run at least one targeted bot test command to verify no immediate regression.
+| # | Task | Status |
+|---|------|--------|
+| 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | Open — packet infra ready |
+| 3.2 | Compare BG fishing packets against FG capture | Blocked on 3.1 |
+| 3.3 | Harden BG fishing parity to match FG packet/timing | Blocked on 3.2 |
 
-## Global P0: Corpse-Run Stabilization
-1. Setup command path
-- [x] `DeathCorpseRunTests` setup uses `.tele name {NAME} Orgrimmar` before kill.
-- [x] `ValleyOfTrials` setup path removed from corpse-run flow.
-- [ ] Capture fresh live evidence for both BG and FG under current setup.
+---
 
-2. Runtime guard and teardown safety
-- [ ] Keep corpse-run runtime window at up to 10 minutes.
-- [ ] On timeout/failure/cancel, stop only repo-scoped lingering clients and managers within 30 seconds.
-- [ ] Persist teardown evidence with process name, PID, and stop outcome.
+## P4 - Movement Flags After Teleport (BT-MOVE-001/002)
 
-3. Behavior verification
-- [ ] BG and FG both complete `alive -> dead -> ghost -> runback -> reclaim-ready -> retrieve -> alive`.
-- [ ] Resurrection retrieval occurs only after reclaim delay reaches zero.
-- [ ] Verify both clients can run back from Orgrimmar graveyard pathing (no teleport shortcuts).
+ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset() clears flags to MOVEFLAG_NONE. Remaining: formal FG packet capture test to verify no flag divergence.
 
-## Global P1: Iterative Scenario Parity (Combat + Gathering)
-1. Combat loop parity
-- [ ] Run FG and BG combat scenarios side-by-side and compare movement cadence, spell timing, and packet signature.
-- [ ] Add mismatch triage tasks immediately when parity diverges.
+| # | Task | Status |
+|---|------|--------|
+| 4.1 | Capture FG teleport packets (MSG_MOVE_TELEPORT_ACK → first heartbeats) | Open — packet infra ready |
+| 4.2 | Compare BG teleport behavior — identify remaining flag divergence | Blocked on 4.1 |
+| 4.3 | Fix any remaining MovementController flag issues found | Blocked on 4.2 |
 
-2. Gathering/mining parity
-- [ ] Run FG and BG gathering/mining scenarios in the same cycle with equivalent route goals.
-- [ ] Compare approach vectors, node interaction timing, and interruption handling.
-- [ ] Add research + implementation tasks for each discovered divergence.
+---
 
-3. Physics calibration gate
-- [ ] Run physics calibration checks whenever FG/BG movement diverges.
-- [ ] Feed calibration outputs into `PhysicsEngine` and `MovementController` tasks before closing parity work.
+## P5 - Ragefire Chasm 10-Man Dungeoneering Test
+
+**Goal:** A live integration test that launches 10 bots (1 FG + 9 BG) as a raid group, enters Ragefire Chasm (map 389), and clears the dungeon using coordinated tank/heal/DPS rotations. Validates that the dungeoneering orchestration, group coordination, and class-role combat rotations all work end-to-end.
+
+### Raid Composition
+
+| Slot | Account | Role | Class | Race | Gender | Runner |
+|------|---------|------|-------|------|--------|--------|
+| 1 | TESTBOT1 | Main Tank / Raid Leader | Warrior | Orc | Female | Foreground |
+| 2 | RFCBOT2 | Off-Tank | Shaman | Orc | Female | Background |
+| 3 | RFCBOT3 | Healer | Druid | Tauren | Male | Background |
+| 4 | RFCBOT4 | Healer | Priest | Undead | Male | Background |
+| 5 | RFCBOT5 | DPS | Warlock | Undead | Male | Background |
+| 6 | RFCBOT6 | DPS | Hunter | Orc | Female | Background |
+| 7 | RFCBOT7 | DPS | Rogue | Undead | Female | Background |
+| 8 | RFCBOT8 | DPS | Mage | Troll | Male | Background |
+| 9 | RFCBOT9 | DPS | Warrior | Orc | Female | Background |
+| 10 | RFCBOT10 | DPS | Warrior | Tauren | Female | Background |
+
+*Trope: physical classes (Warrior, Hunter, Rogue, Shaman) = Female; magic classes (Druid, Priest, Warlock, Mage) = Male.*
+
+### Implementation Tasks
+
+| # | Task | Status |
+|---|------|--------|
+| 5.1 | Create MaNGOS accounts (RFCBOT2–RFCBOT10) + GM level 6 via SOAP. Characters auto-created on first bot login, then leveled via `.character level` | **Done** (SOAP) |
+| 5.2 | Create `RagefireChasm.settings.json` — 10-bot StateManager config with dungeoneering mode | **Done** (eb3fddd) |
+| 5.3 | Restore `DungeoneeringTask` from commit `0e7e0bf` — adapt to current BotRunner architecture (IBotTask, behavior trees, NavigationPath) | **Done** (541a941) |
+| 5.4 | Add dungeoneering coordinator to StateManager — group formation, raid conversion, ready check, dungeon entry at RFC portal (1811, -4410, -18) on Kalimdor | **Done** (5a2ae0b) |
+| 5.5 | Implement role-aware combat sequences — tank (hold aggro, skull mark), healer (lowest-HP party member), DPS (assist skull target), off-tank (pickup adds) | **Done** (DungeoneeringCoordinator + DungeoneeringTask) |
+| 5.6 | Add rest/buff coordination — CanProceed check (all members HP>85%, mana>80%) before pulls | **Done** (541a941, built into DungeoneeringTask) |
+| 5.7 | Create `RagefireChasmTests.cs` — test fixture launches StateManager with RFC config, asserts: group formed, dungeon entered (map=389), mobs killed, forward progress | **Done** (eb3fddd) |
+| 5.8 | Add dungeon waypoint data for RFC map 389 — encounter positions from `creature` table for mapId=389 | **Done** (541a941, DungeonWaypoints.cs) |
+
+### Key Architecture
+
+- **Test fixture** simply launches StateManager with `RagefireChasm.settings.json` and polls snapshots
+- **StateManager** coordinates group formation: FG bot (TESTBOT1) invites all 9 BG bots, converts to raid, sets loot rules, then teleports all to RFC entrance
+- **DungeoneeringTask** (restored from `0e7e0bf`) handles in-dungeon behavior: leader navigates waypoints, pulls encounters with skull marks; non-leaders follow leader within 15y
+- **BotProfiles** provide class-specific rotations (already exist for Warrior, Warlock, Mage, etc.)
+- **MapTransitionGraph** already has RFC portal coordinates: Kalimdor (1811, -4410, -18) ↔ RFC (3, -11, -18)
+- **PartyNetworkClientComponent** handles all group/raid operations (invite, accept, convert, ready check)
+- **GroupManager** provides role-aware target selection (skull first, heal lowest HP)
+
+### Reference
+
+- Old DungeoneeringTask: `git show 0e7e0bf:BotRunner/Tasks/DungeoneeringTask.cs`
+- Old working commit: `git show 0e7e0bf` ("Working dungeoneering... again")
+- Functional pathfinding: `git show 9d3fb0c` ("Functional dungeon pathfinding implemented")
+- Basic crawling: `git show 2b39d21` ("Basic dungeon crawling implemented")
+- Group formation test: `Tests/BotRunner.Tests/LiveValidation/GroupFormationTests.cs`
+- Party sequences: `Exports/BotRunner/BotRunnerService.Sequences.Party.cs`
+- RFC portal: `Exports/BotRunner/Movement/MapTransitionGraph.cs:157`
+
+---
+
+## Blocked - Storage Stubs (Needs NuGet)
+
+| ID | Task | Blocker |
+|----|------|---------|
+| `RTS-MISS-001` | S3 ops in `RecordedTests.Shared` | Requires `AWSSDK.S3` |
+| `RTS-MISS-002` | Azure ops in `RecordedTests.Shared` | Requires `Azure.Storage.Blobs` |
+
+---
 
 ## Canonical Commands
-1. Corpse-run validation:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
-2. Combat validation:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+```bash
+# Full LiveValidation suite
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m
 
-3. Gathering/mining validation:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~Mining" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+# Corpse-run only
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m
 
-4. Repo-scoped lingering process cleanup:
-- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
+# Combat tests only (BG + FG collections)
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatBgTests|FullyQualifiedName~CombatFgTests"
 
-## Cross-Project Ownership for Current Priority
-- `Tests/TASKS.md`: cross-suite sequencing and parity gates.
-- `Tests/BotRunner.Tests/TASKS.md`: corpse/combat/gathering test behaviors and simple run commands.
-- `Tests/Tests.Infrastructure/TASKS.md`: timeout and teardown lifecycle guardrails.
-- `Exports/BotRunner/TASKS.md`: retrieve/combat/gathering task behavior and stall prevention.
-- `Tests/Navigation.Physics.Tests/TASKS.md`: calibration evidence and interpolation tests.
-- `Exports/Navigation/TASKS.md`: `PhysicsEngine` frame-by-frame interpolation and movement parity.
+# Physics calibration
+dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings
 
-## Master Index of TASKS.md Files
-- `BotProfiles/TASKS.md`
-- `Exports/TASKS.md`
-- `Exports/BotCommLayer/TASKS.md`
-- `Exports/BotRunner/TASKS.md`
-- `Exports/GameData.Core/TASKS.md`
-- `Exports/Loader/TASKS.md`
-- `Exports/Navigation/TASKS.md`
-- `Exports/WinImports/TASKS.md`
-- `Exports/WoWSharpClient/TASKS.md`
-- `RecordedTests.PathingTests/TASKS.md`
-- `RecordedTests.Shared/TASKS.md`
-- `Services/TASKS.md`
-- `Services/BackgroundBotRunner/TASKS.md`
-- `Services/CppCodeIntelligenceMCP/TASKS.md`
-- `Services/DecisionEngineService/TASKS.md`
-- `Services/ForegroundBotRunner/TASKS.md`
-- `Services/LoggingMCPServer/TASKS.md`
-- `Services/PathfindingService/TASKS.md`
-- `Services/PromptHandlingService/TASKS.md`
-- `Services/WoWStateManager/TASKS.md`
-- `Tests/TASKS.md`
-- `Tests/BotRunner.Tests/TASKS.md`
-- `Tests/Navigation.Physics.Tests/TASKS.md`
-- `Tests/PathfindingService.Tests/TASKS.md`
-- `Tests/PromptHandlingService.Tests/TASKS.md`
-- `Tests/RecordedTests.PathingTests.Tests/TASKS.md`
-- `Tests/RecordedTests.Shared.Tests/TASKS.md`
-- `Tests/Tests.Infrastructure/TASKS.md`
-- `Tests/WowSharpClient.NetworkTests/TASKS.md`
-- `Tests/WoWSharpClient.Tests/TASKS.md`
-- `Tests/WoWSimulation/TASKS.md`
-- `Tests/WWoW.RecordedTests.PathingTests.Tests/TASKS.md`
-- `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md`
-- `Tests/WWoW.Tests.Infrastructure/TASKS.md`
-- `UI/TASKS.md`
-- `UI/Systems/Systems.AppHost/TASKS.md`
-- `UI/Systems/Systems.ServiceDefaults/TASKS.md`
-- `UI/WoWStateManagerUI/TASKS.md`
-- `WWoW.RecordedTests.PathingTests/TASKS.md`
-- `WWoW.RecordedTests.Shared/TASKS.md`
-- `WWoWBot.AI/TASKS.md`
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match command line/process tree).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, add one research task and one implementation task immediately.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
+# Full solution
+dotnet test WestworldOfWarcraft.sln --configuration Release
+```
 
 ## Session Handoff
-- Last updated: 2026-02-24
-- Current top priority: commit and merge branch to a clean baseline, then continue corpse/combat/gathering stabilization.
-- Next sync target: confirm merged baseline builds and preserves Orgrimmar corpse-run setup before deeper parity iteration.
+- **Last updated:** 2026-03-22 (session 128)
+- **Branch:** `cpp_physics_system`
+- **Completed this session:**
+  - **Deep WoW.exe binary decompilation** — 20+ functions decompiled including:
+    - CMovement::CollisionStep (0x633840) — 2-pass AABB sweep
+    - CMovement::Update (0x618C30) — per-frame movement dispatcher
+    - CWorldCollision::TestTerrain (0x6721B0) — spatial grid query
+    - SpatialQuery (0x6AA8B0) — chunk-based terrain/WMO/M2 intersection
+    - BuildMovementInfo (0x7C6340) — wire format verified byte-for-byte
+    - Packet dispatch table (0x616580) — 39 movement commands mapped
+    - Remote unit extrapolation loop (0x616DE0)
+  - **Phase 1: Speed change application** — SMSG_FORCE_*_SPEED_CHANGE ACKed but never applied; now writes speed to player model
+  - **Phase 2: Knockback system** — Full KnockBackArgs parsing (guid+counter+vsin+vcos+hspeed+vspeed), velocity impulse via MovementController, FALLINGFAR + gravity handles trajectory
+  - **Phase 3: Remote unit extrapolation** — GetExtrapolatedPosition() on WoWUnit with WoW.exe speed thresholds (>60y/s=teleport, <3y/s=jitter)
+  - **Phase 4: Spline improvements** — Catmull-Rom for Flying, Cyclic wrap-around, Frozen halt
+  - **Time delta clamping** — [-500ms, +1000ms] matching WoW.exe 0x618D0D
+  - **New constants:** SQRT_2, COLLISION_SKIN_EPSILON, speed thresholds
+  - **Calibration unchanged:** 142/143 physics tests, 44/44 spline tests, 18/18 snapshot tests
+- **Commits:** `9abae9dc` through `61c885f8` (8 commits)
+- **Remaining:** Phase 5 (FG hardening), Phase 6 (opcode sweep) — see plan at `~/.claude/plans/prancy-chasing-puddle.md`
+- **Previous session:**
+  - **BG bot CharacterSelect stuck fix (72476477):** Root cause: `ReadItemField` in ObjectUpdateHandler.cs had no catch-all for unrecognized item fields (enchantment sub-slots 23-42). Missing 4-byte reads corrupted the update stream — player GUID 0x10 was read as update type 16, discarding the player's own create object. Added `else reader.ReadUInt32()` to all field readers (Item, GameObject, DynamicObject, Corpse, Container). BG bot now reliably enters world.
+  - **Elevated-structure ledge guard (46183c06):** Physics engine `GetGroundZ` returns terrain Z below WMO docks/piers. Added two-stage check: detect character is on invisible surface (charZ >> originGroundZ), then use STEP_HEIGHT threshold to prevent walking off. Fixes BG bot sinking at Ratchet dock.
+  - **PathfindingService hang fix (ac2b7986):** Disabled post-corridor segment validation — `ValidateWalkableSegment` physics sweeps cost 5-28s per segment. Corridor paths are navmesh-constrained by construction.
+  - **NPC detection polling (ac2b7986, b5e02f19):** Economy tests use 5-second polling loop for NPC streaming after teleport. Fixed `Game.WoWUnit` type.
+  - **SOAP item delivery timeout (014e2507):** Increased from 5s to 15s for `.additem` propagation.
+- **Commits:** `ac2b7986`, `b5e02f19`, `014e2507`, `46183c06`, `72476477`
+- **Test baseline (26 passed, 10 failed, 2 skipped, aborted before all tests ran):**
+  - **Passing (26):** BasicLoop (2/2), BuffAndConsumable (1/2), CharacterLifecycle, CraftingProfession, EquipmentEquip, GatheringRouteSelection (6/6), LiveBotFixtureDiagnostics (2/2), MapTransition, MovementParity (10/10), MovementSpeed.ZStable
+  - **Failing (10):** DeathCorpseRun (BG), Economy (3: Bank, AH, Mail), Fishing, Gathering (Mining + Herbalism), GroupFormation, MovementSpeed (2: BG speed, Dual comparison)
+  - **Not run (aborted):** Navigation (3), NpcInteraction (4), SpellCast, StarterQuest, TalentAllocation, UnequipItem, VendorBuySell (2), QuestInteraction, OrgrimmarGroundZ (2)
+- **Data dirs:** Server reads from `D:/MaNGOS/data/`. VMaNGOS tools at `D:/vmangos-server/`. WoW MPQ at `D:/World of Warcraft/Data/`. Buildings at `D:/World of Warcraft/Buildings/`.
+- **Known issues:**
+  1. BG bot teleport position check fails — `.go xyz` commands execute but snapshot position doesn't update within 5s timeout. Causes cascade failures in Economy, Gathering, MovementSpeed tests.
+  2. BG bot dead/ghost after teleport — EnsureCleanSlateAsync revive doesn't complete before test body runs.
+  3. Gathering (Mining/Herbalism) — bot detects nodes but can't interact/gather (11min timeout).
+  4. MovementSpeed — BG bot barely moves (0.39 y/s vs expected 7 y/s) during walk test.
+  5. CombatBg/CombatFg fixtures — FG bot stuck at CharacterSelect (COMBATTEST injection/login issue).
+  6. Test run aborted after 40min — remaining 16 tests never executed.
+- **Next:**
+  1. Fix BG bot teleport position tracking — snapshot position not updating after `.go xyz`
+  2. Fix BG bot movement speed — barely moves during walk tests
+  3. Investigate gathering interaction protocol (CMSG_GAMEOBJ_USE → channel → loot)
+  4. Run remaining tests that didn't execute (Navigation, NPC, Spell, Quest, Vendor)

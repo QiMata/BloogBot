@@ -1,6 +1,10 @@
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+<<<<<<< HEAD
+=======
+using GameData.Core.Models;
+>>>>>>> cpp_physics_system
 using System;
 using System.Linq;
 
@@ -18,6 +22,15 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     private bool _isKiting;
     private int _kiteStartTime;
     private int _kiteDurationMs;
+<<<<<<< HEAD
+=======
+
+    // Chase timeout: when dead-reckoning diverges from server position, local
+    // distance calculations become unreliable. If we've been chasing an aggressor
+    // for too long, force auto-attack — the mob is hitting us so we're in range.
+    private int _chaseTickCount;
+    private const int CHASE_FORCE_ATTACK_TICKS = 30; // ~3s at 100ms tick
+>>>>>>> cpp_physics_system
 
     /// <summary>
     /// Perform the combat rotation logic.
@@ -42,30 +55,122 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         var distance = ObjectManager.Player.Position.DistanceTo(target.Position);
         if (distance > attackDistance)
         {
-            // Move toward target
+            _chaseTickCount++;
+
+            // Dead-reckoning fallback: when no physics collision data exists
+            // (dungeon maps without vmtile files), the bot's local position
+            // diverges from the server's position. The local distance calculation
+            // becomes unreliable. If the target is actively attacking us (it's an
+            // aggressor), the server considers us in melee range. Force auto-attack
+            // after a chase timeout to avoid perpetual chase with no attacks.
+            bool targetIsAggressor = target.IsInCombat && ObjectManager.Aggressors.Any(a => a.Guid == target.Guid);
+            if (targetIsAggressor && _chaseTickCount >= CHASE_FORCE_ATTACK_TICKS)
+            {
+                ObjectManager.Face(target.Position);
+                ObjectManager.StartMeleeAttack();
+                return false;
+            }
+
+            // Chase: face and navigate toward the target
+            ObjectManager.Face(target.Position);
+            NavigateToward(target.Position);
             return true;
         }
 
+        _chaseTickCount = 0;
+        // In range — ensure auto-attack is active
+        ObjectManager.StartMeleeAttack();
         return false;
+    }
+
+    /// <summary>
+<<<<<<< HEAD
+    /// Attempt to cast a spell if ready (condition-only overload for legacy profiles).
+    /// </summary>
+    protected bool TryCastSpell(string spellName, bool condition, bool castOnSelf = false)
+        => TryCastSpell(spellName, 0, int.MaxValue, condition, castOnSelf);
+=======
+    /// Calculate the actual melee attack range to the current target using vanilla 1.12.1 formula:
+    /// attacker.CombatReach + target.CombatReach + BASE_OFFSET + leeway(if both moving).
+    /// Falls back to the hardcoded distance if CombatReach data is unavailable (zero).
+    /// </summary>
+    protected float GetMeleeRange(IWoWUnit target)
+    {
+        var playerReach = ObjectManager.Player.CombatReach;
+        var targetReach = target.CombatReach;
+
+        // If server hasn't sent CombatReach data yet, use defaults
+        if (playerReach <= 0f) playerReach = CombatDistance.DEFAULT_PLAYER_COMBAT_REACH;
+        if (targetReach <= 0f) targetReach = CombatDistance.DEFAULT_CREATURE_COMBAT_REACH;
+
+        bool bothMoving = CombatDistance.IsMovingXZ((uint)ObjectManager.Player.MovementFlags)
+                       && CombatDistance.IsMovingXZ((uint)target.MovementFlags);
+
+        return CombatDistance.GetMeleeAttackRange(playerReach, targetReach, bothMoving);
+    }
+
+    /// <summary>
+    /// Calculate the interaction distance to a target NPC/object using bounding radius.
+    /// </summary>
+    protected float GetInteractionRange(IWoWUnit target)
+    {
+        var radius = target.BoundingRadius;
+        if (radius <= 0f) radius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+        return CombatDistance.GetInteractionDistance(radius);
+    }
+
+    /// <summary>
+    /// Calculate the effective spell range to the current target using vanilla 1.12.1 formula:
+    /// baseSpellRange + attacker.BoundingRadius + target.BoundingRadius.
+    /// Falls back to default bounding radii if data is unavailable (zero).
+    /// </summary>
+    /// <param name="baseSpellRange">The spell's base range in yards (e.g. 30 for Frostbolt, 36 for Fireball).</param>
+    protected float GetSpellRange(float baseSpellRange)
+    {
+        var target = ObjectManager.GetTarget(ObjectManager.Player);
+        return GetSpellRange(baseSpellRange, target);
+    }
+
+    /// <summary>
+    /// Calculate the effective spell range to a specific target using vanilla 1.12.1 formula:
+    /// baseSpellRange + attacker.BoundingRadius + target.BoundingRadius.
+    /// Falls back to default bounding radii if data is unavailable (zero).
+    /// </summary>
+    /// <param name="baseSpellRange">The spell's base range in yards (e.g. 30 for Frostbolt, 36 for Fireball).</param>
+    /// <param name="target">The target unit.</param>
+    protected float GetSpellRange(float baseSpellRange, IWoWUnit? target)
+    {
+        var playerRadius = ObjectManager.Player.BoundingRadius;
+        if (playerRadius <= 0f) playerRadius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+
+        var targetRadius = target?.BoundingRadius ?? CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+        if (targetRadius <= 0f) targetRadius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+
+        return CombatDistance.GetSpellRange(baseSpellRange, playerRadius, targetRadius);
     }
 
     /// <summary>
     /// Attempt to cast a spell if ready (condition-only overload for legacy profiles).
     /// </summary>
     protected bool TryCastSpell(string spellName, bool condition, bool castOnSelf = false)
-        => TryCastSpell(spellName, 0, int.MaxValue, condition, castOnSelf);
+        => TryCastSpell(spellName, 0f, float.MaxValue, condition, castOnSelf);
+>>>>>>> cpp_physics_system
 
     /// <summary>
     /// Attempt to cast a spell if ready and in range, with optional callback after cast.
     /// </summary>
+<<<<<<< HEAD
     protected bool TryCastSpell(string spellName, int minRange = 0, int maxRange = int.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
+=======
+    protected bool TryCastSpell(string spellName, float minRange = 0f, float maxRange = float.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
+>>>>>>> cpp_physics_system
     {
         if (!condition) return false;
 
         var target = ObjectManager.GetTarget(ObjectManager.Player);
         if (target == null && !castOnSelf) return false;
 
-        var distance = castOnSelf ? 0 : ObjectManager.Player.Position.DistanceTo(target!.Position);
+        var distance = castOnSelf ? 0f : ObjectManager.Player.Position.DistanceTo(target!.Position);
         if (distance < minRange || distance > maxRange) return false;
 
         if (!ObjectManager.IsSpellReady(spellName)) return false;
@@ -461,18 +566,30 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     /// <param name="spellName">Healing spell to cast.</param>
     /// <param name="healthThreshold">HP% threshold — party members below this are candidates.</param>
     /// <param name="maxRange">Max casting range for the heal (default 40y).</param>
+<<<<<<< HEAD
     protected bool TryCastHeal(string spellName, int healthThreshold = 70, int maxRange = 40)
+=======
+    protected bool TryCastHeal(string spellName, int healthThreshold = 70, float maxRange = 40f)
+>>>>>>> cpp_physics_system
     {
         var healTarget = GetHealTarget(healthThreshold);
         if (healTarget == null) return false;
 
         if (healTarget.Guid == ObjectManager.Player.Guid)
+<<<<<<< HEAD
             return TryCastSpell(spellName, 0, int.MaxValue, true, castOnSelf: true);
+=======
+            return TryCastSpell(spellName, 0f, float.MaxValue, true, castOnSelf: true);
+>>>>>>> cpp_physics_system
 
         // Target the party member for healing
         var prevTarget = ObjectManager.GetTarget(ObjectManager.Player);
         ObjectManager.SetTarget(healTarget.Guid);
+<<<<<<< HEAD
         var result = TryCastSpell(spellName, 0, maxRange);
+=======
+        var result = TryCastSpell(spellName, 0f, maxRange);
+>>>>>>> cpp_physics_system
 
         // Re-target enemy
         if (prevTarget != null && prevTarget.HealthPercent > 0)

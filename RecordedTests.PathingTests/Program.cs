@@ -34,6 +34,14 @@ internal class Program
         Console.WriteLine("==========================================================");
         Console.WriteLine();
 
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine("[INFO] Ctrl+C received — cancelling test orchestration...");
+            cts.Cancel();
+        };
+
         try
         {
             var logger = new ConsoleTestLogger();
@@ -83,7 +91,7 @@ internal class Program
             Console.WriteLine();
 
             // Run tests
-            var results = await RunTestsAsync(configuration, testDefinitions, serverChecker, logger);
+            var results = await RunTestsAsync(configuration, testDefinitions, serverChecker, logger, cts.Token);
 
             // Print summary
             PrintSummary(results);
@@ -91,6 +99,7 @@ internal class Program
             // Cleanup
             mangosClient?.Dispose();
             await StopPathfindingServiceAsync(logger);
+            CleanupRepoScopedProcesses(logger);
 
             return results.All(r => r.Success) ? 0 : 1;
         }
@@ -102,7 +111,9 @@ internal class Program
             Console.ResetColor();
 
             // Ensure PathfindingService is stopped on error
-            await StopPathfindingServiceAsync(new ConsoleTestLogger());
+            var errorLogger = new ConsoleTestLogger();
+            await StopPathfindingServiceAsync(errorLogger);
+            CleanupRepoScopedProcesses(errorLogger);
 
             return 1;
         }
@@ -157,6 +168,53 @@ internal class Program
         }
     }
 
+    /// <summary>
+    /// Finds and kills repo-scoped lingering processes (WoW.exe, WoWStateManager, testhost)
+    /// that have command lines referencing this repository. Never kills non-repo workloads.
+    /// </summary>
+    private static void CleanupRepoScopedProcesses(ITestLogger logger)
+    {
+        var targetNames = new[] { "WoW", "WoWStateManager", "testhost", "testhost.net9.0" };
+        var repoMarker = "Westworld of Warcraft";
+        var killed = 0;
+
+        foreach (var name in targetNames)
+        {
+            try
+            {
+                foreach (var proc in System.Diagnostics.Process.GetProcessesByName(name))
+                {
+                    try
+                    {
+                        // Check if the process main module path contains the repo marker
+                        var modulePath = proc.MainModule?.FileName ?? "";
+                        if (modulePath.Contains(repoMarker, StringComparison.OrdinalIgnoreCase))
+                        {
+                            logger.Info($"[Cleanup] Killing repo-scoped process: {proc.ProcessName} (PID {proc.Id})");
+                            proc.Kill();
+                            killed++;
+                        }
+                    }
+                    catch
+                    {
+                        // Access denied or process already exited — skip
+                    }
+                    finally
+                    {
+                        proc.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // Process enumeration can fail on restricted systems — skip
+            }
+        }
+
+        if (killed > 0)
+            logger.Info($"[Cleanup] Killed {killed} repo-scoped lingering process(es).");
+    }
+
     private static IReadOnlyList<PathingTestDefinition> FilterTests(
         TestConfiguration config,
         IReadOnlyList<PathingTestDefinition> allTests)
@@ -200,12 +258,19 @@ internal class Program
         TestConfiguration config,
         IEnumerable<PathingTestDefinition> testDefinitions,
         IServerAvailabilityChecker serverChecker,
-        ITestLogger logger)
+        ITestLogger logger,
+        CancellationToken cancellationToken = default)
     {
         var results = new List<OrchestrationResult>();
 
         foreach (var testDef in testDefinitions)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                logger.Info("Cancellation requested — stopping test execution.");
+                break;
+            }
+
             Console.WriteLine("----------------------------------------------------------");
             Console.WriteLine($"Test: {testDef.Name}");
             Console.WriteLine($"Category: {testDef.Category}");
@@ -264,7 +329,7 @@ internal class Program
 
                 // Create orchestrator and run test
                 var orchestrator = new RecordedTestOrchestrator(serverChecker, config.OrchestrationOptions, logger);
-                var result = await orchestrator.RunAsync(testDescription, CancellationToken.None);
+                var result = await orchestrator.RunAsync(testDescription, cancellationToken);
 
                 results.Add(result);
 

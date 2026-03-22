@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using GameData.Core.Enums;
+using Serilog;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
@@ -37,6 +38,7 @@ namespace WoWSharpClient.Client
         private readonly Subject<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> _characterFound = new();
         private readonly Subject<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> _attackStateChanged = new();
         private readonly Subject<string> _attackErrors = new();
+        private readonly Subject<Unit> _logoutComplete = new();
 
         // Dynamic opcode subjects registry
         private readonly ConcurrentDictionary<Opcode, ISubject<ReadOnlyMemory<byte>>> _opcodeStreams = new();
@@ -185,9 +187,13 @@ namespace WoWSharpClient.Client
             _pipeline.RegisterHandler(Opcode.SMSG_PONG, HandlePong);
             _pipeline.RegisterHandler(Opcode.SMSG_CHARACTER_LOGIN_FAILED, HandleCharacterLoginFailed);
 
+            // Logout handler
+            _pipeline.RegisterHandler(Opcode.SMSG_LOGOUT_COMPLETE, HandleLogoutComplete);
+
             // Attack handlers (emit to reactive subjects)
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTART, HandleAttackStart);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTOP, HandleAttackStop);
+            _pipeline.RegisterHandler(Opcode.SMSG_CANCEL_COMBAT, HandleCancelCombat);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTINRANGE, HandleAttackSwingNotInRange);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_BADFACING, HandleAttackSwingBadFacing);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTSTANDING, HandleAttackSwingNotStanding);
@@ -239,6 +245,11 @@ namespace WoWSharpClient.Client
             // Spells
             BridgeToLegacy(Opcode.SMSG_INITIAL_SPELLS, Handlers.SpellHandler.HandleInitialSpells);
             BridgeToLegacy(Opcode.SMSG_LEARNED_SPELL, Handlers.SpellHandler.HandleLearnedSpell);
+<<<<<<< HEAD
+=======
+            BridgeToLegacy(Opcode.SMSG_SUPERCEDED_SPELL, Handlers.SpellHandler.HandleSupercededSpell);
+            BridgeToLegacy(Opcode.SMSG_REMOVED_SPELL, Handlers.SpellHandler.HandleRemovedSpell);
+>>>>>>> cpp_physics_system
             BridgeToLegacy(Opcode.SMSG_SPELLLOGMISS, Handlers.SpellHandler.HandleSpellLogMiss);
             BridgeToLegacy(Opcode.SMSG_SPELL_GO, Handlers.SpellHandler.HandleSpellGo);
             BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);
@@ -251,7 +262,21 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_LEVELUP_INFO, Handlers.SpellHandler.HandleLevelUpInfo);
             BridgeToLegacy(Opcode.SMSG_ATTACKSTART, Handlers.SpellHandler.HandleAttackStart);
             BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
+<<<<<<< HEAD
             BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
+=======
+            BridgeToLegacy(Opcode.SMSG_CANCEL_COMBAT, Handlers.SpellHandler.HandleCancelCombat);
+            BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
+            BridgeToLegacy(Opcode.MSG_CHANNEL_START, Handlers.SpellHandler.HandleChannelStart);
+            BridgeToLegacy(Opcode.MSG_CHANNEL_UPDATE, Handlers.SpellHandler.HandleChannelUpdate);
+
+            // Quests
+            BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_COMPLETE, Handlers.QuestHandler.HandleQuestUpdateComplete);
+            BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_ADD_KILL, Handlers.QuestHandler.HandleQuestUpdateAddKill);
+
+            // Death / corpse
+            BridgeToLegacy(Opcode.SMSG_CORPSE_RECLAIM_DELAY, Handlers.DeathHandler.HandleCorpseReclaimDelay);
+>>>>>>> cpp_physics_system
 
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);
@@ -302,6 +327,11 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.MSG_MOVE_START_TURN_RIGHT, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_STOP_TURN, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_SET_FACING, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_ROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_UNROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_RUN_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_SWIM_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_WATER_WALK, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_HEARTBEAT, Handlers.MovementHandler.HandleUpdateMovement);
         }
 
@@ -332,6 +362,7 @@ namespace WoWSharpClient.Client
         public IObservable<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> CharacterFound => _characterFound;
         public IObservable<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> AttackStateChanged => _attackStateChanged;
         public IObservable<string> AttackErrors => _attackErrors;
+        public IObservable<Unit> LogoutComplete => _logoutComplete;
 
         // --- Handlers ---
         private async Task HandleAuthChallenge(ReadOnlyMemory<byte> payload)
@@ -483,28 +514,48 @@ namespace WoWSharpClient.Client
             return Task.CompletedTask;
         }
 
+        private Task HandleCancelCombat(ReadOnlyMemory<byte> payload)
+        {
+            // SMSG_CANCEL_COMBAT: server cancelled all combat (mob evade, etc.)
+            _attackStateChanged.OnNext((false, 0, 0));
+            return Task.CompletedTask;
+        }
+
+        private Task HandleLogoutComplete(ReadOnlyMemory<byte> payload)
+        {
+            // SMSG_LOGOUT_COMPLETE: server confirmed logout. Character returns to char select.
+            Serilog.Log.Information("[WorldClient] SMSG_LOGOUT_COMPLETE received — transitioning to char select");
+            _logoutComplete.OnNext(Unit.Default);
+            return Task.CompletedTask;
+        }
+
         private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTINRANGE — server says player is out of melee range");
             _attackErrors.OnNext("Attack failed: Not in range.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_BADFACING — server says player has wrong facing");
             _attackErrors.OnNext("Attack failed: Bad facing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTSTANDING — server says player is not standing");
             _attackErrors.OnNext("Attack failed: Not standing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_DEADTARGET — server says target is dead");
             _attackErrors.OnNext("Attack failed: Target is dead.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
         {
+            Log.Warning("[COMBAT] SMSG_ATTACKSWING_CANTATTACK — server says can't attack target");
             _attackErrors.OnNext("Attack failed: Can't attack.");
             return Task.CompletedTask;
         }

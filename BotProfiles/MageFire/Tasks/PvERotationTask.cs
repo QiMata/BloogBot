@@ -1,11 +1,21 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFire.Tasks
 {
     public class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
+<<<<<<< HEAD
+=======
+        // Vanilla 1.12.1 mage base spell ranges
+        private const float FireballBaseRange = 35f;
+        private const float ScorchBaseRange = 30f;
+        private const float PyroblastBaseRange = 35f;
+        private const float FlamestrikeBaseRange = 30f;
+
+>>>>>>> cpp_physics_system
         public void Update()
         {
             if (IsKiting)
@@ -29,24 +39,24 @@ namespace MageFire.Tasks
 
         private void ExecuteRotation()
         {
-            if (Update(30))
+            if (Update(GetSpellRange(FireballBaseRange)))
                 return;
 
             bool multiple = ObjectManager.Aggressors.Count() > 1;
 
-            TryCastSpell(Combustion, 0, int.MaxValue, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryCastSpell(Combustion, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80, castOnSelf: true);
 
-            TryCastSpell(FrostNova, 0, 10, multiple, callback: FrostNovaCallback);
+            TryCastSpell(FrostNova, 0f, 10f, multiple, callback: FrostNovaCallback);
 
-            TryCastSpell(Flamestrike, 0, 30, multiple);
+            TryCastSpell(Flamestrike, 0f, GetSpellRange(FlamestrikeBaseRange), multiple);
 
-            TryCastSpell(ArcaneExplosion, 0, 10, multiple);
+            TryCastSpell(ArcaneExplosion, 0f, 10f, multiple);
 
-            TryCastSpell(Pyroblast, 0, 35, !ObjectManager.Player.IsInCombat);
+            TryCastSpell(Pyroblast, 0f, GetSpellRange(PyroblastBaseRange), !ObjectManager.Player.IsInCombat);
 
-            TryCastSpell(Scorch, 0, 29, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Scorch));
+            TryCastSpell(Scorch, 0f, GetSpellRange(ScorchBaseRange), !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Scorch));
 
-            TryCastSpell(Fireball, 0, 34);
+            TryCastSpell(Fireball, 0f, GetSpellRange(FireballBaseRange));
         }
 
         private Action FrostNovaCallback => () => StartKite(1500);

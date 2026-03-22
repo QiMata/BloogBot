@@ -27,20 +27,52 @@ public sealed class PluginCatalog
         var types = AppDomain
             .CurrentDomain.GetAssemblies()
             .SelectMany(a => SafeGetTypes(a))
-            .Where(t => t.GetCustomAttributes<ActivityPluginAttribute>().Any());
+            .Where(t => t is { IsClass: true, IsAbstract: false })
+            .Where(t => t.GetCustomAttributes<ActivityPluginAttribute>().Any())
+            .OrderBy(t => t.FullName, StringComparer.Ordinal);
 
         foreach (var t in types)
         {
-            var plugin = KernelPluginFactory.CreateFromObject(t, t.Name);
+            var plugin = TryCreatePlugin(t);
+            if (plugin is null)
+            {
+                continue;
+            }
+
             foreach (var attr in t.GetCustomAttributes<ActivityPluginAttribute>())
             {
-                map.GetOrAdd(attr.Activity).Add(plugin);
+                GetOrCreateList(map, attr.Activity).Add(plugin);
             }
         }
 
         return map.ToDictionary(
             pair => pair.Key,
             pair => (IReadOnlyList<KernelPlugin>)pair.Value.AsReadOnly());
+    }
+
+    private static KernelPlugin? TryCreatePlugin(Type pluginType)
+    {
+        var constructor = pluginType.GetConstructor(Type.EmptyTypes);
+        if (constructor is null)
+        {
+            return null;
+        }
+
+        var instance = Activator.CreateInstance(pluginType);
+        return instance is null ? null : KernelPluginFactory.CreateFromObject(instance, pluginType.Name);
+    }
+
+    private static List<KernelPlugin> GetOrCreateList(
+        IDictionary<BotActivity, List<KernelPlugin>> map,
+        BotActivity activity)
+    {
+        if (!map.TryGetValue(activity, out var list))
+        {
+            list = new List<KernelPlugin>();
+            map[activity] = list;
+        }
+
+        return list;
     }
 
     private static IEnumerable<Type> SafeGetTypes(Assembly assembly)

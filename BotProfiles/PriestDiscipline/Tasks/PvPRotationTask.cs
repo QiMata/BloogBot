@@ -1,17 +1,29 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+<<<<<<< HEAD
+=======
+using GameData.Core.Models;
+>>>>>>> cpp_physics_system
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestDiscipline.Tasks
 {
     public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
+        // Vanilla 1.12.1 priest base spell ranges
+        private const float ShadowWordPainBaseRange = 30f;
+        private const float SmiteBaseRange = 30f;
+
         public void Update()
         {
             if (!EnsureTarget())
                 return;
 
+<<<<<<< HEAD
             if (Update(30))
+=======
+            if (Update(GetSpellRange(SmiteBaseRange)))
+>>>>>>> cpp_physics_system
                 return;
 
             PerformCombatRotation();
@@ -35,7 +47,11 @@ namespace PriestDiscipline.Tasks
             TryCastSpell(InnerFire, condition: !player.HasBuff(InnerFire), castOnSelf: true);
 
             // Psychic Scream when low HP or overwhelmed
+<<<<<<< HEAD
             TryCastSpell(PsychicScream, 0, 8, player.HealthPercent < 40 || ObjectManager.Aggressors.Count() > 2);
+=======
+            TryCastSpell(PsychicScream, 0f, 8f, player.HealthPercent < 40 || ObjectManager.Aggressors.Count() > 2);
+>>>>>>> cpp_physics_system
 
             // Heal self when needed
             TryCastSpell(Heal, condition: player.HealthPercent < 50, castOnSelf: true);
@@ -44,10 +60,17 @@ namespace PriestDiscipline.Tasks
             TryCastSpell(DispelMagic, condition: player.HasMagicDebuff, castOnSelf: true);
 
             // DoT on target
+<<<<<<< HEAD
             TryCastSpell(ShadowWordPain, 0, 29, !target.HasDebuff(ShadowWordPain));
 
             // Damage spells
             TryCastSpell(Smite, 0, 29);
+=======
+            TryCastSpell(ShadowWordPain, 0f, GetSpellRange(ShadowWordPainBaseRange), !target.HasDebuff(ShadowWordPain));
+
+            // Damage spells
+            TryCastSpell(Smite, 0f, GetSpellRange(SmiteBaseRange));
+>>>>>>> cpp_physics_system
 
             // Wand fallback
             if (player.ManaPercent < 10)

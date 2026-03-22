@@ -6,6 +6,7 @@ using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
@@ -15,9 +16,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using WoWSharpClient.Client;
+using WoWSharpClient.Frames;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
 using WoWSharpClient.Networking.ClientComponents.I;
+<<<<<<< HEAD
+=======
+using WoWSharpClient.Networking.ClientComponents.Models;
+>>>>>>> cpp_physics_system
 using WoWSharpClient.Parsers;
 using WoWSharpClient.Screens;
 using WoWSharpClient.Utils;
@@ -25,9 +31,10 @@ using static GameData.Core.Enums.UpdateFields;
 using Enum = System.Enum;
 using Timer = System.Timers.Timer;
 
+
 namespace WoWSharpClient
 {
-    public class WoWSharpObjectManager : IObjectManager
+    public partial class WoWSharpObjectManager : IObjectManager
     {
         private static WoWSharpObjectManager _instance;
 
@@ -41,25 +48,35 @@ namespace WoWSharpClient
             }
         }
 
+
         private ILogger<WoWSharpObjectManager> _logger;
 
         // Wrapper client for both auth and world transactions
+
+
+        // Wrapper client for both auth and world transactions
         private WoWClient _woWClient;
+
         private PathfindingClient _pathfindingClient;
 
         // Movement controller - handles all movement logic
         private MovementController _movementController;
+        private int _gameLoopReentrancyGuard; // 0 = idle, 1 = running
+
 
         private LoginScreen _loginScreen;
+
         private RealmSelectScreen _realmScreen;
+
         private CharacterSelectScreen _characterSelectScreen;
+
 
         private Timer _gameLoopTimer;
 
-        private long _lastPingMs = 0;
-        private ControlBits _controlBits = ControlBits.Nothing;
-        public bool IsPlayerMoving => !Player.MovementFlags.Equals(MovementFlags.MOVEFLAG_NONE);
 
+        private long _lastPingMs = 0;
+
+<<<<<<< HEAD
         private bool _isInControl = false;
         private bool _isBeingTeleported = true;
         private ulong _currentTargetGuid;
@@ -69,20 +86,19 @@ namespace WoWSharpClient
         private DateTime _sniffStartTime;
 
         private TimeSpan _lastPositionUpdate = TimeSpan.Zero;
+=======
+>>>>>>> cpp_physics_system
         private WorldTimeTracker _worldTimeTracker;
 
+
         private readonly SemaphoreSlim _updateSemaphore = new(1, 1);
+
         private Task _backgroundUpdateTask;
+
         private CancellationTokenSource _updateCancellation;
 
         // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
-        private Func<uint, bool> _spellCooldownChecker;
 
-        /// <summary>
-        /// Set a delegate that checks if a spell ID is off cooldown (returns true if ready).
-        /// Wire this to SpellCastingNetworkClientComponent.CanCastSpell().
-        /// </summary>
-        public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellCooldownChecker = checker;
 
         // Optional agent factory accessor — set by BackgroundBotWorker for LootTargetAsync
         private Func<IAgentFactory> _agentFactoryAccessor;
@@ -90,6 +106,7 @@ namespace WoWSharpClient
         public void SetAgentFactoryAccessor(Func<IAgentFactory> accessor) => _agentFactoryAccessor = accessor;
 
         private WoWSharpObjectManager() { }
+
 
         public void Initialize(
             WoWClient wowClient,
@@ -99,6 +116,7 @@ namespace WoWSharpClient
         {
             WoWSharpEventEmitter.Instance.Reset();
             lock (_objectsLock) _objects.Clear();
+            _activePet = null;
             _pendingUpdates.Clear();
 
             _logger = logger;
@@ -128,10 +146,15 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnSetTimeSpeed += EventEmitter_OnSetTimeSpeed;
             WoWSharpEventEmitter.Instance.OnSpellGo += EventEmitter_OnSpellGo;
 
+            // Restore player control when server-driven spline completes
+            Splines.Instance.OnSplineCompleted += OnSplineCompleted;
+
             _loginScreen = new(_woWClient);
             _realmScreen = new(_woWClient);
             _characterSelectScreen = new(_woWClient);
+            LootFrame = new NetworkLootFrame(() => _agentFactoryAccessor?.Invoke()?.LootingAgent);
         }
+
         private void InitializeMovementController()
         {
             // Initialize movement controller when we have a player
@@ -144,8 +167,8 @@ namespace WoWSharpClient
                 );
             }
         }
-        private void EventEmitter_OnSpellGo(object? sender, EventArgs e) { }
 
+<<<<<<< HEAD
         private void EventEmitter_OnClientControlUpdate(object? sender, EventArgs e)
         {
             _isInControl = true;
@@ -160,6 +183,8 @@ namespace WoWSharpClient
         {
             _ = _woWClient.QueryTimeAsync();
         }
+=======
+>>>>>>> cpp_physics_system
 
         /// <summary>
         /// Optional callback invoked each game loop tick after movement/physics.
@@ -168,16 +193,26 @@ namespace WoWSharpClient
         /// </summary>
         public Action<float>? OnBotTick { get; set; }
 
+
         public bool IsGameLoopRunning { get; private set; }
 
         /// <summary>
-        /// Starts the fixed-timestep game loop (50ms / ~20 Hz).
-        /// Tick order: spline updates → ping heartbeat → physics/movement → bot AI.
+        /// Starts the game loop (~20 Hz timer). Physics runs at a fixed 50ms sub-step
+        /// regardless of timer jitter. Prevents rubber banding and terrain sinking from
+        /// variable delta times when System.Timers.Timer fires late under thread pool pressure.
+        /// Tick order: spline updates → ping heartbeat → physics sub-steps → bot AI.
         /// Object updates are processed on a separate background thread.
         /// </summary>
         public void StartGameLoop()
         {
             if (IsGameLoopRunning) return;
+
+            // Seed time tracking so the first tick doesn't see a huge delta from TimeSpan.Zero.
+            if (_worldTimeTracker != null && _lastPositionUpdate == TimeSpan.Zero)
+            {
+                _lastPositionUpdate = _worldTimeTracker.NowMS;
+                _physicsTimeAccumulator = 0f;
+            }
 
             _gameLoopTimer = new Timer(50);
             _gameLoopTimer.Elapsed += OnGameLoopTick;
@@ -211,8 +246,26 @@ namespace WoWSharpClient
             Log.Information("[GameLoop] Stopped");
         }
 
+
+        // Fixed physics timestep: 50ms (matches timer interval). When the timer fires late,
+        // physics runs multiple sub-steps at this fixed dt instead of one large step.
+        // This prevents rubber banding (large single-frame jumps) and sinking (over-integrated gravity).
+        private const float PHYSICS_FIXED_DT = 0.050f;
+        // Maximum wall-clock delta to process per tick. Prevents runaway catch-up after long stalls
+        // (e.g. GC pause, thread pool starvation). Caps at 4 sub-steps (200ms).
+        private const float PHYSICS_MAX_DT = 0.200f;
+        // Accumulated fractional time from previous tick, carried forward for sub-stepping.
+        private float _physicsTimeAccumulator = 0f;
+        private int _substepZeroCount = 0;
+
         private void OnGameLoopTick(object? sender, ElapsedEventArgs e)
         {
+            // Reentrancy guard: System.Timers.Timer fires on ThreadPool threads.
+            // If the physics IPC takes >50ms, the next tick fires concurrently.
+            // Without this guard, two ticks read the same starting position and the
+            // second overwrites the first's result — causing position oscillation.
+            if (Interlocked.CompareExchange(ref _gameLoopReentrancyGuard, 1, 0) != 0)
+                return;
             try
             {
                 var now = _worldTimeTracker.NowMS;
@@ -225,10 +278,47 @@ namespace WoWSharpClient
                 // 2. Handle ping heartbeat
                 HandlePingHeartbeat((long)now.TotalMilliseconds);
 
-                // 3. Update player movement if we're in control
-                if (_isInControl && !_isBeingTeleported && Player != null && _movementController != null)
+                // 3. Update player movement if we're in control.
+                // Allow physics during teleport if ground snap is pending — the bot needs gravity
+                // to fall from teleport Z to the actual ground (e.g. teleported above a rooftop).
+                var allowPhysics = _isInControl && Player != null && _movementController != null
+                    && (!_isBeingTeleported || _movementController.NeedsGroundSnap);
+                if (allowPhysics)
                 {
-                    _movementController.Update(deltaSec, (uint)now.TotalMilliseconds);
+                    // Sub-step physics at a fixed timestep to prevent rubber banding from timer jitter.
+                    // System.Timers.Timer is thread-pool based — actual intervals can be 50-500ms.
+                    // Without sub-stepping, a 200ms delta causes a single large physics step that
+                    // moves the character 4x further than expected, then the server rubber-bands.
+                    var clampedDelta = MathF.Min(deltaSec, PHYSICS_MAX_DT);
+                    _physicsTimeAccumulator += clampedDelta;
+
+                    var gameTimeMs = (uint)now.TotalMilliseconds;
+                    int subSteps = 0;
+                    while (_physicsTimeAccumulator >= PHYSICS_FIXED_DT)
+                    {
+                        var preX = Player.Position.X;
+                        var preY = Player.Position.Y;
+                        _movementController.Update(PHYSICS_FIXED_DT, gameTimeMs);
+                        var postX = Player.Position.X;
+                        var postY = Player.Position.Y;
+                        var moved = MathF.Abs(postX - preX) >= 0.001f || MathF.Abs(postY - preY) >= 0.001f;
+                        if (!moved && (Player.MovementFlags & GameData.Core.Enums.MovementFlags.MOVEFLAG_FORWARD) != 0)
+                        {
+                            _substepZeroCount++;
+                            if (_substepZeroCount <= 3 || _substepZeroCount % 200 == 0)
+                                Log.Warning("[SubStep] Zero-delta sub-step {SubStep}/{Total}: pre=({PreX:F3},{PreY:F3}) post=({PostX:F3},{PostY:F3}) accum={Accum:F4}",
+                                    subSteps, (int)(_physicsTimeAccumulator / PHYSICS_FIXED_DT) + subSteps + 1,
+                                    preX, preY, postX, postY, _physicsTimeAccumulator + PHYSICS_FIXED_DT);
+                        }
+                        _physicsTimeAccumulator -= PHYSICS_FIXED_DT;
+                        // NOTE: Do NOT advance gameTimeMs between substeps. The virtual time
+                        // increment caused packet timestamps to exceed real clock time, and on
+                        // the next timer tick (uint)now.TotalMilliseconds would be LESS than the
+                        // inflated gameTimeMs — the server detected backward timestamps as time
+                        // manipulation and rubber-banded the player, causing ~50% of frames to
+                        // have zero displacement. All substeps share the same real timestamp.
+                        subSteps++;
+                    }
                 }
 
                 // 4. Bot AI callback
@@ -240,7 +330,12 @@ namespace WoWSharpClient
             {
                 Log.Error(ex, "[GameLoop] Tick error");
             }
+            finally
+            {
+                Interlocked.Exchange(ref _gameLoopReentrancyGuard, 0);
+            }
         }
+
 
         private void HandlePingHeartbeat(long now)
         {
@@ -254,11 +349,8 @@ namespace WoWSharpClient
         }
 
         // ============= INPUT HANDLERS =============
-        public void StartMovement(ControlBits bits)
-        {
-            var player = (WoWLocalPlayer)Player;
-            if (player == null) return;
 
+<<<<<<< HEAD
             // Convert control bits to movement flags and update player state
             MovementFlags flags = ConvertControlBitsToFlags(bits, player.MovementFlags, true);
             player.MovementFlags = flags;
@@ -605,10 +697,17 @@ namespace WoWSharpClient
             _movementController = null;
             Log.Information("[WorldSession] Session ended, game loop stopped");
         }
+=======
+>>>>>>> cpp_physics_system
 
         public bool HasEnteredWorld { get; internal set; }
+
+        internal readonly object SpellLock = new();
+
         public List<Spell> Spells { get; internal set; } = [];
+
         public List<Cooldown> Cooldowns { get; internal set; } = [];
+
 
         private HighGuid _playerGuid = new(new byte[4], new byte[4]);
 
@@ -622,88 +721,103 @@ namespace WoWSharpClient
             }
         }
 
+
         public IWoWEventHandler EventHandler => WoWSharpEventEmitter.Instance;
+
 
         public IWoWLocalPlayer Player { get; set; } =
             new WoWLocalPlayer(new HighGuid(new byte[4], new byte[4]));
 
-        public IWoWLocalPet Pet => null;
 
-        private static readonly List<WoWObject> _objects = [];
-        private static readonly object _objectsLock = new();
-        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _systemMessages = new();
+        private WoWLocalPet _activePet;
+
+        public IWoWLocalPet Pet => _activePet;
+
+        // Pet action bar and spell IDs populated from SMSG_PET_SPELLS
+        private readonly List<(uint SpellId, byte ActionType)> _petActionBar = [];
+        private readonly List<uint> _petSpellIds = [];
+        private readonly object _petSpellLock = new();
 
         /// <summary>
-        /// Returns an object by its full GUID, or null if not found.
-        /// Checks the local player first, then the objects list.
+        /// All pet spell IDs (action bar + additional spells) from SMSG_PET_SPELLS.
         /// </summary>
-        public WoWObject GetObjectByGuid(ulong guid)
+        internal IReadOnlyList<uint> PetSpellIds
         {
-            if (guid == PlayerGuid.FullGuid)
-                return Player as WoWObject;
-            lock (_objectsLock) return _objects.FirstOrDefault(o => o.Guid == guid);
+            get { lock (_petSpellLock) return _petSpellIds.ToArray(); }
         }
 
         /// <summary>
-        /// Returns a snapshot of the objects list. Safe to enumerate from any thread
-        /// while ProcessUpdatesAsync modifies the underlying list.
+        /// Called by PetHandler when SMSG_PET_SPELLS is received.
         /// </summary>
-        public IEnumerable<IWoWObject> Objects
+        internal void SetPetSpells(ulong petGuid, List<(uint SpellId, byte ActionType)> actionBar, List<uint> spells)
         {
-            get { lock (_objectsLock) return _objects.ToArray(); }
-        }
-
-        /// <summary>
-        /// Units that are alive and targeting the player or party members.
-        /// In WoWSharpClient, UnitReaction is not reliably set from server packets,
-        /// so we use target-based detection instead of faction-based.
-        /// </summary>
-        public IEnumerable<IWoWUnit> Hostiles
-        {
-            get
+            lock (_petSpellLock)
             {
-                var playerGuid = PlayerGuid.FullGuid;
-                if (playerGuid == 0) return [];
-                return Objects.OfType<IWoWUnit>()
-                    .Where(u => u.Health > 0 && u.Guid != playerGuid)
-                    .Where(u => u.TargetGuid == playerGuid || u.IsInCombat);
+                _petActionBar.Clear();
+                _petActionBar.AddRange(actionBar);
+                _petSpellIds.Clear();
+                // Merge action bar spell IDs and additional spells
+                foreach (var entry in actionBar)
+                    _petSpellIds.Add(entry.SpellId);
+                foreach (var id in spells)
+                {
+                    if (!_petSpellIds.Contains(id))
+                        _petSpellIds.Add(id);
+                }
             }
         }
 
         /// <summary>
-        /// Units actively in combat that are targeting the player or party.
+        /// Called by PetHandler when pet is dismissed (petGuid=0 or empty packet).
         /// </summary>
-        public IEnumerable<IWoWUnit> Aggressors =>
-            Hostiles.Where(u => u.IsInCombat || u.IsFleeing);
-
-        /// <summary>Aggressors that have mana (likely casters).</summary>
-        public IEnumerable<IWoWUnit> CasterAggressors =>
-            Aggressors.Where(u => u.ManaPercent > 0);
-
-        /// <summary>Aggressors that have no mana (melee).</summary>
-        public IEnumerable<IWoWUnit> MeleeAggressors =>
-            Aggressors.Where(u => u.ManaPercent <= 0);
+        internal void ClearPetSpells()
+        {
+            lock (_petSpellLock)
+            {
+                _petActionBar.Clear();
+                _petSpellIds.Clear();
+            }
+        }
 
         /// <summary>
-        /// Drains all pending system messages (CHAT_MSG_SYSTEM) received since last call.
+        /// Sends a CMSG_PET_ACTION packet. Called by WoWLocalPet methods.
         /// </summary>
-        public List<string> DrainSystemMessages()
+        internal void SendPetAction(byte[] payload)
         {
-            var messages = new List<string>();
-            while (_systemMessages.TryDequeue(out var msg))
-                messages.Add(msg);
-            return messages;
+            if (_woWClient == null)
+            {
+                Log.Warning("[PET] Cannot send CMSG_PET_ACTION — no world client connected");
+                return;
+            }
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_PET_ACTION, payload)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Log.Error(t.Exception, "[PET] Failed to send CMSG_PET_ACTION");
+                    else
+                        Log.Debug("[PET] CMSG_PET_ACTION sent ({Len} bytes)", payload.Length);
+                });
         }
+
         public ILoginScreen LoginScreen => _loginScreen;
+
         public IRealmSelectScreen RealmSelectScreen => _realmScreen;
+
         public ICharacterSelectScreen CharacterSelectScreen => _characterSelectScreen;
+
 
         public void EnterWorld(ulong characterGuid)
         {
             // Use the property setter (not the backing field) so it also
             // recreates the Player object with the correct GUID.
+<<<<<<< HEAD
             // Set PlayerGuid BEFORE HasEnteredWorld so snapshots never see
             // HasEnteredWorld=true with a stale zero-GUID player.
+=======
+            // HasEnteredWorld intentionally flips true here so the login
+            // sequence does not spam repeated CMSG_PLAYER_LOGIN packets while
+            // we wait for SMSG_LOGIN_VERIFY_WORLD / object hydration.
+>>>>>>> cpp_physics_system
             PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
 
@@ -712,20 +826,89 @@ namespace WoWSharpClient
             InitializeMovementController();
         }
 
-        private readonly Queue<ObjectStateUpdate> _pendingUpdates = new();
-
-        public void QueueUpdate(ObjectStateUpdate update)
+        public void ResetWorldSessionState(string source, bool preservePlayerGuid = true)
         {
-            _pendingUpdates.Enqueue(update);
+            StopGameLoop();
+            HasEnteredWorld = false;
+            _isInControl = false;
+            _isBeingTeleported = false;
+            _movementController = null;
+
+            _pendingUpdates.Clear();
+            lock (_objectsLock)
+            {
+                _objects.Clear();
+            }
+            _activePet = null;
+
+            if (!preservePlayerGuid)
+            {
+                _playerGuid = new HighGuid(new byte[4], new byte[4]);
+            }
+
+            Player = new WoWLocalPlayer(_playerGuid);
+
+            Log.Information("[WorldSession] Reset state from {Source}; preservePlayerGuid={Preserve}; guid=0x{Guid:X}",
+                source, preservePlayerGuid, _playerGuid.FullGuid);
         }
 
-        public async Task ProcessUpdatesAsync(CancellationToken token)
+
+        /// <summary>
+        /// Logout and re-enter world with the same character. Waits for
+        /// SMSG_LOGOUT_COMPLETE then sends CMSG_PLAYER_LOGIN. Returns true
+        /// if the full cycle completed within the timeout.
+        /// </summary>
+        public async Task<bool> LogoutAndReenterWorldAsync(TimeSpan timeout)
         {
-            while (!token.IsCancellationRequested)
+            if (_woWClient == null) return false;
+
+            var characterGuid = PlayerGuid.FullGuid;
+            if (characterGuid == 0)
             {
-                await _updateSemaphore.WaitAsync(token);
-                try
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: no character GUID");
+                return false;
+            }
+
+            var worldClient = _woWClient.WorldClient;
+            if (worldClient == null)
+            {
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: no world client");
+                return false;
+            }
+
+            // Subscribe to SMSG_LOGOUT_COMPLETE before sending request.
+            var logoutTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var logoutSub = worldClient.LogoutComplete.Subscribe(_ => logoutTcs.TrySetResult(true));
+
+            // Send CMSG_LOGOUT_REQUEST.
+            HasEnteredWorld = false;
+            Logout();
+            Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: sent CMSG_LOGOUT_REQUEST, waiting for SMSG_LOGOUT_COMPLETE...");
+
+            // Wait for server to confirm logout.
+            var logoutTask = logoutTcs.Task;
+            if (await Task.WhenAny(logoutTask, Task.Delay(timeout)) != logoutTask)
+            {
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: timed out waiting for SMSG_LOGOUT_COMPLETE");
+                HasEnteredWorld = true; // restore state
+                return false;
+            }
+
+            Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: logout confirmed, re-entering world with GUID 0x{Guid:X}", characterGuid);
+
+            // Brief pause to let server finalize the logout.
+            await Task.Delay(1000);
+
+            // Re-enter world with the same character.
+            EnterWorld(characterGuid);
+
+            // Wait for SMSG_LOGIN_VERIFY_WORLD (HasEnteredWorld will be set by the handler).
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (HasEnteredWorld && Player?.Position != null)
                 {
+<<<<<<< HEAD
                     while (_pendingUpdates.Count > 0)
                     {
                         var update = _pendingUpdates.Dequeue();
@@ -835,16 +1018,20 @@ namespace WoWSharpClient
                                 update.Operation, update.Guid);
                         }
                     }
+=======
+                    Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: re-entered world at ({X:F1},{Y:F1},{Z:F1})",
+                        Player.Position.X, Player.Position.Y, Player.Position.Z);
+                    return true;
+>>>>>>> cpp_physics_system
                 }
-                finally
-                {
-                    _updateSemaphore.Release();
-                }
-
-                await Task.Delay(10, token);
+                await Task.Delay(200);
             }
+
+            Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: timed out waiting for world re-entry");
+            return false;
         }
 
+<<<<<<< HEAD
         private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite)
         {
             unit.MovementFlags = data.MovementFlags;
@@ -2092,33 +2279,48 @@ namespace WoWSharpClient
         }
 
         #region NotImplemented
+=======
+>>>>>>> cpp_physics_system
 
         public string ZoneText { get; private set; }
 
+
         public string MinimapZoneText { get; private set; }
+
 
         public string ServerName { get; private set; }
 
+
         public IGossipFrame GossipFrame { get; private set; }
+
 
         public ILootFrame LootFrame { get; private set; }
 
+
         public IMerchantFrame MerchantFrame { get; private set; }
+
 
         public ICraftFrame CraftFrame { get; private set; }
 
+
         public IQuestFrame QuestFrame { get; private set; }
+
 
         public IQuestGreetingFrame QuestGreetingFrame { get; private set; }
 
+
         public ITaxiFrame TaxiFrame { get; private set; }
+
 
         public ITradeFrame TradeFrame { get; private set; }
 
+
         public ITrainerFrame TrainerFrame { get; private set; }
+
 
         public ITalentFrame TalentFrame { get; private set; }
 
+<<<<<<< HEAD
         public bool IsSpellReady(string spellName)
         {
             // Resolve spell name to highest-rank ID the player knows
@@ -2420,6 +2622,8 @@ namespace WoWSharpClient
             // CMSG_DESTROYITEM: bag(1) + slot(1) + count(1) + reserved(3) = 6 bytes
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_DESTROYITEM, [srcBag, srcSlot, count, 0, 0, 0]);
         }
+=======
+>>>>>>> cpp_physics_system
 
         public void Logout()
         {
@@ -2427,21 +2631,6 @@ namespace WoWSharpClient
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_LOGOUT_REQUEST, []);
         }
 
-        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot) { }
-
-        public void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null)
-        {
-            if (_woWClient == null) return;
-            // Map logical bag index (0=backpack, 1-4=extra bags) to WoW packet bag/slot values.
-            // For backpack (0xFF): slot uses ABSOLUTE inventory index (23 = INVENTORY_SLOT_ITEM_START).
-            // For extra bags (19-22): slot is relative within the bag container.
-            byte srcBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
-            byte srcSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
-            // CMSG_AUTOEQUIP_ITEM: srcBag(1) + srcSlot(1) = 2 bytes
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [srcBag, srcSlot]);
-        }
-
-        public void UnequipItem(EquipSlot slot) { }
 
         public void AcceptResurrect()
         {
@@ -2453,39 +2642,85 @@ namespace WoWSharpClient
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_RESURRECT_RESPONSE, ms.ToArray());
         }
 
-        public IWoWPlayer PartyLeader => null;
 
-        public ulong PartyLeaderGuid { get; set; }
+        public IWoWPlayer PartyLeader
+        {
+            get
+            {
+                var leaderGuid = PartyLeaderGuid;
+                if (leaderGuid == 0) return null;
+                lock (_objectsLock)
+                {
+                    return _objects.OfType<IWoWPlayer>().FirstOrDefault(p => p.Guid == leaderGuid);
+                }
+            }
+        }
 
-        public ulong Party1Guid => 0;
 
-        public ulong Party2Guid => 0;
+        public ulong PartyLeaderGuid
+        {
+            get
+            {
+                var factory = _agentFactoryAccessor?.Invoke();
+                return factory?.PartyAgent?.LeaderGuid ?? _partyLeaderGuidOverride;
+            }
+            set => _partyLeaderGuidOverride = value;
+        }
+        private ulong _partyLeaderGuidOverride;
 
-        public ulong Party3Guid => 0;
 
-        public ulong Party4Guid => 0;
+        public ulong Party1Guid => GetPartyMemberGuid(0);
+
+
+        public ulong Party2Guid => GetPartyMemberGuid(1);
+
+
+        public ulong Party3Guid => GetPartyMemberGuid(2);
+
+
+        public ulong Party4Guid => GetPartyMemberGuid(3);
+
+        private ulong GetPartyMemberGuid(int index)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var members = factory?.PartyAgent?.GetGroupMembers();
+            if (members == null || index >= members.Count) return 0;
+            return members[index].Guid;
+        }
+
 
         public ulong StarTargetGuid => 0;
 
+
         public ulong CircleTargetGuid => 0;
+
 
         public ulong DiamondTargetGuid => 0;
 
+
         public ulong TriangleTargetGuid => 0;
+
 
         public ulong MoonTargetGuid => 0;
 
+
         public ulong SquareTargetGuid => 0;
+
 
         public ulong CrossTargetGuid => 0;
 
+
         public ulong SkullTargetGuid => 0;
+
 
         public string GlueDialogText => string.Empty;
 
+
         public LoginStates LoginState => LoginStates.login;
 
+
         public void AntiAfk() { }
+
 
         public IWoWUnit GetTarget(IWoWUnit woWUnit)
         {
@@ -2504,16 +2739,49 @@ namespace WoWSharpClient
             }
         }
 
-        public sbyte GetTalentRank(uint tabIndex, uint talentIndex)
+
+        // Cursor state for inventory item pickup (equipment slots)
+        private (byte Bag, byte Slot)? _cursorInventoryItem;
+
+        public void PickupInventoryItem(uint inventorySlot)
         {
-            return 0;
+            // inventorySlot is the absolute equipment slot index (0=Head, 17=Ranged, etc.)
+            _cursorInventoryItem = (0xFF, (byte)inventorySlot);
         }
 
-        public void PickupInventoryItem(uint inventorySlot) { }
 
-        public void DeleteCursorItem() { }
+        public void DeleteCursorItem()
+        {
+            // Delete whatever is currently on the cursor
+            if (_cursorItem != null)
+            {
+                var src = _cursorItem.Value;
+                _cursorItem = null;
+                var factory = _agentFactoryAccessor?.Invoke();
+                _ = factory?.InventoryAgent?.DestroyItemAsync(src.Bag, src.Slot, (uint)src.Quantity);
+            }
+            else if (_cursorInventoryItem != null)
+            {
+                var src = _cursorInventoryItem.Value;
+                _cursorInventoryItem = null;
+                var factory = _agentFactoryAccessor?.Invoke();
+                _ = factory?.InventoryAgent?.DestroyItemAsync(src.Bag, src.Slot);
+            }
+        }
 
-        public void EquipCursorItem() { }
+
+        public void EquipCursorItem()
+        {
+            // Equip whatever is on the cursor from a bag slot
+            if (_cursorItem != null)
+            {
+                var src = _cursorItem.Value;
+                _cursorItem = null;
+                if (_woWClient != null)
+                    _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [src.Bag, src.Slot]);
+            }
+        }
+
 
         public void ConfirmItemEquip() { }
 
@@ -2521,93 +2789,203 @@ namespace WoWSharpClient
         /// Send MSG_MOVE_WORLDPORT_ACK to acknowledge a cross-map transfer.
         /// Called when SMSG_TRANSFER_PENDING is received.
         /// </summary>
-        public void SendWorldportAck()
-        {
-            if (_woWClient == null) return;
-            Serilog.Log.Information("[WorldportAck] Sending MSG_MOVE_WORLDPORT_ACK");
-            _ = _woWClient.SendMSGPackedAsync(Opcode.MSG_MOVE_WORLDPORT_ACK, []);
-        }
 
-        public void SendChatMessage(string chatMessage)
-        {
-            if (_woWClient == null) return;
-            // SAY chat requires a faction language, not Universal (server rejects language 0 for chat type 0)
-            var language = Player?.Race switch
-            {
-                Race.Orc or Race.Undead or Race.Tauren or Race.Troll => Language.Orcish,
-                _ => Language.Common,
-            };
-            _ = _woWClient.SendChatMessageAsync(ChatMsg.CHAT_MSG_SAY, language, "", chatMessage);
-        }
-
-        /// <summary>
-        /// Sends a GM command (e.g. ".go xyz ...") and waits for the server's system message response.
-        /// Returns all system messages received within the timeout window.
-        /// </summary>
-        public async Task<List<string>> SendGmCommandAsync(string command, int timeoutMs = 2000)
-        {
-            // Drain any stale messages
-            DrainSystemMessages();
-
-            SendChatMessage(command);
-
-            // Wait for server response
-            await Task.Delay(timeoutMs);
-
-            return DrainSystemMessages();
-        }
 
         public void SetRaidTarget(IWoWUnit target, TargetMarker v) { }
 
+
         public void JoinBattleGroundQueue() { }
+
 
         public void ResetInstances() { }
 
+
         public void PickupMacro(uint v) { }
+
 
         public void PlaceAction(uint v) { }
 
-        public void InviteToGroup(ulong guid) { }
 
-        public void InviteByName(string characterName) { }
+        public void InviteToGroup(ulong guid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var member = factory?.PartyAgent?.GetGroupMember(guid);
+            if (member != null)
+                _ = factory!.PartyAgent.InvitePlayerAsync(member.Name);
+        }
 
-        public void KickPlayer(ulong guid) { }
 
-        public void AcceptGroupInvite() { }
+        public void InviteByName(string characterName)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.InvitePlayerAsync(characterName);
+        }
 
-        public void DeclineGroupInvite() { }
 
-        public void LeaveGroup() { }
+        public void KickPlayer(ulong guid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.KickPlayerAsync(guid);
+        }
 
-        public void DisbandGroup() { }
 
-        public void ConvertToRaid() { }
+        public void AcceptGroupInvite()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.AcceptInviteAsync();
+        }
+
+
+        public void DeclineGroupInvite()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.DeclineInviteAsync();
+        }
+
+
+        public void LeaveGroup()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.LeaveGroupAsync();
+        }
+
+
+        public void DisbandGroup()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.DisbandGroupAsync();
+        }
+
+
+        public void ConvertToRaid()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.ConvertToRaidAsync();
+        }
+
+        public void ChangeRaidSubgroup(string playerName, byte subGroup)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.ChangeSubGroupAsync(playerName, subGroup);
+        }
 
         public bool HasPendingGroupInvite()
         {
-            return false;
+            var factory = _agentFactoryAccessor?.Invoke();
+            return factory?.PartyAgent?.HasPendingInvite ?? false;
         }
+
 
         public bool HasLootRollWindow(int itemId)
         {
-            return false;
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return false;
+            var availableLoot = factory.LootingAgent.GetAvailableLoot();
+            return availableLoot.Any(s => s.ItemId == (uint)itemId && s.RequiresRoll);
         }
 
-        public void LootPass(int itemId) { }
 
-        public void LootRollGreed(int itemId) { }
+        public void LootPass(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Pass);
+        }
 
-        public void LootRollNeed(int itemId) { }
 
-        public void AssignLoot(int itemId, ulong playerGuid) { }
+        public void LootRollGreed(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Greed);
+        }
 
-        public void SetGroupLoot(GroupLootSetting setting) { }
 
-        public void PromoteLootManager(ulong playerGuid) { }
+        public void LootRollNeed(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Need);
+        }
 
-        public void PromoteAssistant(ulong playerGuid) { }
 
-        public void PromoteLeader(ulong playerGuid) { }
+        public void AssignLoot(int itemId, ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return;
+            var slot = factory.LootingAgent.GetAvailableLoot()
+                .FirstOrDefault(s => s.ItemId == (uint)itemId);
+            if (slot != null)
+                _ = factory.LootingAgent.AssignMasterLootAsync(slot.SlotIndex, playerGuid);
+        }
+
+
+        private (ulong LootGuid, byte Slot) FindPendingRollSlot(int itemId)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return (0, 0);
+            var slot = factory.LootingAgent.GetAvailableLoot()
+                .FirstOrDefault(s => s.ItemId == (uint)itemId && s.RequiresRoll && s.RollGuid.HasValue);
+            if (slot == null) return (0, 0);
+            return (slot.RollGuid!.Value, slot.SlotIndex);
+        }
+
+
+        public void SetGroupLoot(GroupLootSetting setting)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+            {
+                // GroupLootSetting maps to master loot quality thresholds
+                var threshold = setting switch
+                {
+                    GroupLootSetting.MasterLooterCommon => ItemQuality.Common,
+                    GroupLootSetting.MasterLooterRare => ItemQuality.Rare,
+                    GroupLootSetting.MasterLooterEpic => ItemQuality.Epic,
+                    GroupLootSetting.MasterLooterLegendary => ItemQuality.Legendary,
+                    _ => ItemQuality.Uncommon
+                };
+                _ = factory.PartyAgent.SetLootMethodAsync(LootMethod.MasterLooter, lootThreshold: threshold);
+            }
+        }
+
+
+        public void PromoteLootManager(ulong playerGuid)
+        {
+            // Loot manager is set via SetLootMethodAsync with MasterLoot + lootMasterGuid
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.SetLootMethodAsync(LootMethod.MasterLooter, playerGuid);
+        }
+
+
+        public void PromoteAssistant(ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var member = factory?.PartyAgent?.GetGroupMember(playerGuid);
+            if (member != null)
+                _ = factory!.PartyAgent.PromoteToAssistantAsync(member.Name);
+        }
+
+
+        public void PromoteLeader(ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.PromoteToLeaderAsync(playerGuid);
+        }
+
 
         public void DoEmote(Emote emote)
         {
@@ -2615,6 +2993,7 @@ namespace WoWSharpClient
             var packet = BitConverter.GetBytes((uint)emote);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_EMOTE, packet);
         }
+
 
         public void DoEmote(TextEmote emote)
         {
@@ -2628,6 +3007,7 @@ namespace WoWSharpClient
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_TEXT_EMOTE, ms.ToArray());
         }
 
+<<<<<<< HEAD
         public uint GetManaCost(string spellName)
         {
             // Spell cost data not available from server packets in vanilla 1.12.1
@@ -2687,11 +3067,15 @@ namespace WoWSharpClient
         {
             _movementController?.SetPath(path);
         }
+=======
+>>>>>>> cpp_physics_system
 
         public void RefreshSkills() { }
 
+
         public void RefreshSpells() { }
 
+<<<<<<< HEAD
         public void ReleaseSpirit()
         {
             if (_woWClient == null) return;
@@ -3013,6 +3397,8 @@ namespace WoWSharpClient
             Update,
             Remove,
         }
+=======
+>>>>>>> cpp_physics_system
 
         public record ObjectStateUpdate(
             ulong Guid,

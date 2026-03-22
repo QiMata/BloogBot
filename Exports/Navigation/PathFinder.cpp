@@ -26,9 +26,366 @@
 
 #include "MoveMap.h"
 #include "PathFinder.h"
+#include "Navigation.h"
 
-#include <iostream>
-#include <fstream>
+#include <cmath>
+#include <chrono>
+
+extern "C" uint32_t ValidateWalkableSegment(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float radius,
+    float height,
+    float* resolvedEndZ,
+    float* supportDelta,
+    float* travelFraction);
+
+extern "C" float GetGroundZ(
+    uint32_t mapId,
+    float x,
+    float y,
+    float z,
+    float maxSearchDist);
+
+namespace
+{
+    constexpr float PathValidationAgentRadius = 0.6f;
+    constexpr float PathValidationAgentHeight = 2.0f;
+    constexpr uint32_t SegmentValidationClear = 0;
+    constexpr uint32_t SegmentValidationMissingSupport = 2;
+    constexpr int MaxSegmentRefinementDepth = 3;
+    constexpr int MaxRefinementTotalCalls = 500;
+    constexpr float RedundantPointDistanceThreshold = 0.75f;
+    constexpr int MaxSimplificationPasses = 4;
+    constexpr float MinDetourSegmentLength = 2.0f;
+    constexpr float MaxDetourLengthInflation = 2.75f;
+    constexpr float MinCandidateEndpointDistance = 1.0f;
+    constexpr float DetourAlongSamples[] = { 0.35f, 0.5f, 0.65f };
+    constexpr float DetourLateralOffsets[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f };
+
+    XYZ ToXyz(const Vector3& point)
+    {
+        return XYZ(point.x, point.y, point.z);
+    }
+
+    float HorizontalDistance(const Vector3& start, const Vector3& end)
+    {
+        const float dx = end.x - start.x;
+        const float dy = end.y - start.y;
+        return std::sqrt((dx * dx) + (dy * dy));
+    }
+
+    bool ValidatePathSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        Vector3* adjustedEnd,
+        uint32_t* resultCode = nullptr)
+    {
+        float resolvedEndZ = end.z;
+        float supportDelta = 0.0f;
+        float travelFraction = 0.0f;
+        const uint32_t validation = ValidateWalkableSegment(
+            mapId,
+            ToXyz(start),
+            ToXyz(end),
+            PathValidationAgentRadius,
+            PathValidationAgentHeight,
+            &resolvedEndZ,
+            &supportDelta,
+            &travelFraction);
+
+        if (resultCode)
+            *resultCode = validation;
+
+        if (adjustedEnd)
+        {
+            *adjustedEnd = end;
+            if (std::isfinite(resolvedEndZ) && validation == SegmentValidationClear)
+                adjustedEnd->z = resolvedEndZ;
+        }
+
+        return validation == SegmentValidationClear || validation == SegmentValidationMissingSupport;
+    }
+
+    Vector3 BuildGroundedMidpoint(uint32_t mapId, const Vector3& start, const Vector3& end)
+    {
+        Vector3 midpoint(
+            (start.x + end.x) * 0.5f,
+            (start.y + end.y) * 0.5f,
+            (start.z + end.z) * 0.5f);
+
+        const float queryBaseZ = std::max(start.z, end.z) + 2.0f;
+        const float supportZ = GetGroundZ(mapId, midpoint.x, midpoint.y, queryBaseZ, 8.0f);
+
+        if (std::isfinite(supportZ) && supportZ > -100000.0f)
+            midpoint.z = supportZ;
+
+        return midpoint;
+    }
+
+    bool TryBuildDetourCandidate(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        float alongFraction,
+        float lateralOffset,
+        int directionSign,
+        Vector3* candidate)
+    {
+        if (!candidate)
+            return false;
+
+        const float dx = end.x - start.x;
+        const float dy = end.y - start.y;
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        const float invDistance = 1.0f / horizontalDistance;
+        const float dirX = dx * invDistance;
+        const float dirY = dy * invDistance;
+        const float perpX = -dirY * static_cast<float>(directionSign);
+        const float perpY = dirX * static_cast<float>(directionSign);
+
+        Vector3 detourPoint(
+            start.x + (dx * alongFraction) + (perpX * lateralOffset),
+            start.y + (dy * alongFraction) + (perpY * lateralOffset),
+            (start.z + end.z) * 0.5f);
+
+        const float queryBaseZ = std::max(start.z, end.z) + 2.5f;
+        const float searchDistance = std::max(8.0f, std::fabs(end.z - start.z) + lateralOffset + 4.0f);
+        const float supportZ = GetGroundZ(mapId, detourPoint.x, detourPoint.y, queryBaseZ, searchDistance);
+        if (!std::isfinite(supportZ) || supportZ <= -100000.0f)
+            return false;
+
+        detourPoint.z = supportZ;
+        if (HorizontalDistance(start, detourPoint) < MinCandidateEndpointDistance ||
+            HorizontalDistance(detourPoint, end) < MinCandidateEndpointDistance)
+        {
+            return false;
+        }
+
+        const float detourLength = HorizontalDistance(start, detourPoint) + HorizontalDistance(detourPoint, end);
+        if (detourLength > (horizontalDistance * MaxDetourLengthInflation))
+            return false;
+
+        *candidate = detourPoint;
+        return true;
+    }
+
+    bool AppendRefinedSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output,
+        int& totalCalls);
+
+    bool AppendRefinedCandidate(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& candidate,
+        const Vector3& end,
+        int depth,
+        PointsArray& output,
+        int& totalCalls)
+    {
+        const size_t baseSize = output.size();
+        if (!AppendRefinedSegment(mapId, start, candidate, depth + 1, output, totalCalls))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        const Vector3 candidateEnd = output.back();
+        if (!AppendRefinedSegment(mapId, candidateEnd, end, depth + 1, output, totalCalls))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool TryAppendDetourSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output,
+        int& totalCalls)
+    {
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        for (const float alongFraction : DetourAlongSamples)
+        {
+            for (const float lateralOffset : DetourLateralOffsets)
+            {
+                for (int directionSign : { 1, -1 })
+                {
+                    if (totalCalls >= MaxRefinementTotalCalls)
+                        return false;
+
+                    Vector3 candidate;
+                    if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, &candidate))
+                        continue;
+
+                    if (AppendRefinedCandidate(mapId, start, candidate, end, depth, output, totalCalls))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool AppendRefinedSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output,
+        int& totalCalls)
+    {
+        ++totalCalls;
+        if (totalCalls >= MaxRefinementTotalCalls)
+            return false;
+
+        Vector3 adjustedEnd = end;
+        uint32_t validation = SegmentValidationClear;
+        if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+        {
+            output.push_back(adjustedEnd);
+            return true;
+        }
+
+        if (depth >= MaxSegmentRefinementDepth)
+            return false;
+
+        if (TryAppendDetourSegment(mapId, start, end, depth, output, totalCalls))
+            return true;
+
+        const Vector3 midpoint = BuildGroundedMidpoint(mapId, start, end);
+        return AppendRefinedCandidate(mapId, start, midpoint, end, depth, output, totalCalls);
+    }
+
+    void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    {
+        if (pathPoints.size() < 2)
+            return;
+
+        PointsArray refined;
+        refined.reserve(pathPoints.size() * 2);
+        refined.push_back(pathPoints.front());
+
+        bool changed = false;
+        int totalCalls = 0;
+        for (size_t i = 1; i < pathPoints.size(); ++i)
+        {
+            if (totalCalls >= MaxRefinementTotalCalls)
+            {
+                // Budget exhausted — keep remaining waypoints as-is
+                for (size_t j = i; j < pathPoints.size(); ++j)
+                    refined.push_back(pathPoints[j]);
+                break;
+            }
+
+            const Vector3 start = refined.back();
+            const Vector3 end = pathPoints[i];
+
+            Vector3 adjustedEnd = end;
+            uint32_t validation = SegmentValidationClear;
+            if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+            {
+                refined.push_back(adjustedEnd);
+                continue;
+            }
+
+            const size_t beforeRefineSize = refined.size();
+            if (AppendRefinedSegment(mapId, start, end, 0, refined, totalCalls))
+            {
+                changed = true;
+                continue;
+            }
+
+            refined.resize(beforeRefineSize);
+            refined.push_back(end);
+        }
+
+        if (changed)
+            pathPoints.swap(refined);
+    }
+
+    constexpr int MaxSimplificationTotalCalls = 500;
+
+    void SimplifyPathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    {
+        if (pathPoints.size() < 3)
+            return;
+
+        int totalCalls = 0;
+
+        for (int pass = 0; pass < MaxSimplificationPasses; ++pass)
+        {
+            if (totalCalls >= MaxSimplificationTotalCalls)
+                return;
+
+            const PointsArray source = pathPoints;
+            PointsArray simplified;
+            simplified.reserve(source.size());
+            simplified.push_back(source.front());
+
+            bool changed = false;
+            Vector3 pendingNext = source[1];
+
+            for (size_t i = 1; i + 1 < source.size(); ++i)
+            {
+                const Vector3 prev = simplified.back();
+                const Vector3 curr = pendingNext;
+                pendingNext = source[i + 1];
+
+                if (totalCalls >= MaxSimplificationTotalCalls)
+                {
+                    simplified.push_back(curr);
+                    continue;
+                }
+
+                const float incomingDistance = HorizontalDistance(prev, curr);
+                const float outgoingDistance = HorizontalDistance(curr, pendingNext);
+                if (incomingDistance > RedundantPointDistanceThreshold &&
+                    outgoingDistance > RedundantPointDistanceThreshold)
+                {
+                    simplified.push_back(curr);
+                    continue;
+                }
+
+                ++totalCalls;
+                Vector3 adjustedNext = pendingNext;
+                uint32_t validation = SegmentValidationClear;
+                if (ValidatePathSegment(mapId, prev, pendingNext, &adjustedNext, &validation))
+                {
+                    pendingNext = adjustedNext;
+                    changed = true;
+                    continue;
+                }
+
+                simplified.push_back(curr);
+            }
+
+            simplified.push_back(pendingNext);
+            if (!changed)
+                return;
+
+            pathPoints.swap(simplified);
+            if (pathPoints.size() < 3)
+                return;
+        }
+    }
+}
 
 ////////////////// PathFinder //////////////////
 PathFinder::PathFinder(unsigned int mapId, unsigned int instanceId) :
@@ -142,7 +499,7 @@ dtPolyRef PathFinder::getPolyByLocation(const float* point, float* distance) con
 	// we don't have it in our old path
 	// try to get it by findNearestPoly()
 	// first try with low search box
-	float extents[VERTEX_SIZE] = { 3.0f, 5.0f, 3.0f };    // bounds of poly search area
+	float extents[VERTEX_SIZE] = { 4.0f, 5.0f, 4.0f };    // bounds of poly search area (padded for corridor tolerance)
 	float closestPoint[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
 	dtStatus dtResult = m_navMeshQuery->findNearestPoly(point, extents, &m_filter, &polyRef, closestPoint);
 	if (dtStatusSucceed(dtResult) && polyRef != INVALID_POLYREF)
@@ -389,6 +746,8 @@ void PathFinder::BuildPolyPath(const Vector3& startPos, const Vector3& endPos)
 
 void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 {
+	auto buildStart = std::chrono::steady_clock::now();
+
 	float pathPoints[MAX_POINT_PATH_LENGTH * VERTEX_SIZE];
 	unsigned int pointCount = 0;
 	dtStatus dtResult = DT_FAILURE;
@@ -417,6 +776,8 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 			m_pointPathLimit);    // maximum number of points
 	}
 
+	auto afterSmooth = std::chrono::steady_clock::now();
+
 	if (pointCount < 2 || dtStatusFailed(dtResult))
 	{
 		// only happens if pass bad data to findStraightPath or navmesh is broken
@@ -434,8 +795,28 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
+	// RefinePathForWalkability and SimplifyPathForWalkability DISABLED:
+	// ValidateWalkableSegment physics capsule sweeps cost ~630ms per segment,
+	// making 27-point paths take 16+ seconds. The Detour smooth path is already
+	// walkable (generated via moveAlongSurface). The C# CalculateValidatedPath
+	// layer handles segment validation via FindBlockedSegment at the service level.
+	auto afterRefine = afterSmooth;
+	auto afterSimplify = afterSmooth;
+
+	{
+		auto smoothMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterSmooth - buildStart).count();
+		auto refineMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterRefine - afterSmooth).count();
+		auto simplifyMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterSimplify - afterRefine).count();
+		auto totalMs = smoothMs + refineMs + simplifyMs;
+		if (totalMs > 50)
+		{
+			fprintf(stderr, "[NAV-PERF] BuildPointPath map=%u pts=%u smooth=%lldms refine=%lldms simplify=%lldms total=%lldms\n",
+				m_mapId, pointCount, smoothMs, refineMs, simplifyMs, totalMs);
+		}
+	}
+
 	// first point is always our current location - we need the next one
-	setActualEndPosition(m_pathPoints[pointCount - 1]);
+	setActualEndPosition(m_pathPoints[m_pathPoints.size() - 1]);
 
 	// force the given destination, if needed
 	if (m_forceDestination &&
@@ -491,11 +872,27 @@ void PathFinder::createFilter()
 	unsigned short includeFlags = 0;
 	unsigned short excludeFlags = 0;
 	includeFlags |= (NAV_GROUND);
-	
+	// NAV_STEEP_SLOPES polygons (>52°) are included via NAV_GROUND but penalized
+	// with high area cost below so pathfinding avoids them when alternatives exist.
+
 	m_filter.setIncludeFlags(includeFlags);
 	m_filter.setExcludeFlags(excludeFlags);
 
-	// TODO
+	// Penalize undesirable terrain so paths prefer flat walkable ground.
+	// Detour area costs multiply traversal cost for polygons with that area type.
+	// VMaNGOS area IDs (GridMapDefines.h):
+	//   AREA_NONE=0, AREA_GROUND=1, AREA_GROUND_MODEL=2,
+	//   AREA_STEEP_SLOPE=3, AREA_STEEP_SLOPE_MODEL=4,
+	//   AREA_WATER_TRANSITION=5, AREA_WATER=6, AREA_MAGMA=7, AREA_SLIME=8
+	//
+	// Steep slopes (>52°): 10x cost — prefer flat ground but allow when no alternative.
+	// AREA_WATER/MAGMA/SLIME: already excluded via includeFlags (no NAV_GROUND flag).
+	// AREA_WATER_TRANSITION (5): has NAV_GROUND|NAV_WATER — included in filter.
+	//   Not penalized here because even small costs cause cascading path changes.
+	//   Swim-avoidance is handled at the task level (IsSwimming check).
+	m_filter.setAreaCost(3, 10.0f);   // AREA_STEEP_SLOPE
+	m_filter.setAreaCost(4, 10.0f);   // AREA_STEEP_SLOPE_MODEL
+
 	updateFilter(false, 0, 0, 0);
 }
 
@@ -521,10 +918,7 @@ bool PathFinder::HaveTile(const Vector3& p) const
 
     if (m_navMesh->getTileAt(tx, ty, 0) == NULL)
     {
-        std::ofstream myfile;
-        myfile.open("C:\\Users\\Drew\\Repos\\bloog-bot-v2\\Bot\\navigationDebug.txt");
-        myfile << "Tile failed to load: " << tx << "," << ty << std::endl;
-        myfile.close();
+        printf("[PathFinder] Tile failed to load: %d,%d\n", tx, ty);
     }
         
     return (m_navMesh->getTileAt(tx, ty, 0) != NULL);
@@ -542,7 +936,7 @@ NavTerrain PathFinder::getNavTerrain(float x, float y, float z)
 	const float pos[VERTEX_SIZE] = { y, z, x };
 
 	// small search box first, then a tall one if we didn’t hit a poly
-	float ext[VERTEX_SIZE] = { 3.f, 5.f, 3.f };
+	float ext[VERTEX_SIZE] = { 4.f, 5.f, 4.f };
 	dtPolyRef ref = 0;
 	float nearest[VERTEX_SIZE];
 
@@ -728,7 +1122,12 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 		}
 		else
 		{
-			len = SMOOTH_PATH_STEP_SIZE / len;
+			// Guard against near-zero vector magnitude to avoid invalid step scaling.
+			constexpr float MinStepDenominator = 1e-4f;
+			if (len > MinStepDenominator)
+				len = SMOOTH_PATH_STEP_SIZE / len;
+			else
+				len = 1.0f;
 		}
 
 		float moveTgt[VERTEX_SIZE];

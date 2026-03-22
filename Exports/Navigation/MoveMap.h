@@ -27,6 +27,7 @@
 
 #include <unordered_map>
 #include <map>
+#include <string>
 
 #include "DetourAlloc.h"
 #include "DetourNavMesh.h"
@@ -82,6 +83,11 @@ namespace MMAP
 
 		std::map<unsigned int, bool> zoneMap = {};
 
+		/// Set the base directory for mmaps/ (must include trailing separator).
+		/// When set, loadMapData and loadMap use this instead of the DLL directory.
+		void setMmapsBasePath(const std::string& path) { m_mmapsBasePath = path; }
+		const std::string& getMmapsBasePath() const { return m_mmapsBasePath; }
+
 		bool loadMap(unsigned int mapId, int x, int y);
 
 		// the returned [dtNavMeshQuery const*] is NOT threadsafe
@@ -94,6 +100,7 @@ namespace MMAP
 		unsigned int packTileID(int x, int y);
 
 		MMapDataSet loadedMMaps;
+		std::string m_mmapsBasePath;
 	};
 
 	class MMapFactory

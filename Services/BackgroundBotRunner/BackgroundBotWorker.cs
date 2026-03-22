@@ -35,6 +35,10 @@ namespace BackgroundBotRunner
         private IWorldClient? _activeWorldClient;
         private IDisposable? _worldDisconnectSubscription;
         private IDisposable? _tradeAutoAcceptSubscription;
+<<<<<<< HEAD
+=======
+        private IDisposable? _logoutCompleteSubscription;
+>>>>>>> cpp_physics_system
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
@@ -83,12 +87,38 @@ namespace BackgroundBotRunner
                     await Task.Delay(100, stoppingToken);
                 }
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Normal shutdown — handled in StopAsync
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in BackgroundBotWorker");
             }
         }
 
+<<<<<<< HEAD
+=======
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("BackgroundBotWorker stopping — cleaning up bot runner and agent factory.");
+
+            try
+            {
+                _botRunner.Stop();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error stopping bot runner during shutdown.");
+            }
+
+            ResetAgentFactory();
+
+            _logger.LogInformation("BackgroundBotWorker cleanup complete.");
+            await base.StopAsync(cancellationToken);
+        }
+
+>>>>>>> cpp_physics_system
         private static BotBehaviorConfig LoadBehaviorConfig(IConfiguration configuration)
         {
             var config = new BotBehaviorConfig();
@@ -249,13 +279,42 @@ namespace BackgroundBotRunner
             {
                 _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
                 {
-                    _logger.LogInformation("World client disconnected. Resetting agent factory.");
+                    _logger.LogInformation("World client disconnected. Resetting object manager world state and agent factory.");
+                    WoWSharpObjectManager.Instance.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
                     ResetAgentFactory();
                 });
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
+            }
+
+            // Auto-re-enter world after logout. When the server confirms logout
+            // (SMSG_LOGOUT_COMPLETE), automatically re-login with the same character.
+            // This enables tests to do .gm off → logout → relog to clear all GM state.
+            try
+            {
+                _logoutCompleteSubscription = worldClient.LogoutComplete?.Subscribe(_ =>
+                {
+                    var om = WoWSharpObjectManager.Instance;
+                    var guid = om.PlayerGuid.FullGuid;
+                    if (guid == 0)
+                    {
+                        _logger.LogWarning("Logout complete but no character GUID stored — cannot auto-re-enter.");
+                        return;
+                    }
+                    _logger.LogInformation("Logout complete — auto-re-entering world with GUID 0x{Guid:X}", guid);
+                    om.ResetWorldSessionState("BackgroundBotWorker.LogoutComplete");
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(1500); // Let server finalize logout
+                        om.EnterWorld(guid);
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to subscribe to logout complete notifications.");
             }
 
             _logger.LogInformation("Initialized network client component factory using active world client.");
@@ -289,15 +348,22 @@ namespace BackgroundBotRunner
             _tradeAutoAcceptSubscription?.Dispose();
             _tradeAutoAcceptSubscription = null;
 
+<<<<<<< HEAD
+=======
+            _logoutCompleteSubscription?.Dispose();
+            _logoutCompleteSubscription = null;
+
+>>>>>>> cpp_physics_system
             _logger.LogInformation("Cleared network client component factory state.");
         }
 
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
-            BotProfiles.Common.BotBase botProfile;
+            var @class = WoWNameGenerator.ResolveClass(accountName);
 
-            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
+            BotProfiles.Common.BotBase botProfile = @class switch
             {
+<<<<<<< HEAD
                 var classCode = accountName.Substring(2, 2);
                 var @class = WoWNameGenerator.ParseClassCode(classCode);
 
@@ -319,6 +385,19 @@ namespace BackgroundBotRunner
             {
                 botProfile = new WarriorArms.WarriorArms();
             }
+=======
+                Class.Warrior => new WarriorArms.WarriorArms(),
+                Class.Paladin => new PaladinRetribution.PaladinRetribution(),
+                Class.Rogue => new RogueCombat.RogueCombat(),
+                Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
+                Class.Priest => new PriestDiscipline.PriestDiscipline(),
+                Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
+                Class.Mage => new MageArcane.MageArcane(),
+                Class.Warlock => new WarlockAffliction.WarlockAffliction(),
+                Class.Druid => new DruidRestoration.DruidRestoration(),
+                _ => new WarriorArms.WarriorArms()
+            };
+>>>>>>> cpp_physics_system
 
             return new ClassContainer(
                 botProfile.Name,

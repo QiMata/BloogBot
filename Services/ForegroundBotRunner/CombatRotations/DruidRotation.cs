@@ -1,6 +1,7 @@
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Constants;
+using GameData.Core.Models;
 
 namespace ForegroundBotRunner.CombatRotations
 {
@@ -10,7 +11,7 @@ namespace ForegroundBotRunner.CombatRotations
     /// </summary>
     public class DruidRotation : ICombatRotation
     {
-        public float DesiredRange => 5f;
+        public float DesiredRange => CombatDistance.GetMeleeAttackRange(CombatDistance.DEFAULT_PLAYER_COMBAT_REACH, CombatDistance.DEFAULT_CREATURE_COMBAT_REACH);
         public float PullRange => 30f;
 
         public bool Pull(LocalPlayer player, WoWUnit target)

@@ -29,11 +29,20 @@ namespace RogueAssassin.Tasks
             if (Environment.TickCount - riposteStartTime > 5000 && readyToRiposte)
                 readyToRiposte = false;
 
+<<<<<<< HEAD
 
             if (!EnsureTarget())
                 return;
 
             if (Update(3))
+=======
+
+            if (!EnsureTarget())
+                return;
+
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target != null && Update(GetMeleeRange(target)))
+>>>>>>> cpp_physics_system
                 return;
 
             // Ensure Sword/Mace/1H is equipped (not dagger)

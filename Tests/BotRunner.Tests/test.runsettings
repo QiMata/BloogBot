@@ -2,7 +2,14 @@
 <RunSettings>
   <RunConfiguration>
     <TargetPlatform>x86</TargetPlatform>
+<<<<<<< HEAD
     <!-- Hard stop for hangs so dotnet test does not run indefinitely. -->
     <TestSessionTimeout>180000</TestSessionTimeout>
+=======
+    <!-- Hard stop for hangs so dotnet test does not run indefinitely.
+         Suite has 43 tests; combat (5m) + corpse-run×2 (4m) + gathering×2 (5m) + fixture init (90s)
+         + NPC/navigation/quest/spell tests (~10m) = ~26 min. 40 min gives headroom. -->
+    <TestSessionTimeout>2400000</TestSessionTimeout>
+>>>>>>> cpp_physics_system
   </RunConfiguration>
 </RunSettings>

@@ -3,6 +3,10 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+<<<<<<< HEAD
+=======
+#include <mutex>
+>>>>>>> cpp_physics_system
 #include <unordered_map>
 #include "Vector3.h"
 #include "AABox.h"
@@ -18,12 +22,12 @@ class SceneCache; // forward declaration
 struct QueryParams
 {
     float inflation = 0.02f;            // Extra inflation (in world units) applied to broad-phase shape/AABB searches
-    bool backfaceCulling = false;       // If true, ignore back-face hits (currently unused / TODO)
+    bool backfaceCulling = false;       // Reserved: back-face hit filtering. Not evaluated by current query paths; defaults to false (all faces hit).
     uint32_t includeMask = 0xFFFFFFFFu; // Bitmask of collision channels to include (ANDed with per-instance mask)
     uint32_t excludeMask = 0u;          // Bitmask of collision channels to exclude (applied after include)
     std::vector<uint32_t> ignoreInstanceIds; // Instance/model IDs to ignore entirely
     bool returnFaceIndex = true;        // If false, triIndex will be set to -1 in results
-    bool returnPhysMat = false;         // If true, (future) physical material retrieval enabled (not implemented yet)
+    bool returnPhysMat = false;         // Reserved: physical material retrieval. Not populated by current query paths; physMaterialId/friction/restitution stay at defaults.
     bool traceComplex = true;           // Whether to trace against complex geometry (always true for now)
 };
 
@@ -236,12 +240,28 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
+<<<<<<< HEAD
+=======
+        // Capsule-aware support query. Samples the center and nearby footprint points
+        // so narrow ledges / triangle seams do not falsely report "no support" when the
+        // character capsule is still safely supported.
+        static float GetCapsuleSupportZ(
+            uint32_t mapId,
+            float x,
+            float y,
+            float currentZ,
+            float queryZ,
+            float maxSearchDist,
+            float radius);
+
+>>>>>>> cpp_physics_system
         // --- Scene Cache (pre-processed collision geometry) ---
         static void SetSceneCache(uint32_t mapId, SceneCache* cache);
         static SceneCache* GetSceneCache(uint32_t mapId);
         static void ClearSceneCaches();
         static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
         static const std::string& GetScenesDir() { return m_scenesDir; }
+<<<<<<< HEAD
 
     private:
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
@@ -251,8 +271,25 @@ class SceneQuery
 
         // Per-map scene caches (pre-processed collision geometry)
         inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
+=======
+>>>>>>> cpp_physics_system
 
         // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
         // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).
         static float GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist);
+
+    private:
+        inline static VMAP::VMapManager2* m_vmapManager = nullptr;
+        inline static MapLoader* m_mapLoader = nullptr;
+        inline static bool m_initialized = false;
+        inline static std::string m_scenesDir;
+
+        // Per-map scene caches (pre-processed collision geometry)
+        // Protected by m_sceneCachesMutex — accessed concurrently by ProtobufSocketServer client threads
+        inline static std::recursive_mutex m_sceneCachesMutex;
+        inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
+
+        // Dynamic object ground Z: vertical ray against DynamicObjectRegistry triangles
+        // (elevators, doors, etc.) that aren't in the pre-cached SceneCache or VMAP data.
+        static float GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist);
 };

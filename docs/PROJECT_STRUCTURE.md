@@ -324,7 +324,6 @@ Navigation/
 ?   ?   ??? PhysicsBridge.h         # C++ ? C# interop structures (PhysicsInput/Output)
 ?   ?
 ?   ??? Movement Modules:
-?   ?   ??? PhysicsThreePass.cpp/.h     # UP/SIDE/DOWN movement decomposition
 ?   ?   ??? PhysicsCollideSlide.cpp/.h  # Iterative wall collision (collide-and-slide)
 ?   ?   ??? PhysicsGroundSnap.cpp/.h    # Ground detection, step snapping, depenetration
 ?   ?   ??? PhysicsMovement.cpp/.h      # Air (falling/jumping) and swim movement
@@ -393,9 +392,9 @@ StepV2(PhysicsInput, dt) ? PhysicsOutput
 |----------|-------|-------------|
 | `STEP_HEIGHT` | 0.6f | Max height for auto-stepping (stairs) |
 | `STEP_DOWN_HEIGHT` | 0.5f | Max drop for ground snap |
-| `GRAVITY` | 19.29f | WoW gravity (yards/s²) |
+| `GRAVITY` | 19.29f | WoW gravity (yards/sï¿½) |
 | `JUMP_VELOCITY` | 7.96f | Initial jump velocity |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5f | ~60° max walkable slope |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5f | ~60ï¿½ max walkable slope |
 | `WATER_LEVEL_DELTA` | 1.0f | Swim threshold below water surface |
 
 ## Services Directory

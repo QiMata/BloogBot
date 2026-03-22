@@ -7,6 +7,10 @@ namespace HunterSurvival.Tasks
 {
     public class PvPRotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 hunter base spell ranges
+        private const float RangedAttackRange = 35f;
+        private const float HunterDeadZone = 8f;
+
         internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
@@ -15,24 +19,30 @@ namespace HunterSurvival.Tasks
             if (!EnsureTarget())
                 return;
 
+<<<<<<< HEAD
             if (Update(34))
+=======
+            var rangedRange = GetSpellRange(RangedAttackRange);
+            if (Update(rangedRange))
+>>>>>>> cpp_physics_system
                 return;
 
             ObjectManager.StopAllMovement();
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (target == null) return;
 
-            bool ranged = ObjectManager.Player.Position.DistanceTo(target.Position) > 5 &&
-                           ObjectManager.Player.Position.DistanceTo(target.Position) < 34;
+            var meleeRange = GetMeleeRange(target);
+            var distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
+            bool ranged = distanceToTarget > HunterDeadZone && distanceToTarget < rangedRange;
             if (ranged)
             {
-                TryCastSpell(ConcussiveShot, 0, 34, !target.HasDebuff(ConcussiveShot));
-                TryCastSpell(ArcaneShot, 0, 34);
+                TryCastSpell(ConcussiveShot, 0f, rangedRange, !target.HasDebuff(ConcussiveShot));
+                TryCastSpell(ArcaneShot, 0f, rangedRange);
                 return;
             }
 
-            TryCastSpell(WingClip, 0, 5, !target.HasDebuff(WingClip));
-            TryCastSpell(RaptorStrike, 0, 5);
+            TryCastSpell(WingClip, 0f, meleeRange, !target.HasDebuff(WingClip));
+            TryCastSpell(RaptorStrike, 0f, meleeRange);
         }
 
         public override void PerformCombatRotation() => Update();

@@ -22,26 +22,29 @@ using Microsoft.Extensions.Configuration;
 
 namespace WoWStateManager
 {
-    public class StateManagerWorker : BackgroundService
+    public partial class StateManagerWorker : BackgroundService
     {
         private readonly ILogger<StateManagerWorker> _logger;
+
         private readonly ILoggerFactory _loggerFactory;
+
         private readonly IConfiguration _configuration;
+
         private readonly IServiceProvider _serviceProvider;
 
+
         private readonly CharacterStateSocketListener _activityMemberSocketListener;
+
         private readonly StateManagerSocketListener _worldStateManagerSocketListener;
+
 
         private readonly MangosSOAPClient _mangosSOAPClient;
 
         private readonly Dictionary<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)> _managedServices = [];
-        private readonly object _managedServicesLock = new();
 
-        // Prevent repeated launches each loop iteration
-        private bool _initialLaunchCompleted = false;
         // Optional basic backoff tracking (account -> last launch time)
         private readonly Dictionary<string, DateTime> _lastLaunchTimes = new();
-        private static readonly TimeSpan MinRelaunchInterval = TimeSpan.FromMinutes(1);
+
 
         // 63c: Named-pipe log servers � one per foreground bot account
         private readonly Dictionary<string, BotLogPipeServer> _botLogPipeServers = new();
@@ -51,15 +54,7 @@ namespace WoWStateManager
         /// from the injection code path to the monitoring task closure.
         /// Uses Interlocked on ticks since DateTime is a struct and cannot be volatile.
         /// </summary>
-        private sealed class InjectionTimestampHolder(DateTime initial)
-        {
-            private long _ticks = initial.Ticks;
-            public DateTime Value
-            {
-                get => new(Interlocked.Read(ref _ticks), DateTimeKind.Utc);
-                set => Interlocked.Exchange(ref _ticks, value.Ticks);
-            }
-        }
+
 
         public StateManagerWorker(
             ILogger<StateManagerWorker> logger,
@@ -80,6 +75,7 @@ namespace WoWStateManager
                 StateManagerSettings.Instance.CharacterSettings,
                 configuration["CharacterStateListener:IpAddress"],
                 int.Parse(configuration["CharacterStateListener:Port"]),
+                _mangosSOAPClient,
                 _loggerFactory.CreateLogger<CharacterStateSocketListener>()
             );
 
@@ -97,6 +93,7 @@ namespace WoWStateManager
             _worldStateManagerSocketListener.DataMessageStream.Subscribe(OnWorldStateUpdate);
         }
 
+<<<<<<< HEAD
         public void StartBackgroundBotWorker(string accountName)
         {
             var tokenSource = new CancellationTokenSource();
@@ -172,6 +169,8 @@ namespace WoWStateManager
             // Start WoW process and inject the bot worker service
             StartForegroundBotRunner(accountName, targetProcessId);
         }
+=======
+>>>>>>> cpp_physics_system
 
         /// <summary>
         /// Gets the status of all managed bot processes
@@ -210,12 +209,8 @@ namespace WoWStateManager
         /// <summary>
         /// Gets detailed status for a foreground (injected) bot by checking both process state and communication state
         /// </summary>
-        private string GetForegroundBotStatus(string accountName, uint? processId)
-        {
-            // Check if we're receiving state updates from the bot
-            var hasStateUpdates = _activityMemberSocketListener.CurrentActivityMemberList.TryGetValue(accountName, out var snapshot);
-            var hasRecentUpdate = hasStateUpdates && snapshot != null && !string.IsNullOrEmpty(snapshot.AccountName);
 
+<<<<<<< HEAD
             // Check process state if we have a PID
             bool processRunning = false;
             if (processId.HasValue)
@@ -392,6 +387,8 @@ namespace WoWStateManager
             response.Response = ResponseResult.Success;
             _logger.LogInformation($"Action forward: queued {forward.Action.ActionType} for '{forward.AccountName}'");
         }
+=======
+>>>>>>> cpp_physics_system
 
         /// <summary>
         /// Checks if a service is listening on the specified IP and port.
@@ -422,6 +419,11 @@ namespace WoWStateManager
                 return false;
             }
         }
+
+        /// <summary>
+        /// Waits for required services (PathfindingService) to be ready before spawning WoW clients.
+        /// </summary>
+
 
         /// <summary>
         /// Waits for required services (PathfindingService) to be ready before spawning WoW clients.
@@ -460,6 +462,7 @@ namespace WoWStateManager
             return false;
         }
 
+
         private async Task<bool> ApplyDesiredWorkerState(CancellationToken stoppingToken)
         {
             _logger.LogInformation($"ApplyDesiredWorkerState called. CharacterSettings count: {StateManagerSettings.Instance.CharacterSettings.Count}");
@@ -471,8 +474,8 @@ namespace WoWStateManager
 
             if (!pathfindingReady)
             {
-                _logger.LogWarning("PathfindingService is not ready - proceeding anyway but navigation may fail");
-                // Note: We proceed anyway since the service might come online later, but we log the warning
+                _logger.LogError("PathfindingService is not ready after {Timeout}s — aborting bot startup. Navigation requires PathfindingService on port 5001.", serviceTimeout.TotalSeconds);
+                return false;
             }
 
             // 62d: Deduplicate CharacterSettings by AccountName to prevent double-launch races
@@ -533,17 +536,17 @@ namespace WoWStateManager
                 {
                     case Settings.BotRunnerType.Foreground:
                         _logger.LogInformation($"Starting Foreground bot worker for {accountName} (DLL injection)");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
                         break;
 
                     case Settings.BotRunnerType.Background:
                         _logger.LogInformation($"Starting Background bot worker for {accountName} (headless)");
-                        StartBackgroundBotWorker(accountName);
+                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
                         break;
 
                     default:
                         _logger.LogWarning($"Unknown RunnerType {characterSettings.RunnerType} for {accountName}, defaulting to Foreground");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
                         break;
                 }
 
@@ -557,6 +560,7 @@ namespace WoWStateManager
             return true;
         }
 
+<<<<<<< HEAD
         private void StartForegroundBotRunner(string accountName, int? targetProcessId = null)
         {
             // Set the path to ForegroundBotRunner.dll in an environment variable
@@ -1335,6 +1339,8 @@ namespace WoWStateManager
 
             _logger.LogInformation("All managed services stopped");
         }
+=======
+>>>>>>> cpp_physics_system
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -1409,6 +1415,7 @@ namespace WoWStateManager
 
             _logger.LogInformation($"StateManagerServiceWorker has stopped.");
         }
+<<<<<<< HEAD
 
         /// <summary>
         /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
@@ -1422,5 +1429,25 @@ namespace WoWStateManager
             _logger.LogInformation("StateManagerWorker.StopAsync — complete.");
         }
     }
+=======
+>>>>>>> cpp_physics_system
 
+        /// <summary>
+        /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
+        /// The .NET host calls StopAsync on all IHostedService instances during shutdown.
+        /// </summary>
+
+
+        /// <summary>
+        /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
+        /// The .NET host calls StopAsync on all IHostedService instances during shutdown.
+        /// </summary>
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("StateManagerWorker.StopAsync — cleaning up managed processes...");
+            await StopAllManagedServices();
+            await base.StopAsync(cancellationToken);
+            _logger.LogInformation("StateManagerWorker.StopAsync — complete.");
+        }
+    }
 }

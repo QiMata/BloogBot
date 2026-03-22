@@ -89,15 +89,15 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region OpenMailboxAsync - CMSG_GOSSIP_HELLO
+        #region OpenMailboxAsync - CMSG_GAMEOBJ_USE
 
         [Fact]
-        public async Task OpenMailboxAsync_ShouldSendGossipHelloWithMailboxGuid()
+        public async Task OpenMailboxAsync_ShouldSendGameObjUseWithMailboxGuid()
         {
             await _mailAgent.OpenMailboxAsync(TestMailboxGuid);
 
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(
-                Opcode.CMSG_GOSSIP_HELLO,
+                Opcode.CMSG_GAMEOBJ_USE,
                 It.Is<byte[]>(p =>
                     p.Length == 8 &&
                     BitConverter.ToUInt64(p, 0) == TestMailboxGuid),
@@ -568,7 +568,7 @@ namespace WoWSharpClient.Tests.Agent
             await _mailAgent.QuickCheckMailAsync(TestMailboxGuid);
 
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(
-                Opcode.CMSG_GOSSIP_HELLO, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
+                Opcode.CMSG_GAMEOBJ_USE, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GET_MAIL_LIST, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
             Assert.False(_mailAgent.IsMailboxWindowOpen); // closed at end
@@ -580,7 +580,7 @@ namespace WoWSharpClient.Tests.Agent
             await _mailAgent.QuickSendMailAsync(TestMailboxGuid, "Player", "Subject", "Body");
 
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(
-                Opcode.CMSG_GOSSIP_HELLO, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
+                Opcode.CMSG_GAMEOBJ_USE, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_SEND_MAIL, It.IsAny<byte[]>(), It.IsAny<CancellationToken>()), Times.Once);
             Assert.False(_mailAgent.IsMailboxWindowOpen);

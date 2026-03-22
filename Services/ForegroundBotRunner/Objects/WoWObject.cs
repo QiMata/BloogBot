@@ -19,6 +19,17 @@ namespace ForegroundBotRunner.Objects
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         private delegate void RightClickGameObjDelegate(nint objectPtr);
+<<<<<<< HEAD
+
+        // 0x60BEA0 = CGUnit_C::OnRightClick(int autoLoot) — for units/NPCs
+        private static readonly RightClickUnitDelegate rightClickUnitFunction =
+            Marshal.GetDelegateForFunctionPointer<RightClickUnitDelegate>(0x60BEA0);
+
+        // 0x5F8660 = CGGameObject_C::OnRightClick() — for game objects (no extra params)
+        private static readonly RightClickGameObjDelegate rightClickGameObjectFunction =
+            Marshal.GetDelegateForFunctionPointer<RightClickGameObjDelegate>(0x5F8660);
+=======
+>>>>>>> cpp_physics_system
 
         // 0x60BEA0 = CGUnit_C::OnRightClick(int autoLoot) — for units/NPCs
         private static readonly RightClickUnitDelegate rightClickUnitFunction =
@@ -28,8 +39,8 @@ namespace ForegroundBotRunner.Objects
         private static readonly RightClickGameObjDelegate rightClickGameObjectFunction =
             Marshal.GetDelegateForFunctionPointer<RightClickGameObjDelegate>(0x5F8660);
 
-        public float ScaleX => MemoryManager.ReadFloat(nint.Add(GetDescriptorPtr(), MemoryAddresses.WoWObject_ScaleXOffset));
-        public float Height => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset));
+        public float ScaleX { get { var d = GetDescriptorPtr(); return d != nint.Zero ? MemoryManager.ReadFloat(nint.Add(d, MemoryAddresses.WoWObject_ScaleXOffset)) : 1.0f; } }
+        public float Height { get { return IsValidPtr(Pointer) ? MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset)) : 0f; } }
         public Position Position => GetPosition();
 
         private Position GetPosition()
@@ -49,18 +60,22 @@ namespace ForegroundBotRunner.Objects
                     float x;
                     float y;
                     float z;
-                    if (MemoryManager.ReadInt(GetDescriptorPtr() + 0x54) == 3)
+                    var descPtr = GetDescriptorPtr();
+                    if (descPtr != nint.Zero && MemoryManager.ReadInt(descPtr + 0x54) == 3)
                     {
-                        x = MemoryManager.ReadFloat(GetDescriptorPtr() + 0x3C);
-                        y = MemoryManager.ReadFloat(GetDescriptorPtr() + (0x3C + 4));
-                        z = MemoryManager.ReadFloat(GetDescriptorPtr() + (0x3C + 8));
+                        x = MemoryManager.ReadFloat(descPtr + 0x3C);
+                        y = MemoryManager.ReadFloat(descPtr + (0x3C + 4));
+                        z = MemoryManager.ReadFloat(descPtr + (0x3C + 8));
                         return new(x, y, z);
                     }
                     var v2 = MemoryManager.ReadInt(nint.Add(Pointer, 0x210));
                     nint xyzStruct;
-                    if (v2 != 0)
+                    if (v2 != 0 && IsValidPtr(v2))
                     {
-                        var underlyingFuncPtr = MemoryManager.ReadInt(nint.Add(MemoryManager.ReadIntPtr(v2), 0x44));
+                        var vtable = MemoryManager.ReadIntPtr(v2);
+                        if (!IsValidPtr(vtable))
+                            return new(0, 0, 0);
+                        var underlyingFuncPtr = MemoryManager.ReadInt(nint.Add(vtable, 0x44));
                         switch (underlyingFuncPtr)
                         {
                             case 0x005F5C10:
@@ -69,7 +84,13 @@ namespace ForegroundBotRunner.Objects
                                 z = MemoryManager.ReadFloat(v2 + 0x2c + 0x8);
                                 return new(x, y, z);
                             case 0x005F3690:
-                                v2 = (int)nint.Add(MemoryManager.ReadIntPtr(nint.Add(MemoryManager.ReadIntPtr(v2 + 0x4), 0x110)), 0x24);
+                                var inner1 = MemoryManager.ReadIntPtr(v2 + 0x4);
+                                if (!IsValidPtr(inner1))
+                                    return new(0, 0, 0);
+                                var inner2 = MemoryManager.ReadIntPtr(nint.Add(inner1, 0x110));
+                                if (!IsValidPtr(inner2))
+                                    return new(0, 0, 0);
+                                v2 = (int)nint.Add(inner2, 0x24);
                                 x = MemoryManager.ReadFloat(v2);
                                 y = MemoryManager.ReadFloat(v2 + 0x4);
                                 z = MemoryManager.ReadFloat(v2 + 0x8);
@@ -79,7 +100,10 @@ namespace ForegroundBotRunner.Objects
                     }
                     else
                     {
-                        xyzStruct = nint.Add(MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110)), 0x24);
+                        var movementPtr = MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110));
+                        if (!IsValidPtr(movementPtr))
+                            return new(0, 0, 0);
+                        xyzStruct = nint.Add(movementPtr, 0x24);
                     }
                     x = MemoryManager.ReadFloat(xyzStruct);
                     y = MemoryManager.ReadFloat(nint.Add(xyzStruct, 0x4));
@@ -192,52 +216,79 @@ namespace ForegroundBotRunner.Objects
 
         public WoWObjectType ObjectType => objectType;
 
-        public uint LastUpated => throw new NotImplementedException();
+        public uint LastUpated => 0;
 
         public uint Entry => (uint)MemoryManager.ReadInt(nint.Add(GetDescriptorPtr(), 0xC));
 
-        public bool InWorld => throw new NotImplementedException();
+        public bool InWorld => true;
 
-        public uint LastUpdated => throw new NotImplementedException();
+        public uint LastUpdated => 0;
 
-        public ulong TransportGuid => throw new NotImplementedException();
+        public ulong TransportGuid => 0;
 
-        public Position TransportOffset => throw new NotImplementedException();
+        public Position TransportOffset => new(0, 0, 0);
 
-        public float SwimPitch => throw new NotImplementedException();
+        public float SwimPitch => 0f;
 
-        public float JumpVerticalSpeed => throw new NotImplementedException();
+        public float JumpVerticalSpeed => 0f;
 
-        public float JumpSinAngle => throw new NotImplementedException();
+        public float JumpSinAngle => 0f;
 
-        public float JumpCosAngle => throw new NotImplementedException();
+        public float JumpCosAngle => 0f;
 
-        public float JumpHorizontalSpeed => throw new NotImplementedException();
+        public float JumpHorizontalSpeed => 0f;
 
-        public float SplineElevation => throw new NotImplementedException();
+        public float SplineElevation => 0f;
 
-        public float TransportOrientation => throw new NotImplementedException();
+        public float TransportOrientation => 0f;
 
-        public uint TransportLastUpdated => throw new NotImplementedException();
+        public uint TransportLastUpdated => 0;
 
-        public SplineFlags SplineFlags { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalPoint { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public ulong SplineTargetGuid { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public float SplineFinalOrientation { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineTimePassed { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineDuration { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public uint SplineId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public List<Position> SplineNodes { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalDestination { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public SplineFlags SplineFlags { get; set; }
+        public Position SplineFinalPoint { get; set; } = new(0, 0, 0);
+        public ulong SplineTargetGuid { get; set; }
+        public float SplineFinalOrientation { get; set; }
+        public int SplineTimePassed { get; set; }
+        public int SplineDuration { get; set; }
+        public uint SplineId { get; set; }
+        public List<Position> SplineNodes { get; set; } = [];
+        public Position SplineFinalDestination { get; set; } = new(0, 0, 0);
 
         public void Interact()
         {
+<<<<<<< HEAD
+=======
+            // Guard: don't call native right-click if the object manager is torn down
+            // or the object pointer is stale (e.g. mining node despawned during zone transition).
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero)
+                return;
+            if (Pointer == nint.Zero)
+                return;
+
+>>>>>>> cpp_physics_system
             if (ObjectType == WoWObjectType.GameObj)
                 rightClickGameObjectFunction(Pointer);  // CGGameObject_C::OnRightClick — no extra params
             else
                 rightClickUnitFunction(Pointer, 0);     // CGUnit_C::OnRightClick(int autoLoot)
         }
 
-        public nint GetDescriptorPtr() => MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWObject_DescriptorOffset));
+        public nint GetDescriptorPtr()
+        {
+            var ptr = Pointer;
+            if (!IsValidPtr(ptr))
+                return nint.Zero;
+            var desc = MemoryManager.ReadIntPtr(nint.Add(ptr, MemoryAddresses.WoWObject_DescriptorOffset));
+            return IsValidPtr(desc) ? desc : nint.Zero;
+        }
+
+        /// <summary>
+        /// Returns true if <paramref name="ptr"/> looks like a valid user-mode address.
+        /// Rejects 0, -1 (0xFFFFFFFF), and addresses below 0x10000 (low page guard).
+        /// </summary>
+        internal static bool IsValidPtr(nint ptr)
+        {
+            var v = (nuint)(nint)ptr;
+            return v > 0x10000 && v < 0xFFFF0000;
+        }
     }
 }

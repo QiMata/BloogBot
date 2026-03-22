@@ -1,0 +1,30 @@
+[
+  {
+    "AccountName": "TESTBOT1",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Female",
+    "GmLevel": 6,
+    "Openness": 0.9,
+    "Conscientiousness": 0.95,
+    "Extraversion": 0.8,
+    "Agreeableness": 0.7,
+    "Neuroticism": 0.3,
+    "ShouldRun": true,
+    "RunnerType": "Foreground"
+  },
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Female",
+    "GmLevel": 6,
+    "Openness": 0.7,
+    "Conscientiousness": 0.85,
+    "Extraversion": 0.6,
+    "Agreeableness": 0.8,
+    "Neuroticism": 0.4,
+    "ShouldRun": true,
+    "RunnerType": "Background"
+  }
+]

@@ -35,7 +35,8 @@ namespace RogueSubtlety.Tasks
             if (!ObjectManager.PartyLeader.IsMoving && ObjectManager.GetTarget(ObjectManager.Player) != null
                 && ObjectManager.GetTarget(ObjectManager.Player).Position.DistanceTo(ObjectManager.PartyLeader.Position) <= 5)
             {
-                if (MoveBehindTarget(3))
+                var target = ObjectManager.GetTarget(ObjectManager.Player);
+                if (MoveBehindTarget(GetMeleeRange(target)))
                     return;
                 else
                 {

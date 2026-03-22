@@ -14,19 +14,65 @@ public static class PhysicsTestConstants
     // ==========================================================================
 
     /// <summary>
-    /// WoW gravity in yards/second² (19.2911 is the authentic vanilla value)
+    /// WoW gravity in yards/secondï¿½ (19.2911 is the authentic vanilla value)
     /// </summary>
     public const float Gravity = 19.2911f;
 
     /// <summary>
-    /// Initial vertical velocity when jumping (yards/second)
+    /// Initial vertical velocity when jumping (yards/second).
+    /// Computed inline in client as sqrt(2*g*maxJumpHeight), NOT a static constant.
     /// </summary>
-    public const float JumpVelocity = 7.95577f;
+    public const float JumpVelocity = 7.9535f;
 
     /// <summary>
     /// Water surface detection offset
     /// </summary>
     public const float WaterLevelDelta = 2.0f;
+
+    /// <summary>
+    /// Initial downward velocity when transitioning from grounded to freefall.
+    /// Small nudge to prevent one-frame hover at vz=0.
+    /// </summary>
+    public const float FallStartVelocity = -0.1f;
+
+    /// <summary>
+    /// Terminal fall velocity (max vertical speed during free-fall).
+    /// Address 0x0087D894 in 1.12.1.
+    /// </summary>
+    public const float TerminalVelocity = 60.148f;
+
+    /// <summary>
+    /// Terminal velocity with Safe Fall effect active.
+    /// Address 0x0087D898 (adjacent to TerminalVelocity).
+    /// </summary>
+    public const float SafeFallTerminalVelocity = 7.0f;
+
+    // ==========================================================================
+    // BASE MOVEMENT SPEEDS (VMaNGOS baseMoveSpeed[])
+    // ==========================================================================
+
+    public const float BaseWalkSpeed = 2.5f;
+    public const float BaseRunSpeed = 7.0f;
+    public const float BaseRunBackSpeed = 4.5f;
+    public const float BaseSwimSpeed = 4.722222f;    // server-side only
+    public const float BaseSwimBackSpeed = 2.5f;
+    public const float BaseTurnRate = 3.141594f;      // Ï€ rad/s
+
+    // ==========================================================================
+    // FALL DAMAGE
+    // ==========================================================================
+
+    /// <summary>Safe fall distance before damage starts (yards)</summary>
+    public const float FallSafeDistance = 14.57f;
+
+    /// <summary>Minimum fall time before damage (ms)</summary>
+    public const float FallSafeTimeMs = 1229.0f;
+
+    /// <summary>Fall damage coefficient: dmgPct = coeff * (zDiff - safeFall) - offset</summary>
+    public const float FallDamageCoeff = 0.018f;
+
+    /// <summary>Fall damage offset constant</summary>
+    public const float FallDamageOffset = 0.2426f;
 
     // ==========================================================================
     // GROUND DETECTION
@@ -39,9 +85,9 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Maximum height the character can automatically step up (yards)
-    /// WoW vanilla client allows approximately 2.1-2.2 unit step-ups
+    /// WoW.exe CMovement +0xB4: hardcoded as 0x4001C71C = 2.027778f
     /// </summary>
-    public const float StepHeight = 2.125f;
+    public const float StepHeight = 2.027778f;
 
     /// <summary>
     /// Maximum downward distance to snap to ground while remaining grounded (yards)
@@ -73,14 +119,43 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Minimum Z component of surface normal to be considered walkable.
-    /// cos(60°) = 0.5, meaning slopes steeper than 60° are not walkable.
+    /// cos(50Â°) = 0.6428, per WoW 1.12.1 client (0x0080DFFC). Slopes steeper than 50Â° are non-walkable.
     /// </summary>
-    public const float WalkableMinNormalZ = 0.5f;
+    public const float WalkableMinNormalZ = 0.6428f;
 
     /// <summary>
-    /// Maximum walkable slope angle in degrees (60°)
+    /// Maximum walkable slope angle in degrees (50Â° per WoW client)
     /// </summary>
-    public const float MaxWalkableSlopeDegrees = 60.0f;
+    public const float MaxWalkableSlopeDegrees = 50.0f;
+
+    /// <summary>
+    /// tan(50Â°) â€” max Z-drop per unit horizontal distance on walkable slope.
+    /// Used for cliff detection.
+    /// </summary>
+    public const float WalkableTanMaxSlope = 1.1918f;
+
+    // ==========================================================================
+    // TERRAIN NORMAL ESTIMATION
+    // ==========================================================================
+
+    /// <summary>
+    /// XY offset for finite-difference terrain normal probes
+    /// </summary>
+    public const float NormalProbeOffset = 0.3f;
+
+    // ==========================================================================
+    // STEP-UP TOLERANCES
+    // ==========================================================================
+
+    /// <summary>
+    /// Extra penetration tolerance added to capsule radius during step-up promotion
+    /// </summary>
+    public const float StepUpPenToleranceExtra = 0.05f;
+
+    /// <summary>
+    /// Max Z above pre-step position for step-up candidate promotion
+    /// </summary>
+    public const float MaxStepUpAbovePreStep = 1.5f;
 
     // ==========================================================================
     // CAPSULE DIMENSIONS (Standard WoW Character)
@@ -117,7 +192,7 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Normal Z threshold for ceiling surfaces (downward-facing)
-    /// cos(120°) = -0.5
+    /// cos(120ï¿½) = -0.5
     /// </summary>
     public const float CeilingNormalZThreshold = -0.5f;
 
@@ -126,12 +201,12 @@ public static class PhysicsTestConstants
     // ==========================================================================
 
     /// <summary>
-    /// Epsilon for numerical comparisons
+    /// Epsilon for numerical comparisons (VECTOR_EPSILON in C++)
     /// </summary>
     public const float Epsilon = 1e-6f;
 
     /// <summary>
-    /// Larger epsilon for less precise comparisons
+    /// Larger epsilon for ground snap / candidate sorting (GROUND_SNAP_EPSILON in C++)
     /// </summary>
     public const float LargeEpsilon = 1e-4f;
 
@@ -139,4 +214,32 @@ public static class PhysicsTestConstants
     /// Touch epsilon for contact detection
     /// </summary>
     public const float TouchEpsilon = 1e-3f;
+
+    // ==========================================================================
+    // COLLISION GEOMETRY
+    // ==========================================================================
+
+    /// <summary>
+    /// Overlap normal Z filter â€” ignore overlaps whose normal Z exceeds this
+    /// </summary>
+    public const float OverlapNormalZFilter = 0.7f;
+
+    /// <summary>
+    /// Max deferred depenetration applied per physics tick
+    /// </summary>
+    public const float MaxDeferredDepenPerTick = 0.05f;
+
+    /// <summary>
+    /// Max overlap recovery iterations per tick
+    /// </summary>
+    public const int MaxOverlapRecoverIterations = 4;
+
+    // ==========================================================================
+    // WATER TRANSITION
+    // ==========================================================================
+
+    /// <summary>
+    /// Velocity damping factor when entering water
+    /// </summary>
+    public const float WaterEntryVelocityDamp = 0.5f;
 }

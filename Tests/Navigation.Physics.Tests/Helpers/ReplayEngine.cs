@@ -34,6 +34,10 @@ public static class ReplayEngine
     /// </summary>
     public static CalibrationResult Replay(MovementRecording recording, string recordingName = "")
     {
+        // Clear stale dynamic objects from previous replays so they don't
+        // pollute GetGroundZ/GetDynamicGroundZ with objects from other recordings.
+        try { NavigationInterop.ClearAllDynamicObjects(); } catch { /* optional */ }
+
         var result = new CalibrationResult();
         var frames = recording.Frames;
 
@@ -291,9 +295,42 @@ public static class ReplayEngine
 
             // Strip TELEPORT_TO_PLANE from moveFlags
             uint cleanedMoveFlags = currentFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
+            uint nextCleanFlags = nextFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
 
-            // Build nearby objects array for this frame
-            var dynObjects = BuildDynamicObjects(currentFrame);
+            // JumpStart lookahead: if the current frame is grounded but the next frame
+            // is airborne, the jump begins during this interval. Override the engine
+            // input to use airborne flags so it applies jump impulse and airborne physics
+            // instead of ground sweep. Without this, the engine outputs ground-level Z
+            // while the recording shows the character already in the air (~0.98y error).
+            bool isJumpStartFrame = (cleanedMoveFlags & 0x6000) == 0 && (nextCleanFlags & 0x6000) != 0;
+            if (isJumpStartFrame)
+            {
+                cleanedMoveFlags |= (nextCleanFlags & 0x6000);
+                fallStartFrameIndex = i;
+            }
+
+            // SurfaceStep lookahead: both frames grounded but Z changes > 0.35y (walking
+            // over stairs, ramps, ledges). Provide Vz hint so the engine's trust-grounded
+            // refinement can widen its ground search to find the target surface.
+            // 0.35y captures WMO stair/edge step-ups (0.38-0.43y) that the navmesh misses
+            // at the exact step-edge XY while keeping normal slope movement (< 0.35y/frame)
+            // on the standard probe path.
+            bool isNextAirborne = (nextCleanFlags & 0x6000) != 0;
+            bool isSurfaceStepFrame = !isJumpStartFrame && !isNextAirborne
+                && (cleanedMoveFlags & 0x6000) == 0
+                && MathF.Abs(nextWorldZ - worldZ) > 0.35f;
+
+            // Build nearby objects array for this frame.
+            // For transport frames, use the NEXT frame's GO positions so the engine
+            // sees the elevator/boat at its end-of-frame position. This aligns the
+            // engine's transport-local → world coordinate transform and ground
+            // collision detection with the comparison target (nextFrame's world pos).
+            // Without this, the engine outputs a world position based on the current
+            // elevator Z while the expected position uses the next elevator Z,
+            // producing a systematic error equal to one frame of platform movement.
+            var dynObjects = (onTransportFrame && nextFrame.NearbyGameObjects?.Count > 0)
+                ? BuildDynamicObjects(nextFrame)
+                : BuildDynamicObjects(currentFrame);
             GCHandle dynHandle = default;
 
             try
@@ -338,6 +375,8 @@ public static class ReplayEngine
                     MapId = recording.MapId,
                     DeltaTime = dt,
                     FrameCounter = (uint)i,
+                    StepUpBaseZ = prevOutput.StepUpBaseZ,
+                    StepUpAge = prevOutput.StepUpAge,
                 };
 
                 // Pin and set nearby objects
@@ -348,26 +387,80 @@ public static class ReplayEngine
                     input.NearbyObjectCount = dynObjects.Length;
                 }
 
-                // Velocity: for ALL airborne frames, derive velocity from recorded
-                // position deltas. The TRUST_INPUT_VELOCITY flag tells the engine
-                // to use these Vx/Vy values as-is instead of recalculating from
-                // moveFlags + orientation (which accumulates error over 50+ frames).
-                bool isAirborne = (currentFrame.MovementFlags & 0x6000) != 0;
-                if (isAirborne)
+                // Derive velocity from recorded position deltas for replay frames.
+                // The TRUST_INPUT_VELOCITY flag tells the engine to use Vx/Vy as-is
+                // instead of recalculating from moveFlags + orientation.
+                // For grounded frames, the trust path uses capsule sweep Z with locked XY.
+                //
+                // Transport frames use a split strategy:
+                // - Grounded on transport: NO trust — engine snaps to the elevator model
+                //   surface via capsule sweep. Dynamic objects come from the next frame
+                //   (see BuildDynamicObjects above), so the elevator is at end-of-frame Z.
+                // - Airborne on transport: TRUST with transport-LOCAL velocity, rotated to
+                //   world space. The engine starts at TransportLocalToWorld(currentLocal,
+                //   nextGO), so transport-local velocity avoids double-counting elevator
+                //   movement. Without trust, the engine can't reproduce jump trajectories
+                //   on moving platforms (errors up to ~1.2y).
+                bool isAirborne = (cleanedMoveFlags & 0x6000) != 0;
+                bool useReplayTrust = !onTransportFrame || (onTransportFrame && isAirborne);
+                if (useReplayTrust)
                 {
                     const float GRAVITY = 19.2911f;
-                    float deltaX = nextWorldX - worldX;
-                    float deltaY = nextWorldY - worldY;
-                    float deltaZ = nextWorldZ - worldZ;
-                    input.Vx = deltaX / dt;
-                    input.Vy = deltaY / dt;
-                    // Remove gravity contribution from vertical delta to get initial Vz
-                    input.Vz = deltaZ / dt + 0.5f * GRAVITY * dt;
-                    input.PhysicsFlags = PHYSICS_FLAG_TRUST_INPUT_VELOCITY;
 
-                    if (!wasAirborne)
-                        input.FallTime = 1;
+                    if (onTransportFrame && isAirborne)
+                    {
+                        // Airborne on transport: use transport-local velocity.
+                        // Position fields are transport-local when TransportGuid != 0.
+                        // Rotate the local delta to world space using the transport's
+                        // orientation so the engine's airborne physics (which runs in
+                        // world space) applies the correct displacement.
+                        float localDx = nextFrame.Position.X - currentFrame.Position.X;
+                        float localDy = nextFrame.Position.Y - currentFrame.Position.Y;
+                        float localDz = nextFrame.Position.Z - currentFrame.Position.Z;
+
+                        // Use the next frame's transport GO (matches the dynamic objects
+                        // registered for this frame) for the rotation.
+                        var transportForRotation = FindTransportGO(nextFrame, nextFrame.TransportGuid)
+                            ?? FindTransportGO(currentFrame, currentFrame.TransportGuid);
+                        if (transportForRotation != null)
+                        {
+                            float cosO = MathF.Cos(transportForRotation.Facing);
+                            float sinO = MathF.Sin(transportForRotation.Facing);
+                            input.Vx = (localDx * cosO - localDy * sinO) / dt;
+                            input.Vy = (localDx * sinO + localDy * cosO) / dt;
+                        }
+                        else
+                        {
+                            input.Vx = localDx / dt;
+                            input.Vy = localDy / dt;
+                        }
+                        input.Vz = localDz / dt + 0.5f * GRAVITY * dt;
+                        input.PhysicsFlags = PHYSICS_FLAG_TRUST_INPUT_VELOCITY;
+                    }
+                    else
+                    {
+                        // Non-transport: use world-space velocity as before.
+                        float deltaX = nextWorldX - worldX;
+                        float deltaY = nextWorldY - worldY;
+                        float deltaZ = nextWorldZ - worldZ;
+                        input.Vx = deltaX / dt;
+                        input.Vy = deltaY / dt;
+                        bool isSwim = (currentFrame.MovementFlags & 0x00200000) != 0;
+                        input.Vz = isAirborne
+                            ? deltaZ / dt + 0.5f * GRAVITY * dt  // Remove gravity contribution
+                            : isSwim ? deltaZ / dt                // Swim: provide Z velocity directly
+                            : isSurfaceStepFrame ? deltaZ / dt    // Surface step: hint for wider ground search
+                            : 0;                                  // Grounded: engine handles Z via sweep/snap
+                        input.PhysicsFlags = PHYSICS_FLAG_TRUST_INPUT_VELOCITY;
+                    }
                 }
+
+                // First airborne frame (jump start): FallTime must be 0 so the engine
+                // applies JUMP_VELOCITY impulse (the engine gates on fallTime == 0).
+                // Subsequent airborne frames use fallTimeMs computed from frame timestamps
+                // which is already set above (line 335).
+                if (isAirborne && !wasAirborne)
+                    input.FallTime = 0;
 
                 var output = StepPhysicsV2(ref input);
                 prevOutput = output;
@@ -381,7 +474,6 @@ public static class ReplayEngine
                 float vertError = MathF.Abs(dz);
 
                 bool isSwimming = (currentFrame.MovementFlags & 0x00200000) != 0;
-                uint nextCleanFlags = nextFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
                 bool flagsChanged = cleanedMoveFlags != nextCleanFlags;
 
                 // Classify transition type

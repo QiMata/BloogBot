@@ -33,4 +33,14 @@ public interface IBotContext
     /// Event handler for game events (combat, spells, UI).
     /// </summary>
     IWoWEventHandler EventHandler { get; }
+<<<<<<< HEAD
+=======
+
+    /// <summary>
+    /// Push a diagnostic message into the bot's rolling snapshot message buffer.
+    /// Live tests use these markers when runtime behavior is observable but the
+    /// snapshot state itself lags behind.
+    /// </summary>
+    void AddDiagnosticMessage(string message);
+>>>>>>> cpp_physics_system
 }

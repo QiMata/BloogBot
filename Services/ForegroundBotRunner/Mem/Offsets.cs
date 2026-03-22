@@ -136,6 +136,7 @@
             public static nint ClntObjMgrGetActivePlayer = 0x00468550;
             public static nint ClntObjMgrGetMapId = 0x00468580;
             public static nint NetClientSend = 0x005379A0;
+            public static nint NetClientProcessMessage = 0x00537AA0;
             public static nint GetSpellCooldown = 0x006E13E0;
             public static nint GetSpellCooldownPtr1 = 0x00CECAEC;
             public static nint UseItem = 0x005D8D00;

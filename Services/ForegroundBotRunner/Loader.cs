@@ -62,7 +62,11 @@ namespace ForegroundBotRunner
                     try
                     {
                         _firstChanceLogged++;
-                        File.AppendAllText(FirstChanceLog, $"[{DateTime.Now:HH:mm:ss}] FirstChance({_firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}\n");
+                        var msg = $"[{DateTime.Now:HH:mm:ss}] FirstChance({_firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}";
+                        // Include stack trace for non-Win32 exceptions (NullRef, AccessViolation, etc.)
+                        if (e.Exception is not System.ComponentModel.Win32Exception)
+                            msg += $"\n  Stack: {e.Exception.StackTrace}";
+                        File.AppendAllText(FirstChanceLog, msg + "\n");
                     }
                     catch { }
                     finally { Interlocked.Exchange(ref _firstChanceReentrancy, 0); }

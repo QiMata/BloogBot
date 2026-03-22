@@ -257,4 +257,84 @@ public class ErrorPatternDiagnosticTests(PhysicsEngineFixture fixture, ITestOutp
 
     private static float SafeAvgV(List<CalibrationResult.FrameDetail> frames) =>
         frames.Count > 0 ? frames.Average(f => f.VertError) : 0;
+
+    // ==========================================================================
+    // NPT-MISS-003: HARD DRIFT GATE — PER-MODE THRESHOLDS
+    // ==========================================================================
+
+    /// <summary>
+    /// NPT-MISS-003: Per-movement-mode drift gate.
+    /// Asserts that ground, air, and swim frame errors stay within mode-specific thresholds.
+    /// Excludes recording artifacts and SPLINE_ELEVATION transitions.
+    /// Reports top offenders per mode with recording name, frame index, and error vector.
+    /// </summary>
+    [Fact]
+    public void DriftGate_PerMode_CleanFramesWithinThresholds()
+    {
+        if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Physics engine not initialized"); return; }
+
+        var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
+        if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings found"); return; }
+
+        // Collect all clean frames and group by movement mode
+        var allClean = allResults
+            .SelectMany(r => r.result.CleanFrames)
+            .ToList();
+
+        var byMode = allClean
+            .GroupBy(f => f.MovementMode)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        _output.WriteLine($"=== PER-MODE DRIFT GATE (clean frames only) ===");
+        _output.WriteLine($"Total clean frames: {allClean.Count}");
+
+        // Per-mode thresholds: (mode, avgLimit, p99Limit)
+        // Ground and swim should be tight; air and transition get more slack.
+        var modeThresholds = new (string mode, float avgLimit, float p99Limit)[]
+        {
+            ("ground",     Tolerances.AvgPosition,     Tolerances.P99Position),
+            ("air",        Tolerances.AvgPosition * 2,  Tolerances.P99Position),
+            ("swim",       Tolerances.AvgPosition * 2,  Tolerances.P99Position),
+            ("transition", Tolerances.AvgPosition * 3,  Tolerances.P99Position * 1.5f),
+            ("transport",  Tolerances.TransportAvg,     Tolerances.TransportP99),
+        };
+
+        var failures = new List<string>();
+
+        foreach (var (mode, avgLimit, p99Limit) in modeThresholds)
+        {
+            if (!byMode.TryGetValue(mode, out var frames) || frames.Count == 0)
+            {
+                _output.WriteLine($"  [{mode,-12}] n=0 (no frames)");
+                continue;
+            }
+
+            float avg = frames.Average(f => f.PosError);
+            var sorted = frames.Select(f => f.PosError).OrderBy(e => e).ToList();
+            int p99Idx = Math.Clamp((int)(sorted.Count * 99 / 100.0), 0, sorted.Count - 1);
+            float p99 = sorted[p99Idx];
+            float worst = sorted[^1];
+
+            _output.WriteLine($"  [{mode,-12}] n={frames.Count,5}  avg={avg:F4}y (< {avgLimit})  p99={p99:F4}y (< {p99Limit})  worst={worst:F4}y");
+
+            // Top 3 offenders per mode
+            var top3 = frames.OrderByDescending(f => f.PosError).Take(3).ToList();
+            foreach (var f in top3)
+            {
+                _output.WriteLine(
+                    $"    [{f.RecordingName}] frame={f.Frame,5} err={f.PosError:F3}y " +
+                    $"dX={f.ErrorX:+0.000;-0.000} dY={f.ErrorY:+0.000;-0.000} dZ={f.ErrorZ:+0.000;-0.000} " +
+                    $"flags=0x{f.MoveFlags:X8}");
+            }
+
+            if (avg >= avgLimit)
+                failures.Add($"[{mode}] avg={avg:F4}y exceeds {avgLimit}y (worst: [{top3[0].RecordingName}] frame {top3[0].Frame})");
+            if (p99 >= p99Limit)
+                failures.Add($"[{mode}] p99={p99:F4}y exceeds {p99Limit}y (worst: [{top3[0].RecordingName}] frame {top3[0].Frame})");
+        }
+
+        Assert.True(failures.Count == 0,
+            $"Per-mode drift gate failed ({failures.Count} threshold breaches):\n  " +
+            string.Join("\n  ", failures));
+    }
 }

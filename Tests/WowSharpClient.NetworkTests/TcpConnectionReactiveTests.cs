@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -134,6 +135,117 @@ namespace WowSharpClient.NetworkTests
             var ex = await disconnectedTcs.Task;
             Assert.Null(ex);
             Assert.False(connection.IsConnected);
+        }
+
+        // --- WSCN-TST-004: Reconnect semantics and duplicate disconnect-emit guard ---
+
+        [Fact]
+        public async Task Reconnect_WhileConnected_EmitsDisconnectThenConnect()
+        {
+            // Arrange - TcpConnection.ConnectAsync calls DisconnectAsync first if already connected
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var connection = new TcpConnection();
+
+            var connectedCount = 0;
+            var disconnectedEvents = new List<Exception?>();
+            using var subConn = connection.WhenConnected.Subscribe(_ => Interlocked.Increment(ref connectedCount));
+            using var subDisc = connection.WhenDisconnected.Subscribe(ex => { lock (disconnectedEvents) disconnectedEvents.Add(ex); });
+
+            // First connection
+            var acceptTask1 = AcceptClientAsync(cts.Token);
+            await connection.ConnectAsync("127.0.0.1", _port, cts.Token);
+            var (serverClient1, serverStream1) = await acceptTask1;
+            using var _s1 = serverClient1;
+            using var _ss1 = serverStream1;
+
+            Assert.True(connection.IsConnected);
+            Assert.Equal(1, connectedCount);
+
+            // Act - Reconnect while still connected (ConnectAsync calls DisconnectAsync internally)
+            var acceptTask2 = AcceptClientAsync(cts.Token);
+            await connection.ConnectAsync("127.0.0.1", _port, cts.Token);
+            var (serverClient2, serverStream2) = await acceptTask2;
+            using var _s2 = serverClient2;
+            using var _ss2 = serverStream2;
+
+            // Assert - Should have 2 connected events and at least 1 disconnect (from the reconnect)
+            Assert.Equal(2, connectedCount);
+            Assert.True(connection.IsConnected);
+            Assert.True(disconnectedEvents.Count >= 1);
+            // Graceful disconnects during reconnect have null exception
+            Assert.Null(disconnectedEvents[0]);
+        }
+
+        [Fact]
+        public async Task ServerClose_ThenExplicitDisconnect_OnlyTwoDisconnectEvents()
+        {
+            // Arrange - Test that server-initiated close + explicit disconnect don't crash
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var connection = new TcpConnection();
+
+            var disconnectedEvents = new List<Exception?>();
+            using var sub = connection.WhenDisconnected.Subscribe(ex =>
+            {
+                lock (disconnectedEvents) disconnectedEvents.Add(ex);
+            });
+
+            var acceptTask = AcceptClientAsync(cts.Token);
+            await connection.ConnectAsync("127.0.0.1", _port, cts.Token);
+            var (serverClient, serverStream) = await acceptTask;
+
+            // Act - Server closes
+            serverClient.Close();
+            serverStream.Close();
+            await Task.Delay(200); // Let the read loop detect EOF
+
+            // Then explicit disconnect (should be safe even if already disconnected)
+            await connection.DisconnectAsync(cts.Token);
+            await Task.Delay(100);
+
+            // Assert - Should not crash. Exact event count depends on timing,
+            // but we should have at least one disconnect and no exceptions thrown
+            Assert.True(disconnectedEvents.Count >= 1);
+            Assert.False(connection.IsConnected);
+        }
+
+        [Fact]
+        public async Task ConnectAsync_AfterDispose_ThrowsObjectDisposed()
+        {
+            // Arrange
+            var connection = new TcpConnection();
+            connection.Dispose();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => connection.ConnectAsync("127.0.0.1", _port));
+        }
+
+        [Fact]
+        public async Task Dispose_WhileConnected_CompletesObservables()
+        {
+            // Arrange
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var connection = new TcpConnection();
+
+            var completedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.WhenConnected.Subscribe(
+                _ => { },
+                () => completedTcs.TrySetResult()
+            );
+
+            var acceptTask = AcceptClientAsync(cts.Token);
+            await connection.ConnectAsync("127.0.0.1", _port, cts.Token);
+            var (serverClient, serverStream) = await acceptTask;
+            using var _ = serverClient;
+            using var __ = serverStream;
+
+            // Act
+            connection.Dispose();
+
+            // Assert - Observables should be completed
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await completedTcs.Task.WaitAsync(timeoutCts.Token);
+            Assert.True(completedTcs.Task.IsCompleted);
         }
     }
 }

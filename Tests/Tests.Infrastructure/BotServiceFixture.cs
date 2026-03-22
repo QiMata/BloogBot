@@ -36,23 +36,81 @@ namespace Tests.Infrastructure;
 /// </summary>
 public class BotServiceFixture : IAsyncLifetime
 {
+<<<<<<< HEAD
+=======
+    private const string RepoMarker = "Westworld of Warcraft";
+>>>>>>> cpp_physics_system
     private readonly MangosServerFixture _mangosFixture = new();
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
     private readonly List<int> _managedWoWPids = [];
+<<<<<<< HEAD
     private static readonly System.Text.RegularExpressions.Regex WoWPidRegex =
         new(@"WoW\.exe started.*Process ID: (\d+)", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
+=======
+
+    /// <summary>
+    /// Per-service log manager. Created when a test name is set via <see cref="SetTestName"/>.
+    /// Writes per-service log files to TestResults/ServiceLogs/{TestName}/.
+    /// </summary>
+    public ServiceLogManager? ServiceLogs { get; private set; }
+
+    /// <summary>
+    /// Optional path to a custom StateManagerSettings.json file.
+    /// When set, StateManager will load bot configuration from this file instead of the default.
+    /// Set this before calling <see cref="InitializeAsync"/>.
+    /// </summary>
+    public string? CustomSettingsPath { get; set; }
+
+    /// <summary>
+    /// The normalized settings path that StateManager was last successfully started with.
+    /// Used by <see cref="EnsureSettingsAsync"/> to skip redundant restarts.
+    /// null = default settings (no custom path).
+    /// </summary>
+    private string? _activeSettingsPath;
+
+    /// <summary>
+    /// Snapshot of coordinator env var at last init, so we detect when
+    /// WWOW_TEST_DISABLE_COORDINATOR changes between tests.
+    /// </summary>
+    private string? _activeCoordinatorFlag;
+    private static readonly System.Text.RegularExpressions.Regex WoWPidRegex =
+        new(@"WoW\.exe started.*Process ID: (\d+)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+>>>>>>> cpp_physics_system
     /// Machine-wide mutex to prevent multiple test processes from concurrently
     /// launching StateManagers. Only one BotServiceFixture can be initializing at a time.
     /// </summary>
     private static Mutex? _globalMutex;
 
     /// <summary>
+<<<<<<< HEAD
+=======
+    /// Whether a managed client (WoW.exe or StateManager) has crashed during this session.
+    /// When true, tests should fail fast instead of timing out.
+    /// </summary>
+    public bool ClientCrashed { get; private set; }
+
+    /// <summary>Descriptive message about which client crashed and when.</summary>
+    public string? CrashMessage { get; private set; }
+
+    private CancellationTokenSource? _crashMonitorCts;
+    private bool _mutexHeld;
+
+    /// <summary>
+>>>>>>> cpp_physics_system
     /// Whether all required services (MaNGOS + StateManager) are healthy and ready.
     /// </summary>
     public bool ServicesReady { get; private set; }
+
+    /// <summary>
+    /// Whether PathfindingService is listening on its configured port (default 5001).
+    /// Tests that require pathfinding should check this in addition to <see cref="ServicesReady"/>.
+    /// </summary>
+    public bool PathfindingServiceReady { get; private set; }
 
     /// <summary>
     /// Reason for service unavailability, if any.
@@ -100,11 +158,22 @@ public class BotServiceFixture : IAsyncLifetime
     /// </summary>
     public void SetOutput(ITestOutputHelper output) => _output = output;
 
+    /// <summary>
+    /// Initialize per-service logging for a specific test. Call before InitializeAsync.
+    /// Log files are written to TestResults/ServiceLogs/{testName}/ and overwritten each run.
+    /// </summary>
+    public void SetTestName(string testName)
+    {
+        ServiceLogs?.Dispose();
+        ServiceLogs = new ServiceLogManager(testName);
+    }
+
     public async Task InitializeAsync()
     {
         Log("BotServiceFixture initializing...");
 
         // Acquire machine-wide mutex — prevents concurrent test processes from racing.
+<<<<<<< HEAD
         // If another test process is already setting up, we wait up to 2 minutes for it.
         const string mutexName = "Global\\WWoW_BotServiceFixture_Mutex";
         try
@@ -171,6 +240,101 @@ public class BotServiceFixture : IAsyncLifetime
         }
         else
         {
+=======
+        // Skip if we already hold it (e.g., during RestartWithSettingsAsync).
+        if (!_mutexHeld)
+        {
+            const string mutexName = "Global\\WWoW_BotServiceFixture_Mutex";
+            try
+            {
+                _globalMutex = new Mutex(false, mutexName);
+                Log("  [Mutex] Acquiring machine-wide lock (prevents concurrent StateManager launches)...");
+                if (!_globalMutex.WaitOne(TimeSpan.FromMinutes(2)))
+                {
+                    UnavailableReason = "Another test process is already running BotServiceFixture. Wait for it to finish.";
+                    Log($"SKIP: {UnavailableReason}");
+                    return;
+                }
+                Log("  [Mutex] Lock acquired.");
+                _mutexHeld = true;
+            }
+            catch (AbandonedMutexException)
+            {
+                // Previous holder crashed — we now own the mutex, which is fine.
+                Log("  [Mutex] Acquired (previous holder crashed).");
+                _mutexHeld = true;
+            }
+        }
+        else
+        {
+            Log("  [Mutex] Already held (restart in progress).");
+        }
+
+        // Kill stale StateManager / WoW.exe from previous test runs so we get a clean slate.
+        await KillStaleProcessesAsync();
+
+        // Verify FastCall.dll in the Bot output directory has the LuaCall export.
+        VerifyFastCallDll();
+
+        // Delegate auth/world/MySQL checks to MangosServerFixture
+        await _mangosFixture.InitializeAsync();
+
+        if (!_mangosFixture.IsAvailable)
+        {
+            UnavailableReason = _mangosFixture.UnavailableReason;
+            Log($"SKIP: {UnavailableReason}");
+            return;
+        }
+
+        Log($"  Auth server ({_mangosFixture.Config.AuthServerPort}): {_mangosFixture.IsAuthAvailable}");
+        Log($"  World server ({_mangosFixture.Config.WorldServerPort}): {_mangosFixture.IsWorldAvailable}");
+        Log($"  MySQL ({_mangosFixture.Config.MySqlPort}): {_mangosFixture.IsMySqlAvailable}");
+
+        // Verify port 8088 is free before starting
+        if (IsPortInUse(8088))
+        {
+            Log("  [StateManager] WARNING: Port 8088 still in use after stale cleanup. Waiting 5s...");
+            await Task.Delay(5000);
+            if (IsPortInUse(8088))
+            {
+                UnavailableReason = "Port 8088 is occupied by another process after cleanup. Cannot start StateManager.";
+                Log($"SKIP: {UnavailableReason}");
+                return;
+            }
+        }
+
+        // Always start a fresh StateManager (stale ones were killed above)
+        Log("  [StateManager] Starting fresh instance...");
+        var smReady = await TryStartStateManagerAsync();
+
+        Log($"  StateManager (8088): {smReady}");
+
+        if (smReady)
+        {
+            ServicesReady = true;
+            _activeSettingsPath = CustomSettingsPath != null ? Path.GetFullPath(CustomSettingsPath) : null;
+            _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+            Log($"All services are ready! (settings={Path.GetFileName(CustomSettingsPath ?? "default")}, coordinator={_activeCoordinatorFlag})");
+
+            // Check if PathfindingService is also available (StateManager launches it as a child process).
+            // PathfindingService listens on port 5001 by default. If it's not running, tests that require
+            // pathfinding (corpse run, movement, gathering) will fail.
+            PathfindingServiceReady = await WaitForPathfindingServiceAsync();
+            Log($"  PathfindingService (5001): {PathfindingServiceReady}");
+            if (!PathfindingServiceReady)
+            {
+                Log("  [PathfindingService] WARNING: PathfindingService is not available on port 5001.");
+                Log("  [PathfindingService] Likely cause: WWOW_DATA_DIR is not set or does not contain mmaps/, maps/, vmaps/ subdirectories.");
+                Log("  [PathfindingService] Set WWOW_DATA_DIR to your nav data directory (e.g., D:\\World of Warcraft) and rebuild.");
+                Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
+            }
+
+            // Start background crash monitoring
+            StartCrashMonitor();
+        }
+        else
+        {
+>>>>>>> cpp_physics_system
             UnavailableReason = "WoWStateManager (port 8088) not available. Start it manually before running integration tests.";
             Log($"SKIP: {UnavailableReason}");
         }
@@ -193,8 +357,132 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
+<<<<<<< HEAD
     /// Verifies that FastCall.dll in the Bot output directory contains the LuaCall export.
     /// If the file is suspiciously small (< 20KB), attempts to copy the correct version.
+=======
+    /// Starts a background task that polls StateManager and WoW.exe processes for crashes.
+    /// When a crash is detected, sets <see cref="ClientCrashed"/> and <see cref="CrashMessage"/>
+    /// so tests can fail fast instead of timing out.
+    /// </summary>
+    private void StartCrashMonitor()
+    {
+        _crashMonitorCts = new CancellationTokenSource();
+        var ct = _crashMonitorCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    // Check StateManager — if it exits, nothing can recover it
+                    if (_stateManagerProcess != null && _stateManagerProcess.HasExited)
+                    {
+                        var msg = $"StateManager crashed (exit code {_stateManagerProcess.ExitCode}) at {DateTime.Now:HH:mm:ss}";
+                        Log($"  [CrashMonitor] {msg}");
+                        ClientCrashed = true;
+                        CrashMessage = msg;
+                        return; // StateManager is unrecoverable — stop monitoring
+                    }
+
+                    // Check tracked WoW.exe PIDs — StateManager auto-restarts WoW.exe,
+                    // so set crash flag but keep monitoring. OutputDataReceived handler
+                    // clears the flag when a new healthy PID is registered.
+                    if (!ClientCrashed)
+                    {
+                        List<int> pids;
+                        lock (_managedWoWPids)
+                            pids = new List<int>(_managedWoWPids);
+
+                        foreach (var pid in pids)
+                        {
+                            if (IsProcessDead(pid))
+                            {
+                                var msg = $"WoW.exe PID {pid} crashed at {DateTime.Now:HH:mm:ss}";
+                                Log($"  [CrashMonitor] {msg}");
+                                ClientCrashed = true;
+                                CrashMessage = msg;
+                                // Remove dead PID so we don't re-detect the same crash
+                                lock (_managedWoWPids)
+                                    _managedWoWPids.Remove(pid);
+                                break; // Continue loop — will detect recovery via OutputDataReceived
+                            }
+                        }
+                    }
+
+                    // Check PathfindingService (port 5001) — if it crashes mid-suite,
+                    // navigation tests will fail with mysterious timeouts.
+                    if (PathfindingServiceReady && !IsPortInUse(5001))
+                    {
+                        PathfindingServiceReady = false;
+                        var msg = $"PathfindingService (port 5001) stopped responding at {DateTime.Now:HH:mm:ss}";
+                        Log($"  [CrashMonitor] {msg}");
+                    }
+
+                    await Task.Delay(2000, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch
+                {
+                    // Best-effort monitoring — don't crash the monitor itself
+                }
+            }
+        }, ct);
+    }
+
+    /// <summary>
+    /// Throws <see cref="Xunit.Sdk.XunitException"/> if a client has crashed.
+    /// When a crash is detected, waits up to 30 seconds for StateManager to restart
+    /// WoW.exe before failing. The crash flag is cleared when a new healthy PID is
+    /// registered (see OutputDataReceived handler).
+    /// </summary>
+    public void AssertClientAlive()
+    {
+        if (!ClientCrashed)
+            return;
+
+        // Give StateManager time to restart WoW.exe — it auto-recovers from crashes.
+        // The OutputDataReceived handler clears ClientCrashed when a new PID arrives.
+        var crashMsg = CrashMessage;
+        for (int i = 0; i < 30; i++)
+        {
+            Thread.Sleep(1000);
+            if (!ClientCrashed)
+            {
+                Log($"  [CrashMonitor] Client recovered after {i + 1}s — new WoW.exe launched");
+                return;
+            }
+        }
+
+        Assert.Fail($"Client crashed and did not recover within 30s: {crashMsg}");
+    }
+
+    /// <summary>Check if a TCP port is currently in use.</summary>
+    private static bool IsPortInUse(int port)
+    {
+        try
+        {
+            using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            listener.Stop();
+            return false; // Port is free
+        }
+        catch (SocketException)
+        {
+            return true; // Port in use
+        }
+    }
+
+    /// <summary>
+    /// Verifies that FastCall.dll in Bot output is the correct version (13KB, 25 exports
+    /// including Safe* SEH wrappers). If a stale >20KB version is found, replaces it from
+    /// ForegroundBotRunner/Resources/. This prevents ERROR #132 crashes caused by missing
+    /// Safe* entry points (EntryPointNotFoundException on WoW's main thread every second).
+>>>>>>> cpp_physics_system
     /// </summary>
     private void VerifyFastCallDll()
     {
@@ -204,18 +492,34 @@ public class BotServiceFixture : IAsyncLifetime
             if (!File.Exists(fastCallPath))
             {
                 Log($"  [FastCall] WARNING: FastCall.dll not found at {fastCallPath}");
-                TryCopyCorrectFastCall(fastCallPath);
                 return;
             }
 
             var fileInfo = new FileInfo(fastCallPath);
             Log($"  [FastCall] {fastCallPath}: {fileInfo.Length} bytes, modified {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
 
-            // The correct FastCall.dll with LuaCall is ~62KB. The stale version is ~12KB.
-            if (fileInfo.Length < 20_000)
+            // The correct FastCall.dll is ~14KB (25 exports with Safe* SEH wrappers).
+            // The OLD version is ~40KB (9 exports, no Safe* functions).
+            // If we detect a stale version, replace it from the canonical source.
+            if (fileInfo.Length > 20_000)
             {
+<<<<<<< HEAD
                 Log($"  [FastCall] WARNING: FastCall.dll is only {fileInfo.Length} bytes — likely missing LuaCall export!");
                 TryCopyCorrectFastCall(fastCallPath);
+=======
+                Log($"  [FastCall] STALE DLL DETECTED ({fileInfo.Length} bytes > 20KB). Replacing from Resources/...");
+                var sourcePath = FindCanonicalFastCallDll();
+                if (sourcePath != null)
+                {
+                    File.Copy(sourcePath, fastCallPath, overwrite: true);
+                    var newInfo = new FileInfo(fastCallPath);
+                    Log($"  [FastCall] Replaced with {sourcePath}: {newInfo.Length} bytes");
+                }
+                else
+                {
+                    Log($"  [FastCall] ERROR: Cannot find canonical FastCall.dll in Resources/. Build will likely crash.");
+                }
+>>>>>>> cpp_physics_system
             }
         }
         catch (Exception ex)
@@ -224,10 +528,89 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+<<<<<<< HEAD
     private void TryCopyCorrectFastCall(string targetPath)
+=======
+    /// <summary>
+    /// Finds the canonical FastCall.dll from ForegroundBotRunner/Resources/.
+    /// Walks up from test output dir to solution root, then checks the known path.
+    /// </summary>
+    private static string? FindCanonicalFastCallDll()
+>>>>>>> cpp_physics_system
     {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "Services", "ForegroundBotRunner", "Resources", "FastCall.dll");
+            if (File.Exists(candidate))
+            {
+                var info = new FileInfo(candidate);
+                // Sanity check: canonical version should be <20KB
+                if (info.Length < 20_000)
+                    return candidate;
+            }
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Ensures StateManager is running with the given settings. If already running
+    /// with identical settings and coordinator flag, this is a no-op — avoiding
+    /// the expensive teardown + relaunch cycle.
+    /// </summary>
+    public async Task EnsureSettingsAsync(string settingsPath)
+    {
+        var normalized = Path.GetFullPath(settingsPath);
+        var coordFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+
+        Log($"[EnsureSettings] Requested={Path.GetFileName(settingsPath)}, Active={_activeSettingsPath ?? "(null)"}, " +
+            $"coord={coordFlag}/{_activeCoordinatorFlag ?? "(null)"}, ready={ServicesReady}");
+
+        if (ServicesReady && _activeSettingsPath == normalized && _activeCoordinatorFlag == coordFlag)
+        {
+            Log($"[EnsureSettings] Already running with {Path.GetFileName(settingsPath)} (coordinator={coordFlag}), skipping restart.");
+            return;
+        }
+
+        Log($"[EnsureSettings] Settings differ — restarting StateManager.");
+        await RestartWithSettingsAsync(settingsPath);
+    }
+
+    /// <summary>
+    /// Unconditionally tears down and relaunches StateManager with the given settings.
+    /// Internal implementation — callers should use <see cref="EnsureSettingsAsync"/>.
+    /// </summary>
+    private async Task RestartWithSettingsAsync(string settingsPath)
+    {
+        Log($"[Restart] Tearing down for reconfigure with: {settingsPath}");
+        await TeardownProcessesAsync();
+
+        // Reset state for fresh init
+        ServicesReady = false;
+        ClientCrashed = false;
+        CrashMessage = null;
+        UnavailableReason = null;
+        PathfindingServiceReady = false;
+
+        CustomSettingsPath = settingsPath;
+        await InitializeAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        // Write crash summary to service logs before teardown
+        if (ClientCrashed && ServiceLogs != null)
+            ServiceLogs.WriteSummary($"CRASH DETECTED: {CrashMessage}");
+        ServiceLogs?.Dispose();
+        ServiceLogs = null;
+
+        await TeardownProcessesAsync();
+
+        // Always release the machine-wide mutex so the next test run can proceed
         try
         {
+<<<<<<< HEAD
             var botDir = Path.GetDirectoryName(Path.GetDirectoryName(targetPath));
             if (botDir == null) return;
             var sourcePath = Path.Combine(Path.GetDirectoryName(botDir)!, "net8.0", "FastCall.dll");
@@ -248,16 +631,25 @@ public class BotServiceFixture : IAsyncLifetime
             else
             {
                 Log($"  [FastCall] Source not found at {sourcePath} — cannot auto-fix");
+=======
+            if (_mutexHeld)
+            {
+                _globalMutex?.ReleaseMutex();
+                _mutexHeld = false;
+>>>>>>> cpp_physics_system
             }
+            _globalMutex?.Dispose();
+            _globalMutex = null;
         }
-        catch (Exception ex)
+        catch (ApplicationException)
         {
-            Log($"  [FastCall] Error copying FastCall.dll: {ex.Message}");
+            // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
         }
     }
 
-    public Task DisposeAsync()
+    private async Task TeardownProcessesAsync()
     {
+<<<<<<< HEAD
         int wowKilled = 0, pfKilled = 0;
 
         try
@@ -317,6 +709,36 @@ public class BotServiceFixture : IAsyncLifetime
                 _globalMutex?.ReleaseMutex();
                 _globalMutex?.Dispose();
                 _globalMutex = null;
+=======
+        // Stop crash monitor first
+        try { _crashMonitorCts?.Cancel(); } catch { }
+
+        int wowKilled = 0, pfKilled = 0;
+
+        // Snapshot PIDs we launched so we can check for orphans after cleanup.
+        // Copy under lock to avoid racing with the stdout capture callback.
+        int? stateManagerPid = null;
+        List<int> launchedPids;
+        lock (_managedWoWPids)
+            launchedPids = new List<int>(_managedWoWPids);
+        try
+        {
+            stateManagerPid = _stateManagerProcess?.Id;
+        }
+        catch { /* process may have exited */ }
+
+        // 1. Kill StateManager FIRST — prevents its monitoring loop (every 5s) from
+        //    relaunching WoW.exe after we kill bot processes. StateManager detects
+        //    terminated bots and re-creates them via ApplyDesiredWorkerState.
+        if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
+        {
+            Log("Stopping StateManager (must die first to prevent WoW.exe relaunch)...");
+            try
+            {
+                _stateManagerProcess.Kill(entireProcessTree: true);
+                _stateManagerProcess.WaitForExit(5000);
+                Log("  StateManager process terminated.");
+>>>>>>> cpp_physics_system
             }
             catch (ApplicationException)
             {
@@ -324,6 +746,7 @@ public class BotServiceFixture : IAsyncLifetime
             }
         }
 
+<<<<<<< HEAD
         return Task.CompletedTask;
     }
 
@@ -333,15 +756,131 @@ public class BotServiceFixture : IAsyncLifetime
     /// intercepting new bot connections. WoW.exe kills include a MaNGOS session
     /// cooldown so the auth server doesn't reject the next login attempt.
     /// </summary>
+=======
+        // 2. Brief delay for the process tree to finish dying
+        await Task.Delay(1000);
+
+        // 3. Kill ALL WoW.exe processes spawned by this fixture.
+        foreach (var proc in Process.GetProcessesByName("WoW"))
+        {
+            try
+            {
+                Log($"Cleanup: killing WoW.exe PID {proc.Id}");
+                if (await ForceKillProcessAsync(proc, "WoW"))
+                    wowKilled++;
+            }
+            finally { proc.Dispose(); }
+        }
+
+        // 4. Kill orphaned PathfindingService
+        pfKilled += await KillPathfindingServiceProcessesAsync("PF");
+
+        // 5. Kill orphaned BackgroundBotRunner processes
+        int bgKilled = 0;
+        foreach (var bgPid in FindDotnetProcessesByDll("BackgroundBotRunner"))
+        {
+            try
+            {
+                var proc = Process.GetProcessById(bgPid);
+                try
+                {
+                    Log($"Cleanup: killing BackgroundBotRunner PID {bgPid}");
+                    if (await ForceKillProcessAsync(proc, "BGBot"))
+                        bgKilled++;
+                }
+                finally { proc.Dispose(); }
+            }
+            catch (ArgumentException) { /* already dead */ }
+        }
+
+        lock (_managedWoWPids)
+            _managedWoWPids.Clear();
+
+        if (wowKilled + pfKilled + bgKilled > 0)
+            Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService, {bgKilled} BackgroundBotRunner killed.");
+
+        // 6. Orphan detection
+        await ForceKillOrphanedProcessesAsync(stateManagerPid, launchedPids);
+    }
+
+    /// <summary>
+    /// Post-cleanup orphan detection and force-kill. Waits briefly after normal cleanup,
+    /// then checks if any PIDs that THIS fixture launched are still alive. If found,
+    /// force-kills them to prevent runaway resource consumption (e.g., WoW.exe relaunch
+    /// loops that exhaust Windows handles overnight).
+    ///
+    /// Safe: Only kills PIDs from <see cref="_managedWoWPids"/> and the StateManager process —
+    /// never blanket-kills by process name.
+    /// </summary>
+    private async Task ForceKillOrphanedProcessesAsync(int? stateManagerPid, List<int> wowPids)
+    {
+        var allTrackedPids = new List<(int pid, string source)>();
+        if (stateManagerPid.HasValue)
+            allTrackedPids.Add((stateManagerPid.Value, "StateManager"));
+        foreach (var pid in wowPids)
+            allTrackedPids.Add((pid, "WoW.exe"));
+
+        if (allTrackedPids.Count == 0)
+        {
+            Log("[OrphanCheck] No PIDs were tracked by this fixture — skipping orphan check.");
+            return;
+        }
+
+        Log($"[OrphanCheck] Waiting 10s before checking {allTrackedPids.Count} tracked PIDs for orphans...");
+        await Task.Delay(10_000);
+
+        var orphanCount = 0;
+        foreach (var (pid, source) in allTrackedPids)
+        {
+            if (IsProcessDead(pid))
+                continue;
+
+            orphanCount++;
+            Log($"[OrphanCheck] Orphan detected: PID {pid} ({source}) — force-killing.");
+            try
+            {
+                var proc = Process.GetProcessById(pid);
+                try { await ForceKillProcessAsync(proc, $"OrphanKill-{source}"); }
+                finally { proc.Dispose(); }
+            }
+            catch (ArgumentException) { /* exited between check and kill — fine */ }
+        }
+
+        Log(orphanCount > 0
+            ? $"[OrphanCheck] Force-killed {orphanCount} orphaned process(es)."
+            : $"[OrphanCheck] All {allTrackedPids.Count} tracked PIDs confirmed dead. No orphans detected.");
+    }
+
+    /// <summary>
+    /// Kill any WoWStateManager.exe, WoW.exe, and PathfindingService processes
+    /// left over from previous test runs. This prevents stale StateManagers from
+    /// intercepting new bot connections. WoW.exe kills include a MaNGOS session
+    /// cooldown so the auth server doesn't reject the next login attempt.
+    /// </summary>
+>>>>>>> cpp_physics_system
     private async Task KillStaleProcessesAsync()
     {
         int smKilled = 0, wowKilled = 0, pfKilled = 0;
 
+<<<<<<< HEAD
         // 1. Kill stale StateManagers (they manage the entire bot lifecycle)
+=======
+        // 1. Kill stale StateManagers (repo-scoped — only kills processes from this repo)
+>>>>>>> cpp_physics_system
         foreach (var proc in Process.GetProcessesByName("WoWStateManager"))
         {
             try
             {
+<<<<<<< HEAD
+=======
+                var modulePath = proc.MainModule?.FileName ?? "";
+                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"  [Cleanup] Skipping WoWStateManager PID {proc.Id} (not repo-scoped: {modulePath})");
+                    continue;
+                }
+
+>>>>>>> cpp_physics_system
                 Log($"  [Cleanup] Killing stale WoWStateManager.exe PID {proc.Id} (started {proc.StartTime:HH:mm:ss})");
                 proc.Kill(entireProcessTree: true);
                 proc.WaitForExit(5000);
@@ -360,14 +899,22 @@ public class BotServiceFixture : IAsyncLifetime
             try
             {
                 Log($"  [Cleanup] Killing orphaned WoW.exe PID {proc.Id}");
+<<<<<<< HEAD
                 if (ForceKillProcess(proc, "Cleanup-WoW"))
+=======
+                if (await ForceKillProcessAsync(proc, "Cleanup-WoW"))
+>>>>>>> cpp_physics_system
                     wowKilled++;
             }
             finally { proc.Dispose(); }
         }
 
         // 3. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
+<<<<<<< HEAD
         pfKilled += KillPathfindingServiceProcesses("Cleanup-PF");
+=======
+        pfKilled += await KillPathfindingServiceProcessesAsync("Cleanup-PF");
+>>>>>>> cpp_physics_system
 
         int totalKilled = smKilled + wowKilled + pfKilled;
         if (totalKilled > 0)
@@ -386,6 +933,47 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+<<<<<<< HEAD
+=======
+    /// <summary>
+    /// Waits for PathfindingService to become available on port 5001.
+    /// StateManager launches PathfindingService as a child process. If WWOW_DATA_DIR
+    /// is missing or invalid, PathfindingService exits immediately with code 1.
+    /// </summary>
+    private async Task<bool> WaitForPathfindingServiceAsync()
+    {
+        const int pathfindingPort = 5001;
+        const int maxWaitSeconds = 30;
+
+        // If port is already in use, it's ready
+        if (IsPortInUse(pathfindingPort))
+        {
+            Log($"  [PathfindingService] Already listening on port {pathfindingPort}.");
+            return true;
+        }
+
+        // Give StateManager time to launch PathfindingService (it does this during Main())
+        Log($"  [PathfindingService] Waiting up to {maxWaitSeconds}s for port {pathfindingPort}...");
+        for (int i = 0; i < maxWaitSeconds; i++)
+        {
+            var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", pathfindingPort, 1000);
+            if (ready)
+            {
+                Log($"  [PathfindingService] Ready on port {pathfindingPort} after {i + 1}s.");
+                return true;
+            }
+
+            if (i % 10 == 9)
+                Log($"  [PathfindingService] Still waiting... ({i + 1}s)");
+
+            await Task.Delay(1000);
+        }
+
+        Log($"  [PathfindingService] Did not become ready within {maxWaitSeconds}s.");
+        return false;
+    }
+
+>>>>>>> cpp_physics_system
     private async Task<bool> TryStartStateManagerAsync()
     {
         try
@@ -408,7 +996,7 @@ public class BotServiceFixture : IAsyncLifetime
                 FileName = smExe,
                 WorkingDirectory = smDir,
                 UseShellExecute = false,
-                CreateNoWindow = true,
+                CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
@@ -422,8 +1010,39 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] Set DOTNET_ROOT(x86) = {x86DotnetRoot}");
             }
 
+<<<<<<< HEAD
+=======
+            // Always show console windows for child processes (BG bots, PathfindingService)
+            // so test runners can observe bot output in real time.
+            psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
+
+>>>>>>> cpp_physics_system
             if (!string.IsNullOrEmpty(envRecording))
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
+
+            // Pass custom settings override to StateManager if configured
+            Log($"  [StateManager] CustomSettingsPath={CustomSettingsPath ?? "(null)"}");
+            if (!string.IsNullOrEmpty(CustomSettingsPath) && File.Exists(CustomSettingsPath))
+            {
+                psi.Environment["WWOW_SETTINGS_OVERRIDE"] = CustomSettingsPath;
+                Log($"  [StateManager] Using custom settings: {CustomSettingsPath}");
+            }
+            else if (!string.IsNullOrEmpty(CustomSettingsPath))
+            {
+                Log($"  [StateManager] WARNING: CustomSettingsPath set but file not found: {CustomSettingsPath}");
+            }
+
+            // Reduce log level to Warning to prevent stdout pipe saturation with 10+ bots.
+            // .NET Host reads Logging__LogLevel__Default from environment (double underscore = : separator).
+            psi.Environment["Logging__LogLevel__Default"] = "Warning";
+
+            // Explicitly forward coordinator toggle so restarts inherit the test's intent
+            var coordDisable = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR");
+            if (coordDisable != null)
+            {
+                psi.Environment["WWOW_TEST_DISABLE_COORDINATOR"] = coordDisable;
+                Log($"  [StateManager] WWOW_TEST_DISABLE_COORDINATOR={coordDisable}");
+            }
 
             _stateManagerProcess = Process.Start(psi);
             if (_stateManagerProcess == null)
@@ -438,12 +1057,41 @@ public class BotServiceFixture : IAsyncLifetime
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
+<<<<<<< HEAD
                     Log($"  [StateManager-OUT] {e.Data}");
+=======
+                    // Write ALL lines to per-service log files (no filtering)
+                    ServiceLogs?.ClassifyAndWrite(e.Data);
+
+                    // Throttle verbose repetitive lines to reduce test host memory pressure.
+                    // StateManager emits snapshot queries, equipment dumps, and skill snapshots
+                    // at 350ms intervals — thousands of lines per minute. Only log important lines.
+                    if (!IsVerboseStateManagerLine(e.Data))
+                        Log($"  [StateManager-OUT] {e.Data}");
+>>>>>>> cpp_physics_system
                     var match = WoWPidRegex.Match(e.Data);
                     if (match.Success && int.TryParse(match.Groups[1].Value, out var wowPid))
                     {
                         lock (_managedWoWPids)
+<<<<<<< HEAD
                             _managedWoWPids.Add(wowPid);
+=======
+                        {
+                            // Prune dead PIDs from previous launch attempts — StateManager
+                            // auto-restarts WoW.exe on crash, so stale PIDs would trigger
+                            // false crash detection.
+                            _managedWoWPids.RemoveAll(p => IsProcessDead(p));
+                            _managedWoWPids.Add(wowPid);
+
+                            // Clear sticky crash flag if a healthy replacement has launched
+                            if (ClientCrashed)
+                            {
+                                Log($"  [BotServiceFixture] Clearing crash flag — WoW.exe restarted (new PID {wowPid})");
+                                ClientCrashed = false;
+                                CrashMessage = null;
+                            }
+                        }
+>>>>>>> cpp_physics_system
                         Log($"  [BotServiceFixture] Tracking WoW.exe PID {wowPid} for cleanup");
                     }
                 }
@@ -451,7 +1099,10 @@ public class BotServiceFixture : IAsyncLifetime
             _stateManagerProcess.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrEmpty(e.Data))
+                {
+                    ServiceLogs?.WriteStateManagerError(e.Data);
                     Log($"  [StateManager-ERR] {e.Data}");
+                }
             };
             _stateManagerProcess.BeginOutputReadLine();
             _stateManagerProcess.BeginErrorReadLine();
@@ -516,13 +1167,21 @@ public class BotServiceFixture : IAsyncLifetime
     /// (proven to work for WoW.exe created via native CreateProcess), with Process.Kill()
     /// and CloseMainWindow() as fallbacks. Verifies the process is actually dead before
     /// returning success.
+<<<<<<< HEAD
     /// </summary>
     private bool ForceKillProcess(Process proc, string label)
+=======
+    ///
+    /// Async to avoid blocking the test thread during post-kill waits.
+    /// </summary>
+    private async Task<bool> ForceKillProcessAsync(Process proc, string label)
+>>>>>>> cpp_physics_system
     {
         var pid = proc.Id;
         try
         {
             if (proc.HasExited) return true;
+<<<<<<< HEAD
         }
         catch { /* can't check — proceed with kill attempts */ }
 
@@ -703,6 +1362,293 @@ public class BotServiceFixture : IAsyncLifetime
         {
             return true; // no process with this PID — it's dead
         }
+=======
+        }
+        catch { /* can't check — proceed with kill attempts */ }
+
+        // Attempt 1: taskkill /F /PID — most reliable for WoW.exe (native CreateProcess child)
+        try
+        {
+            var taskKill = Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                Arguments = $"/F /PID {pid}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+            if (taskKill != null)
+            {
+                taskKill.WaitForExit(5000);
+                var stdout = taskKill.StandardOutput.ReadToEnd();
+                var stderr = taskKill.StandardError.ReadToEnd();
+                var exitCode = taskKill.ExitCode;
+                taskKill.Dispose();
+                Log($"  [{label}] taskkill /F /PID {pid}: exit={exitCode} stdout='{stdout.Trim()}' stderr='{stderr.Trim()}'");
+
+                if (exitCode == 0)
+                {
+                    // Wait for the process to actually terminate
+                    await Task.Delay(1000);
+                    if (IsProcessDead(pid))
+                        return true;
+                    Log($"  [{label}] taskkill reported success but PID {pid} still alive!");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"  [{label}] taskkill failed for PID {pid}: {ex.Message}");
+        }
+
+        // Attempt 2: .NET Process.Kill()
+        try
+        {
+            proc.Kill();
+            proc.WaitForExit(3000);
+        }
+        catch (Exception ex)
+        {
+            Log($"  [{label}] Process.Kill() failed for PID {pid}: {ex.Message}");
+        }
+        if (IsProcessDead(pid))
+        {
+            Log($"  [{label}] Process.Kill() worked for PID {pid}");
+            return true;
+        }
+
+        // Attempt 3: CloseMainWindow (sends WM_CLOSE — graceful)
+        try
+        {
+            proc.CloseMainWindow();
+            await Task.Delay(2000);
+        }
+        catch (Exception ex)
+        {
+            Log($"  [{label}] CloseMainWindow failed for PID {pid}: {ex.Message}");
+        }
+        if (IsProcessDead(pid))
+        {
+            Log($"  [{label}] CloseMainWindow worked for PID {pid}");
+            return true;
+        }
+
+        Log($"  [{label}] FAILED to kill PID {pid} after all attempts!");
+        return false;
+    }
+
+    /// <summary>
+    /// Kill PathfindingService regardless of hosting model:
+    /// 1) direct PathfindingService.exe process name
+    /// 2) dotnet-hosted PathfindingService.dll discovered via listening port
+    /// </summary>
+    private async Task<int> KillPathfindingServiceProcessesAsync(string label)
+    {
+        var killed = 0;
+        var seenPids = new HashSet<int>();
+
+        foreach (var proc in Process.GetProcessesByName("PathfindingService"))
+        {
+            try
+            {
+                var modulePath = proc.MainModule?.FileName ?? "";
+                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"  [Cleanup] Skipping PathfindingService PID {proc.Id} (not repo-scoped: {modulePath})");
+                    continue;
+                }
+
+                seenPids.Add(proc.Id);
+                Log($"  [Cleanup] Killing PathfindingService PID {proc.Id}");
+                if (await ForceKillProcessAsync(proc, label))
+                    killed++;
+            }
+            finally { proc.Dispose(); }
+        }
+
+        foreach (var pid in GetListeningPidsForPort(5001))
+        {
+            if (seenPids.Contains(pid))
+                continue;
+
+            Process? proc = null;
+            try
+            {
+                proc = Process.GetProcessById(pid);
+                seenPids.Add(pid);
+                Log($"  [Cleanup] Killing process on PathfindingService port 5001 (PID {pid}, Name '{proc.ProcessName}')");
+                if (await ForceKillProcessAsync(proc, $"{label}-Port5001"))
+                    killed++;
+            }
+            catch (ArgumentException)
+            {
+                // Process already exited.
+            }
+            finally { proc?.Dispose(); }
+        }
+
+        return killed;
+    }
+
+    /// <summary>
+    /// Parses `netstat -ano -p tcp` and returns PIDs listening on the specified local TCP port.
+    /// </summary>
+    private static IEnumerable<int> GetListeningPidsForPort(int port)
+    {
+        var pids = new HashSet<int>();
+        try
+        {
+            using var netstat = Process.Start(new ProcessStartInfo
+            {
+                FileName = "netstat",
+                Arguments = "-ano -p tcp",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+
+            if (netstat == null)
+                return pids;
+
+            var output = netstat.StandardOutput.ReadToEnd();
+            netstat.WaitForExit(5000);
+
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                output,
+                @"^\s*TCP\s+\S+:(?<port>\d+)\s+\S+\s+LISTENING\s+(?<pid>\d+)\s*$",
+                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                if (!int.TryParse(match.Groups["port"].Value, out var parsedPort) || parsedPort != port)
+                    continue;
+                if (!int.TryParse(match.Groups["pid"].Value, out var parsedPid) || parsedPid <= 0)
+                    continue;
+
+                pids.Add(parsedPid);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup helper; ignore parse failures.
+        }
+
+        return pids;
+    }
+
+    /// <summary>
+    /// Find dotnet.exe processes hosting a specific DLL by querying wmic for command lines.
+    /// Returns PIDs of matching processes.
+    /// </summary>
+    private static List<int> FindDotnetProcessesByDll(string dllNameFragment)
+    {
+        var pids = new List<int>();
+        try
+        {
+            using var wmic = Process.Start(new ProcessStartInfo
+            {
+                FileName = "wmic",
+                Arguments = "process where \"name='dotnet.exe'\" get ProcessId,CommandLine /FORMAT:LIST",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+            if (wmic == null) return pids;
+            var output = wmic.StandardOutput.ReadToEnd();
+            wmic.WaitForExit(5000);
+
+            // wmic LIST format: "CommandLine=...\nProcessId=...\n"
+            string? currentCmdLine = null;
+            foreach (var rawLine in output.Split('\n'))
+            {
+                var line = rawLine.Trim();
+                if (line.StartsWith("CommandLine=", StringComparison.OrdinalIgnoreCase))
+                    currentCmdLine = line["CommandLine=".Length..];
+                else if (line.StartsWith("ProcessId=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (currentCmdLine != null
+                        && currentCmdLine.Contains(dllNameFragment, StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(line["ProcessId=".Length..].Trim(), out var pid)
+                        && pid > 0)
+                    {
+                        pids.Add(pid);
+                    }
+                    currentCmdLine = null;
+                }
+            }
+        }
+        catch { /* best-effort */ }
+        return pids;
+    }
+
+    /// <summary>Check if a process has actually terminated (by PID).</summary>
+    private static bool IsProcessDead(int pid)
+    {
+        try
+        {
+            Process.GetProcessById(pid);
+            return false; // still alive
+        }
+        catch (ArgumentException)
+        {
+            return true; // no process with this PID — it's dead
+        }
+    }
+
+    /// <summary>
+    /// Filters out high-frequency StateManager output lines that flood test output.
+    /// These lines are emitted every ~350ms per bot and accumulate thousands of entries
+    /// during a full test run, consuming significant memory in the test host process.
+    /// </summary>
+    private static bool IsVerboseStateManagerLine(string line)
+    {
+        // These patterns appear hundreds/thousands of times per test run.
+        // Suppressing them prevents ITestOutputHelper memory pressure crash.
+        if (line.Contains("Snapshot query:")
+            || line.Contains("[SkillSnapshot]")
+            || line.Contains("[BOT RUNNER] Equipment:")
+            || line.Contains("[BOT RUNNER] Protobuf Inventory")
+            || line.Contains("SMSG_MONSTER_MOVE")
+            || line.Contains("SNAPSHOT_RECEIVED:")
+            || line.Contains("[BOT RUNNER] Equipment slot")
+            || line.Contains("Received world state update message")
+            || line.Contains("[ReadValuesUpdateBlock]")
+            || line.Contains("GAMEOBJ CREATED")
+            || line.Contains("INVENTORY_CHANGE_FAILURE")
+            || line.Contains("[WorldClient] INVENTORY_CHANGE_FAILURE")
+            || line.Contains("[BOT RUNNER] Inventory changed:")
+            // High-frequency per-tick lines that saturate stdout with 10+ bots
+            || line.Contains("[DIAG] DeathRecovery:")
+            || line.Contains("HandleUpdateObject")
+            || line.Contains("ParseCreateObject")
+            || line.Contains("[DIAG] [TICK#")
+            || line.Contains("SMSG_COMPRESSED_UPDATE_OBJECT")
+            || line.Contains("StateChangeResponse dispatched")
+            // Action delivery logs temporarily unfiltered for GOTO debugging
+            // || line.Contains("QUEUED ACTION for")
+            // || line.Contains("Action forward: queued")
+            // || line.Contains("INJECTING PENDING ACTION")
+            // || line.Contains("DELIVERING ACTION")
+            // FG crash/relaunch events must NOT be filtered — need visibility
+            // || line.Contains("Detected terminated bot process")
+            // || line.Contains("attempting re-launch")
+            // Packet hex dump spam from Console.WriteLine in PacketPipeline
+            || line.Contains("[RX]")
+            || line.Contains("[TX]")
+            || line.Contains("payload:"))
+            return true;
+
+        // Filter orphaned .NET logger prefix lines (no content, just the logger category)
+        // e.g. "info: WoWStateManager.StateManagerWorker[0]" with no trailing content
+        var trimmed = line.TrimEnd();
+        if (trimmed.EndsWith("[0]") && trimmed.StartsWith("info:"))
+            return true;
+
+        return false;
+>>>>>>> cpp_physics_system
     }
 
     private void Log(string message)

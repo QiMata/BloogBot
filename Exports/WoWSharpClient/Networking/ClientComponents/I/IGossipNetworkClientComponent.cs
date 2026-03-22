@@ -136,11 +136,14 @@ namespace WoWSharpClient.Networking.ClientComponents.I
 
         /// <summary>
         /// Selects the optimal quest reward based on the specified strategy.
+        /// Falls back to index 0 when no reward choices are provided.
         /// </summary>
-        /// <param name="strategy">The reward selection strategy.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>A task representing the asynchronous operation.</returns>
         Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Selects the optimal quest reward based on the specified strategy and available reward choices.
+        /// </summary>
+        Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, IReadOnlyList<QuestRewardChoice> availableRewards, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Accepts all available quests that match the specified filter.

@@ -89,6 +89,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                         IsInRaid = false;
                         IsGroupLeader = false;
                         GroupSize = 0;
+                        LeaderGuid = 0;
                     }
                     _logger.LogInformation("{Reason}", reason);
                 })
@@ -96,7 +97,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _leadershipChanges = SafeOpcodeStream(Opcode.SMSG_GROUP_SET_LEADER)
                 .Select(ParseGroupSetLeader)
-                .Do(change => _logger.LogInformation("Group leadership changed to: {Leader} ({LeaderGuid:X})", change.NewLeaderName, change.NewLeaderGuid))
+                .Do(change =>
+                {
+                    if (change.NewLeaderGuid != 0)
+                        LeaderGuid = change.NewLeaderGuid;
+                    _logger.LogInformation("Group leadership changed to: {Leader} ({LeaderGuid:X})", change.NewLeaderName, change.NewLeaderGuid);
+                })
                 .Publish().RefCount();
 
             _partyCommandResults = SafeOpcodeStream(Opcode.SMSG_PARTY_COMMAND_RESULT)
@@ -142,6 +148,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public bool IsInRaid { get; private set; }
         public bool IsGroupLeader { get; private set; }
         public uint GroupSize { get; private set; }
+        public ulong LeaderGuid { get; private set; }
         public LootMethod CurrentLootMethod { get; private set; }
         public bool HasPendingInvite { get; private set; }
         #endregion
@@ -756,6 +763,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 }
 
                 IsGroupLeader = selfIsLeader && count > 0;
+                LeaderGuid = leaderGuid;
                 CurrentLootMethod = parsedLootMethod;
 
                 return (groupType == 1, count);

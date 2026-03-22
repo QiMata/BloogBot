@@ -10,6 +10,6 @@ namespace WarlockAffliction.Tasks
             new[] { CurseOfAgony, Immolate, Corruption, SiphonLife, Haunt };
 
         protected override void AfterDots() =>
-            TryCastSpell(Haunt, 0, 30, ShouldReapply(Haunt));
+            TryCastSpell(Haunt, 0f, GetSpellRange(HauntBaseRange), ShouldReapply(Haunt));
     }
 }

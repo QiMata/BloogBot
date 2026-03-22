@@ -48,7 +48,8 @@ namespace WarriorProtection.Tasks
 
                 ObjectManager.SetTarget(looseUnit.Guid);
 
-                if ((looseUnit.ManaPercent < 10 || looseUnit.Position.DistanceTo(ObjectManager.Player.Position) < 8) && Update(5))
+                float meleeRange = GetMeleeRange(looseUnit);
+                if ((looseUnit.ManaPercent < 10 || looseUnit.Position.DistanceTo(ObjectManager.Player.Position) < meleeRange) && Update(meleeRange))
                 {
 
                 }

@@ -137,3 +137,36 @@ Drive full LiveValidation and BotRunner integration test refactor until FG and B
 Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
 
 
+<<<<<<< HEAD
+=======
+
+
+## Archived Snapshot (2026-02-24 19:43:32) - Tests/BotRunner.Tests/TASKS.md
+
+- [x] Use `.tele name {NAME} Orgrimmar` before kill in `DeathCorpseRunTests`.
+- [x] Remove `ValleyOfTrials` setup dependency from corpse-run test flow.
+- [x] Removed reseed/variant retry death-loop path from runback setup.
+- [x] Preserved strict corpse lifecycle ordering in test assertions.
+- [x] Added timeout/runsettings plumbing baseline for test sessions.
+- [x] Switched corpse setup teleport from `ValleyOfTrials` to Orgrimmar named teleport command path.
+
+
+## Archived Snapshot (2026-03-11) - Tests/BotRunner.Tests/TASKS.md
+
+- [x] `BRT-OVR-003` Unblock the last BG live failure in `FishingProfessionTests`.
+- Evidence:
+  - BG now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL` in the spell-state path.
+  - `FishingData.ResolveCastableFishingSpellId(...)` prefers the highest currently-known fishing rank and falls back to skill-derived rank only when the known-spell list is missing.
+  - `FishingProfessionTests` now passes with catch detection based on bag delta or skill-up.
+  - Broad `LiveValidation` rerun finished `33 passed, 0 failed, 2 skipped`.
+
+- [x] `BRT-OVR-005` Isolate the FG herbalism crash/group-formation fallout and prove no active gameobject spawn path remains.
+- Evidence:
+  - Repo scan + DB verification confirmed the Mangos Silverleaf error referenced the natural world row `gameobject.guid=1641` / `id=1618`, not a test-spawned node.
+  - `GatheringProfessionTests` now keeps BG as the hard assertion path while FG mining/herbalism is best-effort reference coverage with safe-zone cleanup in `finally`.
+  - `GroupFormationTests` now starts from `EnsureCleanSlateAsync()` and a live `CheckFgActionableAsync()` probe so post-crash FG restarts skip instead of timing out.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
+
+>>>>>>> cpp_physics_system

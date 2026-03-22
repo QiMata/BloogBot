@@ -155,10 +155,76 @@ BloogBot/
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `WWOW_WAIT_DEBUG` | Set to `1` to enable debugger attachment |
-| `DOTNET_CLI_TELEMETRY_OPTOUT` | Disable .NET telemetry |
+#### Core / Injection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FOREGROUNDBOT_DLL_PATH` | *(set by StateManager)* | Absolute path to ForegroundBotRunner.dll — set automatically during injection |
+| `WWOW_ACCOUNT_NAME` | *(set by StateManager)* | Account name for the bot to log in with |
+| `WWOW_ACCOUNT_PASSWORD` | *(set by StateManager)* | Account password for the bot |
+| `WWOW_CHARACTER_CLASS` | *(optional)* | Override character class for auto-creation (e.g. `Warrior`) |
+| `WWOW_CHARACTER_RACE` | *(optional)* | Override character race (e.g. `Orc`) |
+| `WWOW_CHARACTER_GENDER` | *(optional)* | Override character gender (e.g. `Male`) |
+| `WWOW_WAIT_DEBUG` | *(unset)* | Set to `1` to pause on startup and wait for debugger attachment |
+| `WWOW_INJECT_LOG_DIR` | `<BaseDirectory>/WWoWLogs` | Override directory for injection diagnostic logs |
+| `WWOW_DISABLE_PACKET_HOOKS` | *(unset)* | Set to `1` to skip SignalEventManager + PacketLogger hook installation. **Required** to prevent FG crash during cross-map transfers (dungeon teleports). Also configurable via `appsettings.json` `Injection:DisablePacketHooks` |
+| `WWOW_LOGIN_STATE_MONITOR` | *(unset)* | Set to `1` to enable login state monitor polling |
+| `LOADER_ALLOC_CONSOLE` | *(unset)* | Set to `1` to allocate a console window for Loader.dll diagnostics. Also configurable via `appsettings.json` `Injection:AllocateConsole` |
+| `LOADER_PAUSE_ON_EXCEPTION` | *(unset)* | Set to `1` to pause on exception during loader bootstrap (for debugging) |
+
+#### Services
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WWOW_DATA_DIR` | *(auto-detected)* | Root directory containing `maps/`, `vmaps/`, `mmaps/`, `dbc/` data files for pathfinding |
+| `WWOW_RECORDINGS_DIR` | `<Documents>/BloogBot/MovementRecordings` | Override directory for movement recordings |
+| `WWOW_LOADER_DLL_PATH` | *(auto-detected)* | Override path to Loader.dll for FG injection |
+| `WWOW_SETTINGS_OVERRIDE` | *(unset)* | Path to override StateManagerSettings.json |
+| `WWOW_SHOW_WINDOWS` | *(unset)* | Set to `1` to show child process windows (StateManager, PathfindingService, etc.) |
+| `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` | *(unset)* | Set to `1` to enable native path segment validation in PathfindingService |
+
+#### Testing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WWOW_TEST_DISABLE_COORDINATOR` | *(unset)* | Set to `1` to disable CombatCoordinator during tests |
+| `WWOW_TEST_COORD_SUPPRESS_SECONDS` | *(unset)* | Seconds to suppress coordinator after enabling |
+| `WWOW_DISABLE_AUTORELEASE_CORPSE_TASK` | *(unset)* | Set to `1` to disable auto-release corpse task during tests |
+| `WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK` | *(unset)* | Set to `1` to disable auto-retrieve corpse task during tests |
+| `WWOW_TEST_WOW_PATH` | `E:\Elysium Project Game Client\WoW.exe` | Override WoW.exe path for tests |
+| `WWOW_TEST_LOADER_PATH` | *(auto-detected)* | Override Loader.dll path for tests |
+| `WWOW_TEST_AUTH_IP` | `127.0.0.1` | Auth server IP for tests |
+| `WWOW_TEST_AUTH_PORT` | `3724` | Auth server port for tests |
+| `WWOW_TEST_WORLD_PORT` | `8085` | World server port for tests |
+| `WWOW_TEST_PATHFINDING_IP` | `127.0.0.1` | Pathfinding service IP for tests |
+| `WWOW_TEST_PATHFINDING_PORT` | `5001` | Pathfinding service port for tests |
+| `WWOW_TEST_MYSQL_PORT` | `3306` | MySQL port for tests |
+| `WWOW_TEST_MYSQL_USER` | `root` | MySQL user for tests |
+| `WWOW_TEST_MYSQL_PASSWORD` | `root` | MySQL password for tests |
+| `WWOW_TEST_SOAP_PORT` | `7878` | SOAP API port for tests |
+| `WWOW_TEST_USERNAME` | `TESTBOT1` | Test account username |
+| `WWOW_TEST_PASSWORD` | `PASSWORD` | Test account password |
+| `WWOW_TEST_RESTORE_COMMAND_TABLE` | *(unset)* | Restore command table after test modifications |
+| `WWOW_BOT_OUTPUT_DIR` | *(auto-detected)* | Override bot output directory for test fixtures |
+| `WWOW_MAP_PATH` | *(unset)* | Override map data path for physics tests |
+| `WWOW_RECORDED_TEST_HOST` | *(unset)* | Host for recorded scenario tests |
+| `WWOW_RECORDED_TEST_PORT` | *(unset)* | Port for recorded scenario tests |
+| `WWOW_RECORDED_TEST_REALM` | *(unset)* | Realm for recorded scenario tests |
+| `WWOW_WOW_WINDOW_TITLE` | *(unset)* | WoW window title for FG recorded tests |
+| `WWOW_WOW_PROCESS_ID` | *(unset)* | WoW process ID for FG recorded tests |
+| `WWOW_WOW_WINDOW_HANDLE` | *(unset)* | WoW window handle for FG recorded tests |
+| `DOTNET_CLI_TELEMETRY_OPTOUT` | *(unset)* | Disable .NET CLI telemetry |
+
+#### appsettings.json Configuration (StateManager)
+
+These `appsettings.json` keys in `Services/WoWStateManager/appsettings.json` map to environment variable behavior:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `Injection:DisablePacketHooks` | `"true"` | Sets `WWOW_DISABLE_PACKET_HOOKS=1` for FG bot process |
+| `Injection:AllocateConsole` | `"true"` | Sets `LOADER_ALLOC_CONSOLE=1` for FG bot process |
+| `GameClient:ExecutablePath` | `D:\World of Warcraft\WoW.exe` | Path to WoW.exe for FG injection |
+| `LoaderDllPath` | `Loader.dll` | Path to native Loader.dll |
 
 ## Troubleshooting
 

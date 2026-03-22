@@ -1,7 +1,8 @@
 using BloogBot.AI.Observable;
-using BloogBot.AI.Semantic;
 using BloogBot.AI.States;
 using Microsoft.SemanticKernel;
+
+namespace BloogBot.AI.Semantic;
 
 /// <summary>
 /// Coordinates the Semantic Kernel plugins based on the current bot activity.

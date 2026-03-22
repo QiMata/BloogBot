@@ -56,6 +56,48 @@ namespace WoWSharpClient.Models
         public float SplineElevation { get; set; }
         public uint TransportLastUpdated { get; set; }
 
+        // Remote unit extrapolation state — WoW.exe 0x616DE0.
+        // Records the last known position + movement state for predicting
+        // where this unit is between server heartbeat updates.
+        internal uint ExtrapolationTimeMs { get; set; }
+        internal MovementFlags ExtrapolationFlags { get; set; }
+        internal float ExtrapolationFacing { get; set; }
+        internal Position? ExtrapolationBasePosition { get; set; }
+
+        /// <summary>
+        /// Predicts this unit's current position by extrapolating from the last known
+        /// movement state. Matches WoW.exe remote unit prediction (0x616DE0).
+        /// Speed thresholds: >60y/s = teleport (return raw), <3y/s = jitter (return raw).
+        /// </summary>
+        public Position GetExtrapolatedPosition(uint currentTimeMs)
+        {
+            if (ExtrapolationBasePosition == null || ExtrapolationTimeMs == 0)
+                return Position;
+
+            uint elapsed = currentTimeMs - ExtrapolationTimeMs;
+            if (elapsed > 1500) return Position; // Stale — don't extrapolate
+
+            // Only extrapolate if unit has directional movement flags
+            var dirFlags = ExtrapolationFlags & (MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
+                | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+            if (dirFlags == MovementFlags.MOVEFLAG_NONE) return Position;
+
+            float speed = (dirFlags & MovementFlags.MOVEFLAG_BACKWARD) != 0 ? RunBackSpeed : RunSpeed;
+            if (speed * speed < 9f) return Position;   // Jitter filter: <3 y/s
+            if (speed * speed > 3600f) return Position; // Teleport filter: >60 y/s
+
+            float dt = elapsed * 0.001f;
+            float facing = ExtrapolationFacing;
+            float dx = MathF.Cos(facing) * speed * dt;
+            float dy = MathF.Sin(facing) * speed * dt;
+
+            return new Position(
+                ExtrapolationBasePosition.X + dx,
+                ExtrapolationBasePosition.Y + dy,
+                ExtrapolationBasePosition.Z
+            );
+        }
+
         public SplineFlags SplineFlags { get; set; }
         public Position SplineFinalPoint { get; set; } = new(0, 0, 0);
         public ulong SplineTargetGuid { get; set; }
@@ -265,10 +307,55 @@ namespace WoWSharpClient.Models
 
         public bool HasBuff(string name) => Buffs.Any(a => a.Name == name);
         public bool HasDebuff(string name) => Debuffs.Any(a => a.Name == name);
+<<<<<<< HEAD
         public bool DismissBuff(string buffName)
         {
             // TODO: Send CMSG_CANCEL_AURA when WoWUnit has client access
             return false;
+=======
+
+        /// <summary>
+        /// Rebuilds Buffs/Debuffs lists from raw AuraFields + AuraFlags (object update data).
+        /// Called after SMSG_UPDATE_OBJECT processes aura field changes for BG bot.
+        /// In Vanilla 1.12.1: AuraFlags has 6 uint32s, each covering 8 slots (4 bits per slot).
+        /// Bit 0 (0x1) = active, bit 2 (0x4) = harmful (debuff).
+        /// </summary>
+        public void RebuildBuffsFromAuraFields()
+        {
+            Buffs.Clear();
+            Debuffs.Clear();
+            for (int slot = 0; slot < AuraFields.Length; slot++)
+            {
+                uint spellId = AuraFields[slot];
+                if (spellId == 0) continue;
+
+                // Read 4-bit flags for this slot from AuraFlags
+                int flagsIndex = slot / 8;
+                int bitOffset = (slot % 8) * 4;
+                uint slotFlags = (flagsIndex < AuraFlags.Length)
+                    ? (AuraFlags[flagsIndex] >> bitOffset) & 0xF
+                    : 0;
+
+                // Bit 0 = active; skip inactive slots
+                if ((slotFlags & 0x1) == 0) continue;
+
+                string name = GameData.Core.Constants.SpellData.GetSpellName(spellId) ?? $"Spell#{spellId}";
+                var spell = new Spell(spellId, 0, name, "", "");
+
+                bool isHarmful = (slotFlags & 0x4) != 0;
+                if (isHarmful)
+                    Debuffs.Add(spell);
+                else
+                    Buffs.Add(spell);
+            }
+        }
+        public bool DismissBuff(string buffName)
+        {
+            var buff = Buffs.FirstOrDefault(b => b.Name == buffName);
+            if (buff == null) return false;
+            WoWSharpObjectManager.Instance.CancelAura(buff.Id);
+            return true;
+>>>>>>> cpp_physics_system
         }
 
         public IEnumerable<ISpellEffect> GetDebuffs() =>

@@ -41,6 +41,31 @@ namespace VMAP
     {
         std::string vmapsPath;
 #ifdef _WIN32
+        // Check WWOW_DATA_DIR using process environment first so vmaps matches mmaps/maps root.
+        {
+            char envDataRoot[1024] = { 0 };
+            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", envDataRoot, sizeof(envDataRoot));
+            if (len > 0 && len < sizeof(envDataRoot))
+            {
+                std::string dataRoot = envDataRoot;
+                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                    dataRoot += '\\';
+
+                vmapsPath = dataRoot + "vmaps\\";
+                if (std::filesystem::exists(vmapsPath))
+                    return vmapsPath;
+            }
+        }
+
+        // Prefer current working directory when vmaps is present there.
+        {
+            vmapsPath = (std::filesystem::current_path() / "vmaps").string();
+            if (!vmapsPath.empty() && vmapsPath.back() != '/' && vmapsPath.back() != '\\')
+                vmapsPath += '\\';
+            if (std::filesystem::exists(vmapsPath))
+                return vmapsPath;
+        }
+
         // Get the DLL/EXE path
         WCHAR dllPath[MAX_PATH] = { 0 };
         GetModuleFileNameW((HINSTANCE)&__ImageBase, dllPath, _countof(dllPath));
@@ -73,7 +98,10 @@ namespace VMAP
                 }
             }
         }
-        return vmapsPath;
+        // Last-resort fallback keeps prior behavior for legacy layouts.
+        return "vmaps\\";
+#else
+        return "vmaps/";
 #endif
     }
 

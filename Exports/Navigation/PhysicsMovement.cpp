@@ -12,11 +12,22 @@
 namespace PhysicsMovement
 {
 
-void ApplyGravity(MovementState& st, float dt)
+// Returns the effective terminal velocity based on movement flags.
+// WoW.exe: MOVEFLAG_SAFE_FALL (0x20000000) selects swim/safe-fall terminal vel (7.0)
+// instead of normal (60.148). Used by Slow Fall, Levitate, Safe Fall (rogue).
+static float GetTerminalVelocity(uint32_t moveFlags)
 {
-    st.vz -= PhysicsConstants::GRAVITY * dt; 
-    if (st.vz < -60.0f) 
-        st.vz = -60.0f;
+    if (moveFlags & MOVEFLAG_SAFE_FALL)
+        return PhysicsConstants::SAFE_FALL_TERMINAL_VELOCITY;
+    return PhysicsConstants::TERMINAL_VELOCITY;
+}
+
+void ApplyGravity(MovementState& st, float dt, uint32_t moveFlags)
+{
+    const float termVel = GetTerminalVelocity(moveFlags);
+    st.vz -= PhysicsConstants::GRAVITY * dt;
+    if (st.vz < -termVel)
+        st.vz = -termVel;
 }
 
 MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation)
@@ -31,13 +42,54 @@ MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation)
 
 float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming)
 {
+    float speed;
     if (isSwimming) {
-        if (input.moveFlags & MOVEFLAG_BACKWARD) return input.swimBackSpeed;
-        return input.swimSpeed;
+        speed = (input.moveFlags & MOVEFLAG_BACKWARD) ? input.swimBackSpeed : input.swimSpeed;
+    } else if (input.moveFlags & MOVEFLAG_WALK_MODE) {
+        speed = input.walkSpeed;
+    } else if (input.moveFlags & MOVEFLAG_BACKWARD) {
+        speed = input.runBackSpeed;
+    } else {
+        speed = input.runSpeed;
     }
-    if (input.moveFlags & MOVEFLAG_WALK_MODE) return input.walkSpeed;
-    if (input.moveFlags & MOVEFLAG_BACKWARD) return input.runBackSpeed;
-    return input.runSpeed;
+
+    // WoW.exe CollisionResponse (0x7C5A20): when moving forward+strafe simultaneously,
+    // all velocity components are multiplied by sin(45°) = 0.707107 to maintain constant
+    // total speed (diagonal normalization). VA 0x0081DA54 = 0x3F3504F3.
+    const bool hasForward  = (input.moveFlags & (MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD)) != 0;
+    const bool hasStrafe   = (input.moveFlags & (MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT)) != 0;
+    if (hasForward && hasStrafe)
+        speed *= PhysicsConstants::SIN_45;
+
+    return speed;
+}
+
+// WoW.exe ComputeFallDisplacement (VA 0x7C5E70): Two-phase fall displacement.
+// If terminal velocity is reached mid-frame, splits into:
+//   Phase 1: Acceleration from v0 to termVel (kinematic equation)
+//   Phase 2: Constant velocity at termVel for remaining time
+// This produces accurate positions for long falls where a single-equation
+// approach diverges from the client.
+static float ComputeFallDisplacement(float vz0, float dt, uint32_t moveFlags)
+{
+    const float termVel = GetTerminalVelocity(moveFlags);
+    // vz0 is negative (downward), termVel is positive. Clamp speed magnitude.
+    float speed0 = -vz0;  // positive falling speed
+    if (speed0 > termVel) speed0 = termVel;
+
+    float newSpeed = speed0 + PhysicsConstants::GRAVITY * dt;
+    if (newSpeed <= termVel) {
+        // Case 1: Normal freefall — standard kinematic equation
+        // dz = -speed0 * dt - 0.5 * g * dt²  (negative = downward)
+        return -(speed0 * dt + PhysicsConstants::HALF_GRAVITY * dt * dt);
+    } else {
+        // Case 2: Hit terminal velocity mid-frame — split into two phases
+        float t_accel = (termVel - speed0) * PhysicsConstants::INV_GRAVITY;
+        float d_accel = speed0 * t_accel + PhysicsConstants::HALF_GRAVITY * t_accel * t_accel;
+        float t_const = dt - t_accel;
+        float d_const = t_const * termVel;
+        return -(d_accel + d_const);  // negative = downward
+    }
 }
 
 void ProcessAirMovement(
@@ -50,13 +102,14 @@ void ProcessAirMovement(
     st.fallTime += dt;
 
     // Preserve horizontal velocity while falling (no air control)
-    // Integrate vertical motion using z += vz0*dt - 0.5*g*dt^2
     G3D::Vector3 startPos(st.x, st.y, st.z);
     const float vz0 = st.vz;
-    const float dz = vz0 * dt - 0.5f * PhysicsConstants::GRAVITY * dt * dt;
-    
-    // Apply gravity to velocity (with terminal clamp)
-    ApplyGravity(st, dt);
+
+    // Two-phase fall displacement matching WoW.exe ComputeFallDisplacement
+    const float dz = ComputeFallDisplacement(vz0, dt, input.moveFlags);
+
+    // Apply gravity to velocity (with terminal clamp based on SAFE_FALL flag)
+    ApplyGravity(st, dt, input.moveFlags);
 
     // Predict next position with constant horizontal velocity
     G3D::Vector3 endPos = startPos + G3D::Vector3(st.vx * dt, st.vy * dt, dz);
@@ -71,6 +124,15 @@ void ProcessAirMovement(
     // on nearby slopes that the character is jumping over.
     const bool trustVel = (input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0;
     if (trustVel)
+        return;
+
+    // Skip ground collision detection during the ascending phase of a jump.
+    // When vz0 > 0, the character is moving upward and the capsule naturally
+    // overlaps ground geometry for the first several frames. Snapping to ground
+    // during ascent would kill the jump velocity (vz → 0) immediately.
+    // Ground collision only matters during descent (vz0 <= 0) when the character
+    // is approaching a landing surface.
+    if (vz0 > 1e-4f)
         return;
 
     // Continuous ground collision detection.
@@ -138,23 +200,33 @@ void ProcessAirMovement(
             }
         }
     } else if (!downHits.empty()) {
-        // Fallback for penetrating walkable contacts (character starts inside geometry)
+        // Fallback for penetrating walkable contacts (character starts inside geometry).
+        // SceneCache overlap normals are oriented by OrientNormalForOverlap: FROM capsule
+        // center TOWARD triangle contact. For ground below the capsule center, the normal
+        // points DOWNWARD (nz < 0). Use fabs(nz) for the walkable check — same as
+        // ApplyVerticalDepenetration — to accept both ground and overhead contacts.
+        // Then pick the contact closest to the character's feet (startPos.z).
         const SceneHit* bestPen = nullptr;
         float bestPenZ = -FLT_MAX;
+        float bestPenErr = FLT_MAX;
         for (const auto& hhit : downHits) {
             if (!hhit.startPenetrating) continue;
-            if (hhit.normal.z < walkableCosMin) continue;
+            if (std::fabs(hhit.normal.z) < walkableCosMin) continue;
             if (hhit.distance > sweepDist + 1e-4f) continue;
 
             bool better = false;
+            float hitErr = std::fabs(hhit.point.z - startPos.z);
             if (!bestPen) better = true;
             else {
+                // Prefer terrain (instanceId==0) over WMO instances
                 if ((hhit.instanceId == 0) && (bestPen->instanceId != 0)) better = true;
-                else if (hhit.point.z > bestPenZ) better = true;
+                else if ((hhit.instanceId != 0) && (bestPen->instanceId == 0)) { /* keep terrain */ }
+                else if (hitErr < bestPenErr) better = true;
             }
             if (better) {
                 bestPen = &hhit;
                 bestPenZ = hhit.point.z;
+                bestPenErr = hitErr;
             }
         }
         if (bestPen) {
@@ -164,10 +236,20 @@ void ProcessAirMovement(
             if (std::fabs(nz) > 1e-6f) {
                 snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
             }
-            st.z = snapZ;
-            st.vz = 0.0f;
-            st.isGrounded = true;
-            st.groundNormal = bestPen->normal.directionOrZero();
+            // Reject overhead geometry: don't snap to a surface significantly ABOVE the
+            // character's starting position. For a falling character, legitimate ground
+            // is AT or BELOW their feet. WMO walkways/ramps that the capsule's top
+            // hemisphere overlaps can have walkable normals but are 1-2y above feet.
+            // Allow a small tolerance (LANDING_TOLERANCE) for slope precision.
+            if (snapZ <= startPos.z + LANDING_TOLERANCE) {
+                st.z = snapZ;
+                st.vz = 0.0f;
+                st.isGrounded = true;
+                // Store ground normal with consistent upward orientation
+                G3D::Vector3 gn = bestPen->normal.directionOrZero();
+                if (gn.z < 0.0f) { gn.x = -gn.x; gn.y = -gn.y; gn.z = -gn.z; }
+                st.groundNormal = gn;
+            }
         }
     }
 }

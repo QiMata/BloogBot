@@ -7,6 +7,11 @@ namespace ShamanElemental.Tasks
 {
     public class PvPRotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 shaman base spell ranges
+        private const float LightningBoltBaseRange = 30f;
+        private const float EarthShockBaseRange = 20f;
+        private const float FlameShockBaseRange = 20f;
+
         internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
 
 
@@ -18,7 +23,7 @@ namespace ShamanElemental.Tasks
                 return;
             }
 
-            if (Update(30))
+            if (Update(GetSpellRange(LightningBoltBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -28,10 +33,10 @@ namespace ShamanElemental.Tasks
             ObjectManager.StopAllMovement();
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting));
-            TryCastSpell(EarthShock, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
-            TryCastSpell(FlameShock, 0, 20, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock));
-            TryCastSpell(LightningBolt, 0, 30, ObjectManager.Player.ManaPercent > 10);
+            TryCastSpell(GroundingTotem, condition: ObjectManager.Aggressors.Any(a => a.IsCasting), castOnSelf: true);
+            TryCastSpell(EarthShock, 0f, GetSpellRange(EarthShockBaseRange), ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(FlameShock, 0f, GetSpellRange(FlameShockBaseRange), !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock));
+            TryCastSpell(LightningBolt, 0f, GetSpellRange(LightningBoltBaseRange), ObjectManager.Player.ManaPercent > 10);
         }
     }
 }

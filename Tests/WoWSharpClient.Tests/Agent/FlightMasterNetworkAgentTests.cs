@@ -246,12 +246,15 @@ namespace WoWSharpClient.Tests.Agent
         [Fact]
         public void ParseShowTaxiNodes_ViaObservable_UpdatesCurrentNodeId()
         {
+            // Must set up mock BEFORE constructing the component so Observable.Defer captures the subject
             var subject = new Subject<ReadOnlyMemory<byte>>();
-            _mockWorldClient.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES))
+            var mockWc = new Mock<IWorldClient>();
+            mockWc.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES))
                 .Returns(subject.AsObservable());
+            var agent = new FlightMasterNetworkClientComponent(mockWc.Object, _mockLogger.Object);
 
             (ulong FlightMasterGuid, IReadOnlyList<uint> Nodes)? received = null;
-            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)_flightMasterAgent)
+            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)agent)
                 .TaxiMapOpened
                 .Subscribe(tuple => received = tuple);
 
@@ -264,11 +267,11 @@ namespace WoWSharpClient.Tests.Agent
 
             subject.OnNext(payload);
 
-            Assert.True(_flightMasterAgent.IsTaxiMapOpen);
-            Assert.Equal(2, _flightMasterAgent.AvailableTaxiNodes.Count);
-            Assert.True(_flightMasterAgent.IsNodeAvailable(2));
-            Assert.True(_flightMasterAgent.IsNodeAvailable(10));
-            Assert.Equal(2u, _flightMasterAgent.CurrentNodeId);
+            Assert.True(agent.IsTaxiMapOpen);
+            Assert.Equal(2, agent.AvailableTaxiNodes.Count);
+            Assert.True(agent.IsNodeAvailable(2));
+            Assert.True(agent.IsNodeAvailable(10));
+            Assert.Equal(2u, agent.CurrentNodeId);
             Assert.NotNull(received);
             Assert.Equal(0xABCDUL, received.Value.FlightMasterGuid);
 
@@ -382,20 +385,23 @@ namespace WoWSharpClient.Tests.Agent
         [Fact]
         public void TaxiMapClosed_OnDisconnect_UpdatesStateAndEmits()
         {
+            // Must set up mock BEFORE constructing the component so Observable.Defer captures the subject
             var disconnectSubject = new Subject<Exception?>();
-            _mockWorldClient.Setup(x => x.WhenDisconnected).Returns(disconnectSubject.AsObservable());
+            var mockWc = new Mock<IWorldClient>();
+            mockWc.Setup(x => x.WhenDisconnected).Returns(disconnectSubject.AsObservable());
+            var agent = new FlightMasterNetworkClientComponent(mockWc.Object, _mockLogger.Object);
 
             bool closedEmitted = false;
-            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)_flightMasterAgent)
+            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)agent)
                 .TaxiMapClosed
                 .Subscribe(_ => closedEmitted = true);
 
-            _flightMasterAgent.HandleTaxiMapOpened(0x123, new List<uint> { 1 });
+            agent.HandleTaxiMapOpened(0x123, new List<uint> { 1 });
             disconnectSubject.OnNext(null);
 
             Assert.True(closedEmitted);
-            Assert.False(_flightMasterAgent.IsTaxiMapOpen);
-            Assert.Empty(_flightMasterAgent.AvailableTaxiNodes);
+            Assert.False(agent.IsTaxiMapOpen);
+            Assert.Empty(agent.AvailableTaxiNodes);
 
             subscription.Dispose();
         }
