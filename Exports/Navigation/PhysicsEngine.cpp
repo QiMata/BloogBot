@@ -3093,8 +3093,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		float outDx = st.x - input.x;
 		float outDy = st.y - input.y;
 		float outDist = std::sqrt(outDx*outDx + outDy*outDy);
-		bool hasForward = (input.moveFlags & MOVEFLAG_FORWARD) != 0;
-		if (hasForward && outDist < 0.001f) {
+		// Check effective flags (after airborne/root masking), not raw input flags.
+		// When airborne, FORWARD is stripped from effective flags — zero XY is expected.
+		bool hasEffectiveForward = (effectiveFlags & MOVEFLAG_FORWARD) != 0;
+		if (hasEffectiveForward && outDist < 0.001f) {
 			std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
 			oss << "[OUT_ZERO] FORWARD set but zero XY delta. st=(" << st.x << "," << st.y << "," << st.z
 				<< ") input=(" << input.x << "," << input.y << "," << input.z

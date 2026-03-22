@@ -209,6 +209,13 @@ namespace PhysicsConstants
 
     // While rooted: all movement blocked, only turns allowed
     constexpr uint32_t ROOTED_BLOCKED_BITS = DIRECTIONAL_BITS | PITCH_BITS;
+
+    // =========================================================================
+    // TURN SPEED (WoW.exe binary analysis)
+    // =========================================================================
+    // VA 0x8012CC: 0.75f — when any directional flag (0x200F) is active,
+    // turn rate is multiplied by this factor. Characters turn slower while moving.
+    constexpr float MOVING_TURN_RATE_FACTOR = 0.75f;
 }
 
 class PhysicsEngine

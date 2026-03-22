@@ -534,7 +534,17 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 {
     EnsureMapLoaded(mapId);
 
-    // Scene cache fast path: pre-processed triangles with spatial index
+    // Underground interiors (Undercity, mines, caves) can be 40-50y below the
+    // terrain surface. The default 10y search distance fails to find the WMO
+    // floor when the query starts underground. Increase search distance for
+    // positions significantly below sea level.
+    if (z < -10.0f && maxSearchDist < 60.0f)
+        maxSearchDist = 60.0f;
+
+    // Scene cache fast path: pre-processed triangles with spatial index.
+    // More precise than raw VMAP ray on slopes due to exact barycentric interpolation.
+    // Falls through to VMAP+ADT+BIH for positions not covered by scene cache
+    // (e.g., Undercity underground at Z < -10).
     if (auto* cache = GetSceneCache(mapId))
     {
         float sceneZ = cache->GetGroundZ(x, y, z, maxSearchDist);
@@ -544,20 +554,25 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
         float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
 
         // If only one source has a valid result, return it
-        if (dynZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
-            return sceneZ;
-        if (sceneZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+        if (dynZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
+            // Scene cache returned a result — but verify it's valid.
+            // If invalid (underground gap), fall through to VMAP+BIH.
+            if (sceneZ > PhysicsConstants::INVALID_HEIGHT + 1.0f)
+                return sceneZ;
+            // else: fall through to VMAP+ADT+BIH below
+        } else if (sceneZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
             return dynZ;
-
-        // Both valid — pick closest to query Z within acceptance window
-        float zMax = z + maxSearchDist;
-        float zMin = z - maxSearchDist;
-        bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
-        bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
-        if (sceneOk && dynOk)
-            return (std::fabs(sceneZ - z) <= std::fabs(dynZ - z)) ? sceneZ : dynZ;
-        if (dynOk) return dynZ;
-        return sceneZ;
+        } else {
+            // Both valid — pick closest to query Z within acceptance window
+            float zMax = z + maxSearchDist;
+            float zMin = z - maxSearchDist;
+            bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
+            bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
+            if (sceneOk && dynOk)
+                return (std::fabs(sceneZ - z) <= std::fabs(dynZ - z)) ? sceneZ : dynZ;
+            if (dynOk) return dynZ;
+            return sceneZ;
+        }
     }
 
     // Collect candidate ground heights from all sources, then pick the one
