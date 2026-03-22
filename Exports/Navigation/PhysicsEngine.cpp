@@ -579,17 +579,40 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteSidePass(
         PHYS_INFO(PHYS_MOVE, "[SidePass] No lateral movement needed");
         return empty;
     }
-    
+
+    // WoW.exe CollisionStep (0x633840): the grounded sweep uses a slope-scaled
+    // displacement that includes vertical rise. Our SIDE pass was purely horizontal,
+    // causing the capsule to clip through uphill terrain. Project the movement
+    // direction along the ground surface so the capsule follows the slope.
     G3D::Vector3 sideDir = decomposed.sideVector.directionOrZero();
+
+    // Use the ground normal to project movement along the slope surface.
+    // On flat ground (normal = 0,0,1), this leaves sideDir unchanged.
+    // On a slope, it tilts sideDir upward so the capsule follows the terrain.
+    if (st.isGrounded && st.groundNormal.z > 0.1f && st.groundNormal.z < 1.0f) {
+        // Project horizontal direction onto the slope plane:
+        // projDir = sideDir - normal * (sideDir · normal) / (normal · normal)
+        float dotDN = sideDir.dot(st.groundNormal);
+        G3D::Vector3 projDir = sideDir - st.groundNormal * (dotDN / st.groundNormal.dot(st.groundNormal));
+        float projMag = projDir.magnitude();
+        if (projMag > 1e-6f) {
+            sideDir = projDir * (1.0f / projMag);
+        }
+    }
+
     {
         std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-        oss << "[SidePass] Starting CollideAndSlide dist=" << sideMagnitude;
+        oss << "[SidePass] Starting CollideAndSlide dist=" << sideMagnitude
+            << " dirZ=" << sideDir.z;
         PHYS_INFO(PHYS_MOVE, oss.str());
     }
-    
-    // Use the full iterative CollideAndSlide for the side pass
+
+    // Use CollideAndSlide with horizontalOnly=false when we have a slope-projected
+    // direction (Z != 0), so the capsule can actually move uphill.
+    const bool hasVerticalComponent = std::fabs(sideDir.z) > 1e-4f;
     SlideResult result = CollideAndSlide(
-        input, st, radius, height, sideDir, sideMagnitude, /*horizontalOnly*/ true);
+        input, st, radius, height, sideDir, sideMagnitude,
+        /*horizontalOnly*/ !hasVerticalComponent);
     
     {
         std::ostringstream oss; 
