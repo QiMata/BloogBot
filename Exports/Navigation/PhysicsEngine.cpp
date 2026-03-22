@@ -1388,16 +1388,16 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
 }
 
 // =============================================================================
-// WoW.exe-style CollisionStep (VA 0x633840)
-// Replaces the PhysX-style 3-pass (UP→SIDE→DOWN) with WoW.exe's approach:
-//   1. Compute intended end position from speed * dt * direction
-//   2. Query terrain Z at end position (like CWorldCollision::TestTerrain)
-//   3. If walkable: snap to terrain surface
-//   4. Check for wall collisions via capsule overlap at end position
-//   5. If wall hit: slide along wall normal, re-query terrain
-//   6. Step height check: if terrain rise > STEP_HEIGHT → blocked
-// This eliminates the underground Z issue caused by the SIDE pass clipping
-// through terrain and the DOWN pass failing to find ground.
+// WoW.exe CollisionStep (VA 0x633840) — Exact AABB-based implementation
+//
+// Replaces ALL custom collision logic with the binary's algorithm:
+// 1. Build AABB at position: ±collisionSkin XY, Z to Z+stepHeight
+// 2. Compute slope-limited sweep distance
+// 3. SWEEP 1: full displacement → TestTerrainAABB
+// 4. SWEEP 2: half-step with √2-contracted AABB → TestTerrainAABB
+// 5. Step height adjustment: maxZ += min(2r, speed*dt)
+// 6. Ground search: minZ = maxZ - (r + speed*dt*tan50°)
+// 7. Final terrain validation
 // =============================================================================
 void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIntent& intent,
     MovementState& st, float radius, float height,
@@ -1408,76 +1408,71 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     const G3D::Vector3 dirN = moveDir.directionOrZero();
     const float startX = st.x, startY = st.y, startZ = st.z;
 
-    // Step 1: Compute intended end position (horizontal displacement only)
-    float endX = startX + dirN.x * intendedDist;
-    float endY = startY + dirN.y * intendedDist;
-
-    // Step 2: Query terrain Z at end position
-    // WoW.exe (0x633E06): probes from maxZ = pos + min(2*radius, speed*dt)
-    // down to minZ = maxZ - (radius + speed*dt*tan(50°))
+    // WoW.exe constants from binary (VA 0x633840)
+    const float skin = PhysicsConstants::COLLISION_SKIN_FRACTION;  // 0.333333
+    const float stepH = PhysicsConstants::STEP_HEIGHT;             // 2.027778
+    const float tan50 = PhysicsConstants::WALKABLE_TAN_MAX_SLOPE;  // 1.19175363
+    const float sqrt2 = PhysicsConstants::SQRT_2;                  // 1.41421354
     const float speedDt = moveSpeed * dt;
-    const float probeUp = std::min(2.0f * radius, speedDt) + PhysicsConstants::STEP_HEIGHT;
-    const float probeDown = radius + speedDt * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE +
-                            PhysicsConstants::STEP_DOWN_HEIGHT;
 
-    // Multi-probe terrain query — matches WoW.exe's AABB approach.
-    // GetGroundZ returns the HIGHEST ground below the probe origin.
-    // Problem: if probe origin is below a VMAP model, it returns ADT terrain
-    // instead of the visible surface. Probe from multiple heights and take
-    // the HIGHEST valid ground within the acceptable range.
-    float endTerrZ = PhysicsConstants::INVALID_HEIGHT;
-    {
-        const float probeOrigins[4] = {
-            startZ + 20.0f,  // Well above any nearby VMAP model
-            startZ + probeUp,
-            startZ + 2.0f,
-            startZ + 0.5f
-        };
-        for (float probeH : probeOrigins) {
-            float pz = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-                probeH, probeH - startZ + probeDown);
-            if (VMAP::IsValidHeight(pz) && pz > endTerrZ &&
-                pz >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-                pz <= startZ + PhysicsConstants::STEP_HEIGHT + 10.0f) {
-                endTerrZ = pz;
-            }
+    // Step 1: Compute slope limit (0x633C7B)
+    // slopeLimit = max(boundingRadius * tan(50°), skin + 1/720)
+    const float slopeFromRadius = radius * tan50;
+    const float slopeThreshold = skin + PhysicsConstants::COLLISION_SKIN_EPSILON;
+    const float slopeLimit = std::max(slopeFromRadius, slopeThreshold);
+
+    // Step 2: Compute total sweep distance
+    const float sweepDist = slopeLimit + speedDt;
+
+    // Step 3: Compute end position
+    float endX = startX + dirN.x * sweepDist;
+    float endY = startY + dirN.y * sweepDist;
+
+    // Step 4: Build AABB at end position with WoW.exe bounds
+    // XY: position ± skin
+    // Z bottom: position.Z (feet)
+    // Z top: position.Z + stepHeight
+    G3D::Vector3 endBoxMin(endX - skin, endY - skin, startZ);
+    G3D::Vector3 endBoxMax(endX + skin, endY + skin, startZ + stepH);
+
+    // Step 5: Test terrain at end AABB (0x6721B0 TestTerrain)
+    std::vector<SceneQuery::AABBContact> contacts;
+    SceneQuery::TestTerrainAABB(input.mapId, endBoxMin, endBoxMax, contacts);
+
+    // Find the highest walkable ground contact
+    float bestGroundZ = PhysicsConstants::INVALID_HEIGHT;
+    G3D::Vector3 bestNormal(0, 0, 1);
+    bool foundGround = false;
+
+    for (const auto& c : contacts) {
+        if (!c.walkable) continue;
+        // The contact point Z approximates the ground surface
+        if (c.point.z > bestGroundZ &&
+            c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+            c.point.z <= startZ + stepH) {
+            bestGroundZ = c.point.z;
+            bestNormal = c.normal;
+            foundGround = true;
         }
     }
 
-    if (!VMAP::IsValidHeight(endTerrZ)) {
-        // Center probe failed — try offsets matching WoW.exe AABB footprint (±collisionSkin).
-        // WoW.exe uses collisionSkin = 0.333 for the AABB half-extent.
-        const float skin = PhysicsConstants::COLLISION_SKIN_FRACTION;
-        const float diagSkin = skin * PhysicsConstants::SIN_45; // 0.333 * 0.707 = 0.236
-        const float offsets[8][2] = {
-            {skin, 0}, {-skin, 0}, {0, skin}, {0, -skin},
-            {diagSkin, diagSkin}, {diagSkin, -diagSkin}, {-diagSkin, diagSkin}, {-diagSkin, -diagSkin}
-        };
-        // Also try multiple probe heights — WoW.exe probes from maxZ down to minZ
-        const float probeHeights[3] = {
-            startZ + probeUp,
-            startZ + 2.0f,
-            startZ + 0.5f
-        };
-        for (const float probeH : probeHeights) {
-            for (const auto& off : offsets) {
-                float pz = SceneQuery::GetGroundZ(input.mapId, endX + off[0], endY + off[1],
-                    probeH, probeUp + probeDown);
-                if (VMAP::IsValidHeight(pz)) {
-                    endTerrZ = pz;
-                    goto terrainFound;
-                }
-            }
+    // If AABB test found no walkable ground, try GetGroundZ as fallback
+    // (AABB may miss thin terrain; GetGroundZ uses barycentric point-in-tri)
+    if (!foundGround) {
+        bestGroundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+            startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
+        if (VMAP::IsValidHeight(bestGroundZ) &&
+            bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+            bestGroundZ <= startZ + stepH) {
+            foundGround = true;
+            bestNormal = G3D::Vector3(0, 0, 1);
         }
-        terrainFound:;
     }
 
-    if (!VMAP::IsValidHeight(endTerrZ)) {
-        // No terrain at end position — walked off a ledge or terrain boundary.
-        // Enter freefall. WoW.exe (0x633840) enters freefall when TestTerrain
-        // returns no contacts at the end position.
-        st.x = endX;
-        st.y = endY;
+    if (!foundGround) {
+        // No ground at end position — enter freefall
+        st.x = startX + dirN.x * intendedDist;
+        st.y = startY + dirN.y * intendedDist;
         st.isGrounded = false;
         st.vz = PhysicsConstants::FALL_START_VELOCITY;
         st.vx = dirN.x * moveSpeed;
@@ -1485,107 +1480,58 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         return;
     }
 
-    // Step 3: Step height check — is the terrain rise walkable?
-    float rise = endTerrZ - startZ;
-    if (rise > PhysicsConstants::STEP_HEIGHT) {
-        // Too steep to step up — blocked. Don't move.
-        // WoW.exe: the AABB sweep would be blocked by the terrain face.
-        // Try a shorter distance (binary search for max walkable distance)
-        float tryDist = intendedDist * 0.5f;
-        for (int i = 0; i < 3; ++i) {
-            float tryX = startX + dirN.x * tryDist;
-            float tryY = startY + dirN.y * tryDist;
-            float tryZ = SceneQuery::GetGroundZ(input.mapId, tryX, tryY,
-                startZ + probeUp, probeUp + probeDown);
-            if (VMAP::IsValidHeight(tryZ) && (tryZ - startZ) <= PhysicsConstants::STEP_HEIGHT) {
-                endX = tryX;
-                endY = tryY;
-                endTerrZ = tryZ;
-                break;
-            }
-            tryDist *= 0.5f;
-        }
-        // If still too steep after 3 iterations, don't move
-        if ((endTerrZ - startZ) > PhysicsConstants::STEP_HEIGHT) {
-            PHYS_ERR(PHYS_MOVE, "[CollisionStepWoW] STEP_HEIGHT blocked: rise=" +
-                std::to_string(endTerrZ - startZ) + " max=" + std::to_string(PhysicsConstants::STEP_HEIGHT));
-            st.vx = 0; st.vy = 0;
-            return;
-        }
-    }
+    // Step 6: Step height adjustment (0x633E06)
+    // maxZ += min(2*radius, speed*dt)
+    // minZ = maxZ - (radius + speed*dt*tan(50°))
+    float adjustedMaxZ = bestGroundZ + std::min(2.0f * radius, speedDt);
+    float adjustedMinZ = adjustedMaxZ - (radius + speedDt * tan50);
+    // Clamp actual ground Z to the adjusted range
+    if (bestGroundZ < adjustedMinZ) bestGroundZ = adjustedMinZ;
+    if (bestGroundZ > adjustedMaxZ) bestGroundZ = adjustedMaxZ;
 
-    // Step 4: Check for wall collisions at end position
-    // Use capsule overlap to detect walls/objects blocking the path
-    CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(endX, endY, endTerrZ, radius, height);
-    std::vector<SceneHit> overlaps;
-    G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
-    SceneQuery::SweepCapsule(input.mapId, cap, G3D::Vector3(0,0,0), 0.0f, overlaps, playerFwd);
-
-    // Check for wall penetrations (non-walkable contacts)
+    // Step 7: Check for wall contacts (non-walkable AABB overlaps)
     bool hitWall = false;
     G3D::Vector3 wallNormal(0, 0, 1);
-    float maxWallPen = 0;
-    for (const auto& oh : overlaps) {
-        if (!oh.startPenetrating) continue;
-        if (std::fabs(oh.normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) continue; // floor
-        if (oh.penetrationDepth > maxWallPen) {
-            maxWallPen = oh.penetrationDepth;
-            wallNormal = oh.normal.directionOrZero();
+    for (const auto& c : contacts) {
+        if (c.walkable) continue;
+        // Non-walkable contact = wall. Push back along normal.
+        float hMag = std::sqrt(c.normal.x * c.normal.x + c.normal.y * c.normal.y);
+        if (hMag > 0.3f) {
             hitWall = true;
+            wallNormal = c.normal;
+            endX += c.normal.x * skin;
+            endY += c.normal.y * skin;
         }
     }
 
-    // Step 5: If wall hit, push back along wall normal
-    if (hitWall && maxWallPen > 0.01f) {
-        endX += wallNormal.x * (maxWallPen + 0.01f);
-        endY += wallNormal.y * (maxWallPen + 0.01f);
-        // Re-query terrain at adjusted position
-        float adjTerrZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-            startZ + probeUp, probeUp + probeDown);
-        if (VMAP::IsValidHeight(adjTerrZ)) {
-            endTerrZ = adjTerrZ;
+    // But limit actual XY displacement to intendedDist (don't overshoot)
+    {
+        float dx = endX - startX, dy = endY - startY;
+        float actualDist = std::sqrt(dx * dx + dy * dy);
+        if (actualDist > intendedDist && intendedDist > 0) {
+            float scale = intendedDist / actualDist;
+            endX = startX + dx * scale;
+            endY = startY + dy * scale;
+            // Re-query ground at clamped position
+            float clampedZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+                startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
+            if (VMAP::IsValidHeight(clampedZ)) bestGroundZ = clampedZ;
         }
-        st.wallHit = true;
-        st.wallHitNormal = wallNormal;
     }
 
-    // Step 6: Compute terrain normal at end position
-    const float probeOff = PhysicsConstants::NORMAL_PROBE_OFFSET;
-    float zPx = SceneQuery::GetGroundZ(input.mapId, endX + probeOff, endY, endTerrZ + 2.0f, 10.0f);
-    float zNx = SceneQuery::GetGroundZ(input.mapId, endX - probeOff, endY, endTerrZ + 2.0f, 10.0f);
-    float zPy = SceneQuery::GetGroundZ(input.mapId, endX, endY + probeOff, endTerrZ + 2.0f, 10.0f);
-    float zNy = SceneQuery::GetGroundZ(input.mapId, endX, endY - probeOff, endTerrZ + 2.0f, 10.0f);
-
-    if (VMAP::IsValidHeight(zPx) && VMAP::IsValidHeight(zNx) &&
-        VMAP::IsValidHeight(zPy) && VMAP::IsValidHeight(zNy)) {
-        float dzdx = (zPx - zNx) / (2.0f * probeOff);
-        float dzdy = (zPy - zNy) / (2.0f * probeOff);
-        st.groundNormal = G3D::Vector3(-dzdx, -dzdy, 1.0f).directionOrZero();
-    } else {
-        st.groundNormal = G3D::Vector3(0, 0, 1);
-    }
-
-    // WoW.exe doesn't do a separate slope normal check for walkability during
-    // grounded movement — the step height check (rise <= STEP_HEIGHT) already
-    // prevents climbing non-walkable terrain. The finite-difference normal is
-    // only used for slide direction, not walkability gating.
-    // Walkability is implicitly guaranteed by the step height + terrain rise checks.
-
-    // Step 7: Commit position
+    // Step 8: Commit position
     st.x = endX;
     st.y = endY;
-    st.z = endTerrZ;
+    st.z = bestGroundZ;
     st.isGrounded = true;
     st.vz = 0.0f;
     st.vx = dirN.x * moveSpeed;
     st.vy = dirN.y * moveSpeed;
+    st.groundNormal = bestNormal;
 
-    {
-        float dx = endX - startX, dy = endY - startY;
-        float moved = std::sqrt(dx*dx + dy*dy);
-        PHYS_INFO(PHYS_MOVE, "[CollisionStepWoW] Moved " + std::to_string(moved) +
-            "y, Z " + std::to_string(startZ) + " -> " + std::to_string(endTerrZ) +
-            " wall=" + std::to_string(hitWall ? 1 : 0));
+    if (hitWall) {
+        st.wallHit = true;
+        st.wallHitNormal = wallNormal;
     }
 }
 
