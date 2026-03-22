@@ -177,21 +177,41 @@ namespace WoWSharpClient.Handlers
                             );
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
+                        {
                             ulong splineRunGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineRunGuid} Now running");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineRunGuid);
+                            if (unit != null)
+                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_WALK_MODE;
+                            Log.Information("[SPLINE] {Guid:X} set run mode", splineRunGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE:
+                        {
                             ulong splineWalkGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineWalkGuid} Now walking");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineWalkGuid);
+                            if (unit != null)
+                                unit.MovementFlags |= MovementFlags.MOVEFLAG_WALK_MODE;
+                            Log.Information("[SPLINE] {Guid:X} set walk mode", splineWalkGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_ROOT:
+                        {
                             ulong splineMoveRootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineMoveRootGuid} Now rooted");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveRootGuid);
+                            if (unit != null)
+                                unit.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
+                            Log.Information("[SPLINE] {Guid:X} rooted", splineMoveRootGuid);
                             break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_UNROOT:
+                        {
                             ulong splineMoveUnrootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Log.Information($"{splineMoveUnrootGuid} Now unrooted");
+                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveUnrootGuid);
+                            if (unit != null)
+                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
+                            Log.Information("[SPLINE] {Guid:X} unrooted", splineMoveUnrootGuid);
                             break;
+                        }
                         case Opcode.MSG_MOVE_TIME_SKIPPED:
                             WoWSharpEventEmitter.Instance.FireOnMoveTimeSkipped(
                                 ParseGuidCounterPacket(reader)

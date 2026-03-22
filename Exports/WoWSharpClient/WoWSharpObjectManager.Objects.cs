@@ -115,6 +115,15 @@ namespace WoWSharpClient
             get { lock (_objectsLock) return _objects.ToArray(); }
         }
 
+        /// <summary>Look up a unit by GUID (includes Player). Returns null if not found.</summary>
+        internal WoWUnit? GetUnitByGuid(ulong guid)
+        {
+            if (Player != null && Player.Guid == guid)
+                return (WoWUnit)Player;
+            lock (_objectsLock)
+                return _objects.OfType<WoWUnit>().FirstOrDefault(u => u.Guid == guid);
+        }
+
         /// <summary>
         /// Units that are alive and have a hostile faction reaction (Hated/Hostile/Unfriendly/Neutral).
         /// Matches ForegroundBotRunner ObjectManager.Combat.cs logic.
