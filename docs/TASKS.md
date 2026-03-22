@@ -1,4 +1,4 @@
-# Master Tasks
+﻿# Master Tasks
 
 ## Rules
 1. **Use ONE continuous session.** Auto-compaction handles context limits.
@@ -54,7 +54,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | 9 | RFCBOT9 | DPS | Warrior | Orc | Female | Background |
 | 10 | RFCBOT10 | DPS | Warrior | Tauren | Female | Background |
 
-*Trope: physical classes (Warrior, Hunter, Rogue, Shaman) = Female; magic classes (Druid, Priest, Warlock, Mage) = Male.*
+*Trope: physical classes (Warrior, Hunter, Paladin, Rogue) = Female; magic classes (Druid, Priest, Shaman, Warlock, Mage) = Male.*
 
 ### Implementation Tasks
 

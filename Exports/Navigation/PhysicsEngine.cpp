@@ -1420,12 +1420,27 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     const float probeDown = radius + speedDt * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE +
                             PhysicsConstants::STEP_DOWN_HEIGHT;
 
+    // Multi-probe terrain query — matches WoW.exe's AABB width.
+    // A single center ray can miss terrain mesh gaps. Probe at center + 4 offsets.
     float endTerrZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
         startZ + probeUp, probeUp + probeDown);
 
     if (!VMAP::IsValidHeight(endTerrZ)) {
-        // No terrain at end position — check if we walked off a ledge
-        // Enter freefall (preserve horizontal position from start of this frame)
+        // Center probe failed — try offsets (like WoW.exe AABB footprint)
+        const float offR = std::max(0.1f, radius * 0.5f);
+        const float offsets[4][2] = {{offR,0}, {-offR,0}, {0,offR}, {0,-offR}};
+        for (const auto& off : offsets) {
+            float pz = SceneQuery::GetGroundZ(input.mapId, endX + off[0], endY + off[1],
+                startZ + probeUp, probeUp + probeDown);
+            if (VMAP::IsValidHeight(pz)) {
+                endTerrZ = pz;
+                break;
+            }
+        }
+    }
+
+    if (!VMAP::IsValidHeight(endTerrZ)) {
+        // All probes failed — no terrain here. Enter freefall.
         st.isGrounded = false;
         st.vz = PhysicsConstants::FALL_START_VELOCITY;
         st.vx = dirN.x * moveSpeed;
@@ -1455,6 +1470,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         }
         // If still too steep after 3 iterations, don't move
         if ((endTerrZ - startZ) > PhysicsConstants::STEP_HEIGHT) {
+            PHYS_ERR(PHYS_MOVE, "[CollisionStepWoW] STEP_HEIGHT blocked: rise=" +
+                std::to_string(endTerrZ - startZ) + " max=" + std::to_string(PhysicsConstants::STEP_HEIGHT));
             st.vx = 0; st.vy = 0;
             return;
         }
