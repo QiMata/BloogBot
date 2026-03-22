@@ -950,6 +950,124 @@ public class MovementControllerPhysicsTests
     }
 
     /// <summary>
+    /// Walk uphill on Valley of Trials terrain. The bot must maintain speed
+    /// and stay grounded (no FALLINGFAR oscillation). Tests the slope-projected
+    /// SIDE pass and CollisionStepWoW terrain following.
+    /// </summary>
+    [SkippableFact]
+    public void Forward_Uphill_MaintainsSpeedAndGrounded()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start on the road, face uphill toward the Den cave entrance
+        // facing ≈ 2.0 rad (northwest, uphill)
+        var (controller, player, _) = CreateController(-500f, -4800f, 38f, facing: 2.0f);
+
+        const int frameCount = 100; // 5 seconds
+        const float dtSec = 0.05f;
+
+        var frames = RunFramesWithTrace(controller, player, frameCount, dtSec,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace("Forward_Uphill", frames);
+
+        // Count FALLINGFAR frames
+        int fallingFrames = 0;
+        foreach (var f in frames)
+            if (f.Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR)) fallingFrames++;
+
+        _output.WriteLine($"FALLINGFAR frames: {fallingFrames}/{frameCount}");
+        Assert.True(fallingFrames < frameCount * 0.1,
+            $"Too many FALLINGFAR frames on uphill terrain: {fallingFrames}/{frameCount}");
+
+        // Speed check
+        float dx = player.Position.X - (-500f);
+        float dy = player.Position.Y - (-4800f);
+        float totalXY = MathF.Sqrt(dx * dx + dy * dy);
+        float actualSpeed = totalXY / (frameCount * dtSec);
+        _output.WriteLine($"Uphill speed: {actualSpeed:F2} y/s");
+        Assert.True(actualSpeed >= 3.0f,
+            $"Uphill speed too slow: {actualSpeed:F2} y/s (min 3.0)");
+    }
+
+    /// <summary>
+    /// Walk downhill on Valley of Trials terrain. Must not trigger persistent
+    /// FALLINGFAR oscillation (the bug that caused 0.42 y/s in live tests).
+    /// </summary>
+    [SkippableFact]
+    public void Forward_Downhill_NoFallingFarOscillation()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start on high ground, face downhill toward the road
+        // facing ≈ 5.0 rad (south-southeast, downhill)
+        var (controller, player, _) = CreateController(-284f, -4383f, 62f, facing: 5.0f);
+
+        const int frameCount = 100;
+        const float dtSec = 0.05f;
+
+        var frames = RunFramesWithTrace(controller, player, frameCount, dtSec,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace("Forward_Downhill", frames);
+
+        // Count consecutive FALLINGFAR→grounded transitions (oscillation)
+        int oscillations = 0;
+        for (int i = 1; i < frames.Count; i++)
+        {
+            bool prevFalling = frames[i-1].Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR);
+            bool currGrounded = !frames[i].Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR);
+            if (prevFalling && currGrounded) oscillations++;
+        }
+
+        _output.WriteLine($"FALLINGFAR oscillations: {oscillations}");
+        Assert.True(oscillations <= 3,
+            $"Too many FALLINGFAR oscillations on downhill: {oscillations} (max 3)");
+
+        // Z should be decreasing (going downhill)
+        float zDrop = frames[0].Z - frames[frames.Count - 1].Z;
+        _output.WriteLine($"Z drop: {zDrop:F1}y");
+        Assert.True(zDrop > 0, "Expected Z to decrease going downhill");
+    }
+
+    /// <summary>
+    /// Walk the exact route from the live MovementSpeedTests:
+    /// (-500, -4800, 38) facing 0.75 rad (northeast toward Valley of Trials).
+    /// This route has mixed terrain: flat, uphill, downhill.
+    /// </summary>
+    [SkippableFact]
+    public void Forward_LiveSpeedTestRoute_AchievesMinimumSpeed()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Exact start from MovementSpeedTests
+        var (controller, player, _) = CreateController(-500f, -4800f, 38f, facing: 0.75f);
+
+        const int frameCount = 400; // 20 seconds
+        const float dtSec = 0.05f;
+        const float expectedMinSpeed = 3.5f;
+
+        var frames = RunFramesWithTrace(controller, player, frameCount, dtSec,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+
+        float dx = player.Position.X - (-500f);
+        float dy = player.Position.Y - (-4800f);
+        float totalXY = MathF.Sqrt(dx * dx + dy * dy);
+        float actualSpeed = totalXY / (frameCount * dtSec);
+
+        int fallingFrames = 0;
+        float minZ = float.MaxValue;
+        foreach (var f in frames)
+        {
+            if (f.Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR)) fallingFrames++;
+            if (f.Z < minZ) minZ = f.Z;
+        }
+
+        _output.WriteLine($"Speed: {actualSpeed:F2} y/s, FALLINGFAR: {fallingFrames}/{frameCount}, minZ: {minZ:F1}");
+        Assert.True(minZ > -10f, $"Bot fell through map: minZ={minZ:F1}");
+        Assert.True(actualSpeed >= expectedMinSpeed,
+            $"Speed test route too slow: {actualSpeed:F2} y/s (min {expectedMinSpeed})");
+    }
+
+    /// <summary>
     /// Validates that movement packets are sent at ~500ms intervals with correct position deltas.
     /// </summary>
     [Fact]
