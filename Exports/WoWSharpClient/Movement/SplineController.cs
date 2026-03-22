@@ -28,30 +28,86 @@ namespace WoWSharpClient.Movement
         public Spline Spline { get; } = s;
         private float _elapsed;   // ms since spline start
         private int _seg;         // current segment index
+        private Position? _lastPosition;
 
         /// <summary>Advance <paramref name="dtMs"/> and return the new position.</summary>
         public Position Step(float dtMs)
         {
+            // Frozen splines (0x400000): halt at current position, never advance.
+            // WoW.exe uses this for stunned/rooted NPCs with active splines.
+            if (Spline.Flags.HasFlag(SplineFlags.Frozen))
+                return _lastPosition ?? Spline.Points[0];
+
             _elapsed += dtMs;
 
             while (_seg + 1 < Spline.Points.Count &&
                    _elapsed >= (_seg + 1) * Spline.SegmentMs)
                 _seg++;
 
+            // Cyclic splines (0x100000): wrap back to start instead of finishing.
+            // Used for NPC patrol routes that loop continuously.
             if (_seg + 1 >= Spline.Points.Count)
-                return Spline.Points[^1];
+            {
+                if (Spline.Flags.HasFlag(SplineFlags.Cyclic) && Spline.Points.Count > 1)
+                {
+                    _elapsed %= Spline.DurationMs;
+                    _seg = 0;
+                    while (_seg + 1 < Spline.Points.Count &&
+                           _elapsed >= (_seg + 1) * Spline.SegmentMs)
+                        _seg++;
+                }
+                else
+                {
+                    _lastPosition = Spline.Points[^1];
+                    return _lastPosition;
+                }
+            }
 
             float u = (_elapsed - _seg * Spline.SegmentMs) / Spline.SegmentMs;
-            var a = Spline.Points[_seg];
-            var b = Spline.Points[_seg + 1];
 
-            float x = a.X + (b.X - a.X) * u;
-            float y = a.Y + (b.Y - a.Y) * u;
-            float z = a.Z + (b.Z - a.Z) * u;
-            return new Position(x, y, z);
+            Position result;
+            // Flying splines (0x200): use Catmull-Rom for smooth curves.
+            // WoW.exe SplineStep at 0x7C5360 dispatches to 6 interpolation sub-functions;
+            // Flying flag selects the cubic spline evaluator.
+            if (Spline.Flags.HasFlag(SplineFlags.Flying) && Spline.Points.Count >= 4)
+            {
+                var p0 = Spline.Points[Math.Max(0, _seg - 1)];
+                var p1 = Spline.Points[_seg];
+                var p2 = Spline.Points[_seg + 1];
+                var p3 = Spline.Points[Math.Min(Spline.Points.Count - 1, _seg + 2)];
+                result = CatmullRom(p0, p1, p2, p3, u);
+            }
+            else
+            {
+                var a = Spline.Points[_seg];
+                var b = Spline.Points[_seg + 1];
+                result = new Position(
+                    a.X + (b.X - a.X) * u,
+                    a.Y + (b.Y - a.Y) * u,
+                    a.Z + (b.Z - a.Z) * u
+                );
+            }
+
+            _lastPosition = result;
+            return result;
         }
 
-        public bool Finished => _seg + 1 >= Spline.Points.Count;
+        public bool Finished => !Spline.Flags.HasFlag(SplineFlags.Cyclic)
+            && _seg + 1 >= Spline.Points.Count;
+
+        /// <summary>
+        /// Catmull-Rom cubic spline interpolation.
+        /// P(t) = 0.5 * ((2*P1) + (-P0+P2)*t + (2*P0-5*P1+4*P2-P3)*t² + (-P0+3*P1-3*P2+P3)*t³)
+        /// </summary>
+        private static Position CatmullRom(Position p0, Position p1, Position p2, Position p3, float t)
+        {
+            float t2 = t * t, t3 = t2 * t;
+            return new Position(
+                0.5f * (2*p1.X + (-p0.X+p2.X)*t + (2*p0.X-5*p1.X+4*p2.X-p3.X)*t2 + (-p0.X+3*p1.X-3*p2.X+p3.X)*t3),
+                0.5f * (2*p1.Y + (-p0.Y+p2.Y)*t + (2*p0.Y-5*p1.Y+4*p2.Y-p3.Y)*t2 + (-p0.Y+3*p1.Y-3*p2.Y+p3.Y)*t3),
+                0.5f * (2*p1.Z + (-p0.Z+p2.Z)*t + (2*p0.Z-5*p1.Z+4*p2.Z-p3.Z)*t2 + (-p0.Z+3*p1.Z-3*p2.Z+p3.Z)*t3)
+            );
+        }
     }
 
     /// <summary>Central registry that drives every active spline each frame.</summary>
