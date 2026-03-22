@@ -2407,8 +2407,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			rescueReferenceZ + (trustGroundedReplayInput ? 0.65f : 0.55f),
 			rescueReferenceZ + (trustGroundedReplayInput ? 0.95f : 0.75f)
 		};
-		const float minRescueDz = trustGroundedReplayInput ? -0.35f : -0.15f;
-		const float maxRescueDz = trustGroundedReplayInput ? 0.55f : 0.25f;
+		// WoW.exe CollisionStep (0x633E06): search volume extends down by
+		// radius + speed*dt*tan(50°) and up by min(2*radius, speed*dt).
+		// Use slope-dependent tolerance but ONLY horizontal speed (not fall velocity).
+		const float hSpeedDt = std::sqrt(speedSq) * dt; // speedSq is horizontal only (vx² + vy²)
+		const float slopeTolerance = std::max(0.5f, r + hSpeedDt * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE);
+		const float minRescueDz = trustGroundedReplayInput ? -0.35f : -slopeTolerance;
+		const float maxRescueDz = trustGroundedReplayInput ? 0.55f : std::min(slopeTolerance, PhysicsConstants::STEP_HEIGHT);
 		const float offsets[9][2] = {
 			{0, 0},
 			{probeR, 0}, {-probeR, 0}, {0, probeR}, {0, -probeR},
@@ -3069,6 +3074,47 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.vx = actualV.x; out.vy = actualV.y; out.vz = actualV.z;
 	out.moveFlags = input.moveFlags;
 	if (isSwimming) out.moveFlags |= MOVEFLAG_SWIMMING; else out.moveFlags &= ~MOVEFLAG_SWIMMING;
+
+	// =========================================================================
+	// GROUND CONTACT PERSISTENCE (WoW.exe parity)
+	// =========================================================================
+	// WoW.exe CollisionStep (0x633840) uses an AABB that dynamically sizes to
+	// encompass terrain on both uphill and downhill slopes. Our capsule sweep
+	// can intermittently miss terrain geometry, producing single-frame false-
+	// airborne states. When the character was grounded on the previous frame
+	// (no airborne input flags) and the output position is still near valid
+	// ground, maintain grounded state. This matches WoW.exe behavior where
+	// the character stays grounded unless clearly airborne (walked off a ledge
+	// with no ground within STEP_DOWN_HEIGHT).
+	if (!st.isGrounded && !isSwimming && !inputAirborneFlag && wasGroundedAtStart) {
+		// Quick ray probe at current XY to check if ground exists nearby
+		float persistZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y,
+			st.z + PhysicsConstants::STEP_HEIGHT,
+			PhysicsConstants::STEP_DOWN_HEIGHT + PhysicsConstants::STEP_HEIGHT);
+		// WoW.exe lifts AABB maxZ by min(2*radius, speed*dt) before sweeping.
+		// Our capsule SIDE pass can clip through uphill terrain, leaving st.z
+		// several yards below the surface. Since the character was grounded
+		// last frame and hasn't jumped, any valid ground at this XY is the
+		// correct surface. The character can't have legitimately fallen far
+		// in one frame from a grounded state.
+		if (VMAP::IsValidHeight(persistZ)) {
+			st.z = persistZ;
+			st.isGrounded = true;
+			st.vz = 0.0f;
+			st.fallTime = 0.0f;
+			// Update output position since we snapped Z
+			out.z = st.z;
+			out.vz = 0.0f;
+			PHYS_INFO(PHYS_MOVE, "[GroundPersist] Rescued from false-airborne via ray: z=" + std::to_string(persistZ));
+		} else {
+			std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+			oss << "[GroundPersist] Ray failed: persistZ=" << persistZ
+				<< " st.z=" << st.z << " valid=" << VMAP::IsValidHeight(persistZ)
+				<< " wasGrounded=" << wasGroundedAtStart
+				<< " inputAirborne=" << inputAirborneFlag;
+			PHYS_ERR(PHYS_MOVE, oss.str());
+		}
+	}
 
 	// =========================================================================
 	// AIRBORNE FLAG MANAGEMENT (WoW.exe parity)
