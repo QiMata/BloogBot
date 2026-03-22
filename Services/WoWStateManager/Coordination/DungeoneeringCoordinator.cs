@@ -155,7 +155,7 @@ public class DungeoneeringCoordinator
         }
 
         // Count InWorld bots
-        var inWorldCount = snapshots.Count(s => s.Value.ScreenState == "InWorld");
+        var inWorldCount = snapshots.Count(s => s.Value.IsObjectManagerValid);
         if (inWorldCount < 2)
             return null;
 
@@ -210,11 +210,11 @@ public class DungeoneeringCoordinator
     private ActionMessage? HandleWaitingForBots(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap) || leaderSnap.ScreenState != "InWorld")
+        if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap) || !leaderSnap.IsObjectManagerValid)
             return null;
 
         var readyMembers = _memberAccounts.Count(m =>
-            snapshots.TryGetValue(m, out var s) && s.ScreenState == "InWorld");
+            snapshots.TryGetValue(m, out var s) && s.IsObjectManagerValid);
 
         if (readyMembers < 1)
             return null;
@@ -262,7 +262,7 @@ public class DungeoneeringCoordinator
             if (!_accountToCharName.TryGetValue(account, out var charName))
                 continue; // Not in world yet
 
-            if (!snapshots.TryGetValue(account, out var snap) || snap.ScreenState != "InWorld")
+            if (!snapshots.TryGetValue(account, out var snap) || !snap.IsObjectManagerValid)
                 continue;
 
             // Mark as launched BEFORE starting the task to prevent duplicate launches
@@ -841,7 +841,7 @@ public class DungeoneeringCoordinator
 
                 if (_accountToCharName.TryGetValue(memberAccount, out var charName)
                     && snapshots.TryGetValue(memberAccount, out var snap)
-                    && snap.ScreenState == "InWorld")
+                    && snap.IsObjectManagerValid)
                 {
                     _logger.LogInformation("DUNGEON_COORD: Leader inviting '{CharName}' ({Account}) [{Idx}/{Limit}]",
                         charName, memberAccount, _inviteIndex + 1, inviteLimit);
@@ -968,7 +968,7 @@ public class DungeoneeringCoordinator
 
                 if (_accountToCharName.TryGetValue(memberAccount, out var charName)
                     && snapshots.TryGetValue(memberAccount, out var snap)
-                    && snap.ScreenState == "InWorld")
+                    && snap.IsObjectManagerValid)
                 {
                     _logger.LogInformation("DUNGEON_COORD: Leader inviting '{CharName}' ({Account}) [batch 2, {Idx}/{Total}]",
                         charName, memberAccount, _inviteIndex - PARTY_SIZE_LIMIT + 1, _memberAccounts.Count - PARTY_SIZE_LIMIT);
