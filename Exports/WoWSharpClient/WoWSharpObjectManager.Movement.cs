@@ -203,10 +203,14 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
+            var player = (WoWLocalPlayer)Player;
+            player.SwimSpeed = e.Speed;
+            Serilog.Log.Information("[SPEED] SwimSpeed changed to {Speed:F2} y/s", e.Speed);
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceSpeedChangeAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
                     e.Speed
@@ -233,10 +237,14 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
+            var player = (WoWLocalPlayer)Player;
+            player.RunBackSpeed = e.Speed;
+            Serilog.Log.Information("[SPEED] RunBackSpeed changed to {Speed:F2} y/s", e.Speed);
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceSpeedChangeAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
                     e.Speed
@@ -250,10 +258,14 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
+            var player = (WoWLocalPlayer)Player;
+            player.RunSpeed = e.Speed;
+            Serilog.Log.Information("[SPEED] RunSpeed changed to {Speed:F2} y/s", e.Speed);
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceSpeedChangeAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
                     e.Speed
