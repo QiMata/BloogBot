@@ -120,9 +120,24 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-22 (session 128)
-- **Branch:** `cpp_physics_system`
-- **Completed this session:**
+- **Last updated:** 2026-03-22 (session 129)
+- **Branch:** `main` (merged from `cpp_physics_system`)
+- **Session 129 completed:**
+  - Merged `cpp_physics_system` → `main` (131+ conflict resolutions)
+  - Phases 5-6: FG hardening + opcode coverage sweep
+  - FG auto-attack toggle spam fix (`IsAutoAttacking` tracks state)
+  - LedgeGuard removed (WoW.exe 0x633840 doesn't have one)
+  - Uphill ground detection: DOWN pass accepts walkable surfaces above originalZ
+  - Slope climbing: SIDE pass preserves walkable slope normals for 3D slide
+  - **Terrain-following SIDE pass**: `GetGroundZ` after each advance keeps capsule above terrain
+  - **Ground contact persistence**: ray probe rescues false-airborne on capsule sweep miss
+  - **Face() BADFACING bug**: negative facing caused early return without targeting mob
+  - **Combat test PASSES**: BG bot approaches, faces, kills Vile Familiar
+  - Speed test flaky (passes sometimes, fails on steep routes — FALLINGFAR oscillation)
+  - Bot still partially underground on slopes (GetGroundZ data vs WoW.exe heightmap mismatch)
+- **Test baseline (session 129):** BasicLoop 2/2, CharacterLifecycle 1/1, EquipmentEquip 1/1, CombatBg 1/1, RFC 1/2, GatheringRoute 6/6, MovementSpeed FLAKY
+- **Next priorities:** Fix underground Z, eliminate FALLINGFAR oscillation, run full test sweep
+- **Previous session (128) completed:**
   - **Deep WoW.exe binary decompilation** — 20+ functions decompiled including:
     - CMovement::CollisionStep (0x633840) — 2-pass AABB sweep
     - CMovement::Update (0x618C30) — per-frame movement dispatcher
