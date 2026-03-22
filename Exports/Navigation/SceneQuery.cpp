@@ -1468,6 +1468,191 @@ int SceneQuery::OverlapBox(const VMAP::StaticMapTree& map,
     return OverlapSphere(map, c, r, outOverlaps, includeMask);
 }
 
+// =============================================================================
+// AABB-Triangle SAT overlap test (13 axes)
+// Matches WoW.exe CWorldCollision::Collide primitive test
+// =============================================================================
+static bool AABBTriangleOverlap(
+    const G3D::Vector3& boxCenter, const G3D::Vector3& boxHalfExt,
+    const G3D::Vector3& v0, const G3D::Vector3& v1, const G3D::Vector3& v2)
+{
+    // Translate triangle to AABB-center space
+    G3D::Vector3 a = v0 - boxCenter;
+    G3D::Vector3 b = v1 - boxCenter;
+    G3D::Vector3 c = v2 - boxCenter;
+
+    G3D::Vector3 e0 = b - a;
+    G3D::Vector3 e1 = c - b;
+    G3D::Vector3 e2 = a - c;
+
+    const float ex = boxHalfExt.x, ey = boxHalfExt.y, ez = boxHalfExt.z;
+
+    // Test 3 AABB face normals (X, Y, Z axes)
+    {
+        float minT = std::min({a.x, b.x, c.x}), maxT = std::max({a.x, b.x, c.x});
+        if (minT > ex || maxT < -ex) return false;
+    }
+    {
+        float minT = std::min({a.y, b.y, c.y}), maxT = std::max({a.y, b.y, c.y});
+        if (minT > ey || maxT < -ey) return false;
+    }
+    {
+        float minT = std::min({a.z, b.z, c.z}), maxT = std::max({a.z, b.z, c.z});
+        if (minT > ez || maxT < -ez) return false;
+    }
+
+    // Test triangle face normal
+    G3D::Vector3 triNormal = e0.cross(e1);
+    float d = triNormal.dot(a);
+    float r = ex * std::fabs(triNormal.x) + ey * std::fabs(triNormal.y) + ez * std::fabs(triNormal.z);
+    if (std::fabs(d) > r) return false;
+
+    // Test 9 edge cross products (3 AABB edges × 3 triangle edges)
+    auto testEdge = [&](const G3D::Vector3& edge) -> bool {
+        // Cross with X axis: (0, -edge.z, edge.y)
+        {
+            float p0 = -a.y * edge.z + a.z * edge.y;
+            float p1 = -b.y * edge.z + b.z * edge.y;
+            float p2 = -c.y * edge.z + c.z * edge.y;
+            float r = ey * std::fabs(edge.z) + ez * std::fabs(edge.y);
+            if (std::min({p0,p1,p2}) > r || std::max({p0,p1,p2}) < -r) return false;
+        }
+        // Cross with Y axis: (edge.z, 0, -edge.x)
+        {
+            float p0 = a.x * edge.z - a.z * edge.x;
+            float p1 = b.x * edge.z - b.z * edge.x;
+            float p2 = c.x * edge.z - c.z * edge.x;
+            float r = ex * std::fabs(edge.z) + ez * std::fabs(edge.x);
+            if (std::min({p0,p1,p2}) > r || std::max({p0,p1,p2}) < -r) return false;
+        }
+        // Cross with Z axis: (-edge.y, edge.x, 0)
+        {
+            float p0 = -a.x * edge.y + a.y * edge.x;
+            float p1 = -b.x * edge.y + b.y * edge.x;
+            float p2 = -c.x * edge.y + c.y * edge.x;
+            float r = ex * std::fabs(edge.y) + ey * std::fabs(edge.x);
+            if (std::min({p0,p1,p2}) > r || std::max({p0,p1,p2}) < -r) return false;
+        }
+        return true;
+    };
+
+    if (!testEdge(e0)) return false;
+    if (!testEdge(e1)) return false;
+    if (!testEdge(e2)) return false;
+
+    return true; // All 13 axes pass — overlap confirmed
+}
+
+// =============================================================================
+// Static AABB terrain test — WoW.exe TestTerrain (0x6721B0) equivalent
+// =============================================================================
+int SceneQuery::TestTerrainAABB(uint32_t mapId,
+    const G3D::Vector3& boxMin, const G3D::Vector3& boxMax,
+    std::vector<AABBContact>& outContacts)
+{
+    EnsureMapLoaded(mapId);
+    outContacts.clear();
+
+    auto* scCache = GetSceneCache(mapId);
+    if (!scCache) return 0;
+
+    // Query all triangles in the XY footprint
+    std::vector<CapsuleCollision::Triangle> tris;
+    std::vector<uint32_t> instanceIds;
+    scCache->QueryTrianglesInAABB(boxMin.x, boxMin.y, boxMax.x, boxMax.y, tris, &instanceIds);
+
+    G3D::Vector3 center = (boxMin + boxMax) * 0.5f;
+    G3D::Vector3 halfExt = (boxMax - boxMin) * 0.5f;
+
+    for (size_t i = 0; i < tris.size(); ++i) {
+        const auto& t = tris[i];
+        G3D::Vector3 va(t.a.x, t.a.y, t.a.z);
+        G3D::Vector3 vb(t.b.x, t.b.y, t.b.z);
+        G3D::Vector3 vc(t.c.x, t.c.y, t.c.z);
+
+        // Z window filter — skip triangles completely outside the AABB Z range
+        float triMinZ = std::min({va.z, vb.z, vc.z});
+        float triMaxZ = std::max({va.z, vb.z, vc.z});
+        if (triMaxZ < boxMin.z || triMinZ > boxMax.z) continue;
+
+        if (AABBTriangleOverlap(center, halfExt, va, vb, vc)) {
+            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            // Orient normal to face the AABB center (consistent with WoW.exe)
+            G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
+            if (normal.dot(center - triCenter) < 0) normal = -normal;
+
+            AABBContact contact;
+            contact.point = triCenter; // Approximate contact point
+            contact.normal = normal;
+            contact.distance = 0;
+            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            outContacts.push_back(contact);
+        }
+    }
+
+    return (int)outContacts.size();
+}
+
+// =============================================================================
+// Swept AABB test — WoW.exe CWorldCollision::Collide (0x6373B0) equivalent
+// =============================================================================
+int SceneQuery::SweepAABB(uint32_t mapId,
+    const G3D::Vector3& boxMin, const G3D::Vector3& boxMax,
+    const G3D::Vector3& displacement,
+    std::vector<AABBContact>& outContacts)
+{
+    EnsureMapLoaded(mapId);
+    outContacts.clear();
+
+    auto* scCache = GetSceneCache(mapId);
+    if (!scCache) return 0;
+
+    // Compute swept AABB (union of start and end AABBs)
+    G3D::Vector3 endMin = boxMin + displacement;
+    G3D::Vector3 endMax = boxMax + displacement;
+    float queryMinX = std::min(boxMin.x, endMin.x);
+    float queryMinY = std::min(boxMin.y, endMin.y);
+    float queryMaxX = std::max(boxMax.x, endMax.x);
+    float queryMaxY = std::max(boxMax.y, endMax.y);
+
+    // Query triangles in the swept footprint
+    std::vector<CapsuleCollision::Triangle> tris;
+    std::vector<uint32_t> instanceIds;
+    scCache->QueryTrianglesInAABB(queryMinX, queryMinY, queryMaxX, queryMaxY, tris, &instanceIds);
+
+    G3D::Vector3 center = (boxMin + boxMax) * 0.5f;
+    G3D::Vector3 halfExt = (boxMax - boxMin) * 0.5f;
+    float dispLen = displacement.magnitude();
+
+    for (size_t i = 0; i < tris.size(); ++i) {
+        const auto& t = tris[i];
+        G3D::Vector3 va(t.a.x, t.a.y, t.a.z);
+        G3D::Vector3 vb(t.b.x, t.b.y, t.b.z);
+        G3D::Vector3 vc(t.c.x, t.c.y, t.c.z);
+
+        // Test both start and end AABBs
+        bool overlapStart = AABBTriangleOverlap(center, halfExt, va, vb, vc);
+        G3D::Vector3 endCenter = center + displacement;
+        bool overlapEnd = AABBTriangleOverlap(endCenter, halfExt, va, vb, vc);
+
+        if (overlapStart || overlapEnd) {
+            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
+            G3D::Vector3 testCenter = overlapStart ? center : endCenter;
+            if (normal.dot(testCenter - triCenter) < 0) normal = -normal;
+
+            AABBContact contact;
+            contact.point = triCenter;
+            contact.normal = normal;
+            contact.distance = overlapStart ? 0 : dispLen;
+            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            outContacts.push_back(contact);
+        }
+    }
+
+    return (int)outContacts.size();
+}
+
 int SceneQuery::SweepCapsule(uint32_t mapId,
     const CapsuleCollision::Capsule& capsuleStart,
     const G3D::Vector3& dir,

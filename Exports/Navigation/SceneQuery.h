@@ -228,6 +228,31 @@ class SceneQuery
                                 const G3D::Vector3& playerForward,
                                 const QueryParams& params = QueryParams());
 
+        // WoW.exe-style AABB sweep (VA 0x633840 CWorldCollision::Collide).
+        // Sweeps an axis-aligned bounding box along a direction, returning contacts
+        // with scene geometry (terrain + WMO + M2 via SceneCache).
+        // Uses SAT (Separating Axis Theorem) for AABB-triangle intersection.
+        // Contact normal is the triangle face normal (not swept contact normal).
+        struct AABBContact {
+            G3D::Vector3 point;     // World-space contact point
+            G3D::Vector3 normal;    // Triangle face normal
+            float distance;         // Distance along sweep direction to contact
+            bool walkable;          // normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
+        };
+
+        static int SweepAABB(uint32_t mapId,
+                             const G3D::Vector3& boxMin,
+                             const G3D::Vector3& boxMax,
+                             const G3D::Vector3& displacement,
+                             std::vector<AABBContact>& outContacts);
+
+        // Static AABB overlap test — like WoW.exe TestTerrain (0x6721B0).
+        // Finds all triangles overlapping the AABB and returns contacts.
+        static int TestTerrainAABB(uint32_t mapId,
+                                   const G3D::Vector3& boxMin,
+                                   const G3D::Vector3& boxMax,
+                                   std::vector<AABBContact>& outContacts);
+
         // Line of sight test combining VMAP and ADT terrain checks
         // Returns true if there is clear LOS between `from` and `to` on the given map
         static bool LineOfSight(uint32_t mapId, const G3D::Vector3& from, const G3D::Vector3& to);
