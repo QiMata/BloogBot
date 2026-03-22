@@ -852,7 +852,10 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private static bool IsHydratedInWorldSnapshot(WoWActivitySnapshot? snapshot)
     {
-        return snapshot?.ScreenState == "InWorld"
+        // Use the deterministic IsObjectManagerValid flag (set by BotRunnerService.Snapshot
+        // from IObjectManager state) instead of fragile string comparison.
+        return snapshot != null
+            && snapshot.IsObjectManagerValid
             && !string.IsNullOrWhiteSpace(snapshot.CharacterName)
             && snapshot.Player?.Unit?.MaxHealth > 0
             && snapshot.Player.Unit.GameObject?.Base?.Position != null;
