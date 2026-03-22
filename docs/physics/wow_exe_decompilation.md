@@ -560,3 +560,48 @@ while (accumulatedTime < totalDelta):
 |-----------|-------|-------|
 | Teleport | speed² > 3600 (>60 y/s) | Reject displacement |
 | Jitter | speed² < 9 (<3 y/s) | Ignore micro-movement |
+
+## Packet Send Pipeline
+
+### Movement Command Dispatch (VA 0x615C30)
+Jump table at `0x616580` maps 39 movement commands (0x00-0x26) to handlers.
+Each handler validates the movement, then sends the appropriate opcode.
+
+| Command Index | Opcode | Name | Validator |
+|--------------|--------|------|-----------|
+| 0x00 | 0x00B5 | MSG_MOVE_START_FORWARD | `0x7C6AE0` (CanStartForward) |
+| 0x01 | 0x00B6 | MSG_MOVE_START_BACKWARD | `0x7C6AE0` (CanStartBackward) |
+| 0x02 | 0x00B7 | MSG_MOVE_STOP | `0x7C6BA0` (CanStop) |
+| 0x03 | 0x00B8 | MSG_MOVE_START_STRAFE_LEFT | `0x7C6C50` (CanStrafe) |
+| 0x04 | 0x00B9 | MSG_MOVE_START_STRAFE_RIGHT | `0x7C6C50` (CanStrafe) |
+| 0x05 | 0x00BA | MSG_MOVE_STOP_STRAFE | `0x7C6D30` |
+| 0x06 | 0x00EE | MSG_MOVE_HEARTBEAT (fall) | `0x7C61C0` (CanSendFall) |
+
+### Packet Builder (VA 0x600A30)
+```
+SendMovementPacket(this, timestamp, opcode, flags, ...)
+{
+    1. Store current orientation at +0xC70 (for facing delta detection)
+    2. If SWIMMING: store pitch at +0xC74
+    3. Call BuildMovementInfo(0x600860) → serializes into wire buffer
+    4. Call NetworkSend(0x5AB630) → pushes to socket
+    5. Call UpdateInternalState(0x615B80) → syncs client state
+}
+```
+
+### Facing Change Detection (0x60E1EA)
+Before sending direction change packets (0xDA/0xDB), checks:
+- `abs(currentOrientation - storedOrientation)` against threshold at `0x80C408`
+- If SWIMMING: also checks pitch delta
+- Only sends if delta exceeds threshold (prevents micro-facing packet spam)
+
+### Key Packet Functions
+| Address | Name | Purpose |
+|---------|------|---------|
+| `0x615C30` | `CMovement::ProcessPendingMoves` | Dispatch movement commands |
+| `0x616580` | Jump table | 39 command → handler mappings |
+| `0x60E0A0` | `CMovement::SendMovementUpdate` | Validates + sends movement packet |
+| `0x600A30` | `CMovement::SendPacket` | Builds and sends MovementInfo |
+| `0x600860` | `CMovement::BuildMovementInfo` | Serializes MovementInfo to buffer |
+| `0x5AB630` | `CDataStore::Send` | Pushes buffer to network socket |
+| `0x615B80` | `CMovement::OnPacketSent` | Post-send state update |
