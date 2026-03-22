@@ -43,35 +43,25 @@ internal static class CombatTestHelpers
         LiveBotFixture bot, ITestOutputHelper output,
         string combatAccount, string? observerAccount)
     {
-        // --- Phase 1: Prep in Orgrimmar safe zone ---
-        output.WriteLine("\n--- Phase 1: Prep (Orgrimmar safe zone) ---");
+        // --- Setup: Learn skills + equip weapon + teleport to mob area ---
+        // All GM commands work at any location — no need to teleport to safe zone first.
+        output.WriteLine("\n--- Setup ---");
         await bot.EnsureStrictAliveAsync(combatAccount, "COMBAT");
 
-        await bot.BotTeleportAsync(combatAccount, LiveBotFixture.SafeZoneMap,
-            LiveBotFixture.SafeZoneX, LiveBotFixture.SafeZoneY, LiveBotFixture.SafeZoneZ);
-        await Task.Delay(1500);
-
-        output.WriteLine("  Equipping weapon (Worn Mace) and learning 1H Mace skill...");
+        // Learn + equip via SOAP (instant, no delays needed)
         await bot.BotLearnSpellAsync(combatAccount, OneHandMaceSpell);
         await bot.BotSetSkillAsync(combatAccount, 54, 1, 300);
         await bot.BotAddItemAsync(combatAccount, LiveBotFixture.TestItems.WornMace);
-        await Task.Delay(500);
         await bot.SendActionAsync(combatAccount, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)LiveBotFixture.TestItems.WornMace } }
         });
-        await Task.Delay(500);
 
-        // --- Phase 2: Teleport to mob area ---
-        output.WriteLine("\n--- Phase 2: Teleport to Valley of Trials mob area ---");
+        // Teleport directly to mob area + respawn
         await bot.BotTeleportAsync(combatAccount, MapId, MobAreaX, MobAreaY, MobAreaZ);
-        var arrived = await WaitForNearPositionAsync(bot, combatAccount, MobAreaX, MobAreaY, MobAreaRadius, TimeSpan.FromSeconds(12));
-        if (!arrived) return false;
-
-        // Force nearby creatures to respawn
         await bot.SendGmChatCommandAsync(combatAccount, ".respawn");
-        await Task.Delay(2000);
+        await Task.Delay(500); // Brief settle for teleport + respawn
 
         // --- Phase 3: Position FG observer (BG test only) ---
         if (observerAccount != null)
@@ -156,20 +146,12 @@ internal static class CombatTestHelpers
         LiveBotFixture bot, ITestOutputHelper output,
         string combatAccount, string observerAccount)
     {
-        output.WriteLine("\n--- Phase 3: Position FG observer ---");
-
-        // Ensure GM mode is on for observer (so mobs ignore it)
+        // FG observer: GM on + teleport to flat road near mob area.
+        // No delays — SOAP teleport is instant for FG (WoW.exe handles collision).
         await bot.SendGmChatCommandAsync(observerAccount, ".gm on");
-        await Task.Delay(500);
-
-        // Teleport observer to offset position
         await bot.BotTeleportAsync(observerAccount, MapId, ObserverX, ObserverY, ObserverZ);
-        await Task.Delay(1500);
-
-        // Face toward the combat bot
         await FaceBotTowardTargetBotAsync(bot, observerAccount, combatAccount);
-
-        output.WriteLine($"  [FG-OBSERVER] {observerAccount} at ({ObserverX:F1},{ObserverY:F1},{ObserverZ:F1}), GM on, facing combat bot.");
+        output.WriteLine($"  [FG-OBSERVER] at ({ObserverX:F1},{ObserverY:F1},{ObserverZ:F1}), GM on.");
     }
 
     private static async Task FaceBotTowardTargetBotAsync(
