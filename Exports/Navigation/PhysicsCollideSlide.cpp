@@ -231,9 +231,16 @@ SlideResult CollideAndSlide(
             break;
         }
 
-        // Get the horizontal component of the normal for slide calculation
+        // Get the slide normal. WoW.exe CollisionStep (0x633840) uses a single
+        // swept AABB that naturally follows slopes. Our 3-pass system separates
+        // horizontal and vertical movement, so when the SIDE pass hits a walkable
+        // slope, we must let the slide follow the slope surface (preserve Z in
+        // the normal) rather than flattening to horizontal. This allows the
+        // character to walk UP hills instead of pushing into them.
         G3D::Vector3 hitNormalH = earliest->normal;
-        if (horizontalOnly) {
+        if (horizontalOnly && !isWalkable) {
+            // Only flatten non-walkable contacts (walls, steep cliffs).
+            // Walkable slopes keep full 3D normal so the slide redirects upward.
             hitNormalH.z = 0.0f;
             float mag = hitNormalH.magnitude();
             if (mag > 1e-6f) {
