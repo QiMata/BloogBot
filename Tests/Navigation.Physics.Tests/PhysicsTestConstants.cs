@@ -85,9 +85,9 @@ public static class PhysicsTestConstants
 
     /// <summary>
     /// Maximum height the character can automatically step up (yards)
-    /// WoW vanilla client allows approximately 2.1-2.2 unit step-ups
+    /// WoW.exe CMovement +0xB4: hardcoded as 0x4001C71C = 2.027778f
     /// </summary>
-    public const float StepHeight = 2.125f;
+    public const float StepHeight = 2.027778f;
 
     /// <summary>
     /// Maximum downward distance to snap to ground while remaining grounded (yards)
