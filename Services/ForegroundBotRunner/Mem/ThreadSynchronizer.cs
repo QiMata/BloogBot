@@ -226,6 +226,12 @@ namespace ForegroundBotRunner.Mem
 
             lock (_queueLock)
             {
+                // Stale delegate warning: if queue has items older than 5s, WoW's main thread
+                // is likely blocked (loading screen, modal dialog, Warden scan). Log for diagnosis.
+                if (delegateQueue.Count > 50)
+                {
+                    DiagLogStatic($"WARNING: delegateQueue depth={delegateQueue.Count} — WoW main thread may be blocked");
+                }
                 delegateQueue.Enqueue((function, signal, resultHolder));
             }
             SendUserMessage();
