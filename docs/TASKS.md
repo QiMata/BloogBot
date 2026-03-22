@@ -120,9 +120,22 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-21 (session 126)
+- **Last updated:** 2026-03-22 (session 127)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
+  - **WoW.exe binary decompilation:** Extracted complete physics constant table (VA 0x0081DA54-0x0081DA94), decompiled 10+ functions (ApplyGravity, ComputeFallDisplacement, BeginJump, CollisionResponse, GetCurrentSpeed, etc.), reconstructed CMovement struct layout (0x160 bytes)
+  - **Physics constants updated to exact binary values:** Gravity 19.29110527, jump velocity 7.955547/9.096748, terminal velocity 60.14800262, step height 2.027778, collision skin 0.333333
+  - **Two-phase fall displacement:** Matches WoW.exe ComputeFallDisplacement (0x7C5E70) — splits frame when terminal velocity hit mid-frame
+  - **Safe Fall terminal velocity:** MOVEFLAG_SAFE_FALL (0x20000000) selects 7.0 y/s instead of 60.148
+  - **Diagonal movement damping:** sin(45°) = 0.707107 speed reduction for forward+strafe
+  - **Airborne flag masking:** Directional input stripped during JUMPING/FALLINGFAR
+  - **BotConnectionState proto:** Added connectionState, isObjectManagerValid, isMapTransition to snapshots
+  - **Packet construction parity:** Heartbeat 200ms→100ms, added outbound flag mask 0x75A07DFF
+  - **Terrain height analysis:** Confirmed barycentric interpolation matches WoW.exe (0x6B72A0)
+  - **Calibration:** 142/143 physics tests pass, 102/102 movement tests, 3/3 live physics
+  - **DriftGate metrics:** ground avg=0.075y, air avg=0.005y, swim avg=0.000y, transport avg=0.298y
+- **Commits:** `089c2f18`, `22e8bb03`, `e8465ba8`, `d4f29644`, `4df09b9a`, `463bc907`
+- **Previous session:**
   - **BG bot CharacterSelect stuck fix (72476477):** Root cause: `ReadItemField` in ObjectUpdateHandler.cs had no catch-all for unrecognized item fields (enchantment sub-slots 23-42). Missing 4-byte reads corrupted the update stream — player GUID 0x10 was read as update type 16, discarding the player's own create object. Added `else reader.ReadUInt32()` to all field readers (Item, GameObject, DynamicObject, Corpse, Container). BG bot now reliably enters world.
   - **Elevated-structure ledge guard (46183c06):** Physics engine `GetGroundZ` returns terrain Z below WMO docks/piers. Added two-stage check: detect character is on invisible surface (charZ >> originGroundZ), then use STEP_HEIGHT threshold to prevent walking off. Fixes BG bot sinking at Ratchet dock.
   - **PathfindingService hang fix (ac2b7986):** Disabled post-corridor segment validation — `ValidateWalkableSegment` physics sweeps cost 5-28s per segment. Corridor paths are navmesh-constrained by construction.
