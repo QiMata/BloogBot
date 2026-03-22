@@ -1148,7 +1148,7 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
         // between adjacent grid points. The old threshold (2.625y) falsely
         // blocked horizontal movement on ordinary terrain. Real ledge edges
         // (pier/dock/bridge to terrain below) are typically 5-15y drops.
-        const float ledgeThreshold = 4.0f;
+        const float ledgeThreshold = 6.0f;
         bool isLedgeDrop = false;
 
         if (VMAP::IsValidHeight(groundProbeZ) && VMAP::IsValidHeight(originGroundZ)) {

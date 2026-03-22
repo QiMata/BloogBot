@@ -289,7 +289,8 @@ namespace WoWStateManager
                 _botLogPipeServers[accountName] = pipeServer;
             }
 
-            var PATH_TO_GAME = _configuration["GameClient:ExecutablePath"];
+            var PATH_TO_GAME = Environment.GetEnvironmentVariable("WWOW_WOW_EXE_PATH")
+                ?? _configuration["GameClient:ExecutablePath"];
 
             // Check if we're injecting into an existing process
             bool injectIntoExisting = targetProcessId.HasValue;
