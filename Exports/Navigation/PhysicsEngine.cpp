@@ -1420,10 +1420,29 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     const float probeDown = radius + speedDt * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE +
                             PhysicsConstants::STEP_DOWN_HEIGHT;
 
-    // Multi-probe terrain query — matches WoW.exe's AABB width.
-    // A single center ray can miss terrain mesh gaps. Probe at center + 4 offsets.
-    float endTerrZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-        startZ + probeUp, probeUp + probeDown);
+    // Multi-probe terrain query — matches WoW.exe's AABB approach.
+    // GetGroundZ returns the HIGHEST ground below the probe origin.
+    // Problem: if probe origin is below a VMAP model, it returns ADT terrain
+    // instead of the visible surface. Probe from multiple heights and take
+    // the HIGHEST valid ground within the acceptable range.
+    float endTerrZ = PhysicsConstants::INVALID_HEIGHT;
+    {
+        const float probeOrigins[4] = {
+            startZ + 20.0f,  // Well above any nearby VMAP model
+            startZ + probeUp,
+            startZ + 2.0f,
+            startZ + 0.5f
+        };
+        for (float probeH : probeOrigins) {
+            float pz = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+                probeH, probeH - startZ + probeDown);
+            if (VMAP::IsValidHeight(pz) && pz > endTerrZ &&
+                pz >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+                pz <= startZ + PhysicsConstants::STEP_HEIGHT + 10.0f) {
+                endTerrZ = pz;
+            }
+        }
+    }
 
     if (!VMAP::IsValidHeight(endTerrZ)) {
         // Center probe failed — try offsets matching WoW.exe AABB footprint (±collisionSkin).
