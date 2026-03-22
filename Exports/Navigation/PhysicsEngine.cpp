@@ -1358,7 +1358,7 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
         if (st.vz >= 0.0f) st.vz = PhysicsConstants::FALL_START_VELOCITY;
         // Apply gravity and vertical displacement without changing XY
         const float vz0 = st.vz;
-        const float dz = vz0 * dt - 0.5f * GRAVITY * dt * dt;
+        const float dz = vz0 * dt - HALF_GRAVITY * dt * dt;
         ApplyGravity(st, dt);
         st.z += dz;
         // Perform downward CCD to clamp to ground if encountered

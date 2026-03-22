@@ -15,8 +15,8 @@ namespace PhysicsMovement
 void ApplyGravity(MovementState& st, float dt)
 {
     st.vz -= PhysicsConstants::GRAVITY * dt; 
-    if (st.vz < -60.0f) 
-        st.vz = -60.0f;
+    if (st.vz < -PhysicsConstants::TERMINAL_VELOCITY)
+        st.vz = -PhysicsConstants::TERMINAL_VELOCITY;
 }
 
 MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation)
@@ -53,7 +53,7 @@ void ProcessAirMovement(
     // Integrate vertical motion using z += vz0*dt - 0.5*g*dt^2
     G3D::Vector3 startPos(st.x, st.y, st.z);
     const float vz0 = st.vz;
-    const float dz = vz0 * dt - 0.5f * PhysicsConstants::GRAVITY * dt * dt;
+    const float dz = vz0 * dt - PhysicsConstants::HALF_GRAVITY * dt * dt;
     
     // Apply gravity to velocity (with terminal clamp)
     ApplyGravity(st, dt);

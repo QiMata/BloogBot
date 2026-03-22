@@ -39,6 +39,12 @@ namespace WoWSharpClient
 
         private bool _isBeingTeleported = true;
 
+        /// <summary>
+        /// True when BG bot is in a map transition (teleport in progress).
+        /// Overrides the IObjectManager default (false) so snapshots report real state.
+        /// </summary>
+        public bool IsInMapTransition => _isBeingTeleported;
+
         private long _teleportFlagSetTicks;  // Stopwatch.GetTimestamp() when _isBeingTeleported was last set true
 
         private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)

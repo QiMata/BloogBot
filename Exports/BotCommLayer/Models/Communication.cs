@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-            "IAEoCUgAQgsKCXBhcmFtZXRlciK6AwoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
+            "IAEoCUgAQgsKCXBhcmFtZXRlciKtBAoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -63,46 +63,53 @@ namespace Communication {
             "ck5hbWUYCCABKAkSEwoLc2NyZWVuU3RhdGUYCSABKAkSKAoMbW92ZW1lbnRE",
             "YXRhGAogASgLMhIuZ2FtZS5Nb3ZlbWVudERhdGESFwoPcGFydHlMZWFkZXJH",
             "dWlkGAsgASgEEhoKEnJlY2VudENoYXRNZXNzYWdlcxgMIAMoCRIUCgxyZWNl",
-            "bnRFcnJvcnMYDSADKAkq9woKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
-            "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
-            "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
-            "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
-            "RVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIPCgtP",
-            "RkZFUl9UUkFERRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVNEA0S",
-            "EAoMQUNDRVBUX1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVOQ0hB",
-            "TlRfVFJBREUQEBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVfTEVB",
-            "REVSEBISFQoRUFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xPT1Rf",
-            "TUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xPT1QQ",
-            "FhISCg5MT09UX1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAYEg0K",
-            "CUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUNDRVBU",
-            "X0dST1VQX0lOVklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwSDwoL",
-            "S0lDS19QTEFZRVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRfR1JP",
-            "VVAQHxIWChJTVEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5HRURf",
-            "QVRUQUNLECESFQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FUVEFD",
-            "SxAjEg4KCkNBU1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0VfSVRF",
-            "TRAmEg4KCkVRVUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxERVNU",
-            "Uk9ZX0lURU0QKRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxArEgwK",
-            "CEJVWV9JVEVNECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVNEC4S",
-            "DwoLUkVQQUlSX0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoMRElT",
-            "TUlTU19CVUZGEDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVMT0dJ",
-            "ThA0EgoKBkxPR09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBERUxF",
-            "VEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBT",
-            "RRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsS",
-            "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
-            "VBA+Eg4KClNFVF9GQUNJTkcQPxIQCgxWSVNJVF9WRU5ET1IQQBIRCg1WSVNJ",
-            "VF9UUkFJTkVSEEESFwoTVklTSVRfRkxJR0hUX01BU1RFUhBCEhEKDVNUQVJU",
-            "X0ZJU0hJTkcQQxIZChVTVEFSVF9HQVRIRVJJTkdfUk9VVEUQRBIOCgpDSEVD",
-            "S19NQUlMEEUSGwoXU1RBUlRfUEhZU0lDU19SRUNPUkRJTkcQRhIaChZTVE9Q",
-            "X1BIWVNJQ1NfUkVDT1JESU5HEEcSFwoTU1RBUlRfRFVOR0VPTkVFUklORxBI",
-            "EhMKD0NPTlZFUlRfVE9fUkFJRBBJKi8KDUJvdFJ1bm5lclR5cGUSDgoKRk9S",
-            "RUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASp2Cg9TdGF0ZUNoYW5nZVR5cGUS",
-            "CAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5USU9VU05FU1MQ",
-            "AhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNTEAQSDwoLTkVV",
-            "Uk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNTEAASCwoH",
-            "RkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAJiBnByb3RvMw=="));
+            "bnRFcnJvcnMYDSADKAkSOgoPY29ubmVjdGlvblN0YXRlGA4gASgOMiEuY29t",
+            "bXVuaWNhdGlvbi5Cb3RDb25uZWN0aW9uU3RhdGUSHAoUaXNPYmplY3RNYW5h",
+            "Z2VyVmFsaWQYDyABKAgSFwoPaXNNYXBUcmFuc2l0aW9uGBAgASgIKpELCgpB",
+            "Y3Rpb25UeXBlEggKBFdBSVQQABIICgRHT1RPEAESEQoNSU5URVJBQ1RfV0lU",
+            "SBACEhEKDVNFTEVDVF9HT1NTSVAQAxIUChBTRUxFQ1RfVEFYSV9OT0RFEAQS",
+            "EAoMQUNDRVBUX1FVRVNUEAUSEQoNREVDTElORV9RVUVTVBAGEhEKDVNFTEVD",
+            "VF9SRVdBUkQQBxISCg5DT01QTEVURV9RVUVTVBAIEg8KC1RSQUlOX1NLSUxM",
+            "EAkSEAoMVFJBSU5fVEFMRU5UEAoSDwoLT0ZGRVJfVFJBREUQCxIOCgpPRkZF",
+            "Ul9HT0xEEAwSDgoKT0ZGRVJfSVRFTRANEhAKDEFDQ0VQVF9UUkFERRAOEhEK",
+            "DURFQ0xJTkVfVFJBREUQDxIRCg1FTkNIQU5UX1RSQURFEBASEgoOTE9DS1BJ",
+            "Q0tfVFJBREUQERISCg5QUk9NT1RFX0xFQURFUhASEhUKEVBST01PVEVfQVNT",
+            "SVNUQU5UEBMSGAoUUFJPTU9URV9MT09UX01BTkFHRVIQFBISCg5TRVRfR1JP",
+            "VVBfTE9PVBAVEg8KC0FTU0lHTl9MT09UEBYSEgoOTE9PVF9ST0xMX05FRUQQ",
+            "FxITCg9MT09UX1JPTExfR1JFRUQQGBINCglMT09UX1BBU1MQGRIVChFTRU5E",
+            "X0dST1VQX0lOVklURRAaEhcKE0FDQ0VQVF9HUk9VUF9JTlZJVEUQGxIYChRE",
+            "RUNMSU5FX0dST1VQX0lOVklURRAcEg8KC0tJQ0tfUExBWUVSEB0SDwoLTEVB",
+            "VkVfR1JPVVAQHhIRCg1ESVNCQU5EX0dST1VQEB8SFgoSU1RBUlRfTUVMRUVf",
+            "QVRUQUNLECASFwoTU1RBUlRfUkFOR0VEX0FUVEFDSxAhEhUKEVNUQVJUX1dB",
+            "TkRfQVRUQUNLECISDwoLU1RPUF9BVFRBQ0sQIxIOCgpDQVNUX1NQRUxMECQS",
+            "DQoJU1RPUF9DQVNUECUSDAoIVVNFX0lURU0QJhIOCgpFUVVJUF9JVEVNECcS",
+            "EAoMVU5FUVVJUF9JVEVNECgSEAoMREVTVFJPWV9JVEVNECkSDQoJTU9WRV9J",
+            "VEVNECoSDwoLU1BMSVRfU1RBQ0sQKxIMCghCVVlfSVRFTRAsEhAKDEJVWUJB",
+            "Q0tfSVRFTRAtEg0KCVNFTExfSVRFTRAuEg8KC1JFUEFJUl9JVEVNEC8SFAoQ",
+            "UkVQQUlSX0FMTF9JVEVNUxAwEhAKDERJU01JU1NfQlVGRhAxEg0KCVJFU1VS",
+            "UkVDVBAyEgkKBUNSQUZUEDMSCQoFTE9HSU4QNBIKCgZMT0dPVVQQNRIUChBD",
+            "UkVBVEVfQ0hBUkFDVEVSEDYSFAoQREVMRVRFX0NIQVJBQ1RFUhA3Eg8KC0VO",
+            "VEVSX1dPUkxEEDgSDwoLTE9PVF9DT1JQU0UQORISCg5SRUxFQVNFX0NPUlBT",
+            "RRA6EhMKD1JFVFJJRVZFX0NPUlBTRRA7Eg8KC1NLSU5fQ09SUFNFEDwSDwoL",
+            "R0FUSEVSX05PREUQPRINCglTRU5EX0NIQVQQPhIOCgpTRVRfRkFDSU5HED8S",
+            "EAoMVklTSVRfVkVORE9SEEASEQoNVklTSVRfVFJBSU5FUhBBEhcKE1ZJU0lU",
+            "X0ZMSUdIVF9NQVNURVIQQhIRCg1TVEFSVF9GSVNISU5HEEMSGQoVU1RBUlRf",
+            "R0FUSEVSSU5HX1JPVVRFEEQSDgoKQ0hFQ0tfTUFJTBBFEhsKF1NUQVJUX1BI",
+            "WVNJQ1NfUkVDT1JESU5HEEYSGgoWU1RPUF9QSFlTSUNTX1JFQ09SRElORxBH",
+            "EhcKE1NUQVJUX0RVTkdFT05FRVJJTkcQSBITCg9DT05WRVJUX1RPX1JBSUQQ",
+            "SRIYChRDSEFOR0VfUkFJRF9TVUJHUk9VUBBKKi8KDUJvdFJ1bm5lclR5cGUS",
+            "DgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASp2Cg9TdGF0ZUNoYW5n",
+            "ZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5USU9V",
+            "U05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNTEAQS",
+            "DwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNT",
+            "EAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAIqrAEKEkJvdENvbm5l",
+            "Y3Rpb25TdGF0ZRIUChBCT1RfRElTQ09OTkVDVEVEEAASFgoSQk9UX0FVVEhF",
+            "TlRJQ0FUSU5HEAESEwoPQk9UX0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVS",
+            "SU5HX1dPUkxEEAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVS",
+            "UklORxAFEhMKD0JPVF9MT0dHSU5HX09VVBAGYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
-          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
+          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.AsyncRequest), global::Communication.AsyncRequest.Parser, new[]{ "Id", "ActivitySnapshot", "StateChange", "SnapshotQuery", "ActionForward" }, new[]{ "Parameter" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.SnapshotQueryRequest), global::Communication.SnapshotQueryRequest.Parser, new[]{ "AccountName" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionForwardRequest), global::Communication.ActionForwardRequest.Parser, new[]{ "AccountName", "Action" }, null, null, null, null),
@@ -112,7 +119,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition" }, null, null, null, null)
           }));
     }
     #endregion
@@ -221,6 +228,23 @@ namespace Communication {
     [pbr::OriginalName("SUCCESS")] Success = 0,
     [pbr::OriginalName("FAILURE")] Failure = 1,
     [pbr::OriginalName("IN_PROGRESS")] InProgress = 2,
+  }
+
+  /// <summary>
+  /// Connection lifecycle state — deterministic, packet-driven.
+  /// Replaces string-based screenState for machine consumption.
+  /// </summary>
+  public enum BotConnectionState {
+    [pbr::OriginalName("BOT_DISCONNECTED")] BotDisconnected = 0,
+    [pbr::OriginalName("BOT_AUTHENTICATING")] BotAuthenticating = 1,
+    [pbr::OriginalName("BOT_CHAR_SELECT")] BotCharSelect = 2,
+    [pbr::OriginalName("BOT_ENTERING_WORLD")] BotEnteringWorld = 3,
+    [pbr::OriginalName("BOT_IN_WORLD")] BotInWorld = 4,
+    /// <summary>
+    /// Cross-map teleport / loading screen
+    /// </summary>
+    [pbr::OriginalName("BOT_TRANSFERRING")] BotTransferring = 5,
+    [pbr::OriginalName("BOT_LOGGING_OUT")] BotLoggingOut = 6,
   }
 
   #endregion
@@ -2945,6 +2969,9 @@ namespace Communication {
       partyLeaderGuid_ = other.partyLeaderGuid_;
       recentChatMessages_ = other.recentChatMessages_.Clone();
       recentErrors_ = other.recentErrors_.Clone();
+      connectionState_ = other.connectionState_;
+      isObjectManagerValid_ = other.isObjectManagerValid_;
+      isMapTransition_ = other.isMapTransition_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3124,6 +3151,51 @@ namespace Communication {
       get { return recentErrors_; }
     }
 
+    /// <summary>Field number for the "connectionState" field.</summary>
+    public const int ConnectionStateFieldNumber = 14;
+    private global::Communication.BotConnectionState connectionState_ = global::Communication.BotConnectionState.BotDisconnected;
+    /// <summary>
+    /// Deterministic connection lifecycle state
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.BotConnectionState ConnectionState {
+      get { return connectionState_; }
+      set {
+        connectionState_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "isObjectManagerValid" field.</summary>
+    public const int IsObjectManagerValidFieldNumber = 15;
+    private bool isObjectManagerValid_;
+    /// <summary>
+    /// Safe to read game objects / send actions
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool IsObjectManagerValid {
+      get { return isObjectManagerValid_; }
+      set {
+        isObjectManagerValid_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "isMapTransition" field.</summary>
+    public const int IsMapTransitionFieldNumber = 16;
+    private bool isMapTransition_;
+    /// <summary>
+    /// Loading screen or cross-map teleport in progress
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool IsMapTransition {
+      get { return isMapTransition_; }
+      set {
+        isMapTransition_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3152,6 +3224,9 @@ namespace Communication {
       if (PartyLeaderGuid != other.PartyLeaderGuid) return false;
       if(!recentChatMessages_.Equals(other.recentChatMessages_)) return false;
       if(!recentErrors_.Equals(other.recentErrors_)) return false;
+      if (ConnectionState != other.ConnectionState) return false;
+      if (IsObjectManagerValid != other.IsObjectManagerValid) return false;
+      if (IsMapTransition != other.IsMapTransition) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3172,6 +3247,9 @@ namespace Communication {
       if (PartyLeaderGuid != 0UL) hash ^= PartyLeaderGuid.GetHashCode();
       hash ^= recentChatMessages_.GetHashCode();
       hash ^= recentErrors_.GetHashCode();
+      if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) hash ^= ConnectionState.GetHashCode();
+      if (IsObjectManagerValid != false) hash ^= IsObjectManagerValid.GetHashCode();
+      if (IsMapTransition != false) hash ^= IsMapTransition.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3230,6 +3308,18 @@ namespace Communication {
       }
       recentChatMessages_.WriteTo(output, _repeated_recentChatMessages_codec);
       recentErrors_.WriteTo(output, _repeated_recentErrors_codec);
+      if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
+        output.WriteRawTag(112);
+        output.WriteEnum((int) ConnectionState);
+      }
+      if (IsObjectManagerValid != false) {
+        output.WriteRawTag(120);
+        output.WriteBool(IsObjectManagerValid);
+      }
+      if (IsMapTransition != false) {
+        output.WriteRawTag(128, 1);
+        output.WriteBool(IsMapTransition);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3280,6 +3370,18 @@ namespace Communication {
       }
       recentChatMessages_.WriteTo(ref output, _repeated_recentChatMessages_codec);
       recentErrors_.WriteTo(ref output, _repeated_recentErrors_codec);
+      if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
+        output.WriteRawTag(112);
+        output.WriteEnum((int) ConnectionState);
+      }
+      if (IsObjectManagerValid != false) {
+        output.WriteRawTag(120);
+        output.WriteBool(IsObjectManagerValid);
+      }
+      if (IsMapTransition != false) {
+        output.WriteRawTag(128, 1);
+        output.WriteBool(IsMapTransition);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3321,6 +3423,15 @@ namespace Communication {
       }
       size += recentChatMessages_.CalculateSize(_repeated_recentChatMessages_codec);
       size += recentErrors_.CalculateSize(_repeated_recentErrors_codec);
+      if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ConnectionState);
+      }
+      if (IsObjectManagerValid != false) {
+        size += 1 + 1;
+      }
+      if (IsMapTransition != false) {
+        size += 2 + 1;
+      }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -3376,6 +3487,15 @@ namespace Communication {
       }
       recentChatMessages_.Add(other.recentChatMessages_);
       recentErrors_.Add(other.recentErrors_);
+      if (other.ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
+        ConnectionState = other.ConnectionState;
+      }
+      if (other.IsObjectManagerValid != false) {
+        IsObjectManagerValid = other.IsObjectManagerValid;
+      }
+      if (other.IsMapTransition != false) {
+        IsMapTransition = other.IsMapTransition;
+      }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -3459,6 +3579,18 @@ namespace Communication {
             recentErrors_.AddEntriesFrom(input, _repeated_recentErrors_codec);
             break;
           }
+          case 112: {
+            ConnectionState = (global::Communication.BotConnectionState) input.ReadEnum();
+            break;
+          }
+          case 120: {
+            IsObjectManagerValid = input.ReadBool();
+            break;
+          }
+          case 128: {
+            IsMapTransition = input.ReadBool();
+            break;
+          }
         }
       }
     #endif
@@ -3540,6 +3672,18 @@ namespace Communication {
           }
           case 106: {
             recentErrors_.AddEntriesFrom(ref input, _repeated_recentErrors_codec);
+            break;
+          }
+          case 112: {
+            ConnectionState = (global::Communication.BotConnectionState) input.ReadEnum();
+            break;
+          }
+          case 120: {
+            IsObjectManagerValid = input.ReadBool();
+            break;
+          }
+          case 128: {
+            IsMapTransition = input.ReadBool();
             break;
           }
         }

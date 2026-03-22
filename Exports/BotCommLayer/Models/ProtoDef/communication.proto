@@ -166,6 +166,18 @@ message RequestParameter {
     }
 }
 
+// Connection lifecycle state — deterministic, packet-driven.
+// Replaces string-based screenState for machine consumption.
+enum BotConnectionState {
+    BOT_DISCONNECTED = 0;
+    BOT_AUTHENTICATING = 1;
+    BOT_CHAR_SELECT = 2;
+    BOT_ENTERING_WORLD = 3;
+    BOT_IN_WORLD = 4;
+    BOT_TRANSFERRING = 5;       // Cross-map teleport / loading screen
+    BOT_LOGGING_OUT = 6;
+}
+
 message WoWActivitySnapshot {
     uint32 timestamp = 1;
     string accountName = 2;
@@ -180,4 +192,7 @@ message WoWActivitySnapshot {
     uint64 partyLeaderGuid = 11;  // GUID of the party leader (0 if not in a group)
     repeated string recentChatMessages = 12;    // Recent chat messages (GM command responses, system messages)
     repeated string recentErrors = 13;          // Recent error/UI messages from the game client
+    BotConnectionState connectionState = 14;    // Deterministic connection lifecycle state
+    bool isObjectManagerValid = 15;             // Safe to read game objects / send actions
+    bool isMapTransition = 16;                  // Loading screen or cross-map teleport in progress
 }

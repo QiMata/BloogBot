@@ -39,6 +39,39 @@ namespace BotRunner
                 _activitySnapshot.ScreenState = "LoginScreen";
             }
 
+            // Connection state — deterministic, derived from existing IObjectManager properties.
+            // Gives StateManager and tests a machine-readable lifecycle signal without Task.Delay guessing.
+            var inMapTransition = _objectManager.IsInMapTransition;
+            _activitySnapshot.IsMapTransition = inMapTransition;
+
+            if (!_objectManager.HasEnteredWorld)
+            {
+                if (_objectManager.CharacterSelectScreen?.IsOpen == true)
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotCharSelect;
+                else if (_objectManager.LoginScreen?.IsLoggedIn == true)
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotAuthenticating;
+                else
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotDisconnected;
+            }
+            else if (inMapTransition)
+            {
+                _activitySnapshot.ConnectionState = BotConnectionState.BotTransferring;
+            }
+            else if (playerWorldReady && _objectManager.Player != null)
+            {
+                _activitySnapshot.ConnectionState = BotConnectionState.BotInWorld;
+            }
+            else
+            {
+                _activitySnapshot.ConnectionState = BotConnectionState.BotEnteringWorld;
+            }
+
+            // ObjectManager is valid only when fully in world, not transitioning, and player exists.
+            _activitySnapshot.IsObjectManagerValid =
+                _activitySnapshot.ConnectionState == BotConnectionState.BotInWorld
+                && _objectManager.Player != null
+                && !inMapTransition;
+
             // Always flush message buffers (even during login — captures GM command errors)
             FlushMessageBuffers();
 
@@ -46,7 +79,7 @@ namespace BotRunner
             // During cross-map teleports, object pointers become invalid — reading them
             // causes ACCESS_VIOLATION that .NET 8 cannot catch (process termination).
             if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null
-                || _objectManager.IsInMapTransition)
+                || inMapTransition)
                 return;
 
             var player = _objectManager.Player;

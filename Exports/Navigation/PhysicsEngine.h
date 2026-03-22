@@ -27,14 +27,16 @@ namespace PhysicsConstants
     // GRAVITY AND MOVEMENT
     // =========================================================================
 
-    // Client: 19.291105 @ 0x0081DA58. Server (double): 19.29110527038574.
-    // Pre-computed GRAVITY/2 @ 0x0081DA60, 2*GRAVITY @ 0x0081DA64.
-    constexpr float GRAVITY = 19.2911f;
+    // WoW.exe 1.12.1 VA 0x0081DA58: 19.29110527 (0x419A542F as IEEE 754 float)
+    // Pre-computed: GRAVITY/2 @ 0x0081DA60, 2*GRAVITY @ 0x0081DA64,
+    //               1/GRAVITY @ 0x0080E020, -1/GRAVITY @ 0x0081DA5C
+    constexpr float GRAVITY = 19.29110527f;
 
-    // ~7.9535 appears 26x in client with slight precision variance — computed
-    // inline as sqrt(2*g*h), NOT a static constant. Implied max jump height:
-    // v^2/(2g) = 1.6396 yards.
-    constexpr float JUMP_VELOCITY = 7.9535f;
+    // WoW.exe 0x7C626F: immediate 0xC0FE93D8 = -7.955547f (negative = upward)
+    // Swimming jump: 0x7C6266: 0xC1118C48 = -9.096748f
+    // Implied max jump height: v²/(2g) = 1.640 yards.
+    constexpr float JUMP_VELOCITY = 7.955547f;
+    constexpr float JUMP_VELOCITY_SWIMMING = 9.096748f;
 
     constexpr float WATER_LEVEL_DELTA = 2.0f;
 
@@ -42,11 +44,19 @@ namespace PhysicsConstants
     // Small nudge ensures the character doesn't hover for one frame at vz=0.
     constexpr float FALL_START_VELOCITY = -0.1f;
 
-    // Client: 60.148003 @ 0x0087D894. VMaNGOS: 60.148003f.
-    constexpr float TERMINAL_VELOCITY = 60.148f;
+    // WoW.exe VA 0x0087D894: 60.148003 (0x4270978E)
+    // This is NOT a hardcoded constant — it's computed at init by SetTerminalVelocity()
+    // (0x7C6160): termVel = param * STEP_HEIGHT_FACTOR(1.0936). Default param ≈ 55.0.
+    constexpr float TERMINAL_VELOCITY = 60.14800262f;
 
-    // Client: 7.0 @ 0x0087D898 (adjacent to TERMINAL_VELOCITY).
-    // Used when Safe Fall aura is active.
+    // Pre-computed gravity multiples stored as static floats in WoW.exe.
+    constexpr float HALF_GRAVITY = GRAVITY * 0.5f;      // 9.64555f — VA 0x0081DA60
+    constexpr float DOUBLE_GRAVITY = GRAVITY * 2.0f;    // 38.5822f — VA 0x0081DA64
+    constexpr float INV_GRAVITY = 1.0f / GRAVITY;       // 0.05184f — VA 0x0080E020
+    constexpr float NEG_INV_GRAVITY = -INV_GRAVITY;     //           — VA 0x0081DA5C
+
+    // WoW.exe VA 0x0087D898: 7.0 (adjacent to TERMINAL_VELOCITY).
+    // Used when MOVEFLAG_SAFE_FALL (0x20000000) is set — e.g. Slow Fall, Levitate.
     constexpr float SAFE_FALL_TERMINAL_VELOCITY = 7.0f;
 
     // =========================================================================
@@ -61,9 +71,19 @@ namespace PhysicsConstants
     constexpr float BASE_TURN_RATE       = 3.141594f;   // pi rad/s
 
     // =========================================================================
-    // FALL DAMAGE (VMaNGOS Player.cpp, 0.018 confirmed inline @ 0x0040665A)
-    // Formula: dmgPct = COEFF * (zDiff - safeFall) - OFFSET
+    // FALL DAMAGE
     // =========================================================================
+    // VA 0x0081DA80: 10.0 = FALL_DAMAGE_START_SPEED
+    // VA 0x0081DA84: 11.111111 = 100/9 (damage scalar)
+    // VA 0x0081DA88: 5.555555 = 50/9  (half scalar)
+    // VA 0x0081DA8C: 10.0 = duplicate
+    // VA 0x0081DA90: 5.0
+    // Init functions (0x7C7BD0, 0x7C7C00): square these and store as globals.
+    //   safe_fall_speed² = 10² = 100  (stored at ds:0xCF5D68)
+    //   damage_scalar²   = (100/9)² ≈ 123.457 (stored at ds:0xCF5D7C)
+    constexpr float FALL_DAMAGE_START_SPEED = 10.0f;
+    constexpr float FALL_DAMAGE_SCALAR      = 11.111111f;  // 100/9
+    // VMaNGOS formula: dmgPct = COEFF * (zDiff - safeFall) - OFFSET
     constexpr float FALL_SAFE_DISTANCE  = 14.57f;  // Min fall distance for damage
     constexpr float FALL_SAFE_TIME_MS   = 1229.0f; // Fall time from safe distance
     constexpr float FALL_DAMAGE_COEFF   = 0.018f;  // % max HP per yard
@@ -74,8 +94,11 @@ namespace PhysicsConstants
     // =========================================================================
     constexpr float GROUND_HEIGHT_TOLERANCE = 0.04f;
 
-    // Client: 2.125 @ 0x008060CE (index 8 in a 15-entry step height table
-    // ranging from 7.875 to 0.921875, indexed by model size).
+    // VA 0x0081DA74: 1.093600 (0x3F8BFB16) — used as terminal velocity factor.
+    // SetTerminalVelocity(0x7C6160): termVel = param * 1.0936.
+    // Step height is model-dependent: 2.125 @ 0x008060CE is index 8 in a
+    // 15-entry table ranging from 7.875 to 0.921875, indexed by model size.
+    constexpr float STEP_HEIGHT_FACTOR = 1.093600f;
     constexpr float STEP_HEIGHT = 2.125f;
 
     constexpr float STEP_DOWN_HEIGHT = 4.0f;    // max downward snap while grounded
@@ -88,13 +111,17 @@ namespace PhysicsConstants
     constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
 
     // =========================================================================
-    // SLOPE WALKABILITY (client trig table near 0x0080DFC0)
+    // SLOPE WALKABILITY
     // =========================================================================
 
-    // cos(50) = 0.642788 @ 0x0080DFFC. Slopes steeper than 50 deg non-walkable.
+    // VA 0x0081DA54: sin(45°) = cos(45°) = 1/√2 = 0.70710677 (0x3F3504F3)
+    // Used in collision response: normal scaling for slide planes.
+    constexpr float SIN_45 = 0.70710677f;
+
+    // cos(50°) = 0.642788 @ 0x0080DFFC. Slopes steeper than 50° non-walkable.
     constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.6428f;
 
-    // tan(50) = 1.191754 @ 0x0080E008. Also -tan(50) @ 0x0080E010.
+    // tan(50°) = 1.191754 @ 0x0080E008. Also -tan(50°) @ 0x0080E010.
     // Used for cliff detection: if ground drops faster than this, enter freefall.
     constexpr float WALKABLE_TAN_MAX_SLOPE = 1.1918f;
 
@@ -118,6 +145,14 @@ namespace PhysicsConstants
     // =========================================================================
     // NUMERICAL EPSILONS
     // =========================================================================
+
+    // VA 0x00801360: 0.001 — milliseconds to seconds conversion.
+    // WoW stores fall time as int32 ms, multiplies by this before physics.
+    constexpr float MS_TO_SEC = 0.001f;
+
+    // VA 0x008029D4: 2.384e-07 (0x34800000) — speed epsilon.
+    // If abs(velocity) < this, velocity is considered zero.
+    constexpr float SPEED_EPSILON = 2.384185791015625e-7f;
 
     // General-purpose vector magnitude / sweep distance epsilon.
     // Used throughout for "is this vector effectively zero?" checks.
