@@ -184,17 +184,59 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnForceMoveKnockBack(
             object? sender,
-            RequiresAcknowledgementArgs e
+            KnockBackArgs e
         )
         {
+            var player = (WoWLocalPlayer)Player;
+
+            // Apply knockback velocity — WoW.exe 0x5E59B0.
+            // vCos/vSin define the horizontal direction, hSpeed is magnitude, vSpeed is vertical launch.
+            float velX = e.HSpeed * e.VCos;
+            float velY = e.HSpeed * e.VSin;
+            float velZ = e.VSpeed;  // positive = upward
+
+            // Store pending knockback for MovementController to consume next frame
+            _pendingKnockbackVelX = velX;
+            _pendingKnockbackVelY = velY;
+            _pendingKnockbackVelZ = velZ;
+            _hasPendingKnockback = true;
+
+            // Set FALLINGFAR — knockback initiates a fall trajectory
+            player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
+            // Clear directional flags — knockback overrides player input
+            player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
+                | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+
+            Serilog.Log.Information("[KNOCKBACK] vel=({VelX:F2},{VelY:F2},{VelZ:F2}) hSpeed={HSpeed:F2} dir=({VCos:F3},{VSin:F3})",
+                velX, velY, velZ, e.HSpeed, e.VCos, e.VSin);
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_MOVE_KNOCK_BACK_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds
                 )
             );
+        }
+
+        // Knockback state — consumed by MovementController on next Update()
+        private volatile bool _hasPendingKnockback;
+        private float _pendingKnockbackVelX, _pendingKnockbackVelY, _pendingKnockbackVelZ;
+
+        /// <summary>Returns and clears any pending knockback velocity impulse.</summary>
+        internal bool TryConsumePendingKnockback(out float vx, out float vy, out float vz)
+        {
+            if (!_hasPendingKnockback)
+            {
+                vx = vy = vz = 0;
+                return false;
+            }
+            vx = _pendingKnockbackVelX;
+            vy = _pendingKnockbackVelY;
+            vz = _pendingKnockbackVelZ;
+            _hasPendingKnockback = false;
+            return true;
         }
 
 

@@ -173,7 +173,7 @@ namespace WoWSharpClient.Handlers
                             break;
                         case Opcode.SMSG_MOVE_KNOCK_BACK:
                             WoWSharpEventEmitter.Instance.FireOnForceMoveKnockBack(
-                                ParseGuidCounterPacket(reader)
+                                ParseKnockBackPacket(reader)
                             );
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
@@ -304,6 +304,23 @@ namespace WoWSharpClient.Handlers
             var speed = reader.ReadSingle();
 
             return new(guid, counter, speed);
+        }
+
+        /// <summary>
+        /// SMSG_MOVE_KNOCK_BACK: packed_guid + counter + vsin + vcos + hspeed + vspeed.
+        /// WoW.exe inbound handler at 0x5E59B0. The sin/cos define the XY direction
+        /// of the knockback, hspeed is horizontal magnitude, vspeed is vertical launch.
+        /// </summary>
+        private static KnockBackArgs ParseKnockBackPacket(BinaryReader reader)
+        {
+            var guid = ReaderUtils.ReadPackedGuid(reader);
+            var counter = reader.ReadUInt32();
+            var vSin = reader.ReadSingle();
+            var vCos = reader.ReadSingle();
+            var hSpeed = reader.ReadSingle();
+            var vSpeed = reader.ReadSingle();
+
+            return new KnockBackArgs(guid, counter, vSin, vCos, hSpeed, vSpeed);
         }
 
         private static ulong ParseMessageMove(BinaryReader reader)

@@ -183,6 +183,20 @@ namespace WoWSharpClient.Movement
                 SendForcedStopPacket(gameTimeMs);
             }
 
+            // Consume pending knockback impulse from SMSG_MOVE_KNOCK_BACK.
+            // Must happen before the idle early-return so knockback is never dropped.
+            if (WoWSharpObjectManager.Instance?.TryConsumePendingKnockback(out float kbVx, out float kbVy, out float kbVz) == true)
+            {
+                _velocity = new Vector3(kbVx, kbVy, kbVz);
+                _fallTimeMs = 0;
+                // FALLINGFAR is already set by the event handler; ensure FORWARD/BACKWARD cleared
+                _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
+                _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
+                    | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+                Log.Information("[MovementController] Applied knockback impulse vel=({VelX:F2},{VelY:F2},{VelZ:F2})",
+                    kbVx, kbVy, kbVz);
+            }
+
             if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
                 && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
                 && !_needsGroundSnap

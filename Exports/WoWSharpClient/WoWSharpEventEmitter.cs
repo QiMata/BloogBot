@@ -63,7 +63,7 @@ namespace WoWSharpClient
         public event EventHandler<RequiresAcknowledgementArgs> OnForceRunSpeedChange;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceRunBackSpeedChange;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceSwimSpeedChange;
-        public event EventHandler<RequiresAcknowledgementArgs> OnForceMoveKnockBack;
+        public event EventHandler<KnockBackArgs> OnForceMoveKnockBack;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceTimeSkipped;
         public event EventHandler<RequiresAcknowledgementArgs> OnTeleport;
         public event EventHandler<EventArgs> OnBlockParryDodge;
@@ -231,7 +231,7 @@ namespace WoWSharpClient
         internal void FireOnForceRunSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceRunSpeedChange?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceRunBackSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceRunBackSpeedChange?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceSwimSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceSwimSpeedChange?.Invoke(this, requiresAcknowledgementArgs);
-        internal void FireOnForceMoveKnockBack(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceMoveKnockBack?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnForceMoveKnockBack(KnockBackArgs args) => OnForceMoveKnockBack?.Invoke(this, args);
         internal void FireOnMoveTimeSkipped(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceTimeSkipped?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnTeleport(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnTeleport?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnClientControlUpdate() => FireEvent(OnClientControlUpdate);
