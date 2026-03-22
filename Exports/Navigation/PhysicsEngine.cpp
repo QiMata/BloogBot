@@ -1356,10 +1356,24 @@ bool PhysicsEngine::PerformVerticalPlacementOrFall(const PhysicsInput& input,
         st.isGrounded = false;
         // Only process vertical falling here to avoid double-applying XY when a ground move already occurred.
         if (st.vz >= 0.0f) st.vz = PhysicsConstants::FALL_START_VELOCITY;
-        // Apply gravity and vertical displacement without changing XY
+        // Two-phase fall displacement (WoW.exe 0x7C5E70 parity)
         const float vz0 = st.vz;
-        const float dz = vz0 * dt - HALF_GRAVITY * dt * dt;
-        ApplyGravity(st, dt);
+        const float termVel = (input.moveFlags & MOVEFLAG_SAFE_FALL)
+            ? PhysicsConstants::SAFE_FALL_TERMINAL_VELOCITY
+            : PhysicsConstants::TERMINAL_VELOCITY;
+        float speed0 = -vz0;
+        if (speed0 > termVel) speed0 = termVel;
+        float newSpeed = speed0 + GRAVITY * dt;
+        float dz;
+        if (newSpeed <= termVel) {
+            dz = -(speed0 * dt + HALF_GRAVITY * dt * dt);
+        } else {
+            float t_accel = (termVel - speed0) * PhysicsConstants::INV_GRAVITY;
+            float d_accel = speed0 * t_accel + HALF_GRAVITY * t_accel * t_accel;
+            float t_const = dt - t_accel;
+            dz = -(d_accel + t_const * termVel);
+        }
+        ApplyGravity(st, dt, input.moveFlags);
         st.z += dz;
         // Perform downward CCD to clamp to ground if encountered
         {
@@ -1590,11 +1604,14 @@ float PhysicsEngine::CalculateMoveSpeed(const PhysicsInput& input, bool swim)
 		input.runBackSpeed, input.swimSpeed, input.swimBackSpeed, swim);
 }
 
-void PhysicsEngine::ApplyGravity(MovementState& st, float dt)
+void PhysicsEngine::ApplyGravity(MovementState& st, float dt, uint32_t moveFlags)
 {
-    st.vz -= GRAVITY * dt; 
-    if (st.vz < -PhysicsConstants::TERMINAL_VELOCITY)
-        st.vz = -PhysicsConstants::TERMINAL_VELOCITY;
+    const float termVel = (moveFlags & MOVEFLAG_SAFE_FALL)
+        ? PhysicsConstants::SAFE_FALL_TERMINAL_VELOCITY
+        : PhysicsConstants::TERMINAL_VELOCITY;
+    st.vz -= GRAVITY * dt;
+    if (st.vz < -termVel)
+        st.vz = -termVel;
 }
 
 // =====================================================================================
@@ -1882,7 +1899,28 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		}
 	}
 
-	MovementIntent intent = BuildMovementIntent(input, st.orientation);
+	// =========================================================================
+	// MOVEMENT FLAG RESTRICTIONS (WoW.exe parity)
+	// =========================================================================
+	// When airborne, directional input is ignored — horizontal velocity is frozen
+	// from launch moment. When rooted, all movement is blocked.
+	// We create a masked copy of input for BuildMovementIntent so the direction
+	// vector reflects actual allowed movement, while preserving original flags
+	// for output (server expects them for validation).
+	uint32_t effectiveFlags = input.moveFlags;
+	if (inputAirborneFlag) {
+		// Airborne: strip directional bits — no air control in WoW
+		effectiveFlags &= ~PhysicsConstants::AIRBORNE_BLOCKED_BITS;
+	}
+	if (input.moveFlags & MOVEFLAG_ROOT) {
+		// Rooted: strip all movement bits
+		effectiveFlags &= ~PhysicsConstants::ROOTED_BLOCKED_BITS;
+	}
+
+	// Build intent from restricted flags (determines direction vector)
+	PhysicsInput maskedInput = input;
+	maskedInput.moveFlags = effectiveFlags;
+	MovementIntent intent = BuildMovementIntent(maskedInput, st.orientation);
 
 	// Evaluate liquid to decide swim vs ground/air (use SceneQuery directly)
 	auto liq = SceneQuery::EvaluateLiquidAt(input.mapId, st.x, st.y, st.z);
@@ -3074,20 +3112,28 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.moveFlags = input.moveFlags;
 	if (isSwimming) out.moveFlags |= MOVEFLAG_SWIMMING; else out.moveFlags &= ~MOVEFLAG_SWIMMING;
 
-	// Update movement flags for V2
-	// WoW uses JUMPING for the entire duration of a jump (ascent + descent).
-	// FALLINGFAR is set when falling without a jump (walked off ledge, etc.).
-	// Clear both airborne flags when grounded.
+	// =========================================================================
+	// AIRBORNE FLAG MANAGEMENT (WoW.exe parity)
+	// =========================================================================
+	// WoW uses JUMPING (0x2000) for player-initiated jumps (entire arc: ascent + descent).
+	// FALLINGFAR (0x4000) is set when falling without a jump (walked off ledge, etc.).
+	// When grounded, both are cleared. When airborne:
+	//   - If JUMPING was set by input, preserve it (jump in progress)
+	//   - If neither was set, engine detected a fall → set FALLINGFAR
+	// Additionally, WoW restricts directional flags during airborne:
+	//   FORWARD, BACKWARD, STRAFE_LEFT, STRAFE_RIGHT are cleared when falling
+	//   (no air control). The client sends them but the server/physics ignores them.
 	if (st.isGrounded) {
 		out.moveFlags &= ~(MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR);
 	}
 	else {
-		// Airborne: preserve the airborne flag type from input.
-		// If JUMPING was set, keep it. If only FALLINGFAR, keep that.
-		// If neither was set (engine detected fall), set FALLINGFAR.
 		if (!(out.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR))) {
 			out.moveFlags |= MOVEFLAG_FALLINGFAR;
 		}
+		// WoW.exe: directional input is locked during airborne.
+		// The movement direction is frozen at the moment of leaving the ground.
+		// We don't strip the flags from the packet (server expects them for validation),
+		// but the physics engine ignores them — horizontal velocity is carried from launch.
 	}
 
 	// Ground Z output: when grounded, st.z was snapped to terrain by the DOWN pass.

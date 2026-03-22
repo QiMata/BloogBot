@@ -96,10 +96,12 @@ namespace PhysicsConstants
 
     // VA 0x0081DA74: 1.093600 (0x3F8BFB16) — used as terminal velocity factor.
     // SetTerminalVelocity(0x7C6160): termVel = param * 1.0936.
-    // Step height is model-dependent: 2.125 @ 0x008060CE is index 8 in a
-    // 15-entry table ranging from 7.875 to 0.921875, indexed by model size.
     constexpr float STEP_HEIGHT_FACTOR = 1.093600f;
-    constexpr float STEP_HEIGHT = 2.125f;
+
+    // CMovement constructor hardcodes step-up at +0xB4 as 0x4001C71C = 2.027778f.
+    // Collision skin fraction at +0xB0 = 0.333333 (1/3 of bounding box).
+    constexpr float STEP_HEIGHT = 2.027778f;
+    constexpr float COLLISION_SKIN_FRACTION = 0.333333f;
 
     constexpr float STEP_DOWN_HEIGHT = 4.0f;    // max downward snap while grounded
 
@@ -182,6 +184,31 @@ namespace PhysicsConstants
 
     // Velocity damping factor when entering water (halves horizontal + vertical).
     constexpr float WATER_ENTRY_VELOCITY_DAMP = 0.5f;
+
+    // =========================================================================
+    // MOVEMENT FLAG RESTRICTIONS (WoW.exe binary analysis)
+    // =========================================================================
+    // WoW restricts which movement flags are allowed based on current state.
+    // When airborne (JUMPING or FALLINGFAR), directional input flags are ignored
+    // by the physics — horizontal velocity is frozen at the moment of leaving ground.
+    // When rooted (ROOT), all movement is blocked.
+    // These masks define which bits are ALLOWED in each state.
+
+    // Directional movement bits (FORWARD|BACKWARD|STRAFE_LEFT|STRAFE_RIGHT)
+    constexpr uint32_t DIRECTIONAL_BITS = 0x0000000F;
+    // Turn bits (TURN_LEFT|TURN_RIGHT)
+    constexpr uint32_t TURN_BITS = 0x00000030;
+    // Pitch bits (PITCH_UP|PITCH_DOWN)
+    constexpr uint32_t PITCH_BITS = 0x000000C0;
+
+    // While airborne (JUMPING or FALLINGFAR):
+    //   - Directional input is IGNORED (velocity frozen from launch)
+    //   - Turning is still allowed (camera/facing)
+    //   - Pitch is still allowed (irrelevant unless swimming)
+    constexpr uint32_t AIRBORNE_BLOCKED_BITS = DIRECTIONAL_BITS;
+
+    // While rooted: all movement blocked, only turns allowed
+    constexpr uint32_t ROOTED_BLOCKED_BITS = DIRECTIONAL_BITS | PITCH_BITS;
 }
 
 class PhysicsEngine
@@ -324,7 +351,7 @@ private:
 
     // Helper methods
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
-    void ApplyGravity(MovementState& state, float dt);
+    void ApplyGravity(MovementState& state, float dt, uint32_t moveFlags = 0);
 
     // Create player cylinder at position with specified dimensions
     VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z,

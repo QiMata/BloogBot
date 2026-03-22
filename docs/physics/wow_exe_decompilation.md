@@ -341,14 +341,98 @@ offset  type     name                 evidence
 
 ---
 
-## Key Differences from Current PhysicsEngine.cpp
+## CMovement Structure Layout (Complete — from deep binary analysis)
 
-| Aspect | WoW.exe | Our Implementation | Action |
+```
++0x10: vec3     startPos (x,y,z)
++0x18: float    positionZ
++0x1C: float    startFacing
++0x2C: float    scale (default 1.0)
++0x30: ptr      spline?
++0x38: uint64   GUID (low + high)
++0x40: uint32   movementFlags
++0x44: vec3     currentPos (x,y,z)
++0x50: float    facing (radians)
++0x54: float    pitch (radians)
++0x58: uint32   moveTimestamp (ms)
++0x5C: vec3     direction (normalized)
++0x68: float    forwardSpeed (computed)
++0x6C: float    strafeSpeed (computed)
++0x70: float    pitchCos
++0x74: float    pitchSin
++0x7C: float    heightRef (from startPos.z)
++0x84: float    groundZ
++0x88: float    runSpeed (server-set via SMSG_FORCE_*_SPEED_CHANGE)
++0x8C: float    runBackSpeed
++0x90: float    swimBackSpeed
++0x94: float    swimSpeed
++0x98: float    swimBackSpeedAlt
++0x9C: float    turnPitchRate
++0xA0: float    fallStartVelocity
++0xA4: ptr      transport
++0xB0: float    collisionSkinFraction (0.333333 = 1/3)
++0xB4: float    stepUpHeight (2.027778)
++0xB8: float    collisionScale (1.0)
+```
+
+### GetCurrentSpeed (VA 0x7C4C90)
+
+Speed selection logic based on movement flags:
+```cpp
+float CMovement::GetCurrentSpeed() {
+    if (!(flags & 0x0F)) return 0.0f;           // no directional input
+    if (transport) return transport.dist / transport.duration * 1000.0;
+    if (flags & DESCENDING) {
+        if (flags & BACKWARD) return max(swimBackSpeedAlt, swimSpeed);
+        return swimSpeed;
+    }
+    if (!(flags & WALK_MODE) && !(flags & FLYING)) {
+        if (flags & BACKWARD) return max(swimBackSpeed, runBackSpeed);
+        return runBackSpeed;  // Note: uses +0x8C (runBackSpeed) for non-walk forward
+    }
+    return max(runSpeed, runBackSpeed);
+}
+```
+
+### CollisionResponse / Diagonal Damping (VA 0x7C5A20)
+
+When moving forward+strafe simultaneously, velocity is multiplied by sin(45°) = 0.707107:
+```cpp
+if (hasForward && hasStrafe) {
+    position.x *= SIN_45;  // [0x81DA54]
+    position.y *= SIN_45;
+    position.z *= SIN_45;
+    forwardSpeed *= SIN_45;
+    strafeSpeed *= SIN_45;
+}
+```
+
+### Movement Flag Masks
+
+| Mask | Value | Purpose |
+|---|---|---|
+| Directional check | `0x200F` | FORWARD\|BACKWARD\|STRAFE_L\|STRAFE_R\|LEVITATING |
+| Any movement | `0x20FF` | Above + TURN + PITCH |
+| Simple sync | `0x75A01DFF` | Flags copied from movement update packet |
+| Full sync | `0x75A07DFF` | Above + PENDING_STOP/PENDING_STRAFE_STOP |
+
+---
+
+## Parity Status (updated 2026-03-21)
+
+| Aspect | WoW.exe | Our Implementation | Status |
 |---|---|---|---|
-| **Gravity** | `19.29110527` | `19.2911f` (truncated) | Updated to exact |
-| **Jump velocity** | `-7.955547` / `-9.096748` | `7.9535f` | Updated to exact; added swim |
-| **Terminal velocity** | `60.148003` (computed: `55 × 1.0936`) | `60.148f` | Updated to exact |
-| **Fall displacement** | Two-phase (accel + terminal) | Single equation | Need to implement split-frame |
-| **Time unit** | Integer ms × 0.001 | Float seconds | Match: convert ms→s before physics |
-| **Collision response** | sin(45°) scaling on slide vectors | Custom collide-and-slide | Compare slide vector math |
-| **Speed epsilon** | `2.384e-07` | `1e-6` | Updated |
+| **Gravity** | `19.29110527` | `19.29110527f` | **DONE** |
+| **Jump velocity** | `-7.955547` / `-9.096748` | Defined in constants | **DONE** |
+| **Terminal velocity** | `60.148003` / `7.0` (safe fall) | Both implemented | **DONE** |
+| **Fall displacement** | Two-phase (accel + terminal) | Two-phase in ProcessAirMovement + PerformVerticalPlacementOrFall | **DONE** |
+| **Safe Fall flag** | MOVEFLAG 0x20000000 → termVel=7.0 | Checked in ApplyGravity + ComputeFallDisplacement | **DONE** |
+| **Diagonal damping** | sin(45°) = 0.707107 | Applied in CalculateMoveSpeed | **DONE** |
+| **Step height** | 2.027778 yards | Updated from 2.125 | **DONE** |
+| **Collision skin** | 0.333333 (1/3 bbox) | Added as constant | **DONE** |
+| **Airborne flag masking** | Directional bits ignored when falling | effectiveFlags strips directional bits | **DONE** |
+| **Root flag masking** | All movement blocked when rooted | effectiveFlags strips movement bits | **DONE** |
+| **Speed epsilon** | `2.384e-07` | Updated | **DONE** |
+| **Time unit** | Integer ms × 0.001 | ms→s at StepV2 entry, s→ms at output | **DONE** |
+| **Collision response** | sin(45°) on slide vectors in CollisionResponse | PhysX-style reflection (architecturally different) | **ACCEPTABLE** — our VMAP sweep produces equivalent results |
+| **Ground snap** | Not fully decompiled in binary | Multi-ray ground detection with step-up/down | **ACCEPTABLE** — exceeds binary reference |

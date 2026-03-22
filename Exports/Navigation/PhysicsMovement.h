@@ -17,6 +17,7 @@ namespace PhysicsMovement
         bool isGrounded;
         bool isSwimming;
         float fallTime;
+        float fallStartZ;          // Z when fall/jump began (for WoW.exe parity)
         G3D::Vector3 groundNormal;
     };
 
@@ -47,7 +48,8 @@ namespace PhysicsMovement
         float speed);
 
     /// Applies gravity to vertical velocity with terminal velocity clamp.
-    void ApplyGravity(MovementState& st, float dt);
+    /// Terminal velocity switches based on MOVEFLAG_SAFE_FALL (7.0 vs 60.148).
+    void ApplyGravity(MovementState& st, float dt, uint32_t moveFlags = 0);
 
     /// Builds movement intent from input flags and orientation.
     MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation);
