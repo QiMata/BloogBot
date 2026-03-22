@@ -605,3 +605,52 @@ Before sending direction change packets (0xDA/0xDB), checks:
 | `0x600860` | `CMovement::BuildMovementInfo` | Serializes MovementInfo to buffer |
 | `0x5AB630` | `CDataStore::Send` | Pushes buffer to network socket |
 | `0x615B80` | `CMovement::OnPacketSent` | Post-send state update |
+
+## MovementInfo Struct (VA 0x7C6340 — FillMovementInfo)
+
+Exact binary layout of the MovementInfo block written to every movement packet.
+**Verified: our `MovementPacketHandler.cs` matches byte-for-byte.**
+
+### Wire Format
+```
+Offset  Size  Field                CMovement source     Condition
+------  ----  -----                ----------------     ---------
++0x00   4     movementFlags        +0x40 & 0x75A07DFF   always
++0x04   4     timestamp            function arg          always
++0x08   4     positionX            +0x10                 always
++0x0C   4     positionY            +0x14                 always
++0x10   4     positionZ            +0x18                 always
++0x14   4     orientation          +0x1C                 always
+--- if MOVEFLAG_ONTRANSPORT (0x2000000): ---
++0x18   8     transportGuid        +0x38, +0x3C
++0x20   12    transportOffset      from 0x7C4930
++0x2C   4     transportOrientation from 0x7C4AE0
+--- if MOVEFLAG_SWIMMING (0x200000): ---
+        4     swimPitch            +0x20
+--- always: ---
+        4     fallTime             +0x78 (int32 ms)
+--- if MOVEFLAG_JUMPING (0x2000): ---
+        4     jumpVerticalSpeed    +0xA0 (currentFallSpeed)
+        4     jumpSinAngle         +0x68 (forwardSpeed)
+        4     jumpCosAngle         +0x6C (strafeSpeed)
+        4     jumpHorizontalSpeed  +0x84
+--- if MOVEFLAG_SPLINE_ELEVATION (0x4000000): ---
+        4     splineElevation      +0x80
+```
+
+### Flag Mask Application (0x618909)
+```asm
+and edx, 0x75A07DFF    ; Strip internal-only flags before wire
+```
+Strips: `PENDING_STOP (0x80000)`, `PENDING_STRAFE_STOP (0x100000)`,
+`PENDING_FORWARD (0x200000)`, `ASCENDING (0x40000)`, `LOCAL_DIRTY (0x80000000)`,
+`SPLINE_ENABLED (0x400000)`.
+
+### Transport Flag (0x2000000)
+- If `transportGuid != 0`: set bit `0x2000000` in flags
+- If `transportGuid == 0`: clear bit `0x2000000`
+- Transport offset = position relative to transport origin (from `0x7C4930`)
+
+### Opcodes Requiring Extra Payload (0x6009B0)
+These opcodes append additional data after MovementInfo:
+`0xE3`, `0xE5`, `0xE7`, `0xF6`, `0x2CF`, `0x2D0`, `0x2DB`, `0x2DD`, `0x2DF`
