@@ -929,9 +929,16 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
         const bool prevGrounded = (input.fallTime == 0) &&
             ((input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) == 0);
         if (prevGrounded && input.transportGuid == 0) {
-            float rayZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, st.z,
-                PhysicsConstants::STEP_DOWN_HEIGHT + 1.0f);
-            if (VMAP::IsValidHeight(rayZ) && rayZ <= st.z && rayZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT) {
+            // WoW.exe step height adjustment (0x633E06): lifts bbox.maxZ by
+            // min(2*radius, speed*dt), then extends minZ down by radius + speed*dt*tan(50°).
+            // This creates a search volume that catches ground on BOTH uphill and downhill.
+            // Our ray query must also accept ground above (uphill) within step height.
+            float rayZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y,
+                st.z + PhysicsConstants::STEP_HEIGHT,  // probe from above step height
+                PhysicsConstants::STEP_DOWN_HEIGHT + PhysicsConstants::STEP_HEIGHT + 1.0f);
+            if (VMAP::IsValidHeight(rayZ) &&
+                rayZ <= st.z + PhysicsConstants::STEP_HEIGHT &&  // within step-up range
+                rayZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT) {
                 st.z = rayZ;
                 st.isGrounded = true;
                 st.vz = 0.0f;
