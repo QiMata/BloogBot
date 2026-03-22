@@ -2,10 +2,6 @@
 <RunSettings>
   <RunConfiguration>
     <!-- Hard stop for hangs so dotnet test does not run indefinitely. -->
-<<<<<<< HEAD
-    <TestSessionTimeout>180000</TestSessionTimeout>
-=======
     <TestSessionTimeout>600000</TestSessionTimeout>
->>>>>>> cpp_physics_system
   </RunConfiguration>
 </RunSettings>
