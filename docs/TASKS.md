@@ -120,21 +120,26 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-22 (session 127)
+- **Last updated:** 2026-03-22 (session 128)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - **WoW.exe binary decompilation:** Extracted complete physics constant table (VA 0x0081DA54-0x0081DA94), decompiled 10+ functions (ApplyGravity, ComputeFallDisplacement, BeginJump, CollisionResponse, GetCurrentSpeed, etc.), reconstructed CMovement struct layout (0x160 bytes)
-  - **Physics constants updated to exact binary values:** Gravity 19.29110527, jump velocity 7.955547/9.096748, terminal velocity 60.14800262, step height 2.027778, collision skin 0.333333
-  - **Two-phase fall displacement:** Matches WoW.exe ComputeFallDisplacement (0x7C5E70) — splits frame when terminal velocity hit mid-frame
-  - **Safe Fall terminal velocity:** MOVEFLAG_SAFE_FALL (0x20000000) selects 7.0 y/s instead of 60.148
-  - **Diagonal movement damping:** sin(45°) = 0.707107 speed reduction for forward+strafe
-  - **Airborne flag masking:** Directional input stripped during JUMPING/FALLINGFAR
-  - **BotConnectionState proto:** Added connectionState, isObjectManagerValid, isMapTransition to snapshots
-  - **Packet construction parity:** Heartbeat 200ms→100ms, added outbound flag mask 0x75A07DFF
-  - **Terrain height analysis:** Confirmed barycentric interpolation matches WoW.exe (0x6B72A0)
-  - **Calibration:** 142/143 physics tests pass, 102/102 movement tests, 3/3 live physics
-  - **DriftGate metrics:** ground avg=0.075y, air avg=0.005y, swim avg=0.000y, transport avg=0.298y
-- **Commits:** `089c2f18`, `22e8bb03`, `e8465ba8`, `d4f29644`, `4df09b9a`, `463bc907`
+  - **Deep WoW.exe binary decompilation** — 20+ functions decompiled including:
+    - CMovement::CollisionStep (0x633840) — 2-pass AABB sweep
+    - CMovement::Update (0x618C30) — per-frame movement dispatcher
+    - CWorldCollision::TestTerrain (0x6721B0) — spatial grid query
+    - SpatialQuery (0x6AA8B0) — chunk-based terrain/WMO/M2 intersection
+    - BuildMovementInfo (0x7C6340) — wire format verified byte-for-byte
+    - Packet dispatch table (0x616580) — 39 movement commands mapped
+    - Remote unit extrapolation loop (0x616DE0)
+  - **Phase 1: Speed change application** — SMSG_FORCE_*_SPEED_CHANGE ACKed but never applied; now writes speed to player model
+  - **Phase 2: Knockback system** — Full KnockBackArgs parsing (guid+counter+vsin+vcos+hspeed+vspeed), velocity impulse via MovementController, FALLINGFAR + gravity handles trajectory
+  - **Phase 3: Remote unit extrapolation** — GetExtrapolatedPosition() on WoWUnit with WoW.exe speed thresholds (>60y/s=teleport, <3y/s=jitter)
+  - **Phase 4: Spline improvements** — Catmull-Rom for Flying, Cyclic wrap-around, Frozen halt
+  - **Time delta clamping** — [-500ms, +1000ms] matching WoW.exe 0x618D0D
+  - **New constants:** SQRT_2, COLLISION_SKIN_EPSILON, speed thresholds
+  - **Calibration unchanged:** 142/143 physics tests, 44/44 spline tests, 18/18 snapshot tests
+- **Commits:** `9abae9dc` through `61c885f8` (8 commits)
+- **Remaining:** Phase 5 (FG hardening), Phase 6 (opcode sweep) — see plan at `~/.claude/plans/prancy-chasing-puddle.md`
 - **Previous session:**
   - **BG bot CharacterSelect stuck fix (72476477):** Root cause: `ReadItemField` in ObjectUpdateHandler.cs had no catch-all for unrecognized item fields (enchantment sub-slots 23-42). Missing 4-byte reads corrupted the update stream — player GUID 0x10 was read as update type 16, discarding the player's own create object. Added `else reader.ReadUInt32()` to all field readers (Item, GameObject, DynamicObject, Corpse, Container). BG bot now reliably enters world.
   - **Elevated-structure ledge guard (46183c06):** Physics engine `GetGroundZ` returns terrain Z below WMO docks/piers. Added two-stage check: detect character is on invisible surface (charZ >> originGroundZ), then use STEP_HEIGHT threshold to prevent walking off. Fixes BG bot sinking at Ratchet dock.
