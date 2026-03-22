@@ -146,12 +146,16 @@ internal static class CombatTestHelpers
         LiveBotFixture bot, ITestOutputHelper output,
         string combatAccount, string observerAccount)
     {
-        // FG observer: GM on + teleport to flat road near mob area.
-        // No delays — SOAP teleport is instant for FG (WoW.exe handles collision).
+        // Leave any group/raid from previous tests (RFC raid leaves FG in group)
+        await bot.SendGmChatCommandAsync(observerAccount, ".group disband");
         await bot.SendGmChatCommandAsync(observerAccount, ".gm on");
-        await bot.BotTeleportAsync(observerAccount, MapId, ObserverX, ObserverY, ObserverZ);
+
+        // Teleport FG observer near the mob area. BotTeleportAsync uses .go xyz
+        // via bot chat which works for FG (WoW.exe handles its own collision/Z).
+        await bot.BotTeleportAsync(observerAccount, MapId, MobAreaX - 10f, MobAreaY - 10f, MobAreaZ);
+        await Task.Delay(500);
         await FaceBotTowardTargetBotAsync(bot, observerAccount, combatAccount);
-        output.WriteLine($"  [FG-OBSERVER] at ({ObserverX:F1},{ObserverY:F1},{ObserverZ:F1}), GM on.");
+        output.WriteLine($"  [FG-OBSERVER] near mob area, GM on.");
     }
 
     private static async Task FaceBotTowardTargetBotAsync(

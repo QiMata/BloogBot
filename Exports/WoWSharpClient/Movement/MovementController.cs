@@ -628,53 +628,10 @@ namespace WoWSharpClient.Movement
             else
             {
                 _noGroundFrameCount = 0;
-
-                // When physics HAS valid ground but still reports FALLINGFAR, the DOWN pass
-                // capsule sweep missed the ground surface (e.g. Valley of Trials slope terrain).
-                // Strip FALLINGFAR to prevent IsPlayerAirborne() from blocking MoveToward(),
-                // which would prevent MOVEFLAG_FORWARD from being set on subsequent frames.
-                // Without this, the bot enters a stuck loop: physics returns FALLINGFAR →
-                // MoveToward blocked → no FORWARD flag → zero movement → stuck recovery →
-                // MoveToward sets FORWARD → physics returns FALLINGFAR again → repeat.
-                //
-                // IMPORTANT: Only strip when close to the LAST KNOWN ground (_prevGroundZ).
-                // output.GroundZ is unreliable when airborne (C++ sets it to st.z = character pos).
-                // Use _prevGroundZ which tracks the real terrain surface from the last grounded frame.
-                // When the bot is genuinely elevated (> 4y above last ground), FALLINGFAR is
-                // correct and must be preserved for real gravity/falling.
-                float gapFromLastGround = !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
-                    && _hasPhysicsGroundContact  // Only trust _prevGroundZ if established from real physics ground
-                    ? output.NewPosZ - _prevGroundZ
-                    : float.MaxValue; // Unknown ground → assume far (let FALLINGFAR through)
-                // Gap must be small: bot is near the last known ground surface.
-                // Allow small negative gap (-2y) for downhill slopes — the bot naturally
-                // descends below _prevGroundZ when walking down terrain. Without this
-                // tolerance, the first FALLINGFAR frame on a downhill slope is preserved,
-                // which blocks MOVEFLAG_FORWARD via IsPlayerAirborne(), causing the bot
-                // to enter true freefall and fall through the map.
-                // Large negative gap (< -2y) = fell through terrain → keep FALLINGFAR.
-                bool closeToGroundSurface = gapFromLastGround >= -2.0f && gapFromLastGround < 4.0f;
-                if ((output.MovementFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0 && closeToGroundSurface)
-                {
-                    output.MovementFlags &= ~(uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    output.FallTime = 0;
-                    output.NewVelZ = 0;
-                    // When airborne, C++ sets output.GroundZ = input.prevGroundZ (echoes
-                    // the stale value). Override with current position so _prevGroundZ
-                    // tracks the descent on downhill slopes instead of freezing.
-                    output.GroundZ = output.NewPosZ;
-                    _falseFreefallCount++;
-                    if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
-                    {
-                        Log.Warning("[MovementController] Stripped false FALLINGFAR — close to ground " +
-                            "(prevGround={PrevGround:F1}, pos={Pos:F1}, gap={Gap:F2}). Count={Count}",
-                            _prevGroundZ, output.NewPosZ, gapFromLastGround, _falseFreefallCount);
-                    }
-                }
-                else
-                {
-                    _falseFreefallCount = 0;
-                }
+                // FALLINGFAR stripping REMOVED — the AABB-based CollisionStepWoW
+                // (matching WoW.exe 0x633840) handles ground detection correctly.
+                // If the C++ physics says FALLINGFAR, trust it. The old capsule-based
+                // system had false-airborne states on slopes; the AABB system does not.
             }
             // Guard against falling through objects that the navmesh doesn't model (docks, bridges,
             // WMO platforms). After a teleport, if gravity would pull us more than GROUND_SNAP_MAX_DROP

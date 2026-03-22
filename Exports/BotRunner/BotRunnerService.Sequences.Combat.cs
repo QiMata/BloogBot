@@ -138,29 +138,29 @@ namespace BotRunner
                             return BehaviourTreeStatus.Running;
                         }
 
-                        // In melee range.  Stop movement, face the target, start auto-attack.
-                        // Always re-face on first arrival or when returning from a chase —
-                        // the mob may have moved and the bot's orientation may be stale.
+                        // In melee range. Face the target first, then attack on the next tick.
+                        // WoW.exe sends MSG_MOVE_SET_FACING before CMSG_ATTACKSWING — the server
+                        // checks facing when processing the attack swing. If both packets are sent
+                        // on the same tick, the server may process ATTACKSWING before SET_FACING,
+                        // causing SMSG_ATTACKSWING_BADFACING. Splitting across ticks ensures order.
                         if (!attackStarted)
                         {
                             _objectManager.StopAllMovement();
                             navPath?.Clear();
                             _objectManager.Face(target.Position);
-                            _objectManager.StartMeleeAttack();
-                            Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y <= {Arrival:F1}y) - engaging 0x{Guid:X}",
+                            // Don't attack yet — let the facing packet reach the server first.
+                            // Next tick will enter the else branch and send ATTACKSWING.
+                            Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y <= {Arrival:F1}y) - facing 0x{Guid:X}",
                                 dist, chaseArrivalDist, targetGuid);
                             attackStarted = true;
                         }
                         else
                         {
-                            // Re-face the target if not already facing it — the mob
-                            // may have repositioned during combat or after a re-chase.
-                            if (!player.IsFacing(target.Position))
-                                _objectManager.Face(target.Position);
+                            // Always re-face toward target (mob may reposition during combat)
+                            _objectManager.Face(target.Position);
 
-                            // Re-send CMSG_ATTACKSWING only if the server cancelled it
-                            // (SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT clears IsAutoAttacking).
-                            // Calling StartMeleeAttack every tick resets the swing timer.
+                            // Send CMSG_ATTACKSWING if not already auto-attacking.
+                            // SMSG_CANCEL_COMBAT / SMSG_ATTACKSTOP clear IsAutoAttacking.
                             if (!player.IsAutoAttacking)
                                 _objectManager.StartMeleeAttack();
                         }
