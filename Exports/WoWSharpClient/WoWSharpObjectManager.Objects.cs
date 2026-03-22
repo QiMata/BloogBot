@@ -192,6 +192,16 @@ namespace WoWSharpClient
                 unit.Position.Y = data.Y;
                 unit.Position.Z = data.Z;
                 unit.Facing = data.Facing;
+
+                // Record extrapolation state for remote unit position prediction.
+                // WoW.exe 0x616DE0 predicts other-unit positions between heartbeats.
+                if (unit is not WoWLocalPlayer)
+                {
+                    unit.ExtrapolationBasePosition = new Position(data.X, data.Y, data.Z);
+                    unit.ExtrapolationFlags = data.MovementFlags;
+                    unit.ExtrapolationFacing = data.Facing;
+                    unit.ExtrapolationTimeMs = data.LastUpdated;
+                }
             }
             unit.TransportGuid = data.TransportGuid ?? 0;
             unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
