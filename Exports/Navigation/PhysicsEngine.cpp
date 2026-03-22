@@ -711,7 +711,12 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
         }
 
         float snapZ = planeZ + snapEps;
-        if (snapZ > originalZ) snapZ = originalZ;
+        // WoW.exe CollisionStep (0x633840): the AABB's maxZ is lifted by
+        // min(2*radius, speed*dt) ABOVE the post-sweep position, allowing
+        // the character to step UP onto surfaces above the starting Z.
+        // Only clamp non-walkable surfaces (walls/ceilings) to originalZ.
+        // Walkable surfaces (ground) may be above originalZ on uphill slopes.
+        if (snapZ > originalZ && !walkable) snapZ = originalZ;
 
         // Reject candidates too far below the character's real position.
         // Walkable surfaces use a larger snap limit to handle downhill slopes.
