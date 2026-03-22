@@ -1752,6 +1752,15 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// Log input at the beginning
 	LogStepInputSummary(input, dt);
 
+	// WoW.exe CMovement::Update (0x618D0D): clamps per-frame delta to [-500ms, +1000ms].
+	// Values outside this range indicate frame stalls or clock jumps that would cause
+	// teleport-like movement. The clamp prevents physics divergence on lag spikes.
+	constexpr float MAX_DT = 1.0f;       // 1000ms in seconds
+	constexpr float MIN_DT = -0.5f;      // -500ms (backward time correction)
+	if (dt > MAX_DT) dt = MAX_DT;
+	// Negative dt → non-simulating (same as dt<=0 path below)
+	if (dt <= 0.0f) dt = 0.0f;
+
 	// NOTE (PhysX alignment): PhysX CCT's SweepTest::moveCharacter does not take a dt and
 	// always operates on a caller-provided displacement for the frame. Our StepV2 is a
 	// higher-level MMO movement integrator (WoW-like) that must handle variable/zero dt
