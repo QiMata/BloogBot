@@ -386,6 +386,14 @@ private:
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
     float QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const;
 
+    // WoW.exe-style ground collision (replaces 3-pass for ground movement).
+    // Matches CollisionStep at VA 0x633840: terrain query + wall overlap + step height.
+    // Uses GetGroundZ for terrain height (like WoW's TestTerrain) and capsule overlap
+    // for wall detection (approximates WoW's AABB sweep).
+    void CollisionStepWoW(const PhysicsInput& input, const MovementIntent& intent,
+                          MovementState& st, float radius, float height,
+                          const G3D::Vector3& moveDir, float intendedDist, float dt, float moveSpeed);
+
     bool TryDownwardStepSnap(const PhysicsInput& input,
                               MovementState& st,
                               float radius,
