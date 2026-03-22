@@ -125,7 +125,22 @@ namespace PhysicsConstants
 
     // tan(50°) = 1.191754 @ 0x0080E008. Also -tan(50°) @ 0x0080E010.
     // Used for cliff detection: if ground drops faster than this, enter freefall.
-    constexpr float WALKABLE_TAN_MAX_SLOPE = 1.1918f;
+    // In collision sweep (0x633C7B): slopeLimit = boundingRadius * tan(50°).
+    constexpr float WALKABLE_TAN_MAX_SLOPE = 1.19175363f;
+
+    // √2 = 1.414214 @ 0x0080E00C. Used in grounded collision sweep (0x633D93):
+    // AABB vertical contraction = collisionSkin * √2 for step-down detection.
+    constexpr float SQRT_2 = 1.41421354f;
+
+    // 1/720 = 0.001389 @ 0x0080DFEC. Added to collisionSkin when computing
+    // slope-limited displacement threshold in grounded collision (0x633C83).
+    constexpr float COLLISION_SKIN_EPSILON = 0.00138889f;
+
+    // Speed² thresholds from movement extrapolation (0x616B7E, 0x616B8D):
+    // dist²/dt² > 3600 (speed > 60 y/s) = teleport/illegal movement
+    // dist²/dt² < 9 (speed < 3 y/s) = jitter, ignore displacement
+    constexpr float TELEPORT_SPEED_SQ_THRESHOLD = 3600.0f;
+    constexpr float JITTER_SPEED_SQ_THRESHOLD = 9.0f;
 
     // =========================================================================
     // TERRAIN NORMAL ESTIMATION

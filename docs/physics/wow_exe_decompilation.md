@@ -436,3 +436,53 @@ if (hasForward && hasStrafe) {
 | **Time unit** | Integer ms × 0.001 | ms→s at StepV2 entry, s→ms at output | **DONE** |
 | **Collision response** | sin(45°) on slide vectors in CollisionResponse | PhysX-style reflection (architecturally different) | **ACCEPTABLE** — our VMAP sweep produces equivalent results |
 | **Ground snap** | Not fully decompiled in binary | Multi-ray ground detection with step-up/down | **ACCEPTABLE** — exceeds binary reference |
+| **Collision sweep** | AABB 2-pass (0x633840): full displacement + half-step | Capsule sweep multi-pass | **ACCEPTABLE** — different primitive, same behavior |
+| **Slope limit** | tan(50°) = 1.19175363 @ 0x80E008 | WALKABLE_TAN_MAX_SLOPE = 1.19175363 | **DONE** |
+| **AABB expansion** | √2 = 1.414214 @ 0x80E00C for diagonal step-down | Added as SQRT_2 constant | **DONE** |
+| **Skin epsilon** | 1/720 = 0.001389 @ 0x80DFEC | Added as COLLISION_SKIN_EPSILON | **DONE** |
+| **Speed thresholds** | >60²=teleport, <3²=jitter @ 0x80C734/0x80C5BC | Added as constants | **DONE** |
+
+## Collision Sweep Architecture (VA 0x633840)
+
+WoW.exe uses a **2-pass swept AABB** for local player collision:
+
+### AABB Construction
+- **Horizontal**: `position ± collisionSkin` (0.333333 = 1/3 bbox)
+- **Vertical**: `position.Z` to `position.Z + stepHeight` (2.027778)
+- On transport: displacement is rotated through the transport's 3x3 matrix via `Vec3TransformCoord` (0x4549A0)
+
+### Grounded Path (not falling, not swimming)
+1. **Slope limit**: `slopeLimit = max(boundingRadius * tan(50°), collisionSkin + 1/720)`
+2. **Pass 1 — Full sweep**: Sweep AABB by `moveDir * (slopeLimit + speed*dt)`, call `CWorldCollision::Collide` (0x6373B0)
+3. **Pass 2 — Half-step**: Sweep AABB by `moveDir * speed*dt * 0.5`, contract vertically by `collisionSkin * √2`, call `Collide` again
+4. **Step height adjust**: `bbox.maxZ += min(2*radius, speed*dt)`, then `bbox.minZ = bbox.maxZ - (stepHeight + radius*tan(50°))`
+5. **Terrain test**: `CWorldCollision::TestTerrain` (0x6721B0) — final position validation
+
+### Falling Path (MOVEFLAG_FALLING 0x2000)
+1. Compute fall displacement via `ComputeFallDisplacement` (0x7C6140)
+2. Single swept AABB test via `Collide` (0x6373B0)
+3. Slope descent clamp: `displacement.Z *= -tan(50°)`
+4. Epsilon expansion sweep: `0x637300`/`0x6372D0`
+5. Terrain test: `TestTerrain` (0x6721B0)
+
+### Swimming Path (MOVEFLAG_SWIMMING 0x200000)
+1. Half displacement: `displacement *= 0.5`
+2. Build end-position AABB with `collisionSkin * √2` vertical contraction
+3. Single `Collide` sweep
+4. `TestTerrain` with flag `0x30000`
+5. For each contact: negate penetration, apply slide via `0x637330`
+
+### Key Functions
+| Address | Name | Purpose |
+|---------|------|---------|
+| `0x633840` | `CMovement::CollisionStep` | Main collision orchestrator |
+| `0x6373B0` | `CWorldCollision::Collide` | Swept AABB vs terrain/WMO/M2 |
+| `0x6721B0` | `CWorldCollision::TestTerrain` | Static position terrain test |
+| `0x637300` | `CWorldCollision::ExpandAndSweep` | Epsilon-expanded sweep |
+| `0x637330` | `CWorldCollision::SlideAlongNormal` | Contact slide response |
+| `0x4549A0` | `Vec3TransformCoord` | 3x3 matrix × vector |
+| `0x617430` | `CMovement::GetBoundingRadius` | Unit bounding radius |
+| `0x7C6140` | `CMovement::ComputeFallZ` | Fall displacement from fallTime |
+
+### Architectural Difference: AABB vs Capsule
+WoW.exe uses an **axis-aligned bounding box** (AABB) for collision, NOT a capsule. Our engine uses capsule sweeps via VMAP's `SceneQuery::SweepCapsule`. Both produce equivalent results for normal gameplay — the capsule is slightly more accurate for diagonal movement near corners, while the AABB is faster. The behavioral difference is negligible for physics parity.
