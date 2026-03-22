@@ -62,13 +62,12 @@ namespace GameData.Core.Interfaces
         public void Face(Position pos)
         {
             if (pos == null) return;
-            // Always compute the target facing angle. The previous implementation
-            // had a bug: if Player.Facing was negative, it normalized and RETURNED
-            // without actually facing the target position — causing persistent
-            // SMSG_ATTACKSWING_BADFACING during combat.
-            var targetFacing = Player.GetFacingForPosition(pos);
-            if (!Player.IsFacing(pos))
-                SetFacing(targetFacing);
+            // Always set facing toward target. WoW.exe sends MSG_MOVE_SET_FACING
+            // every time the player turns. MaNGOS checks facing with ±M_PI_F/2 (90°)
+            // for melee attacks — our old 0.5 rad (28°) IsFacing tolerance was too wide,
+            // causing the bot to skip re-facing when the mob repositioned slightly.
+            // Always send the facing update to maintain parity.
+            SetFacing(Player.GetFacingForPosition(pos));
         }
         public void MoveToward(Position pos)
         {
