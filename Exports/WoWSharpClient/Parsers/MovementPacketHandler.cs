@@ -33,6 +33,11 @@ namespace WoWSharpClient.Parsers
             return ms.ToArray();
         }
 
+        // WoW.exe 0x618909: flags are masked with 0x75A07DFF before writing to packets.
+        // This strips PENDING_*, ASCENDING, SPLINE_ENABLED, and LOCAL_DIRTY flags
+        // that are internal to the client and not sent on the wire.
+        private const uint OUTBOUND_FLAG_MASK = 0x75A07DFF;
+
         /*=== NEW: 3‑arg overload (full control) ============================*/
         public static byte[] BuildMovementInfoBuffer(WoWLocalPlayer p,
                                                      uint clientTimeMs,
@@ -41,8 +46,8 @@ namespace WoWSharpClient.Parsers
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
 
-            /* 1) Flags + timestamp */
-            w.Write((uint)p.MovementFlags);
+            /* 1) Flags + timestamp — apply WoW.exe outbound mask */
+            w.Write((uint)p.MovementFlags & OUTBOUND_FLAG_MASK);
             w.Write(clientTimeMs);
 
             /* 2) Position */

@@ -91,7 +91,9 @@ namespace WoWSharpClient.Movement
         // When true, sync _lastPacketPosition to current player position on next Update().
         // Needed because Reset() runs before the teleport position is applied to _player.
         private bool _needsPacketPositionSync;
-        private const uint PACKET_INTERVAL_MS = 200;
+        // WoW.exe heartbeat timer: 100ms (0x5E2110, mov ecx 0x64).
+        // Only sends when position has actually changed (gated by 0x5E22D0).
+        private const uint PACKET_INTERVAL_MS = 100;
         private uint _latestGameTimeMs;
         private uint _staleForwardSuppressUntilMs;
         private int _staleForwardNoDisplacementTicks;

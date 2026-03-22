@@ -984,12 +984,12 @@ public class MovementControllerPhysicsTests
         _output.WriteLine($"=== Packet Timing and Position Deltas ===");
         _output.WriteLine($"Total frames: {frameCount}, Total packets sent: {packetCalls.Count}");
 
-        // Should have sent packets at ~200ms intervals over 10s → ~50 packets
-        // First packet on flag change, then every ~200ms
-        Assert.True(packetCalls.Count >= 30,
-            $"Expected at least 30 packets over 10s (200ms interval), got {packetCalls.Count}.");
-        Assert.True(packetCalls.Count <= 70,
-            $"Expected at most 70 packets over 10s, got {packetCalls.Count}. Too many packets.");
+        // WoW.exe heartbeat: 100ms interval (0x5E2110). Over 10s → ~100 packets.
+        // First packet on flag change, then every ~100ms when position changes.
+        Assert.True(packetCalls.Count >= 50,
+            $"Expected at least 50 packets over 10s (100ms interval), got {packetCalls.Count}.");
+        Assert.True(packetCalls.Count <= 130,
+            $"Expected at most 130 packets over 10s, got {packetCalls.Count}. Too many packets.");
 
         // Check position deltas between consecutive packets
         for (int i = 1; i < packetCalls.Count; i++)
