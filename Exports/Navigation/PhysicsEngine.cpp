@@ -1426,21 +1426,39 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         startZ + probeUp, probeUp + probeDown);
 
     if (!VMAP::IsValidHeight(endTerrZ)) {
-        // Center probe failed — try offsets (like WoW.exe AABB footprint)
-        const float offR = std::max(0.1f, radius * 0.5f);
-        const float offsets[4][2] = {{offR,0}, {-offR,0}, {0,offR}, {0,-offR}};
-        for (const auto& off : offsets) {
-            float pz = SceneQuery::GetGroundZ(input.mapId, endX + off[0], endY + off[1],
-                startZ + probeUp, probeUp + probeDown);
-            if (VMAP::IsValidHeight(pz)) {
-                endTerrZ = pz;
-                break;
+        // Center probe failed — try offsets matching WoW.exe AABB footprint (±collisionSkin).
+        // WoW.exe uses collisionSkin = 0.333 for the AABB half-extent.
+        const float skin = PhysicsConstants::COLLISION_SKIN_FRACTION;
+        const float diagSkin = skin * PhysicsConstants::SIN_45; // 0.333 * 0.707 = 0.236
+        const float offsets[8][2] = {
+            {skin, 0}, {-skin, 0}, {0, skin}, {0, -skin},
+            {diagSkin, diagSkin}, {diagSkin, -diagSkin}, {-diagSkin, diagSkin}, {-diagSkin, -diagSkin}
+        };
+        // Also try multiple probe heights — WoW.exe probes from maxZ down to minZ
+        const float probeHeights[3] = {
+            startZ + probeUp,
+            startZ + 2.0f,
+            startZ + 0.5f
+        };
+        for (const float probeH : probeHeights) {
+            for (const auto& off : offsets) {
+                float pz = SceneQuery::GetGroundZ(input.mapId, endX + off[0], endY + off[1],
+                    probeH, probeUp + probeDown);
+                if (VMAP::IsValidHeight(pz)) {
+                    endTerrZ = pz;
+                    goto terrainFound;
+                }
             }
         }
+        terrainFound:;
     }
 
     if (!VMAP::IsValidHeight(endTerrZ)) {
-        // All probes failed — no terrain here. Enter freefall.
+        // No terrain at end position — walked off a ledge or terrain boundary.
+        // Enter freefall. WoW.exe (0x633840) enters freefall when TestTerrain
+        // returns no contacts at the end position.
+        st.x = endX;
+        st.y = endY;
         st.isGrounded = false;
         st.vz = PhysicsConstants::FALL_START_VELOCITY;
         st.vx = dirN.x * moveSpeed;
