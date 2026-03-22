@@ -459,19 +459,6 @@ namespace ForegroundBotRunner.Objects
             ];
         }
 
-        private uint[] ReadPackedByteField(UpdateFields.EUnitFields field)
-        {
-            var descriptorPtr = GetDescriptorPtr();
-            var packed = MemoryManager.ReadUint(descriptorPtr + (int)field * 4);
-            return
-            [
-                packed & 0xFF,
-                (packed >> 8) & 0xFF,
-                (packed >> 16) & 0xFF,
-                (packed >> 24) & 0xFF
-            ];
-        }
-
         /// <summary>
         /// Tick count when the fall began. Use with current tick to calculate fall duration.
         /// </summary>

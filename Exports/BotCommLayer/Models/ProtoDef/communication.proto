@@ -192,11 +192,7 @@ message WoWActivitySnapshot {
     uint64 partyLeaderGuid = 11;  // GUID of the party leader (0 if not in a group)
     repeated string recentChatMessages = 12;    // Recent chat messages (GM command responses, system messages)
     repeated string recentErrors = 13;          // Recent error/UI messages from the game client
-<<<<<<< HEAD
-}
-=======
     BotConnectionState connectionState = 14;    // Deterministic connection lifecycle state
     bool isObjectManagerValid = 15;             // Safe to read game objects / send actions
     bool isMapTransition = 16;                  // Loading screen or cross-map teleport in progress
 }
->>>>>>> cpp_physics_system

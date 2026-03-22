@@ -7,15 +7,12 @@ namespace MageFire.Tasks
 {
     public class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
-<<<<<<< HEAD
-=======
         // Vanilla 1.12.1 mage base spell ranges
         private const float FireballBaseRange = 35f;
         private const float ScorchBaseRange = 30f;
         private const float PyroblastBaseRange = 35f;
         private const float FlamestrikeBaseRange = 30f;
 
->>>>>>> cpp_physics_system
         public void Update()
         {
             if (IsKiting)

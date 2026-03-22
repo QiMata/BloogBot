@@ -19,13 +19,9 @@ namespace BotRunner
             _activitySnapshot.CurrentAction = null;
 
             // Detect screen state
-<<<<<<< HEAD
-            if (_objectManager.HasEnteredWorld && _objectManager.Player != null)
-=======
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
             if (playerWorldReady && _objectManager.Player != null)
->>>>>>> cpp_physics_system
             {
                 _activitySnapshot.ScreenState = "InWorld";
                 _activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;
@@ -43,13 +39,6 @@ namespace BotRunner
                 _activitySnapshot.ScreenState = "LoginScreen";
             }
 
-<<<<<<< HEAD
-            // Always flush message buffers (even during login — captures GM command errors)
-            FlushMessageBuffers();
-
-            // Only populate game data when in world
-            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null)
-=======
             // Connection state — deterministic, derived from existing IObjectManager properties.
             // Gives StateManager and tests a machine-readable lifecycle signal without Task.Delay guessing.
             var inMapTransition = _objectManager.IsInMapTransition;
@@ -91,7 +80,6 @@ namespace BotRunner
             // causes ACCESS_VIOLATION that .NET 8 cannot catch (process termination).
             if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null
                 || inMapTransition)
->>>>>>> cpp_physics_system
                 return;
 
             var player = _objectManager.Player;
@@ -104,8 +92,6 @@ namespace BotRunner
             try
             {
                 var pos = player.Position;
-<<<<<<< HEAD
-=======
                 // DIAG: log snapshot position to compare with heartbeat position
                 if (_tickCount % 10 == 1 && (uint)player.MovementFlags != 0)
                 {
@@ -113,7 +99,6 @@ namespace BotRunner
                         _tickCount, pos?.X ?? -999, pos?.Y ?? -999, pos?.Z ?? -999,
                         (uint)player.MovementFlags);
                 }
->>>>>>> cpp_physics_system
                 _activitySnapshot.MovementData = new Game.MovementData
                 {
                     MovementFlags = (uint)player.MovementFlags,
@@ -155,11 +140,6 @@ namespace BotRunner
                 var factory = _agentFactoryAccessor?.Invoke();
                 if (factory != null)
                 {
-<<<<<<< HEAD
-                    var members = factory.PartyAgent.GetGroupMembers();
-                    var leader = members.FirstOrDefault(m => m.IsLeader);
-                    _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
-=======
                     // Prefer the stored LeaderGuid from SMSG_GROUP_LIST (most reliable)
                     var storedLeader = factory.PartyAgent.LeaderGuid;
                     if (storedLeader != 0)
@@ -173,7 +153,6 @@ namespace BotRunner
                         var leader = members.FirstOrDefault(m => m.IsLeader);
                         _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
                     }
->>>>>>> cpp_physics_system
                 }
                 else
                 {
@@ -329,10 +308,6 @@ namespace BotRunner
 
             if (unit is IWoWLocalPlayer lp)
             {
-<<<<<<< HEAD
-                try { player.Coinage = lp.Copper; } catch { }
-                try { player.CorpseRecoveryDelaySeconds = (uint)Math.Max(0, lp.CorpseRecoveryDelaySeconds); } catch { }
-=======
                 TryPopulate(() => player.Coinage = lp.Copper, "Coinage");
 
                 // Skip CorpseRecoveryDelaySeconds during ghost form. The FG implementation
@@ -345,17 +320,12 @@ namespace BotRunner
                 {
                     TryPopulate(() => player.CorpseRecoveryDelaySeconds = (uint)Math.Max(0, lp.CorpseRecoveryDelaySeconds), "CorpseRecoveryDelay");
                 }
->>>>>>> cpp_physics_system
             }
 
             if (unit is IWoWPlayer wp)
             {
-<<<<<<< HEAD
-                try { player.PlayerFlags = (uint)wp.PlayerFlags; } catch { }
-=======
                 TryPopulate(() => player.Unit.GameObject.Base.MapId = wp.MapId, "MapId");
                 TryPopulate(() => player.PlayerFlags = (uint)wp.PlayerFlags, "PlayerFlags");
->>>>>>> cpp_physics_system
 
                 try
                 {
@@ -382,11 +352,7 @@ namespace BotRunner
                         });
                     }
                 }
-<<<<<<< HEAD
-                catch { }
-=======
                 catch (Exception ex) { Log.Debug("[Snapshot] QuestLog unavailable: {Type}", ex.GetType().Name); }
->>>>>>> cpp_physics_system
 
                 try
                 {
@@ -412,11 +378,7 @@ namespace BotRunner
                     if (nonZeroSkills > 0)
                         Log.Information("[SkillSnapshot] {Count} skills populated", nonZeroSkills);
                 }
-<<<<<<< HEAD
-                catch { }
-=======
                 catch (Exception ex) { Log.Debug("[Snapshot] SkillInfo unavailable: {Type}", ex.GetType().Name); }
->>>>>>> cpp_physics_system
             }
 
             return player;
@@ -447,24 +409,6 @@ namespace BotRunner
                 protoUnit.GameObject.Base.Position = new Game.Position { X = pos.X, Y = pos.Y, Z = pos.Z };
 
             // Extended fields — individually guarded for FG compatibility
-<<<<<<< HEAD
-            try { protoUnit.GameObject.Base.Facing = unit.Facing; } catch { }
-            try { protoUnit.GameObject.Base.ScaleX = unit.ScaleX; } catch { }
-            try { protoUnit.GameObject.Entry = unit.Entry; } catch { }
-            try { protoUnit.GameObject.Name = unit.Name ?? string.Empty; } catch { }
-            try { protoUnit.GameObject.FactionTemplate = unit.FactionTemplate; } catch { }
-            try { protoUnit.TargetGuid = unit.TargetGuid; } catch { }
-            try { protoUnit.UnitFlags = (uint)unit.UnitFlags; } catch { }
-            try { protoUnit.DynamicFlags = (uint)unit.DynamicFlags; } catch { }
-            try { protoUnit.MovementFlags = (uint)unit.MovementFlags; } catch { }
-            try { protoUnit.MountDisplayId = unit.MountDisplayId; } catch { }
-            try { protoUnit.ChannelSpellId = unit.ChannelingId; } catch { }
-            try { protoUnit.SummonedBy = unit.SummonedByGuid; } catch { }
-            try { protoUnit.NpcFlags = (uint)unit.NpcFlags; } catch { }
-            try { if (unit.Bytes0 != null && unit.Bytes0.Length > 0) protoUnit.Bytes0 = unit.Bytes0[0]; } catch { }
-            try { if (unit.Bytes1 != null && unit.Bytes1.Length > 0) protoUnit.Bytes1 = unit.Bytes1[0]; } catch { }
-            try { if (unit.Bytes2 != null && unit.Bytes2.Length > 0) protoUnit.Bytes2 = unit.Bytes2[0]; } catch { }
-=======
             TryPopulate(() => protoUnit.GameObject.Base.Facing = unit.Facing, "Facing");
             TryPopulate(() => protoUnit.GameObject.Base.ScaleX = unit.ScaleX, "ScaleX");
             TryPopulate(() => protoUnit.GameObject.Entry = unit.Entry, "Entry");
@@ -484,7 +428,6 @@ namespace BotRunner
             TryPopulate(() => { if (unit.Bytes0 != null && unit.Bytes0.Length > 0) protoUnit.Bytes0 = unit.Bytes0[0]; }, "Bytes0");
             TryPopulate(() => { if (unit.Bytes1 != null && unit.Bytes1.Length > 0) protoUnit.Bytes1 = unit.Bytes1[0]; }, "Bytes1");
             TryPopulate(() => { if (unit.Bytes2 != null && unit.Bytes2.Length > 0) protoUnit.Bytes2 = unit.Bytes2[0]; }, "Bytes2");
->>>>>>> cpp_physics_system
 
             // Power map: Mana, Rage, Energy
             try
@@ -496,11 +439,7 @@ namespace BotRunner
                 if (unit.Powers.TryGetValue(Powers.ENERGY, out uint energy)) protoUnit.Power[3] = energy;
                 if (unit.MaxPowers.TryGetValue(Powers.ENERGY, out uint maxEnergy)) protoUnit.MaxPower[3] = maxEnergy;
             }
-<<<<<<< HEAD
-            catch { }
-=======
             catch (Exception ex) { Log.Debug("[Snapshot] Powers unavailable: {Type}", ex.GetType().Name); }
->>>>>>> cpp_physics_system
 
             // Auras (from AuraFields - raw spell IDs)
             try
@@ -511,11 +450,7 @@ namespace BotRunner
                         protoUnit.Auras.Add(auraSpellId);
                 }
             }
-<<<<<<< HEAD
-            catch { }
-=======
             catch (Exception ex) { Log.Debug("[Snapshot] Auras unavailable: {Type}", ex.GetType().Name); }
->>>>>>> cpp_physics_system
 
             return protoUnit;
         }
@@ -546,8 +481,6 @@ namespace BotRunner
 
             return protoGo;
         }
-<<<<<<< HEAD
-=======
 
         /// <summary>
         /// Wraps a snapshot field setter with debug-level logging on failure.
@@ -559,6 +492,5 @@ namespace BotRunner
             try { setter(); }
             catch (Exception ex) { Log.Debug("[Snapshot] {Field} unavailable: {Type}", fieldName, ex.GetType().Name); }
         }
->>>>>>> cpp_physics_system
     }
 }

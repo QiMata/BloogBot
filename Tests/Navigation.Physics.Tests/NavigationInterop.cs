@@ -536,8 +536,6 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetScenesDir(string dir);
-<<<<<<< HEAD
-=======
 
     // ==========================================================================
     // WMO DOODAD EXTRACTION
@@ -550,5 +548,4 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "ExtractWmoDoodads", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern int ExtractWmoDoodads(string mpqDataDir, string vmapsDir);
->>>>>>> cpp_physics_system
 }

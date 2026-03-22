@@ -49,18 +49,12 @@ namespace PathfindingService
             }
             else
             {
-<<<<<<< HEAD
-                Console.WriteLine("[PathfindingService] WARNING: Could not find nav data root containing mmaps/maps/vmaps. FindPath may fail.");
-                if (!string.IsNullOrWhiteSpace(previousDataDir))
-                    Console.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
-=======
                 Console.Error.WriteLine("[PathfindingService] FATAL: Could not find nav data root containing mmaps/maps/vmaps.");
                 if (!string.IsNullOrWhiteSpace(previousDataDir))
                     Console.Error.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
                 Console.Error.WriteLine("[PathfindingService] Set WWOW_DATA_DIR to a directory containing mmaps/, maps/, and vmaps/ subdirectories.");
                 Environment.Exit(1);
                 return;
->>>>>>> cpp_physics_system
             }
 
             CreateHostBuilder(args)
@@ -70,48 +64,6 @@ namespace PathfindingService
 
         private static string? ResolveNavigationDataDirectory(string? existingDataDir)
         {
-<<<<<<< HEAD
-            static bool HasNavData(string root)
-            {
-                if (string.IsNullOrWhiteSpace(root))
-                    return false;
-
-                return Directory.Exists(Path.Combine(root, "mmaps"))
-                    && Directory.Exists(Path.Combine(root, "maps"))
-                    && Directory.Exists(Path.Combine(root, "vmaps"));
-            }
-
-            var candidates = new List<string>();
-            if (!string.IsNullOrWhiteSpace(existingDataDir))
-                candidates.Add(existingDataDir);
-
-            var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            candidates.Add(baseDir);
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "net8.0")));
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "net8.0")));
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "net8.0")));
-            candidates.Add(Directory.GetCurrentDirectory());
-            candidates.Add(@"D:\World of Warcraft");
-
-            try
-            {
-                var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
-                candidates.Add(Path.Combine(repoRoot, "Bot", "Debug", "net8.0"));
-                candidates.Add(Path.Combine(repoRoot, "Bot", "Release", "net8.0"));
-            }
-            catch
-            {
-                // Ignore path normalization failures and continue probing.
-            }
-
-            foreach (var candidate in candidates
-                         .Where(c => !string.IsNullOrWhiteSpace(c))
-                         .Select(c => c.Trim('"').Trim())
-                         .Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (HasNavData(candidate))
-                    return Path.GetFullPath(candidate);
-=======
             var candidates = new List<string>();
             AddCandidate(candidates, existingDataDir);
 
@@ -135,14 +87,11 @@ namespace PathfindingService
             {
                 if (HasNavData(candidate))
                     return candidate;
->>>>>>> cpp_physics_system
             }
 
             return null;
         }
 
-<<<<<<< HEAD
-=======
         private static void AddCommonOutputCandidates(List<string> candidates, string? root)
         {
             if (string.IsNullOrWhiteSpace(root))
@@ -227,7 +176,6 @@ namespace PathfindingService
                 && HasEntries(vmapsDir);
         }
 
->>>>>>> cpp_physics_system
         /// <summary>
         /// Launches the PathfindingService as a separate process.
         /// Used by StateManager when the service isn't already running.

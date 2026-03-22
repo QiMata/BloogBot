@@ -2,10 +2,7 @@ using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
-<<<<<<< HEAD
-=======
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
@@ -22,11 +19,7 @@ namespace MageFrost.Tasks
         private const float DeepFreezeBaseRange = 30f;
 
         private readonly string nuke;
-<<<<<<< HEAD
-        private readonly int range;
-=======
         private readonly float nukeBaseRange;
->>>>>>> cpp_physics_system
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
@@ -54,12 +47,6 @@ namespace MageFrost.Tasks
             }
 
             if (!EnsureTarget())
-<<<<<<< HEAD
-                return;
-
-            if (Update(29 + (ObjectManager.GetTalentRank(3, 11) * 3)))
-=======
->>>>>>> cpp_physics_system
                 return;
 
             var nukeRange = GetSpellRange(nukeBaseRange);

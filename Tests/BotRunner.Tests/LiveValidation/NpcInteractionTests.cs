@@ -1,8 +1,5 @@
 using System;
-<<<<<<< HEAD
-=======
 using System.Diagnostics;
->>>>>>> cpp_physics_system
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -14,25 +11,16 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-<<<<<<< HEAD
-/// NPC interaction tests — dual-client validation.
-/// Validates: vendor (sell/buy), trainer (learn spells), flight master (discover nodes).
-=======
 /// NPC interaction tests — task-driven, dual-client validation.
 /// Validates via BotTask dispatch:
 ///   - Vendor: VisitVendor task finds vendor, repairs, completes (task completion assertion)
 ///   - Trainer: VisitTrainer task purchases available spells (spell-count + coinage assertion)
 ///   - Flight Master: VisitFlightMaster task discovers taxi nodes
 ///   - NPC flags: snapshot-level NPC flag detection
->>>>>>> cpp_physics_system
 /// Uses Horde locations: Razor Hill (vendor/trainer), Orgrimmar (flight master).
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~NpcInteractionTests" --configuration Release
 /// </summary>
-<<<<<<< HEAD
-[RequiresMangosStack]
-=======
->>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class NpcInteractionTests
 {
@@ -41,22 +29,12 @@ public class NpcInteractionTests
 
     private const int MapId = 1; // Kalimdor
     private const float SetupArrivalDistance = 40f;
-<<<<<<< HEAD
-    private const float RazorHillVendorX = 340.36f, RazorHillVendorY = -4686.29f, RazorHillVendorZ = 16.54f;
-    private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 9.66f;
-    private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 61.72f;
-    private const uint LinenCloth = 2589;
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-=======
     // Z+3 offset applied to spawn table Z values to avoid UNDERMAP detection
     private const float RazorHillVendorX = 340.36f, RazorHillVendorY = -4686.29f, RazorHillVendorZ = 19.54f;
     private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 12.66f;
     private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 64.72f;
     private const uint BattleShoutSpellId = 6673;
     private const uint TrainerSetupCopper = 10000;
->>>>>>> cpp_physics_system
 
     public NpcInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -67,30 +45,6 @@ public class NpcInteractionTests
     }
 
     [SkippableFact]
-<<<<<<< HEAD
-    public async Task Vendor_OpenAndSeeInventory()
-    {
-        await RunNpcInteraction("Vendor", RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ,
-            (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, requireNpcInteraction: true);
-    }
-
-    [SkippableFact]
-    public async Task Vendor_SellJunkItems()
-    {
-        await EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 5);
-        if (_bot.ForegroundBot != null)
-            await EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 5);
-
-        await RunNpcInteraction("Vendor (sell)", RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ,
-            (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, requireNpcInteraction: true);
-    }
-
-    [SkippableFact]
-    public async Task Trainer_OpenAndSeeSpells()
-    {
-        await RunNpcInteraction("Trainer", RazorHillTrainerX, RazorHillTrainerY, RazorHillTrainerZ,
-            (uint)NPCFlags.UNIT_NPC_FLAG_TRAINER, requireNpcInteraction: true);
-=======
     public async Task Vendor_VisitTask_FindsAndInteracts()
     {
         _output.WriteLine("=== Vendor Visit: Task-driven vendor interaction ===");
@@ -109,31 +63,11 @@ public class NpcInteractionTests
         {
             _output.WriteLine("[FG] Skipped — FG bot not actionable.");
         }
->>>>>>> cpp_physics_system
     }
 
     [SkippableFact]
     public async Task Trainer_LearnAvailableSpells()
     {
-<<<<<<< HEAD
-        await EnsureMoneyAtLeastAsync(_bot.BgAccountName!, "BG", 10000);
-        await EnsureLevelAtLeastAsync(_bot.BgAccountName!, "BG", 10);
-        if (_bot.ForegroundBot != null)
-        {
-            await EnsureMoneyAtLeastAsync(_bot.FgAccountName!, "FG", 10000);
-            await EnsureLevelAtLeastAsync(_bot.FgAccountName!, "FG", 10);
-        }
-
-        await RunNpcInteraction("Trainer (learn)", RazorHillTrainerX, RazorHillTrainerY, RazorHillTrainerZ,
-            (uint)NPCFlags.UNIT_NPC_FLAG_TRAINER, requireNpcInteraction: true);
-    }
-
-    [SkippableFact]
-    public async Task FlightMaster_DiscoverNodes()
-    {
-        await RunNpcInteraction("Flight Master", OrgrimmarFmX, OrgrimmarFmY, OrgrimmarFmZ,
-            (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER, requireNpcInteraction: true);
-=======
         _output.WriteLine("=== Trainer Visit: Both bots talk to warrior trainer, purchase all available skills ===");
 
         // BG bot trainer visit
@@ -192,81 +126,11 @@ public class NpcInteractionTests
         {
             _output.WriteLine("[FG] Skipped — FG bot not actionable.");
         }
->>>>>>> cpp_physics_system
     }
 
     [SkippableFact]
     public async Task ObjectManager_DetectsNpcFlags()
     {
-<<<<<<< HEAD
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ);
-        if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ);
-
-        await _bot.RefreshSnapshotsAsync();
-
-        // BG bot NPC detection
-        LogNpcFlags("BG", _bot.BackgroundBot);
-
-        // FG bot NPC detection
-        if (_bot.ForegroundBot != null)
-            LogNpcFlags("FG", _bot.ForegroundBot);
-        else
-            _output.WriteLine("FG Bot: NOT AVAILABLE");
-    }
-
-    private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
-    {
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, x, y, z);
-        if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, x, y, z);
-
-        // BG bot interaction
-        _output.WriteLine($"=== BG Bot: {npcType} ===");
-        var bgOk = await InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
-        if (requireNpcInteraction)
-            Assert.True(bgOk, $"BG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
-
-        // FG bot interaction
-        if (_bot.ForegroundBot != null)
-        {
-            _output.WriteLine($"\n=== FG Bot: {npcType} ===");
-            var fgOk = await InteractWithNpc(_bot.FgAccountName!, () => _bot.ForegroundBot, npcFlag, "FG");
-            if (requireNpcInteraction)
-                Assert.True(fgOk, $"FG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
-        }
-        else
-        {
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
-        }
-    }
-
-    private async Task<bool> InteractWithNpc(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = getSnap();
-        var units = snap?.NearbyUnits?.Where(u => (u.NpcFlags & npcFlag) != 0).ToList() ?? [];
-
-        if (units.Count == 0)
-        {
-            _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} found nearby");
-            LogAllUnits(snap, label);
-            return false;
-        }
-
-        var npc = units[0];
-        var npcGuid = npc.GameObject?.Base?.Guid ?? 0;
-        _output.WriteLine($"  [{label}] Found: {npc.GameObject?.Name} GUID={npcGuid:X} NpcFlags={npc.NpcFlags}");
-
-        var result = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.InteractWith,
-            Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
-        });
-        await Task.Delay(1000);
-        _output.WriteLine($"  [{label}] Interaction sent (result={result})");
-        return result == ResponseResult.Success;
-=======
         var hasFg = _bot.IsFgActionable;
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -491,7 +355,6 @@ public class NpcInteractionTests
             coinageBefore,
             coinageAfter,
             (int)timer.ElapsedMilliseconds);
->>>>>>> cpp_physics_system
     }
 
     private async Task EnsureReadyAtLocationAsync(string account, string label, int mapId, float x, float y, float z)
@@ -501,19 +364,11 @@ public class NpcInteractionTests
         if (snap == null)
             return;
 
-<<<<<<< HEAD
-        if (!IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive; reviving before NPC setup.");
-            await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
-=======
         if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before NPC setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
             await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
->>>>>>> cpp_physics_system
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -521,11 +376,7 @@ public class NpcInteractionTests
         var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
         var dist = pos == null
             ? float.MaxValue
-<<<<<<< HEAD
-            : DistanceTo(pos.X, pos.Y, pos.Z, x, y, z);
-=======
             : LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, x, y, z);
->>>>>>> cpp_physics_system
 
         if (dist <= SetupArrivalDistance)
         {
@@ -535,30 +386,10 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-<<<<<<< HEAD
-        await Task.Delay(2500);
-    }
-
-    private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var hasItem = snap?.Player?.BagContents?.Values.Any(v => v == itemId) == true;
-        if (hasItem)
-        {
-            _output.WriteLine($"  [{label}] Item {itemId} already present; skipping additem.");
-            return;
-        }
-
-        _output.WriteLine($"  [{label}] Adding item {itemId} x{addCount}.");
-        await _bot.BotAddItemAsync(account, itemId, addCount);
-        await Task.Delay(1500);
-=======
         await _bot.WaitForTeleportSettledAsync(account, x, y);
         // Wait for nearby units to populate after teleport (race condition: OUT_OF_RANGE_OBJECTS
         // clears old entities before CREATE_OBJECT packets arrive for new ones)
         await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: label);
->>>>>>> cpp_physics_system
     }
 
     private async Task EnsureMoneyAtLeastAsync(string account, string label, long minCopper)
@@ -594,8 +425,6 @@ public class NpcInteractionTests
         await Task.Delay(1200);
     }
 
-<<<<<<< HEAD
-=======
     private async Task EnsureSpellAbsentAsync(string account, string label, uint spellId)
     {
         _output.WriteLine($"  [{label}] Forcing spell {spellId} absent on the server before trainer validation.");
@@ -613,7 +442,6 @@ public class NpcInteractionTests
         Assert.True(removed, $"[{label}] spell {spellId} should be absent from SpellList after .unlearn.");
     }
 
->>>>>>> cpp_physics_system
     private void LogNpcFlags(string label, WoWActivitySnapshot? snap)
     {
         var units = snap?.NearbyUnits?.ToList() ?? [];
@@ -626,38 +454,6 @@ public class NpcInteractionTests
         }
     }
 
-<<<<<<< HEAD
-    private void LogAllUnits(WoWActivitySnapshot? snap, string label)
-    {
-        var units = snap?.NearbyUnits?.Take(10).ToList() ?? [];
-        _output.WriteLine($"  [{label}] Total nearby units: {units.Count}");
-        foreach (var u in units)
-        {
-            var guid = u.GameObject?.Base?.Guid ?? 0;
-            _output.WriteLine($"    [{guid:X8}] {u.GameObject?.Name} NpcFlags={u.NpcFlags}");
-        }
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
-
-    private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        var dz = z1 - z2;
-        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
-=======
     private sealed record TrainerVisitMetrics(
         bool TrainerFound,
         float TrainerDistanceYards,
@@ -680,5 +476,4 @@ public class NpcInteractionTests
         bool FlightMasterFound,
         float FmDistanceYards,
         bool TaskCompleted);
->>>>>>> cpp_physics_system
 }

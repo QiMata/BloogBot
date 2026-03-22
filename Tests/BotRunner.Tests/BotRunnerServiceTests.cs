@@ -90,11 +90,7 @@ namespace BotRunner.Tests
             target.SetupGet(x => x.Position).Returns(new Position(50, 0, 0));
 
             // NavigationPath skips waypoint[0] (current pos) and returns waypoint[1]
-<<<<<<< HEAD
-            var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(1, 1, 1) });
-=======
             var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(5, 0, 0) });
->>>>>>> cpp_physics_system
 
             var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
 

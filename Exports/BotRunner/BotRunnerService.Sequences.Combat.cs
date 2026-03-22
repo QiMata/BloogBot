@@ -1,14 +1,9 @@
-<<<<<<< HEAD
-using GameData.Core.Interfaces;
-using Serilog;
-=======
 using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
 using System;
->>>>>>> cpp_physics_system
 using System.Linq;
 using Xas.FluentBehaviourTree;
 
@@ -16,20 +11,6 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
-<<<<<<< HEAD
-        /// <summary>
-        /// Sequence to stop any active auto-attacks, including melee, ranged, and wand.
-        /// </summary>
-        /// <returns>IBehaviourTreeNode that manages stopping auto-attacks.</returns>
-        private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
-            .Sequence("Start Melee Attack Sequence")
-                .Splice(CheckForTarget(targetGuid))
-                .Do("Start Melee Attack", time =>
-                {
-                    if (targetGuid == 0)
-                    {
-                        Log.Warning("[BOT RUNNER] StartMeleeAttack requested with targetGuid=0; ignoring.");
-=======
         // Stop inside the theoretical melee range to absorb packet/snapshot drift.
         // Previous value of 2.0 was too aggressive — with small creature combat reaches
         // the arrival distance bottomed out at NOMINAL_MELEE_RANGE (1.67y), which
@@ -218,18 +199,12 @@ namespace BotRunner
                     if (targetGuid == 0)
                     {
                         Log.Warning("[BOT RUNNER] StartRangedAttack requested with targetGuid=0; ignoring.");
->>>>>>> cpp_physics_system
                         return BehaviourTreeStatus.Failure;
                     }
 
                     _objectManager.SetTarget(targetGuid);
-<<<<<<< HEAD
-                    _objectManager.StartMeleeAttack();
-                    Log.Information($"[BOT RUNNER] Started melee attack on target {targetGuid:X}");
-=======
                     _objectManager.StartRangedAttack();
                     Log.Information("[BOT RUNNER] Started ranged attack on target {Guid:X}", targetGuid);
->>>>>>> cpp_physics_system
                     return BehaviourTreeStatus.Success;
                 })
             .End()
@@ -237,14 +212,7 @@ namespace BotRunner
 
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
-<<<<<<< HEAD
-                // Check if any auto-attack (melee, ranged, or wand) is active
                 .Condition("Is Any Auto-Attack Active", time => _objectManager.Player.IsAutoAttacking)
-
-                // Disable all auto-attacks
-=======
-                .Condition("Is Any Auto-Attack Active", time => _objectManager.Player.IsAutoAttacking)
->>>>>>> cpp_physics_system
                 .Do("Stop All Auto-Attacks", time =>
                 {
                     _objectManager.StopAttack();
@@ -252,59 +220,21 @@ namespace BotRunner
                 })
             .End()
             .Build();
-<<<<<<< HEAD
-=======
 
->>>>>>> cpp_physics_system
         /// <summary>
         /// Sequence to cast a specific spell. This checks if the bot has sufficient resources,
         /// if the spell is off cooldown, and if the target is in range before casting the spell.
         /// </summary>
-<<<<<<< HEAD
-        /// <param name="spellId">The ID of the spell to cast.</param>
-        /// <returns>IBehaviourTreeNode that manages casting a spell.</returns>
-        private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
-        {
-            Log.Information($"[BOT RUNNER] BuildCastSpellSequence: spell={spellId}, target=0x{targetGuid:X}");
-            return new BehaviourTreeBuilder()
-                .Sequence("Cast Spell Sequence")
-                    .Splice(CheckForTarget(targetGuid))
-
-=======
         private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
         {
             Log.Information("[BOT RUNNER] BuildCastSpellSequence: spell={SpellId}, target=0x{Target:X}", spellId, targetGuid);
             return new BehaviourTreeBuilder()
                 .Sequence("Cast Spell Sequence")
                     .Splice(CheckForTarget(targetGuid))
->>>>>>> cpp_physics_system
                     .Condition("Can Cast Spell", time =>
                     {
                         var canCast = _objectManager.CanCastSpell(spellId, targetGuid);
                         if (!canCast)
-<<<<<<< HEAD
-                            Log.Debug($"[BOT RUNNER] CanCastSpell({spellId}, 0x{targetGuid:X}) = false");
-                        return canCast;
-                    })
-
-                    .Do("Stop and Face Target", time =>
-                    {
-                        // Stop movement before casting to prevent INTERRUPTED failures
-                        _objectManager.StopAllMovement();
-
-                        // Face the target to prevent UNIT_NOT_INFRONT failures
-                        var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
-                        if (target?.Position != null)
-                        {
-                            _objectManager.Face(target.Position);
-                        }
-                        return BehaviourTreeStatus.Success;
-                    })
-
-                    .Do("Cast Spell", time =>
-                    {
-                        Log.Information($"[BOT RUNNER] Casting spell {spellId} on target 0x{targetGuid:X}");
-=======
                             Log.Debug("[BOT RUNNER] CanCastSpell({SpellId}, 0x{Target:X}) = false", spellId, targetGuid);
                         return canCast;
                     })
@@ -321,25 +251,12 @@ namespace BotRunner
                     .Do("Cast Spell", time =>
                     {
                         Log.Information("[BOT RUNNER] Casting spell {SpellId} on target 0x{Target:X}", spellId, targetGuid);
->>>>>>> cpp_physics_system
                         _objectManager.CastSpell(spellId);
                         return BehaviourTreeStatus.Success;
                     })
                 .End()
                 .Build();
         }
-<<<<<<< HEAD
-        /// <summary>
-        /// Sequence to stop the current spell cast. This will stop any spell the bot is currently casting.
-        /// </summary>
-        /// <returns>IBehaviourTreeNode that manages stopping a spell cast.</returns>
-        private IBehaviourTreeNode StopCastSequence => new BehaviourTreeBuilder()
-            .Sequence("Stop Cast Sequence")
-                // Ensure the bot is currently casting a spell
-                .Condition("Is Casting", time => _objectManager.Player.IsCasting || _objectManager.Player.IsChanneling)
-
-                // Stop the current spell cast
-=======
 
         /// <summary>
         /// Sequence to stop the current spell cast.
@@ -347,7 +264,6 @@ namespace BotRunner
         private IBehaviourTreeNode StopCastSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Cast Sequence")
                 .Condition("Is Casting", time => _objectManager.Player.IsCasting || _objectManager.Player.IsChanneling)
->>>>>>> cpp_physics_system
                 .Do("Stop Spell Cast", time =>
                 {
                     _objectManager.StopCasting();
@@ -355,18 +271,6 @@ namespace BotRunner
                 })
             .End()
             .Build();
-<<<<<<< HEAD
-        /// <summary>
-        /// Sequence to resurrect the bot or another target.
-        /// </summary>
-        /// <returns>IBehaviourTreeNode that manages the resurrection process.</returns>
-        private IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
-            .Sequence("Resurrect Sequence")
-                // Ensure the bot or target can be resurrected
-                .Condition("Can Resurrect", time => IsGhostState(_objectManager.Player) && _objectManager.Player.CanResurrect)
-
-                // Perform the resurrection action
-=======
 
         /// <summary>
         /// Sequence to resurrect the bot or another target.
@@ -374,7 +278,6 @@ namespace BotRunner
         private IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
             .Sequence("Resurrect Sequence")
                 .Condition("Can Resurrect", time => IsGhostState(_objectManager.Player) && _objectManager.Player.CanResurrect)
->>>>>>> cpp_physics_system
                 .Do("Resurrect", time =>
                 {
                     _objectManager.AcceptResurrect();

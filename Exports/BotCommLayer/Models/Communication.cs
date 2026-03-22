@@ -53,11 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-<<<<<<< HEAD
-            "IAEoCUgAQgsKCXBhcmFtZXRlciK6AwoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
-=======
             "IAEoCUgAQgsKCXBhcmFtZXRlciKtBAoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
->>>>>>> cpp_physics_system
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -67,40 +63,6 @@ namespace Communication {
             "ck5hbWUYCCABKAkSEwoLc2NyZWVuU3RhdGUYCSABKAkSKAoMbW92ZW1lbnRE",
             "YXRhGAogASgLMhIuZ2FtZS5Nb3ZlbWVudERhdGESFwoPcGFydHlMZWFkZXJH",
             "dWlkGAsgASgEEhoKEnJlY2VudENoYXRNZXNzYWdlcxgMIAMoCRIUCgxyZWNl",
-<<<<<<< HEAD
-            "bnRFcnJvcnMYDSADKAkqlAkKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
-            "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
-            "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
-            "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
-            "RVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIPCgtP",
-            "RkZFUl9UUkFERRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVNEA0S",
-            "EAoMQUNDRVBUX1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVOQ0hB",
-            "TlRfVFJBREUQEBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVfTEVB",
-            "REVSEBISFQoRUFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xPT1Rf",
-            "TUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xPT1QQ",
-            "FhISCg5MT09UX1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAYEg0K",
-            "CUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUNDRVBU",
-            "X0dST1VQX0lOVklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwSDwoL",
-            "S0lDS19QTEFZRVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRfR1JP",
-            "VVAQHxIWChJTVEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5HRURf",
-            "QVRUQUNLECESFQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FUVEFD",
-            "SxAjEg4KCkNBU1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0VfSVRF",
-            "TRAmEg4KCkVRVUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxERVNU",
-            "Uk9ZX0lURU0QKRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxArEgwK",
-            "CEJVWV9JVEVNECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVNEC4S",
-            "DwoLUkVQQUlSX0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoMRElT",
-            "TUlTU19CVUZGEDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVMT0dJ",
-            "ThA0EgoKBkxPR09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBERUxF",
-            "VEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBT",
-            "RRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsS",
-            "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
-            "VBA+Eg4KClNFVF9GQUNJTkcQPyovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVH",
-            "Uk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggK",
-            "BE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAIS",
-            "EAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJP",
-            "VElDSVNNEAUqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZB",
-            "SUxVUkUQARIPCgtJTl9QUk9HUkVTUxACYgZwcm90bzM="));
-=======
             "bnRFcnJvcnMYDSADKAkSOgoPY29ubmVjdGlvblN0YXRlGA4gASgOMiEuY29t",
             "bXVuaWNhdGlvbi5Cb3RDb25uZWN0aW9uU3RhdGUSHAoUaXNPYmplY3RNYW5h",
             "Z2VyVmFsaWQYDyABKAgSFwoPaXNNYXBUcmFuc2l0aW9uGBAgASgIKpELCgpB",
@@ -145,7 +107,6 @@ namespace Communication {
             "TlRJQ0FUSU5HEAESEwoPQk9UX0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVS",
             "SU5HX1dPUkxEEAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVS",
             "UklORxAFEhMKD0JPVF9MT0dHSU5HX09VVBAGYgZwcm90bzM="));
->>>>>>> cpp_physics_system
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -158,11 +119,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-<<<<<<< HEAD
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors" }, null, null, null, null)
-=======
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition" }, null, null, null, null)
->>>>>>> cpp_physics_system
           }));
     }
     #endregion
@@ -3012,12 +2969,9 @@ namespace Communication {
       partyLeaderGuid_ = other.partyLeaderGuid_;
       recentChatMessages_ = other.recentChatMessages_.Clone();
       recentErrors_ = other.recentErrors_.Clone();
-<<<<<<< HEAD
-=======
       connectionState_ = other.connectionState_;
       isObjectManagerValid_ = other.isObjectManagerValid_;
       isMapTransition_ = other.isMapTransition_;
->>>>>>> cpp_physics_system
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3197,8 +3151,6 @@ namespace Communication {
       get { return recentErrors_; }
     }
 
-<<<<<<< HEAD
-=======
     /// <summary>Field number for the "connectionState" field.</summary>
     public const int ConnectionStateFieldNumber = 14;
     private global::Communication.BotConnectionState connectionState_ = global::Communication.BotConnectionState.BotDisconnected;
@@ -3244,7 +3196,6 @@ namespace Communication {
       }
     }
 
->>>>>>> cpp_physics_system
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3273,12 +3224,9 @@ namespace Communication {
       if (PartyLeaderGuid != other.PartyLeaderGuid) return false;
       if(!recentChatMessages_.Equals(other.recentChatMessages_)) return false;
       if(!recentErrors_.Equals(other.recentErrors_)) return false;
-<<<<<<< HEAD
-=======
       if (ConnectionState != other.ConnectionState) return false;
       if (IsObjectManagerValid != other.IsObjectManagerValid) return false;
       if (IsMapTransition != other.IsMapTransition) return false;
->>>>>>> cpp_physics_system
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3299,12 +3247,9 @@ namespace Communication {
       if (PartyLeaderGuid != 0UL) hash ^= PartyLeaderGuid.GetHashCode();
       hash ^= recentChatMessages_.GetHashCode();
       hash ^= recentErrors_.GetHashCode();
-<<<<<<< HEAD
-=======
       if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) hash ^= ConnectionState.GetHashCode();
       if (IsObjectManagerValid != false) hash ^= IsObjectManagerValid.GetHashCode();
       if (IsMapTransition != false) hash ^= IsMapTransition.GetHashCode();
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3363,8 +3308,6 @@ namespace Communication {
       }
       recentChatMessages_.WriteTo(output, _repeated_recentChatMessages_codec);
       recentErrors_.WriteTo(output, _repeated_recentErrors_codec);
-<<<<<<< HEAD
-=======
       if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
         output.WriteRawTag(112);
         output.WriteEnum((int) ConnectionState);
@@ -3377,7 +3320,6 @@ namespace Communication {
         output.WriteRawTag(128, 1);
         output.WriteBool(IsMapTransition);
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3428,8 +3370,6 @@ namespace Communication {
       }
       recentChatMessages_.WriteTo(ref output, _repeated_recentChatMessages_codec);
       recentErrors_.WriteTo(ref output, _repeated_recentErrors_codec);
-<<<<<<< HEAD
-=======
       if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
         output.WriteRawTag(112);
         output.WriteEnum((int) ConnectionState);
@@ -3442,7 +3382,6 @@ namespace Communication {
         output.WriteRawTag(128, 1);
         output.WriteBool(IsMapTransition);
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3484,8 +3423,6 @@ namespace Communication {
       }
       size += recentChatMessages_.CalculateSize(_repeated_recentChatMessages_codec);
       size += recentErrors_.CalculateSize(_repeated_recentErrors_codec);
-<<<<<<< HEAD
-=======
       if (ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
         size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ConnectionState);
       }
@@ -3495,7 +3432,6 @@ namespace Communication {
       if (IsMapTransition != false) {
         size += 2 + 1;
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -3551,8 +3487,6 @@ namespace Communication {
       }
       recentChatMessages_.Add(other.recentChatMessages_);
       recentErrors_.Add(other.recentErrors_);
-<<<<<<< HEAD
-=======
       if (other.ConnectionState != global::Communication.BotConnectionState.BotDisconnected) {
         ConnectionState = other.ConnectionState;
       }
@@ -3562,7 +3496,6 @@ namespace Communication {
       if (other.IsMapTransition != false) {
         IsMapTransition = other.IsMapTransition;
       }
->>>>>>> cpp_physics_system
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -3646,8 +3579,6 @@ namespace Communication {
             recentErrors_.AddEntriesFrom(input, _repeated_recentErrors_codec);
             break;
           }
-<<<<<<< HEAD
-=======
           case 112: {
             ConnectionState = (global::Communication.BotConnectionState) input.ReadEnum();
             break;
@@ -3660,7 +3591,6 @@ namespace Communication {
             IsMapTransition = input.ReadBool();
             break;
           }
->>>>>>> cpp_physics_system
         }
       }
     #endif
@@ -3744,8 +3674,6 @@ namespace Communication {
             recentErrors_.AddEntriesFrom(ref input, _repeated_recentErrors_codec);
             break;
           }
-<<<<<<< HEAD
-=======
           case 112: {
             ConnectionState = (global::Communication.BotConnectionState) input.ReadEnum();
             break;
@@ -3758,7 +3686,6 @@ namespace Communication {
             IsMapTransition = input.ReadBool();
             break;
           }
->>>>>>> cpp_physics_system
         }
       }
     }

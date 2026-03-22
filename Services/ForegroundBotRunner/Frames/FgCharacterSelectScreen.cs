@@ -1,10 +1,7 @@
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
-<<<<<<< HEAD
-=======
 using Serilog;
->>>>>>> cpp_physics_system
 using System;
 using System.Collections.Generic;
 
@@ -22,9 +19,6 @@ public class FgCharacterSelectScreen(
     private DateTime? _charSelectFirstSeen;
     private static readonly TimeSpan CharListGracePeriod = TimeSpan.FromSeconds(2);
 
-<<<<<<< HEAD
-    public bool IsOpen => getScreenState() == WoWScreenState.CharacterSelect;
-=======
     /// <summary>
     /// Snapshot of MaxCharacterCount taken during HasReceivedCharacterList.
     /// Used by CharacterSelects to prevent TOCTOU race where MaxCharacterCount
@@ -42,20 +36,11 @@ public class FgCharacterSelectScreen(
     }
 
     private bool _hasLoggedGracePeriod;
->>>>>>> cpp_physics_system
 
     public bool HasReceivedCharacterList
     {
         get
         {
-<<<<<<< HEAD
-            // When InWorld, IsOpen is false (we're past the charselect screen).
-            // Return true so BotRunnerService doesn't think we're waiting for a character list.
-            if (!IsOpen)
-                return getMaxCharacterCount() > 0;
-
-            // Grace period — WoW.exe needs time to populate character list in memory
-=======
             if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry)
                 return true;
 
@@ -65,14 +50,10 @@ public class FgCharacterSelectScreen(
             if (!IsOpen)
                 return charCount > 0;
 
->>>>>>> cpp_physics_system
             _charSelectFirstSeen ??= DateTime.Now;
             if (DateTime.Now - _charSelectFirstSeen.Value < CharListGracePeriod)
                 return false;
 
-<<<<<<< HEAD
-            return getMaxCharacterCount() > 0;
-=======
             // After grace period, return true even with 0 characters.
             if (!_hasLoggedGracePeriod)
             {
@@ -80,7 +61,6 @@ public class FgCharacterSelectScreen(
                 _hasLoggedGracePeriod = true;
             }
             return true;
->>>>>>> cpp_physics_system
         }
         set { /* BotRunnerService may set this; FG detects from memory, so ignore */ }
     }
@@ -95,14 +75,6 @@ public class FgCharacterSelectScreen(
     {
         get
         {
-<<<<<<< HEAD
-            var count = getMaxCharacterCount();
-            if (count <= 0) return [];
-
-            // FG doesn't have detailed character data from memory — return a minimal entry
-            // so BotRunnerService sees at least one character and proceeds to EnterWorld.
-            return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1 }];
-=======
             // Use the snapshot from HasReceivedCharacterList to prevent TOCTOU race.
             // If HasReceivedCharacterList returned true (charCount > 0), this must
             // also see > 0 — otherwise BotRunnerService sees Count==0 and queues
@@ -121,7 +93,6 @@ public class FgCharacterSelectScreen(
             if (!string.IsNullOrEmpty(genderEnv))
                 Enum.TryParse(genderEnv, ignoreCase: true, out gender);
             return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1, Race = race, Gender = gender }];
->>>>>>> cpp_physics_system
         }
     }
 
@@ -130,15 +101,6 @@ public class FgCharacterSelectScreen(
         // WoW.exe handles this automatically
     }
 
-<<<<<<< HEAD
-    public void CreateCharacter(string name, Race race, Gender gender, Class @class,
-        byte skinColor, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId)
-    {
-        // Lua-based character creation (deferred — not critical path)
-        luaCall($"CreateCharacter(\"{name}\")");
-    }
-
-=======
     /// <summary>Tracks the current step in the multi-phase character creation flow.</summary>
     private int _createCharStep;
     private DateTime _lastCreateStepTime;
@@ -271,7 +233,6 @@ public class FgCharacterSelectScreen(
         _ => 1, // Default to Warrior
     };
 
->>>>>>> cpp_physics_system
     public void DeleteCharacter(ulong characterGuid)
     {
         // Deferred — not critical for unification

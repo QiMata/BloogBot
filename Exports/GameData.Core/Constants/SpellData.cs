@@ -237,8 +237,6 @@ namespace GameData.Core.Constants
 
             // ── Forms ──
             ["Human Form"] = [2457], // Same as Battle Stance for druids leaving form
-<<<<<<< HEAD
-=======
 
             // ── Consumable Buffs ──
             ["Lion's Strength"] = [2367],
@@ -274,7 +272,6 @@ namespace GameData.Core.Constants
             ["Spirit"] = [8112, 8113, 8114, 12177, 13368, 23797],
             ["Stamina"] = [8099, 8100, 8101, 12178, 13370],
             ["Strength"] = [3163, 3164, 8118, 8119, 8120, 11331, 12179, 13372, 23793]
->>>>>>> cpp_physics_system
         };
 
         /// <summary>

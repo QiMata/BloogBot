@@ -1,11 +1,7 @@
 using BotRunner.Combat;
-<<<<<<< HEAD
-using GameData.Core.Interfaces;
-=======
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using Moq;
 
 namespace BotRunner.Tests.Combat
@@ -27,8 +23,6 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(expectedSpellId, FishingData.GetBestFishingSpellId(skill));
         }
 
-<<<<<<< HEAD
-=======
         [Fact]
         public void GetBestKnownFishingSpellId_PrefersHighestKnownRank()
         {
@@ -49,7 +43,6 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(FishingData.FishingRank2, result);
         }
 
->>>>>>> cpp_physics_system
         [Theory]
         [InlineData(FishingData.FishingPole, true)]
         [InlineData(FishingData.StrongFishingPole, true)]
@@ -87,8 +80,6 @@ namespace BotRunner.Tests.Combat
         }
 
         [Fact]
-<<<<<<< HEAD
-=======
         public void FindUsableLureInBags_ReturnsLocationOfBestLure()
         {
             var om = new Mock<IObjectManager>();
@@ -107,7 +98,6 @@ namespace BotRunner.Tests.Combat
         }
 
         [Fact]
->>>>>>> cpp_physics_system
         public void FindUsableLure_FindsLureInExtraBag()
         {
             var om = new Mock<IObjectManager>();
@@ -181,8 +171,6 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(356u, FishingData.FishingSkillId);
         }
 
-<<<<<<< HEAD
-=======
         [Fact]
         public void HasFishingPoleEquipped_ReturnsTrueWhenPoleIsEquipped()
         {
@@ -267,7 +255,6 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(poolPosition.Z, castTarget.Z, 3);
         }
 
->>>>>>> cpp_physics_system
         private static Mock<IObjectManager> CreateEmptyObjectManager()
         {
             var om = new Mock<IObjectManager>();
@@ -280,8 +267,6 @@ namespace BotRunner.Tests.Combat
             var mock = new Mock<IWoWItem>();
             mock.Setup(i => i.ItemId).Returns(itemId);
             mock.Setup(i => i.Name).Returns($"Item_{itemId}");
-<<<<<<< HEAD
-=======
             mock.Setup(i => i.StackCount).Returns(1);
             return mock;
         }
@@ -294,7 +279,6 @@ namespace BotRunner.Tests.Combat
             mock.Setup(g => g.TypeId).Returns(typeId);
             mock.Setup(g => g.Position).Returns(position);
             mock.Setup(g => g.Name).Returns($"Pool_{entry}");
->>>>>>> cpp_physics_system
             return mock;
         }
     }

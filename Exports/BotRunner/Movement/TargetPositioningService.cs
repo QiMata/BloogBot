@@ -13,26 +13,15 @@ namespace BotRunner.Movement
     public class TargetPositioningService : ITargetPositioningService
     {
         private readonly IObjectManager _objectManager;
-<<<<<<< HEAD
-        private readonly float _engagementRange;
-        private readonly NavigationPath _navPath;
-=======
         private readonly PathfindingClient _pathfindingClient;
         private readonly float _engagementRange;
         private NavigationPath? _navPath;
->>>>>>> cpp_physics_system
 
         public TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-<<<<<<< HEAD
-            ArgumentNullException.ThrowIfNull(pathfindingClient);
-            _engagementRange = engagementRange;
-            _navPath = new NavigationPath(pathfindingClient);
-=======
             _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
             _engagementRange = engagementRange;
->>>>>>> cpp_physics_system
         }
 
         public bool EnsureInCombatRange(IWoWUnit target)
@@ -69,12 +58,6 @@ namespace BotRunner.Movement
 
             if (directDistance > _engagementRange)
             {
-<<<<<<< HEAD
-                var waypoint = _navPath.GetNextWaypoint(playerPosition, targetPosition, player.MapId);
-                if (waypoint != null)
-                {
-                    _objectManager.MoveToward(waypoint);
-=======
                 var waypoint = _navPath.GetNextWaypoint(
                     playerPosition,
                     targetPosition,
@@ -87,7 +70,6 @@ namespace BotRunner.Movement
                 else
                 {
                     _objectManager.StopAllMovement();
->>>>>>> cpp_physics_system
                 }
 
                 return false;

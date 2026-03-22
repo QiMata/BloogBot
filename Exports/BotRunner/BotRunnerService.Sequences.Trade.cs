@@ -1,8 +1,5 @@
 using GameData.Core.Enums;
-<<<<<<< HEAD
-=======
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using Serilog;
 using System.Linq;
 using Xas.FluentBehaviourTree;
@@ -19,11 +16,7 @@ namespace BotRunner
         private IBehaviourTreeNode BuildOfferTradeSequence(ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Offer Trade Sequence")
                 // Ensure the bot has a valid trade target
-<<<<<<< HEAD
-                .Condition("Has Valid Trade Target", time => _objectManager.Player.Position.DistanceTo(_objectManager.Players.First(x => x.Guid == targetGuid).Position) < 5.33f)
-=======
                 .Condition("Has Valid Trade Target", time => _objectManager.Player.Position.DistanceTo(_objectManager.Players.First(x => x.Guid == targetGuid).Position) < CombatDistance.INTERACTION_DISTANCE + CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS)
->>>>>>> cpp_physics_system
 
                 // Offer trade to the target
                 .Do("Offer Trade", time =>

@@ -19,10 +19,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   4) Learn talent via GM command.
 ///   5) Assert spell appears in snapshot spell list.
 /// </summary>
-<<<<<<< HEAD
-[RequiresMangosStack]
-=======
->>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class TalentAllocationTests
 {
@@ -31,12 +27,6 @@ public class TalentAllocationTests
 
     private const uint Deflection1 = 16462;
     private const uint MinTalentLevel = 10;
-<<<<<<< HEAD
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-=======
->>>>>>> cpp_physics_system
 
     public TalentAllocationTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -50,22 +40,6 @@ public class TalentAllocationTests
     public async Task Talent_LearnViaGM_SpellAppearsInKnownSpells()
     {
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
-<<<<<<< HEAD
-        var bgLearned = await RunTalentScenario(_bot.BgAccountName!, "BG");
-        Assert.True(bgLearned, "[BG] Spell 16462 should appear in snapshot spell list after .learn.");
-
-        if (_bot.ForegroundBot != null)
-        {
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ===");
-            var fgLearned = await RunTalentScenario(_bot.FgAccountName!, "FG");
-            if (!fgLearned)
-                _output.WriteLine("[FG] WARNING: spell 16462 not visible in FG snapshot spell list; BG path remains authoritative.");
-        }
-        else
-        {
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
-        }
-=======
 
         bool bgLearned, fgLearned = false;
         var hasFg = _bot.IsFgActionable;
@@ -91,21 +65,10 @@ public class TalentAllocationTests
         {
             Assert.True(fgLearned, "[FG] Spell 16462 should appear in FG snapshot spell list after .learn.");
         }
->>>>>>> cpp_physics_system
     }
 
     private async Task<bool> RunTalentScenario(string account, string label)
     {
-<<<<<<< HEAD
-        await EnsureStrictAliveAsync(account, label);
-        await EnsureLevelAtLeastAsync(account, label, MinTalentLevel);
-        _ = await TryEnsureSpellAbsentAsync(account, label, Deflection1);
-
-        _output.WriteLine($"  [{label}] Learning spell {Deflection1}");
-        var learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(learnTrace, label, ".learn");
-
-=======
         await _bot.EnsureCleanSlateAsync(account, label);
         await EnsureLevelAtLeastAsync(account, label, MinTalentLevel);
         var spellCleared = await TryEnsureSpellAbsentAsync(account, label, Deflection1);
@@ -144,41 +107,12 @@ public class TalentAllocationTests
             _output.WriteLine($"  [{label}] POST-LEARN snapshot: screen={screen}, char={charName}, health={health}, spells={spellCount}, has16462={hasSpell}");
         }
 
->>>>>>> cpp_physics_system
         var learned = await WaitForSpellPresenceAsync(account, Deflection1, shouldExist: true, TimeSpan.FromSeconds(12));
         return learned;
     }
 
-<<<<<<< HEAD
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"  [{label}] Not strict-alive; reviving before talent setup.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
-                return;
-        }
-
-        global::Tests.Infrastructure.Skip.If(true, $"{label}: could not establish strict-alive setup state.");
-    }
-=======
     private Task EnsureStrictAliveAsync(string account, string label)
         => _bot.EnsureStrictAliveAsync(account, label);
->>>>>>> cpp_physics_system
 
     private async Task EnsureLevelAtLeastAsync(string account, string label, uint minLevel)
     {
@@ -198,25 +132,6 @@ public class TalentAllocationTests
 
     private async Task<bool> TryEnsureSpellAbsentAsync(string account, string label, uint spellId)
     {
-<<<<<<< HEAD
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var hasSpell = snap?.Player?.SpellList?.Contains(spellId) == true;
-        if (!hasSpell)
-            return true;
-
-        _output.WriteLine($"  [{label}] Spell {spellId} already known; unlearning for clean setup.");
-        var unlearnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".unlearn {spellId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(unlearnTrace, label, ".unlearn");
-
-        var removed = await WaitForSpellPresenceAsync(account, spellId, shouldExist: false, TimeSpan.FromSeconds(10));
-        if (!removed)
-        {
-            _output.WriteLine($"  [{label}] WARNING: spell {spellId} remained known after .unlearn; continuing with learn assertion.");
-            return false;
-        }
-
-=======
         // Always send .unlearn regardless of snapshot state.
         // The server may have the spell even if the client memory scan doesn't show it
         // (client-server desync from prior sessions). By always unlearning:
@@ -241,31 +156,24 @@ public class TalentAllocationTests
             _output.WriteLine($"  [{label}] ERROR: .unlearn {spellId} dropped twice — cannot guarantee clean state.");
             return false;
         }
->>>>>>> cpp_physics_system
         return true;
     }
 
     private async Task<bool> WaitForSpellPresenceAsync(string account, uint spellId, bool shouldExist, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
-<<<<<<< HEAD
-=======
         int pollCount = 0;
->>>>>>> cpp_physics_system
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
             var hasSpell = snap?.Player?.SpellList?.Contains(spellId) == true;
-<<<<<<< HEAD
-=======
             var spellCount = snap?.Player?.SpellList?.Count ?? -1;
             var health = snap?.Player?.Unit?.Health ?? 0;
             var screen = snap?.ScreenState ?? "(null)";
             if (pollCount % 4 == 0 || hasSpell == shouldExist) // log every 2s or on success
                 _output.WriteLine($"  [{account}] poll#{pollCount} {sw.Elapsed.TotalSeconds:F1}s: screen={screen}, health={health}, spells={spellCount}, has{spellId}={hasSpell}");
             pollCount++;
->>>>>>> cpp_physics_system
             if (hasSpell == shouldExist)
                 return true;
 
@@ -296,37 +204,8 @@ public class TalentAllocationTests
     {
         Assert.Equal(ResponseResult.Success, trace.DispatchResult);
 
-<<<<<<< HEAD
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
-    }
-
-    private static bool ContainsCommandRejection(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
-=======
         var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 
->>>>>>> cpp_physics_system
 }

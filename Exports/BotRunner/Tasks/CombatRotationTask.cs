@@ -1,10 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
-<<<<<<< HEAD
-=======
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using System;
 using System.Linq;
 
@@ -22,15 +19,12 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     private bool _isKiting;
     private int _kiteStartTime;
     private int _kiteDurationMs;
-<<<<<<< HEAD
-=======
 
     // Chase timeout: when dead-reckoning diverges from server position, local
     // distance calculations become unreliable. If we've been chasing an aggressor
     // for too long, force auto-attack — the mob is hitting us so we're in range.
     private int _chaseTickCount;
     private const int CHASE_FORCE_ATTACK_TICKS = 30; // ~3s at 100ms tick
->>>>>>> cpp_physics_system
 
     /// <summary>
     /// Perform the combat rotation logic.
@@ -84,12 +78,6 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     }
 
     /// <summary>
-<<<<<<< HEAD
-    /// Attempt to cast a spell if ready (condition-only overload for legacy profiles).
-    /// </summary>
-    protected bool TryCastSpell(string spellName, bool condition, bool castOnSelf = false)
-        => TryCastSpell(spellName, 0, int.MaxValue, condition, castOnSelf);
-=======
     /// Calculate the actual melee attack range to the current target using vanilla 1.12.1 formula:
     /// attacker.CombatReach + target.CombatReach + BASE_OFFSET + leeway(if both moving).
     /// Falls back to the hardcoded distance if CombatReach data is unavailable (zero).
@@ -154,16 +142,11 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     /// </summary>
     protected bool TryCastSpell(string spellName, bool condition, bool castOnSelf = false)
         => TryCastSpell(spellName, 0f, float.MaxValue, condition, castOnSelf);
->>>>>>> cpp_physics_system
 
     /// <summary>
     /// Attempt to cast a spell if ready and in range, with optional callback after cast.
     /// </summary>
-<<<<<<< HEAD
-    protected bool TryCastSpell(string spellName, int minRange = 0, int maxRange = int.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
-=======
     protected bool TryCastSpell(string spellName, float minRange = 0f, float maxRange = float.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
->>>>>>> cpp_physics_system
     {
         if (!condition) return false;
 
@@ -566,30 +549,18 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     /// <param name="spellName">Healing spell to cast.</param>
     /// <param name="healthThreshold">HP% threshold — party members below this are candidates.</param>
     /// <param name="maxRange">Max casting range for the heal (default 40y).</param>
-<<<<<<< HEAD
-    protected bool TryCastHeal(string spellName, int healthThreshold = 70, int maxRange = 40)
-=======
     protected bool TryCastHeal(string spellName, int healthThreshold = 70, float maxRange = 40f)
->>>>>>> cpp_physics_system
     {
         var healTarget = GetHealTarget(healthThreshold);
         if (healTarget == null) return false;
 
         if (healTarget.Guid == ObjectManager.Player.Guid)
-<<<<<<< HEAD
-            return TryCastSpell(spellName, 0, int.MaxValue, true, castOnSelf: true);
-=======
             return TryCastSpell(spellName, 0f, float.MaxValue, true, castOnSelf: true);
->>>>>>> cpp_physics_system
 
         // Target the party member for healing
         var prevTarget = ObjectManager.GetTarget(ObjectManager.Player);
         ObjectManager.SetTarget(healTarget.Guid);
-<<<<<<< HEAD
-        var result = TryCastSpell(spellName, 0, maxRange);
-=======
         var result = TryCastSpell(spellName, 0f, maxRange);
->>>>>>> cpp_physics_system
 
         // Re-target enemy
         if (prevTarget != null && prevTarget.HealthPercent > 0)

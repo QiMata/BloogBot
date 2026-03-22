@@ -34,19 +34,6 @@ namespace PriestHoly.Tasks
             // Group healing: heal party members before DPS
             if (IsInGroup)
             {
-<<<<<<< HEAD
-                if (TryCastHeal(Renew, 80, 40)) return;
-                if (TryCastHeal(Heal, 60, 40)) return;
-            }
-            else if (ObjectManager.Player.HealthPercent < 50)
-            {
-                TryCastSpell(Renew, 0, int.MaxValue, castOnSelf: true);
-            }
-
-            TryCastSpell(HolyFire, 0, 29,
-                         !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(HolyFire));
-            TryCastSpell(Smite, 0, 29);
-=======
                 if (TryCastHeal(Renew, 80, GetSpellRange(HealBaseRange))) return;
                 if (TryCastHeal(Heal, 60, GetSpellRange(HealBaseRange))) return;
             }
@@ -58,7 +45,6 @@ namespace PriestHoly.Tasks
             TryCastSpell(HolyFire, 0f, GetSpellRange(HolyFireBaseRange),
                          !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(HolyFire));
             TryCastSpell(Smite, 0f, GetSpellRange(SmiteBaseRange));
->>>>>>> cpp_physics_system
         }
     }
 }

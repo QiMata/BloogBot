@@ -47,8 +47,6 @@ namespace ForegroundBotRunner
 
         // Track whether SignalEventManager hooks have been initialized after entering world
         private bool _hooksInitialized = false;
-<<<<<<< HEAD
-=======
 
         // Timestamp of world entry — polls are deferred for 2s to let WoW's UI frame system stabilize
         private DateTime _worldEntryTime = DateTime.MinValue;
@@ -57,7 +55,6 @@ namespace ForegroundBotRunner
         private readonly ConnectionStateMachine _connectionState = new();
         private uint _lastObservedContinentId = 0xFFFFFFFF;
         private static readonly ushort FishingCustomAnimOpcode = (ushort)Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM;
->>>>>>> cpp_physics_system
 
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
@@ -244,58 +241,17 @@ namespace ForegroundBotRunner
                             var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
                             var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
                             var playerName = _objectManager?.Player?.Name ?? "(null)";
-<<<<<<< HEAD
-                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, HasEnteredWorld={hasEnteredWorld}, Player={playerName}");
-=======
                             var connState = _connectionState.CurrentState;
                             var pktSend = PacketLogger.SendCount;
                             var pktRecv = PacketLogger.RecvCount;
                             var rawLoginState = ForegroundBotRunner.Mem.MemoryManager.ReadString(ForegroundBotRunner.Mem.Offsets.CharacterScreen.LoginState) ?? "(null)";
                             var maxChars = ObjectManager.MaxCharacterCount;
                             DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, LoginState='{rawLoginState}', HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}, MaxChars={maxChars}");
->>>>>>> cpp_physics_system
                         }
 
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too
                         _objectManager?.AntiAfk();
 
-<<<<<<< HEAD
-                        // Initialize SignalEventManager hooks once after entering world.
-                        // These inject assembly into WoW's event system and must NOT run during
-                        // the world server handshake (causes disconnect).
-                        if (_objectManager?.HasEnteredWorld == true && !_hooksInitialized)
-                        {
-                            ObjectManager.PauseNativeCallsDuringWorldEntry = false;
-                            DiagLog("RESUMED native calls - now InWorld");
-
-                            // Suppress Lua error popups — they block subsequent Lua calls
-                            try
-                            {
-                                Mem.Functions.LuaCall("seterrorhandler(function() end)");
-                                DiagLog("Lua error handler suppressed");
-                            }
-                            catch (Exception ex)
-                            {
-                                DiagLog($"Failed to suppress Lua errors: {ex.Message}");
-                            }
-
-                            try
-                            {
-                                SignalEventManager.InitializeHooks();
-                                DiagLog("SignalEventManager hooks initialized");
-                            }
-                            catch (Exception ex)
-                            {
-                                DiagLog($"SignalEventManager hook init error: {ex.Message}");
-                            }
-                            _hooksInitialized = true;
-                        }
-
-                        // Poll MovementRecorder and run automated scenarios when in world
-                        if (_objectManager?.HasEnteredWorld == true
-                            && _objectManager?.IsContinentTransition != true)
-                        {
-=======
                         // At character select with characters present + not already entering world:
                         // click "Enter World" button directly via Lua. Skip cinematics too.
                         if (!ObjectManager.PauseNativeCallsDuringWorldEntry
@@ -436,7 +392,6 @@ namespace ForegroundBotRunner
                             }
 
                             CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
->>>>>>> cpp_physics_system
                             _movementRecorder?.Poll();
 
                             // Launch automated movement scenarios (once)
@@ -506,15 +461,6 @@ namespace ForegroundBotRunner
             return Task.CompletedTask;
         }
 
-<<<<<<< HEAD
-        /// <summary>
-        /// Subscribe to WoWEventHandler events for state resets on disconnect/logout.
-        /// BotRunnerService handles login flow via ILoginScreen/ICharacterSelectScreen.
-        /// These handlers only reset ObjectManager-level state that FG needs.
-        /// </summary>
-        private void SubscribeToStateResetEvents(WoWEventHandler eventHandler)
-        {
-=======
         private void HandleCapturedPacket(PacketDirection direction, ushort opcode, int size)
         {
             if (direction != PacketDirection.Recv || opcode != FishingCustomAnimOpcode)
@@ -549,16 +495,12 @@ namespace ForegroundBotRunner
         /// </summary>
         private void SubscribeToStateResetEvents(WoWEventHandler eventHandler)
         {
->>>>>>> cpp_physics_system
             eventHandler.OnDisconnect += (_, _) =>
             {
                 DiagLog("EVENT: OnDisconnect - resetting state");
                 _logger.LogWarning("Disconnected from server");
                 ObjectManager.PauseNativeCallsDuringWorldEntry = false;
-<<<<<<< HEAD
-=======
                 Mem.ThreadSynchronizer.ResetObjMgrValidState();
->>>>>>> cpp_physics_system
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {
@@ -571,10 +513,7 @@ namespace ForegroundBotRunner
             {
                 DiagLog("EVENT: OnLogout - resetting world state");
                 _logger.LogInformation("Player logout detected");
-<<<<<<< HEAD
-=======
                 Mem.ThreadSynchronizer.ResetObjMgrValidState();
->>>>>>> cpp_physics_system
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {
@@ -622,7 +561,6 @@ namespace ForegroundBotRunner
                 _logger.LogWarning("Cannot initialize BotRunnerService - missing dependencies");
                 return;
             }
-<<<<<<< HEAD
 
             // Create PathfindingClient from configuration if not injected.
             // Never pass a null client into ClassContainer: corpse retrieval must remain pathfinding-driven.
@@ -672,57 +610,6 @@ namespace ForegroundBotRunner
             var section = configuration.GetSection("BotBehavior");
             if (!section.Exists()) return config;
 
-=======
-
-            // Create PathfindingClient from configuration if not injected.
-            // Never pass a null client into ClassContainer: corpse retrieval must remain pathfinding-driven.
-            if (_pathfindingClient == null)
-            {
-                try
-                {
-                    var pfIp = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-                    var pfPort = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
-                    _pathfindingClient = new PathfindingClient(pfIp, pfPort, _loggerFactory.CreateLogger<PathfindingClient>());
-                    DiagLog($"Created PathfindingClient: {pfIp}:{pfPort}");
-                }
-                catch (Exception ex)
-                {
-                    DiagLog($"Failed to create PathfindingClient: {ex.Message}");
-                    _logger.LogWarning(ex, "Failed to create PathfindingClient from config; using fallback client instance.");
-                    _pathfindingClient = new PathfindingClient();
-                    DiagLog("Created fallback PathfindingClient() after config failure");
-                }
-            }
-
-            var pathfindingClient = _pathfindingClient ?? new PathfindingClient();
-            if (_pathfindingClient == null)
-            {
-                DiagLog("PathfindingClient was null at container creation; using fallback PathfindingClient()");
-                _pathfindingClient = pathfindingClient;
-            }
-
-            var container = CreateClassContainer(_accountName, pathfindingClient);
-
-            _botRunner = new BotRunnerService(
-                _objectManager,
-                _stateUpdateClient,
-                container,
-                agentFactoryAccessor: null, // FG has no network agents
-                accountName: _accountName,
-                behaviorConfig: LoadBehaviorConfig(_configuration));
-
-            _botRunner.Start();
-            DiagLog("BotRunnerService started");
-            _logger.LogInformation("BotRunnerService started - handling login, snapshots, and actions");
-        }
-
-        private static BotBehaviorConfig LoadBehaviorConfig(IConfiguration configuration)
-        {
-            var config = new BotBehaviorConfig();
-            var section = configuration.GetSection("BotBehavior");
-            if (!section.Exists()) return config;
-
->>>>>>> cpp_physics_system
             if (float.TryParse(section["MaxPullRange"], out var v1)) config.MaxPullRange = v1;
             if (int.TryParse(section["TargetLevelRangeBelow"], out var v2)) config.TargetLevelRangeBelow = v2;
             if (int.TryParse(section["TargetLevelRangeAbove"], out var v3)) config.TargetLevelRangeAbove = v3;
@@ -737,33 +624,6 @@ namespace ForegroundBotRunner
 
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
-<<<<<<< HEAD
-            BotProfiles.Common.BotBase botProfile;
-
-            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
-            {
-                var classCode = accountName.Substring(2, 2);
-                var @class = WoWNameGenerator.ParseClassCode(classCode);
-
-                botProfile = @class switch
-                {
-                    Class.Warrior => new WarriorArms.WarriorArms(),
-                    Class.Paladin => new PaladinRetribution.PaladinRetribution(),
-                    Class.Rogue => new RogueCombat.RogueCombat(),
-                    Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
-                    Class.Priest => new PriestDiscipline.PriestDiscipline(),
-                    Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
-                    Class.Mage => new MageArcane.MageArcane(),
-                    Class.Warlock => new WarlockAffliction.WarlockAffliction(),
-                    Class.Druid => new DruidRestoration.DruidRestoration(),
-                    _ => new WarriorArms.WarriorArms()
-                };
-            }
-            else
-            {
-                botProfile = new WarriorArms.WarriorArms();
-            }
-=======
             var @class = WoWNameGenerator.ResolveClass(accountName);
 
             BotProfiles.Common.BotBase botProfile = @class switch
@@ -779,7 +639,6 @@ namespace ForegroundBotRunner
                 Class.Druid => new DruidRestoration.DruidRestoration(),
                 _ => new WarriorArms.WarriorArms()
             };
->>>>>>> cpp_physics_system
 
             return new ClassContainer(
                 botProfile.Name,
@@ -796,11 +655,8 @@ namespace ForegroundBotRunner
             _logger.LogInformation("ForegroundBotWorker stop requested...");
 
             _botRunner?.Stop();
-<<<<<<< HEAD
-=======
             PacketLogger.OnPacketCaptured -= _connectionState.ProcessPacket;
             PacketLogger.OnPacketCaptured -= HandleCapturedPacket;
->>>>>>> cpp_physics_system
 
             // Stop any ongoing movement recording
             if (_movementRecorder?.IsRecording == true)

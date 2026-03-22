@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 using GameData.Core.Constants;
->>>>>>> cpp_physics_system
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
@@ -15,15 +12,6 @@ namespace WoWSharpClient.Models
 {
     public class WoWLocalPet(HighGuid highGuid, WoWObjectType objectType = WoWObjectType.Unit) : WoWUnit(highGuid, objectType), IWoWLocalPet, ICloneable
     {
-<<<<<<< HEAD
-        public void Attack() { }
-
-        public bool CanUse(string spellName) => HasBuff(spellName) || !IsCasting;
-
-        public void Cast(string spellName) { }
-
-        public void FollowPlayer() { }
-=======
         public void Attack()
         {
             var om = WoWSharpObjectManager.Instance;
@@ -82,7 +70,6 @@ namespace WoWSharpClient.Models
                 Guid, PetCommand.Follow);
             WoWSharpObjectManager.Instance?.SendPetAction(payload);
         }
->>>>>>> cpp_physics_system
 
         public bool IsHappy() => true;
 

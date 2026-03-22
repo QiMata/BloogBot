@@ -35,10 +35,7 @@ namespace BackgroundBotRunner
         private IWorldClient? _activeWorldClient;
         private IDisposable? _worldDisconnectSubscription;
         private IDisposable? _tradeAutoAcceptSubscription;
-<<<<<<< HEAD
-=======
         private IDisposable? _logoutCompleteSubscription;
->>>>>>> cpp_physics_system
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
@@ -97,8 +94,6 @@ namespace BackgroundBotRunner
             }
         }
 
-<<<<<<< HEAD
-=======
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("BackgroundBotWorker stopping — cleaning up bot runner and agent factory.");
@@ -118,7 +113,6 @@ namespace BackgroundBotRunner
             await base.StopAsync(cancellationToken);
         }
 
->>>>>>> cpp_physics_system
         private static BotBehaviorConfig LoadBehaviorConfig(IConfiguration configuration)
         {
             var config = new BotBehaviorConfig();
@@ -348,12 +342,9 @@ namespace BackgroundBotRunner
             _tradeAutoAcceptSubscription?.Dispose();
             _tradeAutoAcceptSubscription = null;
 
-<<<<<<< HEAD
-=======
             _logoutCompleteSubscription?.Dispose();
             _logoutCompleteSubscription = null;
 
->>>>>>> cpp_physics_system
             _logger.LogInformation("Cleared network client component factory state.");
         }
 
@@ -363,29 +354,6 @@ namespace BackgroundBotRunner
 
             BotProfiles.Common.BotBase botProfile = @class switch
             {
-<<<<<<< HEAD
-                var classCode = accountName.Substring(2, 2);
-                var @class = WoWNameGenerator.ParseClassCode(classCode);
-
-                botProfile = @class switch
-                {
-                    Class.Warrior => new WarriorArms.WarriorArms(),
-                    Class.Paladin => new PaladinRetribution.PaladinRetribution(),
-                    Class.Rogue => new RogueCombat.RogueCombat(),
-                    Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
-                    Class.Priest => new PriestDiscipline.PriestDiscipline(),
-                    Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
-                    Class.Mage => new MageArcane.MageArcane(),
-                    Class.Warlock => new WarlockAffliction.WarlockAffliction(),
-                    Class.Druid => new DruidRestoration.DruidRestoration(),
-                    _ => new WarriorArms.WarriorArms()
-                };
-            }
-            else
-            {
-                botProfile = new WarriorArms.WarriorArms();
-            }
-=======
                 Class.Warrior => new WarriorArms.WarriorArms(),
                 Class.Paladin => new PaladinRetribution.PaladinRetribution(),
                 Class.Rogue => new RogueCombat.RogueCombat(),
@@ -397,7 +365,6 @@ namespace BackgroundBotRunner
                 Class.Druid => new DruidRestoration.DruidRestoration(),
                 _ => new WarriorArms.WarriorArms()
             };
->>>>>>> cpp_physics_system
 
             return new ClassContainer(
                 botProfile.Name,

@@ -97,6 +97,11 @@ namespace ForegroundBotRunner.Statics
 
         public void StartMeleeAttack()
         {
+            // Skip if already attacking — avoids Lua call overhead on every behavior tree tick.
+            // CastSpellByName('Attack') is a toggle; calling it when already active would STOP the attack.
+            if (Player is LocalPlayer lp && lp._isAutoAttacking)
+                return;
+
             if (!Player.IsCasting && (Player.Class == Class.Warlock || Player.Class == Class.Mage || Player.Class == Class.Priest))
             {
                 MainThreadLuaCall(WandLuaScript);
@@ -107,6 +112,9 @@ namespace ForegroundBotRunner.Statics
                 // Guarded by IsCurrentAction(1) to prevent accidental toggle-off.
                 MainThreadLuaCall(AutoAttackLuaScript);
             }
+
+            if (Player is LocalPlayer localPlayer)
+                localPlayer._isAutoAttacking = true;
         }
 
 
@@ -129,6 +137,8 @@ namespace ForegroundBotRunner.Statics
         public void StopAttack()
         {
             MainThreadLuaCall(TurnOffAutoAttackLuaScript);
+            if (Player is LocalPlayer lp)
+                lp._isAutoAttacking = false;
         }
 
 

@@ -9,10 +9,6 @@ using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
-<<<<<<< HEAD
-using System.IO;
-=======
->>>>>>> cpp_physics_system
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -37,38 +33,11 @@ namespace BotRunner
         private int _lastLoggedContainedItems = -1;
         private int _lastLoggedItemObjects = -1;
 
-<<<<<<< HEAD
-        // Message buffers â€” collected from IWoWEventHandler events, flushed to snapshot each tick
-=======
         // Message buffers — collected from IWoWEventHandler events, flushed to snapshot each tick
->>>>>>> cpp_physics_system
         private readonly Queue<string> _recentChatMessages = new();
         private readonly Queue<string> _recentErrors = new();
         private const int MaxBufferedMessages = 50;
 
-<<<<<<< HEAD
-        // File-based diagnostic logger (works in injected FG process where Serilog isn't configured)
-        // Uses PID in filename so BG/FG processes don't clobber each other's logs
-        private static readonly string _diagPath;
-        private static readonly object _diagLock = new();
-        static BotRunnerService()
-        {
-            try
-            {
-                var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-                var procName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot");
-                Directory.CreateDirectory(dir);
-                _diagPath = Path.Combine(dir, $"botrunner_diag_{procName}_{pid}.log");
-                File.WriteAllText(_diagPath, $"=== BotRunnerService diag started {DateTime.Now:yyyy-MM-dd HH:mm:ss} proc={procName} pid={pid} ===\n");
-            }
-            catch { _diagPath = ""; }
-        }
-        private static void DiagLog(string msg)
-        {
-            if (string.IsNullOrEmpty(_diagPath)) return;
-            try { lock (_diagLock) { File.AppendAllText(_diagPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); } } catch { }
-=======
         // DiagLog writes to file and Serilog. FG context lacks Serilog global config.
         private static readonly string _diagLogPath = System.IO.Path.Combine(
             AppContext.BaseDirectory, "botrunner_diag.log");
@@ -76,7 +45,6 @@ namespace BotRunner
         {
             Log.Information("[DIAG] {Msg}", msg);
             try { System.IO.File.AppendAllText(_diagLogPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n"); } catch { }
->>>>>>> cpp_physics_system
         }
 
         private Task? _asyncBotTaskRunnerTask;
@@ -97,8 +65,6 @@ namespace BotRunner
 
         private readonly Stack<IBotTask> _botTasks = new();
         private bool _tasksInitialized;
-<<<<<<< HEAD
-=======
         // Sticky flag: once we've entered the world, never fall back to login/charselect
         // sequences until an explicit logout is detected. Prevents CreateCharacter spam
         // during transient state drops (teleports, zone transitions).
@@ -106,7 +72,6 @@ namespace BotRunner
         // Set when we initiate a character delete (race/gender mismatch).
         // Cleared once the char list is empty so we don't spam delete every tick.
         private bool _pendingCharacterDeletion;
->>>>>>> cpp_physics_system
         private DateTime _lastDeathRecoveryPush = DateTime.MinValue;
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
@@ -246,11 +211,7 @@ namespace BotRunner
                     // Death recovery must continue even if a behavior tree is currently running.
                     // Some chat/action trees can stay Running while dead, which otherwise starves
                     // ReleaseCorpse/RetrieveCorpse and leaves the character ghost-stalled.
-<<<<<<< HEAD
-                    if (_objectManager.HasEnteredWorld)
-=======
                     if (playerWorldReady)
->>>>>>> cpp_physics_system
                     {
                         PushDeathRecoveryIfNeeded();
 
@@ -276,11 +237,6 @@ namespace BotRunner
 
         private void UpdateBehaviorTree(WoWActivitySnapshot? incomingActivityMemberState)
         {
-<<<<<<< HEAD
-            // Check for new incoming actions FIRST â€” they can interrupt a running tree
-            if (_objectManager.HasEnteredWorld
-                && incomingActivityMemberState.CurrentAction != null
-=======
             // Check for new incoming actions FIRST — they can interrupt a running tree
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
@@ -304,7 +260,6 @@ namespace BotRunner
 
             if (playerWorldReady
                 && incomingActivityMemberState?.CurrentAction != null
->>>>>>> cpp_physics_system
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
             {
                 var action = incomingActivityMemberState.CurrentAction;
@@ -348,29 +303,10 @@ namespace BotRunner
                 return;
             }
 
-<<<<<<< HEAD
-            // Already in world â€” skip all login/charselect checks and go straight to InWorld handling.
-            // Without this guard, ICharacterSelectScreen implementations that return HasReceivedCharacterList=false
-            // when InWorld (e.g., FG's FgCharacterSelectScreen) cause an early return before InitializeTaskSequence.
-            if (_objectManager.HasEnteredWorld)
-            {
-                if (!_tasksInitialized)
-                {
-                    _tasksInitialized = true;
-                    InitializeTaskSequence();
-                }
-
-                _behaviorTree = null;
-                return;
-            }
-
-            if (_objectManager.LoginScreen?.IsLoggedIn != true)
-=======
             // Already in world — skip all login/charselect checks and go straight to InWorld handling.
             // Without this guard, ICharacterSelectScreen implementations that return HasReceivedCharacterList=false
             // when InWorld (e.g., FG's FgCharacterSelectScreen) cause an early return before InitializeTaskSequence.
             if (_objectManager.HasEnteredWorld)
->>>>>>> cpp_physics_system
             {
                 _everEnteredWorld = true;
                 if (!WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player))
@@ -389,8 +325,6 @@ namespace BotRunner
                 return;
             }
 
-<<<<<<< HEAD
-=======
             // CRITICAL: If we were ever in-world but HasEnteredWorld dropped transiently
             // (teleport, zone transition, continent crossing), do NOT fall through to the
             // login/charselect flow. That causes CreateCharacter/EnterWorld Lua spam while in-world.
@@ -418,7 +352,6 @@ namespace BotRunner
                 return;
             }
 
->>>>>>> cpp_physics_system
             if (_objectManager.RealmSelectScreen?.CurrentRealm == null)
             {
                 _behaviorTree = BuildRealmSelectionSequence();
@@ -435,17 +368,9 @@ namespace BotRunner
                 return;
             }
 
-<<<<<<< HEAD
-            if (_objectManager.CharacterSelectScreen?.CharacterSelects.Count == 0)
-            {
-                Class @class = WoWNameGenerator.ParseClassCode(_activitySnapshot.AccountName.Substring(2, 2));
-                Race race = WoWNameGenerator.ParseRaceCode(_activitySnapshot.AccountName[..2]);
-                Gender gender = WoWNameGenerator.DetermineGender(@class);
-=======
             Class @class = WoWNameGenerator.ResolveClass(_activitySnapshot.AccountName);
             Race race = WoWNameGenerator.ResolveRace(_activitySnapshot.AccountName);
             Gender gender = WoWNameGenerator.ResolveGender(@class);
->>>>>>> cpp_physics_system
 
             var charSelects = _objectManager.CharacterSelectScreen?.CharacterSelects;
 
@@ -489,14 +414,10 @@ namespace BotRunner
                 return;
             }
 
-<<<<<<< HEAD
-            // Not yet in world â€” build EnterWorld sequence
-=======
             // Character matches — clear any pending deletion flag
             _pendingCharacterDeletion = false;
 
             // Not yet in world — build EnterWorld sequence
->>>>>>> cpp_physics_system
             _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
         }
 
@@ -537,11 +458,7 @@ namespace BotRunner
             if ((DateTime.UtcNow - _lastDeathRecoveryPush).TotalSeconds < 5)
                 return;
 
-<<<<<<< HEAD
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
-=======
             var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
->>>>>>> cpp_physics_system
 
             // Dead but not ghost - release spirit first
             if (isCorpse)
@@ -560,11 +477,7 @@ namespace BotRunner
                 return;
             }
 
-<<<<<<< HEAD
-            // Ghost form â€” navigate to corpse and resurrect
-=======
             // Ghost form — navigate to corpse and resurrect
->>>>>>> cpp_physics_system
             if (isGhost)
             {
                 if (!_autoRetrieveCorpseTaskEnabled)
@@ -653,11 +566,7 @@ namespace BotRunner
                 return;
 
             _lastKnownAlivePosition = new Position(pos!.X, pos.Y, pos.Z);
-<<<<<<< HEAD
-            DiagLog($"DeathRecovery: update last alive pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
-=======
             // DiagLog removed: fires every tick per bot, saturates stdout pipe with 10+ bots
->>>>>>> cpp_physics_system
         }
 
         private void InitializeTaskSequence()
@@ -675,15 +584,9 @@ namespace BotRunner
             {
                 var @class = WoWNameGenerator.ResolveClass(accountName);
 
-<<<<<<< HEAD
-                // IdleTask sits at the bottom of the stack â€” does nothing.
-                // StateManager sends actions via IPC that build behavior trees.
-                // Push tasks in reverse order (stack is LIFO)
-=======
                 // IdleTask stays at the bottom of the stack until a live test or coordinator
                 // explicitly sends work. Startup travel is test-owned now, so do not inject
                 // default wait/teleport tasks here.
->>>>>>> cpp_physics_system
                 _botTasks.Push(new Tasks.IdleTask(context));
                 Log.Information("[BOT RUNNER] Initialized idle task sequence for {Account} using {Profile} ({Class})",
                     accountName, _container.ClassContainer.Name, @class);

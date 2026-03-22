@@ -1,9 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-<<<<<<< HEAD
-=======
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
@@ -25,11 +22,7 @@ namespace MageFrost.Tasks
             if (IsKiting)
                 return;
 
-<<<<<<< HEAD
-            if (Update(30))
-=======
             if (Update(GetSpellRange(FrostboltBaseRange)))
->>>>>>> cpp_physics_system
                 return;
 
             PerformCombatRotation();
@@ -48,11 +41,7 @@ namespace MageFrost.Tasks
             var distance = player.Position.DistanceTo(target.Position);
 
             // Interrupt casters
-<<<<<<< HEAD
-            TryCastSpell(Counterspell, 0, 30, target.IsCasting);
-=======
             TryCastSpell(Counterspell, 0f, GetSpellRange(CounterspellBaseRange), target.IsCasting);
->>>>>>> cpp_physics_system
 
             // Ice Barrier for damage prevention
             TryCastSpell(IceBarrier, condition: !player.HasBuff(IceBarrier), castOnSelf: true);
@@ -61,22 +50,6 @@ namespace MageFrost.Tasks
             TryCastSpell(ColdSnap, condition: player.HealthPercent < 30, castOnSelf: true);
 
             // Frost Nova + kite when target is in melee
-<<<<<<< HEAD
-            TryCastSpell(FrostNova, 0, 10, distance < 10, callback: () => StartKite(2500));
-
-            // Cone of Cold for close range
-            TryCastSpell(ConeOfCold, 0, 8, distance < 8);
-
-            // Shatter combo on frozen/FoF targets
-            TryCastSpell(DeepFreeze, 0, 30, player.HasBuff(FingersOfFrost));
-            TryCastSpell(IceLance, 0, 30, player.HasBuff(FingersOfFrost));
-
-            // Primary nuke
-            TryCastSpell(Frostbolt, 0, 30);
-
-            // Instant damage when moving
-            TryCastSpell(FireBlast, 0, 20);
-=======
             TryCastSpell(FrostNova, 0f, 10f, distance < 10, callback: () => StartKite(2500));
 
             // Cone of Cold for close range
@@ -91,7 +64,6 @@ namespace MageFrost.Tasks
 
             // Instant damage when moving
             TryCastSpell(FireBlast, 0f, GetSpellRange(FireBlastBaseRange));
->>>>>>> cpp_physics_system
 
             // Wand fallback
             if (player.ManaPercent < 5)

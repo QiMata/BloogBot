@@ -10,18 +10,6 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-<<<<<<< HEAD
-/// Quest interaction integration test - dual-client validation.
-///
-/// Flow per client:
-///   1) Ensure strict-alive setup from snapshot state.
-///   2) Ensure test quest is absent.
-///   3) Add quest via GM and assert snapshot quest-log presence.
-///   4) Complete quest via GM and assert completed-or-removed state in snapshot.
-///   5) Remove quest via GM and assert snapshot quest-log absence.
-/// </summary>
-[RequiresMangosStack]
-=======
 /// Quest snapshot-plumbing coverage — validates GM-driven quest state propagation.
 ///
 /// Tests quest-log field projection (QuestLog1/2/3) through the snapshot pipeline,
@@ -35,21 +23,13 @@ namespace BotRunner.Tests.LiveValidation;
 ///   3) .quest complete -> assert QuestLog2/3 state change.
 ///   4) .quest remove -> assert quest absence from snapshot.
 /// </summary>
->>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class QuestInteractionTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-<<<<<<< HEAD
-    private const int TestQuestId = 783; // A Threat Within
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-=======
     private const int TestQuestId = 786; // Encroachment (kill 4 Quilboar + 4 Scouts — has countable objectives)
->>>>>>> cpp_physics_system
 
     public QuestInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -63,17 +43,6 @@ public class QuestInteractionTests
     public async Task Quest_AddCompleteAndRemove_AreReflectedInSnapshots()
     {
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
-<<<<<<< HEAD
-        await RunQuestScenario(_bot.BgAccountName!, "BG");
-
-        if (_bot.ForegroundBot != null)
-        {
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ===");
-            await RunQuestScenario(_bot.FgAccountName!, "FG");
-        }
-        else
-        {
-=======
 
         if (_bot.IsFgActionable)
         {
@@ -87,78 +56,12 @@ public class QuestInteractionTests
         else
         {
             await RunQuestScenario(_bot.BgAccountName!, "BG");
->>>>>>> cpp_physics_system
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
     }
 
     private async Task RunQuestScenario(string account, string label)
     {
-<<<<<<< HEAD
-        await EnsureStrictAliveAsync(account, label);
-        await EnsureQuestAbsentAsync(account, label, TestQuestId);
-
-        _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
-        var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(addTrace, label, ".quest add");
-
-        var added = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: true, TimeSpan.FromSeconds(12));
-        Assert.True(added, $"[{label}] Quest {TestQuestId} should appear in ActivitySnapshot quest log after add.");
-        await _bot.RefreshSnapshotsAsync();
-        var addedSnap = await _bot.GetSnapshotAsync(account);
-        var addedQuest = addedSnap?.Player?.QuestLogEntries?.FirstOrDefault(q => q.QuestLog1 == (uint)TestQuestId);
-
-        _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
-        var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(completeTrace, label, ".quest complete");
-
-        var completedOrChanged = await WaitForQuestCompletedChangedOrRemovedAsync(
-            account,
-            TestQuestId,
-            addedQuest?.QuestLog2 ?? 0,
-            addedQuest?.QuestLog3 ?? 0,
-            TimeSpan.FromSeconds(12));
-        var completionReportedInChat = completeTrace.ChatMessages.Concat(completeTrace.ErrorMessages)
-            .Any(m => m.Contains("completed", StringComparison.OrdinalIgnoreCase));
-        Assert.True(
-            completedOrChanged || completionReportedInChat,
-            $"[{label}] Quest {TestQuestId} completion should be reflected by quest-log change/removal or explicit completed chat response.");
-
-        _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
-        var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(removeTrace, label, ".quest remove");
-
-        var removed = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: false, TimeSpan.FromSeconds(12));
-        Assert.True(removed, $"[{label}] Quest {TestQuestId} should be absent from ActivitySnapshot quest log after remove.");
-    }
-
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"  [{label}] Not strict-alive; reviving before quest setup.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
-                return;
-        }
-
-        global::Tests.Infrastructure.Skip.If(true, $"{label}: could not establish strict-alive setup state.");
-    }
-
-=======
         await _bot.EnsureCleanSlateAsync(account, label);
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
@@ -229,7 +132,6 @@ public class QuestInteractionTests
     private Task EnsureStrictAliveAsync(string account, string label)
         => _bot.EnsureStrictAliveAsync(account, label);
 
->>>>>>> cpp_physics_system
     private async Task EnsureQuestAbsentAsync(string account, string label, int questId)
     {
         await _bot.RefreshSnapshotsAsync();
@@ -238,11 +140,8 @@ public class QuestInteractionTests
             return;
 
         _output.WriteLine($"  [{label}] Quest {questId} already present; removing for clean setup.");
-<<<<<<< HEAD
-=======
         await _bot.BotSelectSelfAsync(account);
         await Task.Delay(300);
->>>>>>> cpp_physics_system
         var trace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {questId}", captureResponse: true, delayMs: 1000);
         AssertCommandSucceeded(trace, label, ".quest remove (setup)");
 
@@ -300,37 +199,8 @@ public class QuestInteractionTests
     {
         Assert.Equal(ResponseResult.Success, trace.DispatchResult);
 
-<<<<<<< HEAD
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
-    }
-
-    private static bool ContainsCommandRejection(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
-=======
         var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 
->>>>>>> cpp_physics_system
 }

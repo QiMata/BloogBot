@@ -289,13 +289,8 @@ namespace BotRunner.Tests
             // Arrange: snapshot with inventory data
             var snapshot = new WoWActivitySnapshot
             {
-<<<<<<< HEAD
-                AccountName = "ORWR1",
-                CharacterName = "Dralrahgra",
-=======
                 AccountName = "TESTBOT1",
                 CharacterName = "Testbot",
->>>>>>> cpp_physics_system
                 ScreenState = "InWorld",
                 Player = new WoWPlayer()
             };
@@ -339,8 +334,6 @@ namespace BotRunner.Tests
         }
 
         [Fact]
-<<<<<<< HEAD
-=======
         public void DeathState_GhostForm_ShouldRoundTrip()
         {
             // Player is dead (health=0), stand state DEAD (bytes1 & 0xFF == 7),
@@ -490,7 +483,6 @@ namespace BotRunner.Tests
         }
 
         [Fact]
->>>>>>> cpp_physics_system
         public void InventoryMap_ShouldSurviveMergeFromDeserialization()
         {
             // Test using MergeFrom (how ProtobufSocketClient deserializes) instead of ParseFrom

@@ -41,30 +41,12 @@ public class FrameByFramePhysicsTests
     [Fact]
     public void FlatGround_WalkForward_MaintainsGroundContact()
     {
-<<<<<<< HEAD
-        // Arrange
-        var start = WoWWorldCoordinates.ElwynnForest.NorthshireAbbey.AbbeyEntrance;
-        
-        var input = new PhysicsInput
-        {
-            MapId = start.MapId,
-            X = start.X,
-            Y = start.Y,
-            Z = start.Z,
-            Orientation = 0,  // Facing North (+Y)
-            MoveFlags = (uint)MoveFlags.Forward,
-            RunSpeed = 7.0f,
-            SwimSpeed = 4.0f,
-            FlightSpeed = 0
-        };
-=======
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
         // Arrange — Orgrimmar Valley of Strength, confirmed flat terrain
         var start = WoWWorldCoordinates.Durotar.Orgrimmar.ValleyOfStrength;
 
         var input = CreateInput(start, MoveFlags.Forward, runSpeed: 7.0f);
->>>>>>> cpp_physics_system
 
         const float dt = 1.0f / 60.0f;
         const int framesToSimulate = 60; // 1 second of movement
@@ -224,36 +206,10 @@ public class FrameByFramePhysicsTests
         const float dt = 1.0f / 60.0f;
         const int framesToSimulate = 60; // ~1 second covers full jump arc
 
-<<<<<<< HEAD
-        // Calculate expected jump arc using physics
-        // h(t) = h0 + v0*t - 0.5*g*t�
-        // v(t) = v0 - g*t
-        
-        var expectedPositions = new List<(float time, float z, float vz)>();
-        float time = 0;
-        float z = start.Z;
-        float vz = PhysicsTestConstants.JumpVelocity;
-
-        while (z >= start.Z || vz > 0)
-        {
-            expectedPositions.Add((time, z, vz));
-            
-            // Euler integration (matches simple physics)
-            vz -= PhysicsTestConstants.Gravity * dt;
-            z += vz * dt;
-            time += dt;
-
-            if (time > 2.0f) break;  // Safety limit
-        }
-
-        // Calculate max height
-        // max height = v0� / (2g)
-=======
         var frames = SimulatePhysics(input, framesToSimulate, dt);
         WriteFrameTrace("StandingJump", frames);
 
         // Theoretical jump characteristics
->>>>>>> cpp_physics_system
         float expectedMaxHeight = (PhysicsTestConstants.JumpVelocity * PhysicsTestConstants.JumpVelocity) /
                                   (2.0f * PhysicsTestConstants.Gravity);
         float timeToApex = PhysicsTestConstants.JumpVelocity / PhysicsTestConstants.Gravity;

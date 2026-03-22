@@ -1,13 +1,9 @@
-<<<<<<< HEAD
-using GameData.Core.Interfaces;
-=======
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Collections.Generic;
 using System.Linq;
 using System;
->>>>>>> cpp_physics_system
 
 namespace BotRunner.Combat
 {
@@ -25,13 +21,10 @@ namespace BotRunner.Combat
         // Fishing skill ID
         public const uint FishingSkillId = 356;
 
-<<<<<<< HEAD
-=======
         // Fishing pole weapon proficiency — required to equip fishing poles.
         // Real trainers grant this alongside fishing spells; GM .learn does not.
         public const uint FishingPoleProficiency = 7738;
 
->>>>>>> cpp_physics_system
         // Fishing bobber display IDs (vanilla 1.12.1)
         public const uint BobberDisplayId = 668;
 
@@ -65,8 +58,6 @@ namespace BotRunner.Combat
             FishingPole,            // +0
         ];
 
-<<<<<<< HEAD
-=======
         private static readonly HashSet<uint> FishingPoolEntries =
         [
             180248, // School of Tastyfish
@@ -83,7 +74,6 @@ namespace BotRunner.Combat
 
         public static IReadOnlyCollection<uint> KnownFishingPoolEntries => FishingPoolEntries;
 
->>>>>>> cpp_physics_system
         /// <summary>
         /// Returns the highest fishing spell rank the character should have at a given skill level.
         /// </summary>
@@ -96,8 +86,6 @@ namespace BotRunner.Combat
         }
 
         /// <summary>
-<<<<<<< HEAD
-=======
         /// Returns the highest fishing rank currently present in the known-spell list.
         /// Rank-up packets supersede lower ranks server-side, so the spell book may only
         /// contain the highest learned fishing rank.
@@ -126,14 +114,11 @@ namespace BotRunner.Combat
         }
 
         /// <summary>
->>>>>>> cpp_physics_system
         /// Finds the best fishing lure in the player's inventory, preferring higher bonus.
         /// Returns null if no lure is found.
         /// </summary>
         public static IWoWItem? FindUsableLure(IObjectManager objectManager)
         {
-<<<<<<< HEAD
-=======
             var lureLocation = FindUsableLureInBags(objectManager);
             return lureLocation == null ? null : objectManager.GetItem(lureLocation.Value.bag, lureLocation.Value.slot);
         }
@@ -144,7 +129,6 @@ namespace BotRunner.Combat
         /// </summary>
         public static (int bag, int slot, uint itemId)? FindUsableLureInBags(IObjectManager objectManager)
         {
->>>>>>> cpp_physics_system
             foreach (var (itemId, _) in LureTiers)
             {
                 for (int bag = 0; bag < 5; bag++)
@@ -154,18 +138,11 @@ namespace BotRunner.Combat
                     {
                         var item = objectManager.GetItem(bag, slot);
                         if (item != null && item.ItemId == itemId)
-<<<<<<< HEAD
-                            return item;
-                    }
-                }
-            }
-=======
                             return (bag, slot, itemId);
                     }
                 }
             }
 
->>>>>>> cpp_physics_system
             return null;
         }
 
@@ -192,8 +169,6 @@ namespace BotRunner.Combat
         }
 
         /// <summary>
-<<<<<<< HEAD
-=======
         /// Checks if a fishing pole is already equipped in any weapon slot.
         /// </summary>
         public static bool HasFishingPoleEquipped(IObjectManager objectManager)
@@ -318,7 +293,6 @@ namespace BotRunner.Combat
         }
 
         /// <summary>
->>>>>>> cpp_physics_system
         /// Checks if any of the known fishing pole item IDs match the given item ID.
         /// </summary>
         public static bool IsFishingPole(uint itemId) =>

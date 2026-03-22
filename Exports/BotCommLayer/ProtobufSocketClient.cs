@@ -12,10 +12,7 @@ namespace BotCommLayer
         where TRequest : IMessage<TRequest>, new()
         where TResponse : IMessage<TResponse>, new()
     {
-<<<<<<< HEAD
-=======
         private bool _disposed;
->>>>>>> cpp_physics_system
         private TcpClient? _client;
         private NetworkStream? _stream;
         private readonly ILogger? _logger;
@@ -85,8 +82,6 @@ namespace BotCommLayer
 
         public TResponse SendMessage(TRequest request)
         {
-<<<<<<< HEAD
-=======
             return SendMessage(request, readTimeoutOverrideMs: null, writeTimeoutOverrideMs: null);
         }
 
@@ -97,7 +92,6 @@ namespace BotCommLayer
 
         private TResponse SendMessage(TRequest request, int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
         {
->>>>>>> cpp_physics_system
             if (_stream == null && _ipAddress == null)
             {
                 throw new InvalidOperationException("Client is not connected. Cannot send message.");
@@ -109,10 +103,7 @@ namespace BotCommLayer
                 var previousWriteTimeout = _stream?.WriteTimeout;
                 try
                 {
-<<<<<<< HEAD
-=======
                     ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
->>>>>>> cpp_physics_system
                     return SendMessageInternal(request);
                 }
                 catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
@@ -124,10 +115,7 @@ namespace BotCommLayer
                         try
                         {
                             Connect();
-<<<<<<< HEAD
-=======
                             ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
->>>>>>> cpp_physics_system
                             _logger?.LogInformation($"Reconnected to {_ipAddress}:{_port}. Retrying message.");
                             return SendMessageInternal(request);
                         }
@@ -148,8 +136,6 @@ namespace BotCommLayer
             }
         }
 
-<<<<<<< HEAD
-=======
         private void ApplyTimeoutOverrides(int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
         {
             if (_stream == null)
@@ -174,7 +160,6 @@ namespace BotCommLayer
                 _stream.WriteTimeout = previousWriteTimeout.Value;
         }
 
->>>>>>> cpp_physics_system
         private TResponse SendMessageInternal(TRequest request)
         {
             if (_stream == null)

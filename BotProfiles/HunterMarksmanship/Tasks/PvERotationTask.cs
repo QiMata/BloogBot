@@ -51,17 +51,10 @@ namespace HunterMarksmanship.Tasks
             }
 
             // melee — apply Wing Clip then kite back to ranged distance
-<<<<<<< HEAD
-            if (bow != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
-                return;
-            TryCastSpell(MongooseBite, 0, 5);
-            TryCastSpell(RaptorStrike, 0, 5);
-=======
             if (bow != null && TryCastSpell(WingClip, 0f, meleeRange, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
                 return;
             TryCastSpell(MongooseBite, 0f, meleeRange);
             TryCastSpell(RaptorStrike, 0f, meleeRange);
->>>>>>> cpp_physics_system
         }
         public override void PerformCombatRotation() => Update();
     }

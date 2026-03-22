@@ -185,10 +185,7 @@ namespace GameData.Core.Interfaces
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);
         void CastSpell(int spellId, int rank = -1, bool castOnSelf = false);
-<<<<<<< HEAD
-=======
         void CastSpellAtLocation(int spellId, float x, float y, float z);
->>>>>>> cpp_physics_system
         void CastSpellOnGameObject(int spellId, ulong gameObjectGuid);
         void InteractWithGameObject(ulong gameObjectGuid);
         bool CanCastSpell(int spellId, ulong targetGuid);
@@ -285,8 +282,6 @@ namespace GameData.Core.Interfaces
 #else
         Task CraftAvailableRecipesAsync(CancellationToken ct = default);
 #endif
-<<<<<<< HEAD
-=======
 
         // Quest — FG: Lua quest frame, BG: packet-based via AgentFactory
 #if NET8_0_OR_GREATER
@@ -314,6 +309,5 @@ namespace GameData.Core.Interfaces
         Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default);
         Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default);
 #endif
->>>>>>> cpp_physics_system
     }
 }

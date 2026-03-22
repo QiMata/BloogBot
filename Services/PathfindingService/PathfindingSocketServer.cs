@@ -826,19 +826,12 @@ namespace PathfindingService
 				standingOnLocalY = proto.StandingOnLocalY,
 				standingOnLocalZ = proto.StandingOnLocalZ,
 
-<<<<<<< HEAD
-				// Behaviour flags: 0 = default (no TRUST_INPUT_VELOCITY).
-				// The proto field physics_flags (38) is defined but not yet
-				// wired into generated code. Always 0 for live operation.
-				physicsFlags = 0
-=======
 				// Behaviour flags from protobuf (e.g. TRUST_INPUT_VELOCITY).
 				physicsFlags = proto.PhysicsFlags,
 
 				// Step-up height persistence
 				stepUpBaseZ = proto.StepUpBaseZ,
 				stepUpAge = proto.StepUpAge
->>>>>>> cpp_physics_system
             };
         }
 

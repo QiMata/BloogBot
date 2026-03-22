@@ -2,20 +2,14 @@ using BotRunner.Combat;
 using BotRunner.Clients;
 using BotRunner.Constants;
 using BotRunner.Interfaces;
-<<<<<<< HEAD
-=======
 using BotRunner.Movement;
->>>>>>> cpp_physics_system
 using BotRunner.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
-<<<<<<< HEAD
-=======
 using Pathfinding;
->>>>>>> cpp_physics_system
 using System.Collections.Generic;
 using System.Linq;
 
@@ -41,10 +35,6 @@ internal static class AtomicTaskTestHelpers
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)
             ]);
-<<<<<<< HEAD
-        configurePathfinding?.Invoke(pathfinding);
-
-=======
         pathfinding
             .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
             .Returns(true);
@@ -65,7 +55,6 @@ internal static class AtomicTaskTestHelpers
             .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath, Race race, Gender gender) =>
                 pathfinding.Object.GetPath(mapId, start, end, smoothPath));
 
->>>>>>> cpp_physics_system
         ctx.Setup(c => c.ObjectManager).Returns(om.Object);
         ctx.Setup(c => c.Config).Returns(new BotBehaviorConfig());
         ctx.Setup(c => c.EventHandler).Returns(eventHandler.Object);
@@ -96,8 +85,6 @@ internal static class AtomicTaskTestHelpers
         player.Setup(p => p.MapId).Returns(0);
         return player;
     }
-<<<<<<< HEAD
-=======
 
     internal static Mock<IWoWItem> CreateItem(uint itemId, uint stackCount = 1)
     {
@@ -130,7 +117,6 @@ internal static class AtomicTaskTestHelpers
 
         stateEnteredAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
     }
->>>>>>> cpp_physics_system
 }
 
 // ==================== IdleTask Tests ====================
@@ -249,8 +235,6 @@ public class CastSpellTaskTests
     }
 }
 
-<<<<<<< HEAD
-=======
 // ==================== FishingTask Tests ====================
 
 public class FishingTaskTests
@@ -629,7 +613,6 @@ public class FishingTaskTests
     }
 }
 
->>>>>>> cpp_physics_system
 // ==================== UseItemTask Tests ====================
 
 public class UseItemTaskTests
@@ -1073,8 +1056,6 @@ public class MoveToPositionTaskTests
 
 public class RetrieveCorpseTaskTests
 {
-<<<<<<< HEAD
-=======
     [Fact]
     public void FormatNavigationTraceSummary_IncludesKeyFieldsAndTruncatesPathsAndSamples()
     {
@@ -1168,7 +1149,6 @@ public class RetrieveCorpseTaskTests
         Assert.Equal(0, info.StepUpCount);
     }
 
->>>>>>> cpp_physics_system
     private static void ForceRunbackSampleReady(RetrieveCorpseTask task)
     {
         var sampleField = typeof(RetrieveCorpseTask).GetField(
@@ -1178,15 +1158,6 @@ public class RetrieveCorpseTaskTests
         sampleField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(2));
     }
 
-<<<<<<< HEAD
-    private static void ForceExpireUnstickManeuver(RetrieveCorpseTask task)
-    {
-        var untilField = typeof(RetrieveCorpseTask).GetField(
-            "_unstickManeuverUntilUtc",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Missing _unstickManeuverUntilUtc field.");
-        untilField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(1));
-=======
     private static void ForceRunbackProgressExpired(RetrieveCorpseTask task, float bestDistance2D = 95f)
     {
         var bestField = typeof(RetrieveCorpseTask).GetField(
@@ -1224,7 +1195,6 @@ public class RetrieveCorpseTaskTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Missing _lastRunbackWaypointProgressUtc field.");
         lastProgressField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(12));
->>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -1245,11 +1215,7 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
-<<<<<<< HEAD
-        om.Verify(o => o.StopAllMovement(), Times.Once);
-=======
         om.Verify(o => o.ForceStopImmediate(), Times.Once);
->>>>>>> cpp_physics_system
         om.Verify(o => o.RetrieveCorpse(), Times.Once);
         Assert.Single(stack);
     }
@@ -1271,11 +1237,7 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
-<<<<<<< HEAD
-        om.Verify(o => o.StopAllMovement(), Times.Once);
-=======
         om.Verify(o => o.ForceStopImmediate(), Times.Once);
->>>>>>> cpp_physics_system
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
         Assert.Empty(stack);
     }
@@ -1296,21 +1258,12 @@ public class RetrieveCorpseTaskTests
         // Should still be on stack (navigating)
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
-<<<<<<< HEAD
-=======
         om.Verify(o => o.StopMovement(
             ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
->>>>>>> cpp_physics_system
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
-<<<<<<< HEAD
-    }
-
-    [Fact]
-    public void Update_FarFromCorpse_NoPath_DrivesFallbackTarget()
-=======
         om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
     }
 
@@ -1471,7 +1424,6 @@ public class RetrieveCorpseTaskTests
 
     [Fact]
     public void Update_FarFromCorpse_NoPath_StopsAndTriggersRecoveryInsteadOfDirectFallbackDrive()
->>>>>>> cpp_physics_system
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -1488,20 +1440,12 @@ public class RetrieveCorpseTaskTests
 
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
-<<<<<<< HEAD
-        om.Verify(o => o.StopAllMovement(), Times.Never);
-        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
-            MathF.Abs(p.X - corpsePos.X) < 0.01f &&
-            MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
-            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
-=======
         om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
         om.Verify(o => o.StopAllMovement(), Times.AtLeastOnce);
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
->>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -1530,15 +1474,6 @@ public class RetrieveCorpseTaskTests
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
-<<<<<<< HEAD
-            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.AtLeastOnce);
-        om.Verify(o => o.StartMovement(It.Is<ControlBits>(b =>
-            b == ControlBits.StrafeLeft || b == ControlBits.StrafeRight || b == ControlBits.Back)), Times.AtLeastOnce);
-    }
-
-    [Fact]
-    public void Update_AfterStallRecovery_ExecutesAndStopsUnstickManeuver()
-=======
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
         om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
         om.Verify(o => o.StopMovement(It.IsAny<ControlBits>()), Times.Never);
@@ -1546,7 +1481,6 @@ public class RetrieveCorpseTaskTests
 
     [Fact]
     public void Update_AfterStallRecovery_DoesNotIssueSyntheticStrafeCommands()
->>>>>>> cpp_physics_system
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -1566,15 +1500,6 @@ public class RetrieveCorpseTaskTests
             task.Update();
         }
 
-<<<<<<< HEAD
-        task.Update();
-        ForceExpireUnstickManeuver(task);
-        task.Update();
-
-        Assert.Single(stack);
-        om.Verify(o => o.StartMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
-        om.Verify(o => o.StopMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
-=======
         Assert.Single(stack);
         om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
         om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
@@ -1645,7 +1570,6 @@ public class RetrieveCorpseTaskTests
 
         Assert.Single(stack);
         om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
->>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -1667,11 +1591,7 @@ public class RetrieveCorpseTaskTests
         task.Update();
 
         Assert.Single(stack);
-<<<<<<< HEAD
-        om.Verify(o => o.StopAllMovement(), Times.Once);
-=======
         om.Verify(o => o.ForceStopImmediate(), Times.Once);
->>>>>>> cpp_physics_system
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
     }

@@ -19,12 +19,8 @@ namespace HunterSurvival.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(34))
-=======
             var rangedRange = GetSpellRange(RangedAttackRange);
             if (Update(rangedRange))
->>>>>>> cpp_physics_system
                 return;
 
             ObjectManager.StopAllMovement();

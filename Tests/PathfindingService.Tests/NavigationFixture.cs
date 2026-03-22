@@ -15,10 +15,7 @@ public class NavigationFixture : IDisposable
 
     public NavigationFixture()
     {
-<<<<<<< HEAD
-=======
         EnsureDataDir();
->>>>>>> cpp_physics_system
         VerifyNavigationDll();
         VerifyNavDataExists();
 
@@ -47,50 +44,15 @@ public class NavigationFixture : IDisposable
     private static void VerifyNavDataExists()
     {
         var dataRoot = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
-<<<<<<< HEAD
-        string mmapsPath;
-
-        if (!string.IsNullOrEmpty(dataRoot))
-        {
-            mmapsPath = Path.Combine(dataRoot, "mmaps");
-            if (!Directory.Exists(mmapsPath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"WWOW_DATA_DIR is set to '{dataRoot}' but mmaps/ subdirectory not found.\n" +
-                    $"Please ensure nav data exists at: {mmapsPath}\n" +
-                    "Run setup.ps1 to provision data, or unset WWOW_DATA_DIR to use DLL-relative path.");
-            }
-=======
         string resolvedRoot;
 
         if (!string.IsNullOrEmpty(dataRoot))
         {
             resolvedRoot = dataRoot;
->>>>>>> cpp_physics_system
         }
         else
         {
             var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-<<<<<<< HEAD
-            var testOutputDir = Path.GetDirectoryName(assemblyLocation);
-
-            if (testOutputDir == null)
-                throw new InvalidOperationException("Cannot determine test output directory");
-
-            mmapsPath = Path.Combine(testOutputDir, "mmaps");
-
-            if (!Directory.Exists(mmapsPath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"Navigation data not found. Expected mmaps/ at: {mmapsPath}\n" +
-                    "Please either:\n" +
-                    "  1. Set WWOW_DATA_DIR environment variable to point to your nav data root, or\n" +
-                    "  2. Run setup.ps1 to copy nav data to the test output directory, or\n" +
-                    $"  3. Manually copy maps/, mmaps/, and vmaps/ to: {testOutputDir}");
-            }
-        }
-
-=======
             resolvedRoot = Path.GetDirectoryName(assemblyLocation)
                 ?? throw new InvalidOperationException("Cannot determine test output directory");
         }
@@ -117,7 +79,6 @@ public class NavigationFixture : IDisposable
         }
 
         var mmapsPath = Path.Combine(resolvedRoot, "mmaps");
->>>>>>> cpp_physics_system
         var mmtileFiles = Directory.GetFiles(mmapsPath, "*.mmtile");
         if (mmtileFiles.Length == 0)
         {
@@ -128,8 +89,6 @@ public class NavigationFixture : IDisposable
         }
     }
 
-<<<<<<< HEAD
-=======
     /// <summary>
     /// Auto-discovers WWOW_DATA_DIR from the Bot build output directory
     /// (same logic as Navigation.Physics.Tests.PhysicsEngineFixture).
@@ -160,6 +119,5 @@ public class NavigationFixture : IDisposable
         }
     }
 
->>>>>>> cpp_physics_system
     public void Dispose() { /* Navigation lives for the AppDomain – nothing to do. */ }
 }

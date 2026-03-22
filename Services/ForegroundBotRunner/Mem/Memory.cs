@@ -323,11 +323,7 @@ namespace ForegroundBotRunner.Mem
         // WriteProcessMemory via OpenProcess fails in .NET 8 injected context — use direct writes instead.
         static internal void WriteBytes(nint address, byte[] bytes)
         {
-<<<<<<< HEAD
-            if (address == nint.Zero || bytes.Length == 0)
-=======
             if (IsInvalidAddress(address) || bytes.Length == 0)
->>>>>>> cpp_physics_system
                 return;
 
             // Make the target page writable + executable

@@ -45,15 +45,6 @@ namespace DruidRestoration.Tasks
             // Group healing: heal party members before DPS
             if (IsInGroup)
             {
-<<<<<<< HEAD
-                if (TryCastHeal(Rejuvenation, 80, 40)) return;
-                if (TryCastHeal(HealingTouch, 55, 40)) return;
-            }
-            else
-            {
-                TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
-                TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
-=======
                 if (TryCastHeal(Rejuvenation, 80, GetSpellRange(HealBaseRange))) return;
                 if (TryCastHeal(HealingTouch, 55, GetSpellRange(HealBaseRange))) return;
             }
@@ -61,7 +52,6 @@ namespace DruidRestoration.Tasks
             {
                 TryCastSpell(Rejuvenation, condition: ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
                 TryCastSpell(HealingTouch, condition: ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
->>>>>>> cpp_physics_system
             }
 
             // offensive abilities

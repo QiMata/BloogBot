@@ -35,14 +35,10 @@ namespace GameData.Core.Interfaces
 
         /// <summary>True when the ghost is within reclaim range of the corpse and the recovery delay has elapsed.</summary>
         bool CanResurrect { get; }
-<<<<<<< HEAD
-        int CorpseRecoveryDelaySeconds { get; }
-=======
 
         /// <summary>Server-enforced cooldown (seconds) before the player can reclaim their corpse. Typically 30s after death.</summary>
         int CorpseRecoveryDelaySeconds { get; }
 
->>>>>>> cpp_physics_system
         bool InBattleground { get; }
         bool HasQuestTargets { get; }
     }

@@ -1,16 +1,10 @@
 using Communication;
 using GameData.Core.Enums;
-<<<<<<< HEAD
-using Serilog;
-using System;
-using System.Collections.Generic;
-=======
 using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
->>>>>>> cpp_physics_system
 using System.Threading;
 using Xas.FluentBehaviourTree;
 
@@ -20,11 +14,7 @@ namespace BotRunner
     {
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-<<<<<<< HEAD
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
-=======
             var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
->>>>>>> cpp_physics_system
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 
@@ -40,10 +30,6 @@ namespace BotRunner
                         builder.Splice(BuildGoToSequence((float)actionEntry.Item2[0], (float)actionEntry.Item2[1], (float)actionEntry.Item2[2], (float)actionEntry.Item2[3]));
                         break;
                     case CharacterAction.InteractWith:
-<<<<<<< HEAD
-                        builder.Splice(BuildInteractWithSequence(UnboxGuid(actionEntry.Item2[0])));
-                        break;
-=======
                     {
                         var interactGuid = UnboxGuid(actionEntry.Item2[0]);
                         // Try GameObjects first; fall back to NPC interaction via AgentFactory
@@ -63,7 +49,6 @@ namespace BotRunner
                         }
                         break;
                     }
->>>>>>> cpp_physics_system
 
                     case CharacterAction.SelectGossip:
                         builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
@@ -73,10 +58,6 @@ namespace BotRunner
                         builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
                         break;
 
-<<<<<<< HEAD
-                    case CharacterAction.AcceptQuest:
-                        builder.Splice(AcceptQuestSequence);
-=======
                     case CharacterAction.VisitFlightMaster:
                         builder.Do("Queue Flight Master Visit Task", time =>
                         {
@@ -105,13 +86,10 @@ namespace BotRunner
                         {
                             builder.Splice(AcceptQuestSequence);
                         }
->>>>>>> cpp_physics_system
                         break;
                     case CharacterAction.DeclineQuest:
                         builder.Splice(DeclineQuestSequence);
                         break;
-<<<<<<< HEAD
-=======
                     case CharacterAction.AbandonQuest:
                         // Params: [0]=questLogSlot (byte index in quest log)
                         if (actionEntry.Item2.Count >= 1)
@@ -129,14 +107,10 @@ namespace BotRunner
                             });
                         }
                         break;
->>>>>>> cpp_physics_system
                     case CharacterAction.SelectReward:
                         builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.CompleteQuest:
-<<<<<<< HEAD
-                        builder.Splice(CompleteQuestSequence);
-=======
                         // With params: [0]=npcGuid, [1]=questId, optional [2]=rewardIndex
                         // Without params: legacy QuestFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
@@ -155,7 +129,6 @@ namespace BotRunner
                         {
                             builder.Splice(CompleteQuestSequence);
                         }
->>>>>>> cpp_physics_system
                         break;
 
                     case CharacterAction.TrainSkill:
@@ -165,8 +138,6 @@ namespace BotRunner
                         builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
                         break;
 
-<<<<<<< HEAD
-=======
                     case CharacterAction.VisitTrainer:
                         builder.Do("Queue Trainer Visit Task", time =>
                         {
@@ -177,7 +148,6 @@ namespace BotRunner
                         });
                         break;
 
->>>>>>> cpp_physics_system
                     case CharacterAction.OfferTrade:
                         builder.Splice(BuildOfferTradeSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
@@ -250,12 +220,9 @@ namespace BotRunner
                     case CharacterAction.StartMeleeAttack:
                         builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
-<<<<<<< HEAD
-=======
                     case CharacterAction.StartRangedAttack:
                         builder.Splice(BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
->>>>>>> cpp_physics_system
                     case CharacterAction.StopAttack:
                         builder.Splice(StopAttackSequence);
                         break;
@@ -263,8 +230,6 @@ namespace BotRunner
                         var castTargetGuid = actionEntry.Item2.Count > 1 ? UnboxGuid(actionEntry.Item2[1]) : 0UL;
                         builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
-<<<<<<< HEAD
-=======
                     case CharacterAction.StartFishing:
                     {
                         var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2);
@@ -305,7 +270,6 @@ namespace BotRunner
                         });
                         break;
                     }
->>>>>>> cpp_physics_system
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
                         break;
@@ -342,9 +306,6 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.BuyItem:
-<<<<<<< HEAD
-                        builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
-=======
                         // With vendorGuid: [0]=vendorGuid, [1]=itemId, [2]=quantity — packet-based
                         // Without: [0]=slotId, [1]=quantity — legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 3)
@@ -363,21 +324,11 @@ namespace BotRunner
                         {
                             builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         }
->>>>>>> cpp_physics_system
                         break;
                     case CharacterAction.BuybackItem:
                         builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         break;
                     case CharacterAction.SellItem:
-<<<<<<< HEAD
-                        builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
-                        break;
-                    case CharacterAction.RepairItem:
-                        builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
-                        break;
-                    case CharacterAction.RepairAllItems:
-                        builder.Splice(RepairAllItemsSequence);
-=======
                         // With vendorGuid: [0]=vendorGuid, [1]=bagId, [2]=slotId, [3]=quantity — packet-based
                         // Without: [0]=bagId, [1]=slotId, [2]=quantity — legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 4)
@@ -445,7 +396,6 @@ namespace BotRunner
                                 _botTasks.Push(new Tasks.VendorVisitTask(context));
                             return BehaviourTreeStatus.Success;
                         });
->>>>>>> cpp_physics_system
                         break;
 
                     case CharacterAction.DismissBuff:
@@ -484,8 +434,6 @@ namespace BotRunner
 
                     case CharacterAction.SendChat:
                         var chatMsg = (string)actionEntry.Item2[0];
-<<<<<<< HEAD
-=======
 
                         // Internal bot command: .targetself sets CMSG_SET_SELECTION to the
                         // player's own GUID without sending anything to server chat.
@@ -503,15 +451,11 @@ namespace BotRunner
                             break;
                         }
 
->>>>>>> cpp_physics_system
                         builder.Do($"Send Chat: {chatMsg}", time =>
                         {
                             var player = _objectManager.Player;
                             var isDeadOrGhost = player != null && IsDeadOrGhostState(player);
-<<<<<<< HEAD
-=======
                             DiagLog($"SENDCHAT-ACTION: chatMsg='{chatMsg}' dead={isDeadOrGhost} health={player?.Health ?? 0}");
->>>>>>> cpp_physics_system
                             if (isDeadOrGhost)
                             {
                                 Log.Information("[BOT RUNNER] Skipping chat while dead/ghost: {ChatMessage}", chatMsg);
@@ -520,10 +464,7 @@ namespace BotRunner
 
                             Log.Information($"[BOT RUNNER] Sending chat message: {chatMsg}");
                             _objectManager.SendChatMessage(chatMsg);
-<<<<<<< HEAD
-=======
                             DiagLog($"SENDCHAT-SENT: '{chatMsg}'");
->>>>>>> cpp_physics_system
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -576,13 +517,6 @@ namespace BotRunner
                         builder.Do("Retrieve Corpse", time =>
                         {
                             var player = _objectManager.Player;
-<<<<<<< HEAD
-                            if (player != null)
-                            {
-                                if (IsGhostState(player))
-                                {
-                                    var corpsePos = player.CorpsePosition;
-=======
                             DiagLog($"[RETRIEVE_DIAG] player={player != null} playerFlags=0x{(player != null ? (uint)player.PlayerFlags : 0u):X} hp={player?.Health ?? -1u}/{player?.MaxHealth ?? -1u}");
                             if (player != null)
                             {
@@ -592,17 +526,13 @@ namespace BotRunner
                                 {
                                     var corpsePos = player.CorpsePosition;
                                     DiagLog($"[RETRIEVE_DIAG] corpsePos=({corpsePos?.X:F1},{corpsePos?.Y:F1},{corpsePos?.Z:F1})");
->>>>>>> cpp_physics_system
                                     if (IsZeroPosition(corpsePos) && _lastKnownAlivePosition != null)
                                     {
                                         corpsePos = new GameData.Core.Models.Position(
                                             _lastKnownAlivePosition.X,
                                             _lastKnownAlivePosition.Y,
                                             _lastKnownAlivePosition.Z);
-<<<<<<< HEAD
-=======
                                         DiagLog($"[RETRIEVE_DIAG] using fallback corpsePos=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
->>>>>>> cpp_physics_system
                                     }
 
                                     if (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0)
@@ -611,12 +541,6 @@ namespace BotRunner
                                         {
                                             Log.Information("[BOT RUNNER] Queueing pathfinding corpse run to ({X:F0}, {Y:F0}, {Z:F0})",
                                                 corpsePos.X, corpsePos.Y, corpsePos.Z);
-<<<<<<< HEAD
-                                            _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
-                                        }
-                                        return BehaviourTreeStatus.Success;
-                                    }
-=======
                                             DiagLog($"[RETRIEVE_DIAG] PUSHING RetrieveCorpseTask corpse=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
                                             _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
                                         }
@@ -630,26 +554,19 @@ namespace BotRunner
                                     {
                                         DiagLog("[RETRIEVE_DIAG] corpsePos is ZERO, skipping task push");
                                     }
->>>>>>> cpp_physics_system
                                 }
 
                                 var reclaimDelay = player.CorpseRecoveryDelaySeconds;
                                 if (reclaimDelay > 0)
                                 {
                                     Log.Information("[BOT RUNNER] Corpse reclaim cooldown active ({Seconds}s remaining); waiting.", reclaimDelay);
-<<<<<<< HEAD
-=======
                                     DiagLog($"[RETRIEVE_DIAG] reclaimDelay={reclaimDelay}s — NOT pushing task");
->>>>>>> cpp_physics_system
                                     return BehaviourTreeStatus.Success;
                                 }
                             }
 
                             Log.Information("[BOT RUNNER] Retrieving corpse (CMSG_RECLAIM_CORPSE direct)");
-<<<<<<< HEAD
-=======
                             DiagLog("[RETRIEVE_DIAG] fallthrough to direct RetrieveCorpse()");
->>>>>>> cpp_physics_system
                             _objectManager.RetrieveCorpse();
                             return BehaviourTreeStatus.Success;
                         });
@@ -681,8 +598,6 @@ namespace BotRunner
                         break;
                     }
 
-<<<<<<< HEAD
-=======
                     case CharacterAction.CheckMail:
                     {
                         var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -755,7 +670,6 @@ namespace BotRunner
                         break;
                     }
 
->>>>>>> cpp_physics_system
                     default:
                         break;
                 }
@@ -763,8 +677,6 @@ namespace BotRunner
 
             return builder.End().Build();
         }
-<<<<<<< HEAD
-=======
 
         private static List<uint> ParseGatheringEntries(string csv)
             => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -793,6 +705,5 @@ namespace BotRunner
 
             return positions;
         }
->>>>>>> cpp_physics_system
     }
 }

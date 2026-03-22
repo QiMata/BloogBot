@@ -50,9 +50,6 @@ namespace WoWSharpClient.Handlers
                                 "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
                                 teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
 
-<<<<<<< HEAD
-                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
-=======
                             // Only process as a player teleport if the GUID matches our player.
                             // MSG_MOVE_TELEPORT can also be sent for creatures (MaNGOS sends these
                             // when mobs are moved). Processing creature teleports as player teleports
@@ -66,41 +63,14 @@ namespace WoWSharpClient.Handlers
                                 WoWSharpObjectManager.Instance.NotifyTeleportIncoming(teleportData.Z);
                             }
 
->>>>>>> cpp_physics_system
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     teleportGuid,
                                     WoWSharpObjectManager.ObjectUpdateOperation.Update,
-<<<<<<< HEAD
-                                    WoWObjectType.Player,
-                                    teleportData,
-                                    []
-                                )
-                            );
-
-                            // Directly update player position so MovementController uses the
-                            // teleported position in its very next heartbeat/stop packet.
-                            {
-                                var player = WoWSharpObjectManager.Instance.Player;
-                                if (player != null && player.Guid == teleportGuid)
-                                {
-                                    player.Position.X = teleportData.X;
-                                    player.Position.Y = teleportData.Y;
-                                    player.Position.Z = teleportData.Z;
-                                    Log.Information(
-                                        "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
-                                        teleportData.X, teleportData.Y, teleportData.Z);
-                                }
-                            }
-
-                            WoWSharpEventEmitter.Instance.FireOnTeleport(
-                                new RequiresAcknowledgementArgs(teleportGuid, 0)
-=======
                                     isPlayerTeleport ? WoWObjectType.Player : WoWObjectType.Unit,
                                     teleportData,
                                     []
                                 )
->>>>>>> cpp_physics_system
                             );
 
                             // Directly update player position so MovementController uses the

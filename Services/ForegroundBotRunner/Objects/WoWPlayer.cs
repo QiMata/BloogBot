@@ -68,7 +68,6 @@ namespace ForegroundBotRunner.Objects
                 var result = new QuestSlot[questSlotCount];
                 var descriptorPtr = GetDescriptorPtr();
                 int baseOffset = (int)UpdateFields.EPlayerFields.PLAYER_QUEST_LOG_1_1 * 4;
-<<<<<<< HEAD
 
                 for (int i = 0; i < questSlotCount; i++)
                 {
@@ -91,64 +90,6 @@ namespace ForegroundBotRunner.Objects
                     };
                 }
 
-                return result;
-            }
-        }
-=======
->>>>>>> cpp_physics_system
-
-                for (int i = 0; i < questSlotCount; i++)
-                {
-                    int slotOffset = baseOffset + i * 12; // 3 uint32 fields per quest slot
-                    var questId = MemoryManager.ReadUint(descriptorPtr + slotOffset);
-                    var countersPacked = MemoryManager.ReadUint(descriptorPtr + slotOffset + 4);
-                    var questState = MemoryManager.ReadUint(descriptorPtr + slotOffset + 8);
-
-<<<<<<< HEAD
-        public uint[] Inventory
-        {
-            get
-            {
-                // 23 equipment+bag slots × 2 uint32 fields (low/high GUID pairs) = 46 values.
-                // Read from descriptors (same pattern as PackSlots, SkillInfo, etc.).
-                // The Pointer+0x2508 path was wrong — descriptors are the correct source.
-                const int slotCount = 46;
-                var result = new uint[slotCount];
-                var descriptorPtr = GetDescriptorPtr();
-                int baseOffset = (int)GameData.Core.Enums.UpdateFields.EPlayerFields.PLAYER_FIELD_INV_SLOT_HEAD * 4;
-                for (int i = 0; i < slotCount; i++)
-                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
-                return result;
-            }
-        }
-
-        public uint[] PackSlots
-        {
-            get
-            {
-                // 16 backpack slots × 2 uint32 fields (low/high GUID pairs) = 32 values
-                const int slotCount = 32;
-                var result = new uint[slotCount];
-                var descriptorPtr = GetDescriptorPtr();
-                int baseOffset = (int)UpdateFields.EPlayerFields.PLAYER_FIELD_PACK_SLOT_1 * 4;
-                for (int i = 0; i < slotCount; i++)
-                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
-=======
-                    result[i] = new QuestSlot
-                    {
-                        QuestId = questId,
-                        QuestCounters =
-                        [
-                            (byte)(countersPacked & 0xFF),
-                            (byte)((countersPacked >> 8) & 0xFF),
-                            (byte)((countersPacked >> 16) & 0xFF),
-                            (byte)((countersPacked >> 24) & 0xFF)
-                        ],
-                        QuestState = questState
-                    };
-                }
-
->>>>>>> cpp_physics_system
                 return result;
             }
         }
@@ -195,52 +136,9 @@ namespace ForegroundBotRunner.Objects
 
         public uint[] KeyringSlots => Array.Empty<uint>();
 
-<<<<<<< HEAD
-        public SkillInfo[] SkillInfo
-        {
-            get
-            {
-                // WoW 1.12.1 PLAYER_SKILL_INFO layout: INTERLEAVED, 3 fields per skill.
-                // Each skill slot occupies 3 consecutive uint32 descriptor fields:
-                //   offset + 0: SkillLine (low16) | Step (high16)   → SkillInt1
-                //   offset + 1: Current (low16)   | Max (high16)    → SkillInt2
-                //   offset + 2: TempBonus (low16) | PermBonus (high16) → SkillInt3
-                // Total: 128 skills × 3 fields = 384 fields.
-                const int skillCount = 128;
-                var skills = new SkillInfo[skillCount];
-                var descriptorPtr = GetDescriptorPtr();
-                int baseOffset = (int)UpdateFields.EPlayerFields.PLAYER_SKILL_INFO_1_1 * 4;
-                for (int i = 0; i < skillCount; i++)
-                {
-                    int skillOffset = baseOffset + i * 12; // 3 fields × 4 bytes each
-                    skills[i] = new SkillInfo
-                    {
-                        SkillInt1 = MemoryManager.ReadUint(descriptorPtr + skillOffset),     // SkillLine|Step
-                        SkillInt2 = MemoryManager.ReadUint(descriptorPtr + skillOffset + 4), // Current|Max
-                        SkillInt3 = MemoryManager.ReadUint(descriptorPtr + skillOffset + 8), // TempBonus|Perm
-                    };
-                }
-                return skills;
-            }
-        }
-
-        public uint CharacterPoints1
-        {
-            get
-            {
-                try
-                {
-                    var results = Functions.LuaCallWithResult("{0} = UnitCharacterPoints(\"player\")");
-                    return results.Length > 0 && uint.TryParse(results[0], out var v) ? v : 0;
-                }
-                catch { return 0; }
-            }
-        }
-=======
         public uint Farsight => 0;
 
         public uint XP => 0;
->>>>>>> cpp_physics_system
 
         public uint NextLevelXP => 0;
 
@@ -353,19 +251,6 @@ namespace ForegroundBotRunner.Objects
 
         public void OfferTrade()
         {
-        }
-
-        private byte[] ReadPackedByteField(UpdateFields.EPlayerFields field)
-        {
-            var descriptorPtr = GetDescriptorPtr();
-            var packed = MemoryManager.ReadUint(descriptorPtr + (int)field * 4);
-            return
-            [
-                (byte)(packed & 0xFF),
-                (byte)((packed >> 8) & 0xFF),
-                (byte)((packed >> 16) & 0xFF),
-                (byte)((packed >> 24) & 0xFF)
-            ];
         }
 
         private byte[] ReadPackedByteField(UpdateFields.EPlayerFields field)

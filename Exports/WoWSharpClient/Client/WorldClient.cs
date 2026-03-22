@@ -245,11 +245,8 @@ namespace WoWSharpClient.Client
             // Spells
             BridgeToLegacy(Opcode.SMSG_INITIAL_SPELLS, Handlers.SpellHandler.HandleInitialSpells);
             BridgeToLegacy(Opcode.SMSG_LEARNED_SPELL, Handlers.SpellHandler.HandleLearnedSpell);
-<<<<<<< HEAD
-=======
             BridgeToLegacy(Opcode.SMSG_SUPERCEDED_SPELL, Handlers.SpellHandler.HandleSupercededSpell);
             BridgeToLegacy(Opcode.SMSG_REMOVED_SPELL, Handlers.SpellHandler.HandleRemovedSpell);
->>>>>>> cpp_physics_system
             BridgeToLegacy(Opcode.SMSG_SPELLLOGMISS, Handlers.SpellHandler.HandleSpellLogMiss);
             BridgeToLegacy(Opcode.SMSG_SPELL_GO, Handlers.SpellHandler.HandleSpellGo);
             BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);
@@ -262,9 +259,6 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_LEVELUP_INFO, Handlers.SpellHandler.HandleLevelUpInfo);
             BridgeToLegacy(Opcode.SMSG_ATTACKSTART, Handlers.SpellHandler.HandleAttackStart);
             BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
-<<<<<<< HEAD
-            BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
-=======
             BridgeToLegacy(Opcode.SMSG_CANCEL_COMBAT, Handlers.SpellHandler.HandleCancelCombat);
             BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
             BridgeToLegacy(Opcode.MSG_CHANNEL_START, Handlers.SpellHandler.HandleChannelStart);
@@ -276,7 +270,6 @@ namespace WoWSharpClient.Client
 
             // Death / corpse
             BridgeToLegacy(Opcode.SMSG_CORPSE_RECLAIM_DELAY, Handlers.DeathHandler.HandleCorpseReclaimDelay);
->>>>>>> cpp_physics_system
 
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);

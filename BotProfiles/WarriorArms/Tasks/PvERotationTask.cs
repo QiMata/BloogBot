@@ -24,12 +24,8 @@ namespace WarriorArms.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(3))
-=======
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (target != null && Update(GetMeleeRange(target)))
->>>>>>> cpp_physics_system
                 return;
 
             ExecuteRotation();

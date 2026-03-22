@@ -19,13 +19,9 @@ namespace ShamanRestoration.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(12))
-=======
             // Stay close for totem effectiveness and melee fallback
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (Update(target != null ? GetMeleeRange(target) * 2f : 12f))
->>>>>>> cpp_physics_system
                 return;
 
             PerformCombatRotation();
@@ -39,19 +35,11 @@ namespace ShamanRestoration.Tasks
             // Group healing: heal party members before DPS
             if (IsInGroup)
             {
-<<<<<<< HEAD
-                if (TryCastHeal(HealingWave, 60, 40)) return;
-            }
-            else
-            {
-                TryCastSpell(HealingWave, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
-=======
                 if (TryCastHeal(HealingWave, 60, GetSpellRange(HealBaseRange))) return;
             }
             else
             {
                 TryCastSpell(HealingWave, condition: ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
->>>>>>> cpp_physics_system
             }
 
             TryCastSpell(ManaSpringTotem, condition: !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 19 && u.HealthPercent > 0 && u.Name.Contains(ManaSpringTotem)), castOnSelf: true);

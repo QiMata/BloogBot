@@ -192,34 +192,18 @@ namespace ForegroundBotRunner.Mem
 
         static public void RetrieveCorpse()
         {
-<<<<<<< HEAD
-            var result = RetrieveCorpseFunction();
-=======
             var result = RetrieveCorpseSafeFunction(MemoryAddresses.RetrieveCorpseFunPtr);
->>>>>>> cpp_physics_system
             Log.Information("[FG] RetrieveCorpse() returned {Result}", result);
         }
 
         [DllImport("FastCall.dll", EntryPoint = "SetTargetSafe")]
         private static extern int SetTargetSafeFunction(ulong guid, nint funcPtr);
 
-        [HandleProcessCorruptedStateExceptions]
         static public void SetTarget(ulong guid)
         {
-<<<<<<< HEAD
-            try
-            {
-                SetTargetFunction(guid);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Error("[FG] AccessViolationException in SetTarget for GUID 0x{Guid:X}", guid);
-            }
-=======
             if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
             if (SetTargetSafeFunction(guid, MemoryAddresses.SetTargetFunPtr) == 0)
                 Log.Warning("[FG] SetTarget SEH exception for GUID 0x{Guid:X}", guid);
->>>>>>> cpp_physics_system
         }
 
         [DllImport("FastCall.dll", EntryPoint = "SellItemByGuid")]

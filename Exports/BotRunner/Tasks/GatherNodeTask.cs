@@ -43,8 +43,6 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
             return;
         }
 
-<<<<<<< HEAD
-=======
         // Swimming means pathfinding routed us into water — abort and let coordinator retry
         if (player.IsSwimming)
         {
@@ -54,7 +52,6 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
             return;
         }
 
->>>>>>> cpp_physics_system
         // Find the node
         var node = ObjectManager.GameObjects
             .FirstOrDefault(go => go.Guid == nodeGuid);

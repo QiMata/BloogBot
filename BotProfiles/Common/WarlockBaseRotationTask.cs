@@ -66,16 +66,6 @@ namespace BotProfiles.Common
             if (target.HealthPercent <= 20)
             {
                 ObjectManager.StopWandAttack();
-<<<<<<< HEAD
-                TryCastSpell(DrainSoul, 0, 29);
-                return;
-            }
-
-            TryCastSpell(CurseOfAgony, 0, 28,
-                !target.HasDebuff(CurseOfAgony) && target.HealthPercent > 90);
-
-            TryCastSpell(Immolate, 0, 28,
-=======
                 TryCastSpell(DrainSoul, 0f, GetSpellRange(DrainSoulBaseRange));
                 return;
             }
@@ -84,22 +74,14 @@ namespace BotProfiles.Common
                 !target.HasDebuff(CurseOfAgony) && target.HealthPercent > 90);
 
             TryCastSpell(Immolate, 0f, GetSpellRange(ImmolateBaseRange),
->>>>>>> cpp_physics_system
                 !target.HasDebuff(Immolate) && target.HealthPercent > 30);
 
             AfterImmolate();
 
-<<<<<<< HEAD
-            TryCastSpell(Corruption, 0, 28,
-                !target.HasDebuff(Corruption) && target.HealthPercent > 30);
-
-            TryCastSpell(SiphonLife, 0, 28,
-=======
             TryCastSpell(Corruption, 0f, GetSpellRange(CorruptionBaseRange),
                 !target.HasDebuff(Corruption) && target.HealthPercent > 30);
 
             TryCastSpell(SiphonLife, 0f, GetSpellRange(SiphonLifeBaseRange),
->>>>>>> cpp_physics_system
                 !target.HasDebuff(SiphonLife) && target.HealthPercent > 50);
 
             AfterDots();

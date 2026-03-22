@@ -13,12 +13,8 @@ namespace RogueSubtlety.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(5))
-=======
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (target != null && Update(GetMeleeRange(target)))
->>>>>>> cpp_physics_system
                 return;
 
             PerformCombatRotation();
@@ -31,11 +27,7 @@ namespace RogueSubtlety.Tasks
                 return;
 
             // Position behind target
-<<<<<<< HEAD
-            MoveBehindTarget(5);
-=======
             MoveBehindTarget(GetMeleeRange(target));
->>>>>>> cpp_physics_system
 
             ObjectManager.StopAllMovement();
             ObjectManager.Face(target.Position);

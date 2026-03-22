@@ -217,8 +217,6 @@ namespace WoWSharpClient.Tests.Handlers
                 WoWSharpEventEmitter.Instance.OnInitialSpellsLoaded -= handler;
             }
         }
-<<<<<<< HEAD
-=======
 
         [Fact]
         public void HandleSupercededSpell_ReplacesOldRankWithNewRank()
@@ -259,6 +257,5 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
             Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
         }
->>>>>>> cpp_physics_system
     }
 }

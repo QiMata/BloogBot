@@ -14,8 +14,6 @@ namespace DruidBalance.Tasks
         private static readonly string[] ImmuneToNatureDamage = ["Vortex", "Whirlwind", "Whirling", "Dust", "Cyclone"];
         private IWoWUnit secondaryTarget;
         private bool castingEntanglingRoots;
-<<<<<<< HEAD
-=======
 
         // Vanilla 1.12.1 druid base spell ranges
         private const float WrathBaseRange = 30f;
@@ -23,7 +21,6 @@ namespace DruidBalance.Tasks
         private const float StarfireBaseRange = 30f;
         private const float InsectSwarmBaseRange = 30f;
         private const float EntanglingRootsBaseRange = 30f;
->>>>>>> cpp_physics_system
 
         private Action EntanglingRootsCallback => () =>
         {
@@ -57,11 +54,7 @@ namespace DruidBalance.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(30))
-=======
             if (Update(GetSpellRange(WrathBaseRange)))
->>>>>>> cpp_physics_system
                 return;
 
             // if we get an add, root it with Entangling Roots
@@ -71,11 +64,7 @@ namespace DruidBalance.Tasks
             if (secondaryTarget != null && !secondaryTarget.HasDebuff(EntanglingRoots))
             {
                 ObjectManager.SetTarget(secondaryTarget.Guid);
-<<<<<<< HEAD
-                TryCastSpell(EntanglingRoots, 0, 30, !secondaryTarget.HasDebuff(EntanglingRoots), callback: EntanglingRootsCallback);
-=======
                 TryCastSpell(EntanglingRoots, 0f, GetSpellRange(EntanglingRootsBaseRange), !secondaryTarget.HasDebuff(EntanglingRoots), callback: EntanglingRootsCallback);
->>>>>>> cpp_physics_system
             }
 
             TryCastSpell(MoonkinForm, !ObjectManager.Player.HasBuff(MoonkinForm));

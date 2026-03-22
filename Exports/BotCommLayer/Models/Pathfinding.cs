@@ -29,26 +29,6 @@ namespace Pathfinding {
             "bmRpbmcuQ2FsY3VsYXRlUGF0aFJlcXVlc3RIABIuCgNsb3MYAiABKAsyHy5w",
             "YXRoZmluZGluZy5MaW5lT2ZTaWdodFJlcXVlc3RIABIpCgRzdGVwGAMgASgL",
             "MhkucGF0aGZpbmRpbmcuUGh5c2ljc0lucHV0SAASNQoLcmVhZHlfY2hlY2sY",
-<<<<<<< HEAD
-            "BCABKAsyHi5wYXRoZmluZGluZy5SZWFkeUNoZWNrUmVxdWVzdEgAQgkKB3Bh",
-            "eWxvYWQijwIKE1BhdGhmaW5kaW5nUmVzcG9uc2USMgoEcGF0aBgBIAEoCzIi",
-            "LnBhdGhmaW5kaW5nLkNhbGN1bGF0ZVBhdGhSZXNwb25zZUgAEi8KA2xvcxgC",
-            "IAEoCzIgLnBhdGhmaW5kaW5nLkxpbmVPZlNpZ2h0UmVzcG9uc2VIABIqCgRz",
-            "dGVwGAMgASgLMhoucGF0aGZpbmRpbmcuUGh5c2ljc091dHB1dEgAEjcKDHJl",
-            "YWR5X3N0YXR1cxgEIAEoCzIfLnBhdGhmaW5kaW5nLlJlYWR5Q2hlY2tSZXNw",
-            "b25zZUgAEiMKBWVycm9yGGMgASgLMhIucGF0aGZpbmRpbmcuRXJyb3JIAEIJ",
-            "CgdwYXlsb2FkIhMKEVJlYWR5Q2hlY2tSZXF1ZXN0IlMKElJlYWR5Q2hlY2tS",
-            "ZXNwb25zZRIQCghpc19yZWFkeRgBIAEoCBIWCg5zdGF0dXNfbWVzc2FnZRgC",
-            "IAEoCRITCgtsb2FkZWRfbWFwcxgDIAMoDSIYCgVFcnJvchIPCgdtZXNzYWdl",
-            "GAEgASgJInQKFENhbGN1bGF0ZVBhdGhSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEo",
-            "DRIdCgVzdGFydBgCIAEoCzIOLmdhbWUuUG9zaXRpb24SGwoDZW5kGAMgASgL",
-            "Mg4uZ2FtZS5Qb3NpdGlvbhIQCghzdHJhaWdodBgEIAEoCCI4ChVDYWxjdWxh",
-            "dGVQYXRoUmVzcG9uc2USHwoHY29ybmVycxgBIAMoCzIOLmdhbWUuUG9zaXRp",
-            "b24iXgoSTGluZU9mU2lnaHRSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEoDRIcCgRm",
-            "cm9tGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIaCgJ0bxgDIAEoCzIOLmdhbWUu",
-            "UG9zaXRpb24iJQoTTGluZU9mU2lnaHRSZXNwb25zZRIOCgZpbl9sb3MYASAB",
-            "KAgi2gYKDFBoeXNpY3NJbnB1dBIWCg5tb3ZlbWVudF9mbGFncxgBIAEoDRIN",
-=======
             "BCABKAsyHi5wYXRoZmluZGluZy5SZWFkeUNoZWNrUmVxdWVzdEgAEjIKCGdy",
             "b3VuZF96GAUgASgLMh4ucGF0aGZpbmRpbmcuR2V0R3JvdW5kWlJlcXVlc3RI",
             "ABI6Cg5iYXRjaF9ncm91bmRfehgGIAEoCzIgLnBhdGhmaW5kaW5nLkJhdGNo",
@@ -95,42 +75,11 @@ namespace Pathfinding {
             "AiABKA0SCQoBeBgDIAEoAhIJCgF5GAQgASgCEgkKAXoYBSABKAISEwoLb3Jp",
             "ZW50YXRpb24YBiABKAISDQoFc2NhbGUYByABKAISEAoIZ29fc3RhdGUYCCAB",
             "KA0i1gcKDFBoeXNpY3NJbnB1dBIWCg5tb3ZlbWVudF9mbGFncxgBIAEoDRIN",
->>>>>>> cpp_physics_system
             "CgVwb3NfeBgCIAEoAhINCgVwb3NfeRgDIAEoAhINCgVwb3NfehgEIAEoAhIO",
             "CgZmYWNpbmcYBSABKAISFgoOdHJhbnNwb3J0X2d1aWQYBiABKAQSGgoSdHJh",
             "bnNwb3J0X29mZnNldF94GAcgASgCEhoKEnRyYW5zcG9ydF9vZmZzZXRfeRgI",
             "IAEoAhIaChJ0cmFuc3BvcnRfb2Zmc2V0X3oYCSABKAISHQoVdHJhbnNwb3J0",
             "X29yaWVudGF0aW9uGAogASgCEhIKCnN3aW1fcGl0Y2gYCyABKAISEQoJZmFs",
-<<<<<<< HEAD
-            "bF90aW1lGAwgASgCEhgKEHNwbGluZV9lbGV2YXRpb24YDSABKAISDQoFdmVs",
-            "X3gYDiABKAISDQoFdmVsX3kYDyABKAISDQoFdmVsX3oYECABKAISEgoKd2Fs",
-            "a19zcGVlZBgRIAEoAhIRCglydW5fc3BlZWQYEiABKAISFgoOcnVuX2JhY2tf",
-            "c3BlZWQYEyABKAISEgoKc3dpbV9zcGVlZBgUIAEoAhIXCg9zd2ltX2JhY2tf",
-            "c3BlZWQYFSABKAISDAoEcmFjZRgWIAEoDRIOCgZnZW5kZXIYFyABKA0SDgoG",
-            "bWFwX2lkGBggASgNEhIKCmRlbHRhX3RpbWUYGSABKAISFQoNZnJhbWVfY291",
-            "bnRlchgaIAEoDRIVCg1wcmV2X2dyb3VuZF96GBsgASgCEhYKDnByZXZfZ3Jv",
-            "dW5kX254GBwgASgCEhYKDnByZXZfZ3JvdW5kX255GB0gASgCEhYKDnByZXZf",
-            "Z3JvdW5kX256GB4gASgCEhcKD3BlbmRpbmdfZGVwZW5feBgfIAEoAhIXCg9w",
-            "ZW5kaW5nX2RlcGVuX3kYICABKAISFwoPcGVuZGluZ19kZXBlbl96GCEgASgC",
-            "Eh8KF3N0YW5kaW5nX29uX2luc3RhbmNlX2lkGCIgASgNEhsKE3N0YW5kaW5n",
-            "X29uX2xvY2FsX3gYIyABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxfeRgkIAEo",
-            "AhIbChNzdGFuZGluZ19vbl9sb2NhbF96GCUgASgCEhUKDXBoeXNpY3NfZmxh",
-            "Z3MYJiABKA0i+QQKDVBoeXNpY3NPdXRwdXQSEQoJbmV3X3Bvc194GAEgASgC",
-            "EhEKCW5ld19wb3NfeRgCIAEoAhIRCgluZXdfcG9zX3oYAyABKAISEQoJbmV3",
-            "X3ZlbF94GAQgASgCEhEKCW5ld192ZWxfeRgFIAEoAhIRCgluZXdfdmVsX3oY",
-            "BiABKAISFgoObW92ZW1lbnRfZmxhZ3MYByABKA0SEwoLb3JpZW50YXRpb24Y",
-            "CCABKAISDQoFcGl0Y2gYCSABKAISEwoLaXNfZ3JvdW5kZWQYCiABKAgSEwoL",
-            "aXNfc3dpbW1pbmcYCyABKAgSEQoJaXNfZmx5aW5nGAwgASgIEhEKCWZhbGxf",
-            "dGltZRgNIAEoAhIcChRjdXJyZW50X3NwbGluZV9pbmRleBgOIAEoBRIXCg9z",
-            "cGxpbmVfcHJvZ3Jlc3MYDyABKAISEAoIZ3JvdW5kX3oYECABKAISEQoJZ3Jv",
-            "dW5kX254GBEgASgCEhEKCWdyb3VuZF9ueRgSIAEoAhIRCglncm91bmRfbnoY",
-            "EyABKAISEAoIbGlxdWlkX3oYFCABKAISEwoLbGlxdWlkX3R5cGUYFSABKA0S",
-            "FwoPcGVuZGluZ19kZXBlbl94GBYgASgCEhcKD3BlbmRpbmdfZGVwZW5feRgX",
-            "IAEoAhIXCg9wZW5kaW5nX2RlcGVuX3oYGCABKAISHwoXc3RhbmRpbmdfb25f",
-            "aW5zdGFuY2VfaWQYGSABKA0SGwoTc3RhbmRpbmdfb25fbG9jYWxfeBgaIAEo",
-            "AhIbChNzdGFuZGluZ19vbl9sb2NhbF95GBsgASgCEhsKE3N0YW5kaW5nX29u",
-            "X2xvY2FsX3oYHCABKAJCDqoCC1BhdGhmaW5kaW5nYgZwcm90bzM="));
-=======
             "bF90aW1lGAwgASgCEhQKDGZhbGxfc3RhcnRfehgnIAEoAhIYChBzcGxpbmVf",
             "ZWxldmF0aW9uGA0gASgCEg0KBXZlbF94GA4gASgCEg0KBXZlbF95GA8gASgC",
             "Eg0KBXZlbF96GBAgASgCEhIKCndhbGtfc3BlZWQYESABKAISEQoJcnVuX3Nw",
@@ -178,7 +127,6 @@ namespace Pathfinding {
             "AiJTChdOZWFyZXN0V2Fsa2FibGVSZXNwb25zZRIRCglhcmVhX3R5cGUYASAB",
             "KA0SJQoNbmVhcmVzdF9wb2ludBgCIAEoCzIOLmdhbWUuUG9zaXRpb25CDqoC",
             "C1BhdGhmaW5kaW5nYgZwcm90bzM="));
->>>>>>> cpp_physics_system
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
@@ -191,10 +139,6 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.LineOfSightRequest), global::Pathfinding.LineOfSightRequest.Parser, new[]{ "MapId", "From", "To" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.LineOfSightResponse), global::Pathfinding.LineOfSightResponse.Parser, new[]{ "InLos" }, null, null, null, null),
-<<<<<<< HEAD
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ" }, null, null, null, null)
-=======
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.GetGroundZRequest), global::Pathfinding.GetGroundZRequest.Parser, new[]{ "MapId", "Position", "MaxSearchDist" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.GetGroundZResponse), global::Pathfinding.GetGroundZResponse.Parser, new[]{ "GroundZ", "Found" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.BatchGroundZRequest), global::Pathfinding.BatchGroundZRequest.Parser, new[]{ "MapId", "Positions", "MaxSearchDist" }, null, null, null, null),
@@ -209,7 +153,6 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.NavmeshPointResponse), global::Pathfinding.NavmeshPointResponse.Parser, new[]{ "OnNavmesh", "NearestPoint" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.NearestWalkableRequest), global::Pathfinding.NearestWalkableRequest.Parser, new[]{ "MapId", "Position", "SearchRadius" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.NearestWalkableResponse), global::Pathfinding.NearestWalkableResponse.Parser, new[]{ "AreaType", "NearestPoint" }, null, null, null, null)
->>>>>>> cpp_physics_system
           }));
     }
     #endregion
@@ -5185,12 +5128,9 @@ namespace Pathfinding {
       standingOnLocalY_ = other.standingOnLocalY_;
       standingOnLocalZ_ = other.standingOnLocalZ_;
       physicsFlags_ = other.physicsFlags_;
-<<<<<<< HEAD
-=======
       nearbyObjects_ = other.nearbyObjects_.Clone();
       stepUpBaseZ_ = other.stepUpBaseZ_;
       stepUpAge_ = other.stepUpAge_;
->>>>>>> cpp_physics_system
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5714,8 +5654,6 @@ namespace Pathfinding {
       }
     }
 
-<<<<<<< HEAD
-=======
     /// <summary>Field number for the "nearby_objects" field.</summary>
     public const int NearbyObjectsFieldNumber = 40;
     private static readonly pb::FieldCodec<global::Pathfinding.DynamicObjectProto> _repeated_nearbyObjects_codec
@@ -5760,7 +5698,6 @@ namespace Pathfinding {
       }
     }
 
->>>>>>> cpp_physics_system
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5815,12 +5752,9 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StandingOnLocalY, other.StandingOnLocalY)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StandingOnLocalZ, other.StandingOnLocalZ)) return false;
       if (PhysicsFlags != other.PhysicsFlags) return false;
-<<<<<<< HEAD
-=======
       if(!nearbyObjects_.Equals(other.nearbyObjects_)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
       if (StepUpAge != other.StepUpAge) return false;
->>>>>>> cpp_physics_system
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5867,12 +5801,9 @@ namespace Pathfinding {
       if (StandingOnLocalY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StandingOnLocalY);
       if (StandingOnLocalZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StandingOnLocalZ);
       if (PhysicsFlags != 0) hash ^= PhysicsFlags.GetHashCode();
-<<<<<<< HEAD
-=======
       hash ^= nearbyObjects_.GetHashCode();
       if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
       if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -6043,8 +5974,6 @@ namespace Pathfinding {
         output.WriteRawTag(176, 2);
         output.WriteUInt32(PhysicsFlags);
       }
-<<<<<<< HEAD
-=======
       if (FallStartZ != 0F) {
         output.WriteRawTag(189, 2);
         output.WriteFloat(FallStartZ);
@@ -6058,7 +5987,6 @@ namespace Pathfinding {
         output.WriteRawTag(208, 2);
         output.WriteUInt32(StepUpAge);
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -6221,8 +6149,6 @@ namespace Pathfinding {
         output.WriteRawTag(176, 2);
         output.WriteUInt32(PhysicsFlags);
       }
-<<<<<<< HEAD
-=======
       if (FallStartZ != 0F) {
         output.WriteRawTag(189, 2);
         output.WriteFloat(FallStartZ);
@@ -6236,7 +6162,6 @@ namespace Pathfinding {
         output.WriteRawTag(208, 2);
         output.WriteUInt32(StepUpAge);
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -6364,8 +6289,6 @@ namespace Pathfinding {
       if (PhysicsFlags != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(PhysicsFlags);
       }
-<<<<<<< HEAD
-=======
       size += nearbyObjects_.CalculateSize(_repeated_nearbyObjects_codec);
       if (StepUpBaseZ != 0F) {
         size += 2 + 4;
@@ -6373,7 +6296,6 @@ namespace Pathfinding {
       if (StepUpAge != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(StepUpAge);
       }
->>>>>>> cpp_physics_system
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -6503,8 +6425,6 @@ namespace Pathfinding {
       if (other.PhysicsFlags != 0) {
         PhysicsFlags = other.PhysicsFlags;
       }
-<<<<<<< HEAD
-=======
       nearbyObjects_.Add(other.nearbyObjects_);
       if (other.StepUpBaseZ != 0F) {
         StepUpBaseZ = other.StepUpBaseZ;
@@ -6512,7 +6432,6 @@ namespace Pathfinding {
       if (other.StepUpAge != 0) {
         StepUpAge = other.StepUpAge;
       }
->>>>>>> cpp_physics_system
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -6684,8 +6603,6 @@ namespace Pathfinding {
             PhysicsFlags = input.ReadUInt32();
             break;
           }
-<<<<<<< HEAD
-=======
           case 317: {
             FallStartZ = input.ReadFloat();
             break;
@@ -6702,7 +6619,6 @@ namespace Pathfinding {
             StepUpAge = input.ReadUInt32();
             break;
           }
->>>>>>> cpp_physics_system
         }
       }
     #endif
@@ -6874,8 +6790,6 @@ namespace Pathfinding {
             PhysicsFlags = input.ReadUInt32();
             break;
           }
-<<<<<<< HEAD
-=======
           case 317: {
             FallStartZ = input.ReadFloat();
             break;
@@ -6892,7 +6806,6 @@ namespace Pathfinding {
             StepUpAge = input.ReadUInt32();
             break;
           }
->>>>>>> cpp_physics_system
         }
       }
     }

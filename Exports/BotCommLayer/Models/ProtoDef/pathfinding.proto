@@ -191,8 +191,6 @@ message PhysicsInput {
 	// Behaviour flags (bitfield)
 	// PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
 	uint32 physics_flags = 38;
-<<<<<<< HEAD
-=======
 
 	// Nearby dynamic objects for collision (elevators, doors, trophy pillars)
 	repeated DynamicObjectProto nearby_objects = 40;
@@ -200,7 +198,6 @@ message PhysicsInput {
 	// Step-up height persistence (from prior tick output)
 	float step_up_base_z = 41;     // Z height to maintain (-200000 = inactive)
 	uint32 step_up_age = 42;       // frames since step-up detected
->>>>>>> cpp_physics_system
 }
 
 // Physics output

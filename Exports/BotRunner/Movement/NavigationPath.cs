@@ -1,20 +1,14 @@
 using BotRunner.Clients;
-<<<<<<< HEAD
-using GameData.Core.Models;
-=======
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 using System.Collections.Generic;
 using System.Diagnostics;
->>>>>>> cpp_physics_system
 using System;
 
 namespace BotRunner.Movement;
 
 /// <summary>
-<<<<<<< HEAD
-=======
 /// Lightweight counters for debugging and monitoring pathfinding behaviour.
 /// Single-threaded per bot — no locks needed.
 /// </summary>
@@ -355,27 +349,10 @@ public readonly record struct PathAffordanceInfo(
 }
 
 /// <summary>
->>>>>>> cpp_physics_system
 /// Manages a path of waypoints from the pathfinding service.
 /// Tracks progress through the path and handles recalculation.
 /// Caches the path so we don't re-query pathfinding every update tick.
 /// </summary>
-<<<<<<< HEAD
-public class NavigationPath(PathfindingClient? pathfinding, Func<long>? tickProvider = null)
-{
-    private readonly PathfindingClient? _pathfinding = pathfinding;
-    private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
-    private Position[] _waypoints = [];
-    private int _currentIndex;
-    private Position? _destination;
-    private long _lastCalculationTick = -RECALCULATE_COOLDOWN_MS;
-    private Position? _lastWaypointSamplePosition;
-    private float _lastWaypointSampleDistance = float.NaN;
-    private int _stalledNearWaypointSamples;
-
-    private const float WAYPOINT_REACH_DISTANCE = 3f;
-    private const float RECALCULATE_DISTANCE = 10f;
-=======
 public class NavigationPath(
     PathfindingClient? pathfinding,
     Func<long>? tickProvider = null,
@@ -465,14 +442,10 @@ public class NavigationPath(
     private const float MAX_JUMP_HEIGHT = 1.64f;           // JUMP_VELOCITY^2 / (2*GRAVITY)
     private const float MAX_JUMP_DISTANCE_2D = 8f;         // conservative horizontal max at run speed
     private const float GAP_DETECTION_DEPTH_MIN = 3f;      // minimum gap depth to consider
->>>>>>> cpp_physics_system
     private const int RECALCULATE_COOLDOWN_MS = 2000;
     private const float STALLED_NEAR_WAYPOINT_DISTANCE = 8f;
     private const float STALLED_SAMPLE_POSITION_EPSILON = 0.15f;
     private const float STALLED_SAMPLE_DISTANCE_EPSILON = 0.1f;
-<<<<<<< HEAD
-    private const int STALLED_SAMPLE_THRESHOLD = 24;
-=======
     private const int STALLED_SAMPLE_THRESHOLD = 6;      // detect stuck faster (was 10)
     private const int WAYPOINT_REACHABILITY_SCAN_LIMIT = 12;
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
@@ -530,18 +503,11 @@ public class NavigationPath(
         _traceIsShortRoute,
         _traceLastPlanTick,
         CloneExecutionSamples());
->>>>>>> cpp_physics_system
 
     /// <summary>
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
     /// Automatically calculates/recalculates the path as needed.
     /// </summary>
-<<<<<<< HEAD
-    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f)
-    {
-        if (_pathfinding == null)
-            return allowDirectFallback ? destination : null;
-=======
     public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false, float wallNormalX = 0f, float wallNormalY = 0f, float blockedFraction = 1f)
     {
         if (_pathfinding == null)
@@ -554,45 +520,20 @@ public class NavigationPath(
                 usedDirectFallback: fallback != null,
                 fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
         }
->>>>>>> cpp_physics_system
 
         // Recalculate if destination changed significantly
         if (_destination == null || _destination.DistanceTo(destination) > RECALCULATE_DISTANCE)
         {
-<<<<<<< HEAD
-            CalculatePath(currentPosition, destination, mapId);
-=======
             var reason = _destination == null
                 ? NavigationTraceReason.InitialPath
                 : NavigationTraceReason.DestinationChanged;
             CalculatePath(currentPosition, destination, mapId, reason: reason);
->>>>>>> cpp_physics_system
         }
 
         if (_waypoints.Length == 0)
         {
             if (!allowDirectFallback)
             {
-<<<<<<< HEAD
-                CalculatePath(currentPosition, destination, mapId);
-                if (_waypoints.Length == 0)
-                    return null;
-            }
-            else
-            {
-                return destination;
-            }
-        }
-
-        var waypointAdvanceDistance = MathF.Max(WAYPOINT_REACH_DISTANCE, minWaypointDistance);
-
-        // Advance past reached (or intentionally skipped-near) waypoints
-        while (_currentIndex < _waypoints.Length &&
-               currentPosition.DistanceTo(_waypoints[_currentIndex]) < waypointAdvanceDistance)
-        {
-            _currentIndex++;
-        }
-=======
                 CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathUnavailable);
                 if (_waypoints.Length == 0)
                     return RecordWaypointResult(currentPosition, destination, null, usedDirectFallback: false, TRACE_RESOLUTION_NO_ROUTE);
@@ -616,20 +557,12 @@ public class NavigationPath(
 
         // Advance reached waypoints, but avoid skipping corner waypoints into blocked segments.
         AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
->>>>>>> cpp_physics_system
 
         if (_currentIndex >= _waypoints.Length)
         {
             // If we're still not near the destination, recalculate path periodically.
             if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
             {
-<<<<<<< HEAD
-                CalculatePath(currentPosition, destination, mapId);
-            }
-
-            if (_currentIndex >= _waypoints.Length)
-                return allowDirectFallback ? destination : null;
-=======
                 CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
             }
 
@@ -752,16 +685,10 @@ public class NavigationPath(
         {
             _consecutiveWallHitSamples = 0;
             _consecutiveAvoidanceFailures = 0;
->>>>>>> cpp_physics_system
         }
 
         // If the next waypoint remains near while the bot itself does not move,
         // skip it so callers don't repeatedly drive a blocked micro-corner.
-<<<<<<< HEAD
-        var waypoint = _waypoints[_currentIndex];
-        var waypointDistance = currentPosition.DistanceTo(waypoint);
-=======
->>>>>>> cpp_physics_system
         if (_lastWaypointSamplePosition != null
             && waypointDistance <= STALLED_NEAR_WAYPOINT_DISTANCE
             && currentPosition.DistanceTo(_lastWaypointSamplePosition) <= STALLED_SAMPLE_POSITION_EPSILON
@@ -771,9 +698,6 @@ public class NavigationPath(
             _stalledNearWaypointSamples++;
             if (_stalledNearWaypointSamples >= STALLED_SAMPLE_THRESHOLD)
             {
-<<<<<<< HEAD
-                _currentIndex++;
-=======
                 // In strict mode, never advance a stalled corner by index only.
                 // Recalculate so we keep following service-validated turns.
                 // Always recalculate when stalled — never advance by index alone.
@@ -781,23 +705,12 @@ public class NavigationPath(
                 // into invalid geometry. If recalculation fails, mark path as exhausted.
                 CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
                 AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
->>>>>>> cpp_physics_system
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSampleDistance = float.NaN;
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
 
                 if (_currentIndex >= _waypoints.Length)
                 {
-<<<<<<< HEAD
-                    if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
-                        CalculatePath(currentPosition, destination, mapId);
-                    if (_currentIndex >= _waypoints.Length)
-                        return allowDirectFallback ? destination : null;
-                }
-
-                waypoint = _waypoints[_currentIndex];
-                waypointDistance = currentPosition.DistanceTo(waypoint);
-=======
                     if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
                         CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
                     if (_currentIndex >= _waypoints.Length)
@@ -814,7 +727,6 @@ public class NavigationPath(
 
                 waypoint = _waypoints[_currentIndex];
                 waypointDistance = currentPosition.DistanceTo2D(waypoint);
->>>>>>> cpp_physics_system
             }
         }
         else
@@ -824,9 +736,6 @@ public class NavigationPath(
 
         _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
         _lastWaypointSampleDistance = waypointDistance;
-<<<<<<< HEAD
-        return waypoint;
-=======
 
         // Layer 2: If an avoidance waypoint is active, steer toward it instead of the path waypoint.
         // The bot deflects away from the wall and resumes the normal path once the avoidance expires.
@@ -847,21 +756,11 @@ public class NavigationPath(
         }
 
         return RecordWaypointResult(currentPosition, destination, waypoint, usedDirectFallback: false, TRACE_RESOLUTION_WAYPOINT);
->>>>>>> cpp_physics_system
     }
 
     /// <summary>
     /// Calculate a new path from start to end.
     /// </summary>
-<<<<<<< HEAD
-    public void CalculatePath(Position start, Position end, uint mapId)
-    {
-        var nowTick = _tickProvider();
-        if (nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS)
-            return;
-
-        _lastCalculationTick = nowTick;
-=======
     private void AdvanceReachableWaypoints(Position currentPosition, uint mapId, float minWaypointDistance)
     {
         while (_currentIndex < _waypoints.Length)
@@ -1697,48 +1596,28 @@ public class NavigationPath(
 
         _lastCalculationTick = nowTick;
         _hasCalculatedPath = true;
->>>>>>> cpp_physics_system
         _destination = end;
         _lastWaypointSamplePosition = null;
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
-<<<<<<< HEAD
-=======
         _consecutiveWallHitSamples = 0;
         _avoidanceWaypoint = null;
         _avoidanceFramesRemaining = 0;
         _consecutiveAvoidanceFailures = 0;
         _nextSegmentBlocked = false;
         _lastProbeWaypointIndex = -1;
->>>>>>> cpp_physics_system
 
         if (_pathfinding == null)
         {
             _waypoints = [];
-<<<<<<< HEAD
-            _currentIndex = 0;
-=======
             _waypointAcceptanceRadii = [];
             _currentIndex = 0;
             RecordCalculatedTrace(mapId, start, end, new([], [], false, 0, _enableProbeHeuristics), reason);
->>>>>>> cpp_physics_system
             return;
         }
 
         try
         {
-<<<<<<< HEAD
-            _waypoints = _pathfinding.GetPath(mapId, start, end, true);
-            if (_waypoints.Length == 0)
-                _waypoints = _pathfinding.GetPath(mapId, start, end, false);
-            // Skip waypoint[0] since it's usually the current position
-            _currentIndex = _waypoints.Length > 1 ? 1 : 0;
-        }
-        catch
-        {
-            _waypoints = [];
-            _currentIndex = 0;
-=======
             // When probe heuristics are enabled (normal navigation), prefer smooth
             // paths (Detour string-pulling) — fewer redundant waypoints.
             // When disabled (corpse runs), prefer non-smooth paths to avoid Detour
@@ -1898,13 +1777,10 @@ public class NavigationPath(
         catch
         {
             return -1f; // IPC failure
->>>>>>> cpp_physics_system
         }
     }
 
     /// <summary>
-<<<<<<< HEAD
-=======
     /// Whether the next movement toward the target waypoint would go over a cliff edge.
     /// </summary>
     public bool IsCliffAhead(Position currentPos, Position targetWaypoint, uint mapId)
@@ -2317,21 +2193,12 @@ public class NavigationPath(
     }
 
     /// <summary>
->>>>>>> cpp_physics_system
     /// Force a path recalculation on the next GetNextWaypoint call.
     /// Call this when the target changes (e.g., mob died, new target acquired).
     /// </summary>
     public void Clear()
     {
         _waypoints = [];
-<<<<<<< HEAD
-        _currentIndex = 0;
-        _destination = null;
-        _lastCalculationTick = -RECALCULATE_COOLDOWN_MS;
-        _lastWaypointSamplePosition = null;
-        _lastWaypointSampleDistance = float.NaN;
-        _stalledNearWaypointSamples = 0;
-=======
         _waypointAcceptanceRadii = [];
         _currentIndex = 0;
         _destination = null;
@@ -2385,7 +2252,6 @@ public class NavigationPath(
             var start = _currentIndex > 0 ? _waypoints[_currentIndex - 1] : _waypoints[0];
             ComputeWaypointAcceptanceRadii(start);
         }
->>>>>>> cpp_physics_system
     }
 
     /// <summary>
@@ -2397,8 +2263,6 @@ public class NavigationPath(
     /// Number of remaining waypoints.
     /// </summary>
     public int RemainingWaypoints => Math.Max(0, _waypoints.Length - _currentIndex);
-<<<<<<< HEAD
-=======
 
     // =========================================================================
     // TRANSPORT AWARENESS — elevator/boat/zeppelin integration
@@ -2591,5 +2455,4 @@ public class NavigationPath(
             return true; // Service unavailable — assume clear
         }
     }
->>>>>>> cpp_physics_system
 }

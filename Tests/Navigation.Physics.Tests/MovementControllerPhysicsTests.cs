@@ -2,14 +2,6 @@ using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
 using Navigation.Physics.Tests.Helpers;
-<<<<<<< HEAD
-using WoWSharpClient.Client;
-using WoWSharpClient.Models;
-using WoWSharpClient.Movement;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-=======
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -19,7 +11,6 @@ using WoWSharpClient.Movement;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit.Abstractions;
->>>>>>> cpp_physics_system
 
 namespace Navigation.Physics.Tests;
 
@@ -34,20 +25,6 @@ namespace Navigation.Physics.Tests;
 public class MovementControllerPhysicsTests
 {
     private readonly PhysicsEngineFixture _fixture;
-<<<<<<< HEAD
-
-    // Valley of Trials spawn point (Kalimdor, map 1)
-    private const float SpawnX = -618.518f;
-    private const float SpawnY = -4251.67f;
-    private const float SpawnZ = 38.718f;
-    private const uint MapId = 1; // Kalimdor
-
-    public MovementControllerPhysicsTests(PhysicsEngineFixture fixture)
-    {
-        _fixture = fixture;
-    }
-
-=======
     private readonly ITestOutputHelper _output;
 
     // Valley of Trials - open terrain with no WMO structures (Kalimdor, map 1)
@@ -75,7 +52,6 @@ public class MovementControllerPhysicsTests
         float GroundGap,
         MovementFlags Flags);
 
->>>>>>> cpp_physics_system
     private (MovementController controller, WoWLocalPlayer player, Mock<WoWClient> mockClient)
         CreateController(float x, float y, float z, float facing = 0f)
     {
@@ -105,17 +81,6 @@ public class MovementControllerPhysicsTests
     }
 
     /// <summary>
-<<<<<<< HEAD
-    /// Runs N physics frames on the controller with the given dt.
-    /// </summary>
-    private static void RunFrames(MovementController controller, int frameCount,
-        float dtSec = 0.05f, uint startTimeMs = 1000)
-    {
-        for (int i = 0; i < frameCount; i++)
-        {
-            controller.Update(dtSec, startTimeMs + (uint)(i * dtSec * 1000));
-        }
-=======
     /// Runs N physics frames and captures per-frame diagnostics for calibration.
     /// </summary>
     private static List<FrameSnapshot> RunFramesWithTrace(
@@ -240,7 +205,6 @@ public class MovementControllerPhysicsTests
         var last = frames[^1];
 
         return $"firstZ={first.Z:F3}, lastZ={last.Z:F3}, minAbsGap={minGapText}";
->>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -248,21 +212,6 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-<<<<<<< HEAD
-        // Start 5 units above ground at Valley of Trials spawn
-        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 5.0f);
-
-        // Run 20 frames at 50ms each (1 second)
-        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-        // Need at least one movement flag to trigger Update logic
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
-        RunFrames(controller, 20);
-        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-        RunFrames(controller, 1, startTimeMs: 2000);
-
-        // Z should have snapped down toward ground level (~38.7)
-        Assert.InRange(player.Position.Z, SpawnZ - 2.0f, SpawnZ + 2.0f);
-=======
         // Start 5 units above ground at Orgrimmar spawn
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 5.0f);
         float startZ = player.Position.Z;
@@ -281,7 +230,6 @@ public class MovementControllerPhysicsTests
 
         Assert.True(minGap <= 1.5f,
             $"Expected ground contact gap <= 1.5y but min was {minGap:F3}. {Summarize(trace)}");
->>>>>>> cpp_physics_system
     }
 
     [Fact]
@@ -289,24 +237,6 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-<<<<<<< HEAD
-        // Start at Valley of Trials facing east (facing = 0)
-        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
-        var startPos = player.Position;
-
-        // Move forward for 3 seconds (60 frames × 50ms)
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
-        RunFrames(controller, 60);
-
-        // Should have moved ~21 yards forward (7.0 RunSpeed × 3s)
-        float horizontalDist = MathF.Sqrt(
-            MathF.Pow(player.Position.X - startPos.X, 2) +
-            MathF.Pow(player.Position.Y - startPos.Y, 2));
-        Assert.InRange(horizontalDist, 10f, 30f);
-
-        // Z should be on valid terrain (not falling through world).
-        // Real terrain varies significantly — Valley of Trials has steep slopes.
-=======
         // Start at Orgrimmar facing east (facing = 0)
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
         var startPos = player.Position;
@@ -341,7 +271,6 @@ public class MovementControllerPhysicsTests
         Assert.InRange(horizontalDist, 10f, 30f);
 
         // Z should be on valid terrain (not falling through world).
->>>>>>> cpp_physics_system
         Assert.True(player.Position.Z > -50f,
             $"Player fell through world: Z={player.Position.Z:F1}");
     }
@@ -353,20 +282,6 @@ public class MovementControllerPhysicsTests
 
         // Start at valid ground position
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ);
-<<<<<<< HEAD
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
-
-        // Run a few frames to establish state
-        RunFrames(controller, 5);
-
-        // Simulate teleport: jump position far away (triggers >100 unit detection)
-        player.Position = new Position(SpawnX + 200f, SpawnY, SpawnZ);
-
-        // Run more frames — should NOT fall through world
-        RunFrames(controller, 20, startTimeMs: 2000);
-
-        // Z should be near ground, not -2815 or similar
-=======
 
         // Run a few frames to establish state
         _ = RunFramesWithTrace(
@@ -411,7 +326,6 @@ public class MovementControllerPhysicsTests
             $"Expected landing contact gap <= 2.5y after teleport, min was {minGap:F3}. {Summarize(trace)}");
 
         // Guard against through-world failures.
->>>>>>> cpp_physics_system
         Assert.True(player.Position.Z > -50f,
             $"Player fell through world: Z={player.Position.Z:F1}");
     }
@@ -421,17 +335,6 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-<<<<<<< HEAD
-        // Start at Valley of Trials facing north (facing = 0)
-        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
-        var startPos = player.Position;
-
-        // Move backward for 2 seconds (40 frames × 50ms) at RunBackSpeed 4.5
-        player.MovementFlags = MovementFlags.MOVEFLAG_BACKWARD;
-        RunFrames(controller, 40);
-
-        // Should have moved backward (~9 yards at 4.5 speed × 2s)
-=======
         // Start at Orgrimmar facing north (facing = 0)
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
         var startPos = player.Position;
@@ -444,7 +347,6 @@ public class MovementControllerPhysicsTests
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_BACKWARD);
 
         // Should have moved backward (~9 yards at 4.5 speed x 2s)
->>>>>>> cpp_physics_system
         float horizontalDist = MathF.Sqrt(
             MathF.Pow(player.Position.X - startPos.X, 2) +
             MathF.Pow(player.Position.Y - startPos.Y, 2));
@@ -460,14 +362,6 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-<<<<<<< HEAD
-        // Start 60 units above ground — will be in free fall
-        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 60f);
-        float startZ = player.Position.Z;
-
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
-        RunFrames(controller, 10);
-=======
         // Start 60 units above ground - will be in free fall
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 60f);
         float startZ = player.Position.Z;
@@ -478,7 +372,6 @@ public class MovementControllerPhysicsTests
             frameCount: 10,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
         WriteFrameTrace(nameof(Falling_AccumulatesFallTime), trace);
->>>>>>> cpp_physics_system
 
         // After 10 frames of free fall, Z should have decreased
         Assert.True(player.Position.Z < startZ,
@@ -490,18 +383,6 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-<<<<<<< HEAD
-        // Start 10 units above ground — short fall
-        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 10f);
-
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
-
-        // Run enough frames for gravity to pull us down to ground (2 seconds)
-        RunFrames(controller, 40);
-
-        // Should be near ground level after landing
-        Assert.InRange(player.Position.Z, SpawnZ - 3f, SpawnZ + 3f);
-=======
         // Start 30 units above ground — large enough to guarantee significant descent
         // even if terrain rises in the forward direction (Valley of Trials slopes).
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 30f);
@@ -1124,6 +1005,5 @@ public class MovementControllerPhysicsTests
         }
 
         _output.WriteLine("Packet count validation passed.");
->>>>>>> cpp_physics_system
     }
 }

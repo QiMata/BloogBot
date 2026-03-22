@@ -1,10 +1,7 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
-<<<<<<< HEAD
-=======
 using GameData.Core.Constants;
->>>>>>> cpp_physics_system
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
@@ -53,31 +50,17 @@ public abstract class BotTask(IBotContext botContext)
     private NavigationPath? _navPath;
 
     /// <summary>
-<<<<<<< HEAD
-=======
     /// Exposes the cached NavigationPath for trace/diagnostic access in subclasses.
     /// Returns null if no navigation has been attempted yet.
     /// </summary>
     protected NavigationPath? NavPath => _navPath;
 
     /// <summary>
->>>>>>> cpp_physics_system
     /// Move toward a destination using cached pathfinding. Only re-queries the pathfinding
     /// service when the destination changes significantly or a cooldown expires.
     /// Call ClearNavigation() when switching targets.
     /// </summary>
     protected void NavigateToward(Position destination)
-<<<<<<< HEAD
-    {
-        _navPath ??= new NavigationPath(Container.PathfindingClient);
-        var player = ObjectManager.Player;
-        if (player?.Position == null)
-            return;
-
-        var waypoint = _navPath.GetNextWaypoint(player.Position, destination, player.MapId);
-        if (waypoint != null)
-            ObjectManager.MoveToward(waypoint);
-=======
         => TryNavigateToward(destination);
 
     /// <summary>
@@ -132,7 +115,6 @@ public abstract class BotTask(IBotContext botContext)
             destination.X, destination.Y, destination.Z, player.MapId);
         ObjectManager.StopAllMovement();
         return false;
->>>>>>> cpp_physics_system
     }
 
     /// <summary>
@@ -150,11 +132,8 @@ public abstract class BotTask(IBotContext botContext)
             return;
 
         var top = BotTasks.Peek();
-<<<<<<< HEAD
-=======
         BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
         BotRunnerService.DiagLog($"[TASK-POP] task={top.GetType().Name} reason={reason} remaining={BotTasks.Count - 1}");
->>>>>>> cpp_physics_system
         BotTasks.Pop();
         Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);

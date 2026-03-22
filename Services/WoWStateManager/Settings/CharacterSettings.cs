@@ -100,8 +100,6 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("BehaviorConfig", NullValueHandling = NullValueHandling.Ignore)]
         public BotBehaviorConfig? BehaviorConfig { get; set; }
-<<<<<<< HEAD
-=======
 
         /// <summary>
         /// Optional: Character class override. If set, used instead of parsing class from AccountName.
@@ -124,6 +122,5 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("CharacterGender", NullValueHandling = NullValueHandling.Ignore)]
         public string? CharacterGender { get; set; }
->>>>>>> cpp_physics_system
     }
 }

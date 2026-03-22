@@ -92,8 +92,6 @@ namespace WoWSharpClient.Handlers
                 Log.Information("[LoginHandler] SMSG_NEW_WORLD: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) facing={O:F2}",
                     mapId, x, y, z, orientation);
 
-<<<<<<< HEAD
-=======
                 // Update MapId and position immediately — SMSG_LOGIN_VERIFY_WORLD may arrive
                 // later but MapId must be current for snapshot pipeline (map-based routing,
                 // DungeonWaypoints lookup, test assertions).
@@ -106,7 +104,6 @@ namespace WoWSharpClient.Handlers
                     Facing = orientation
                 });
 
->>>>>>> cpp_physics_system
                 // NOW send the worldport ACK — this is the correct time per 1.12.1 protocol
                 WoWSharpObjectManager.Instance.SendWorldportAck();
             }

@@ -31,19 +31,10 @@ namespace BotRunner
 
         private IBehaviourTreeNode BuildUseItemByIdSequence(int itemId)
         {
-<<<<<<< HEAD
-            var diagPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "botrunner_useitem_diag.txt");
-=======
->>>>>>> cpp_physics_system
             return new BehaviourTreeBuilder()
                 .Sequence("Use Item By ID")
                     .Do("Find and Use Item", time =>
                     {
-<<<<<<< HEAD
-                        try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] BuildUseItemByIdSequence: looking for itemId={itemId}\n"); } catch { }
-
-=======
->>>>>>> cpp_physics_system
                         // Search all bag slots for the item by ID
                         for (int bag = 0; bag <= 4; bag++)
                         {
@@ -54,10 +45,6 @@ namespace BotRunner
                                 if (contained != null && contained.ItemId == (uint)itemId)
                                 {
                                     Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Using.", itemId, bag, slot);
-<<<<<<< HEAD
-                                    try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] FOUND item {itemId} at bag={bag}, slot={slot}. Calling UseItem.\n"); } catch { }
-=======
->>>>>>> cpp_physics_system
                                     _objectManager.UseItem(bag, slot, 0);
                                     return BehaviourTreeStatus.Success;
                                 }
@@ -66,10 +53,6 @@ namespace BotRunner
 
                         // Fallback: brute-force use all backpack slots (server ignores invalid)
                         Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Trying brute-force use for all backpack slots.", itemId);
-<<<<<<< HEAD
-                        try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] BRUTE-FORCE: item {itemId} not found, trying all 16 backpack slots\n"); } catch { }
-=======
->>>>>>> cpp_physics_system
                         for (int slot = 0; slot < 16; slot++)
                             _objectManager.UseItem(0, slot, 0);
                         return BehaviourTreeStatus.Success;
@@ -256,12 +239,6 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages repairing the item.</returns>
         private IBehaviourTreeNode BuildRepairItemSequence(int repairSlot) => new BehaviourTreeBuilder()
             .Sequence("Repair Item Sequence")
-<<<<<<< HEAD
-                // Ensure the bot has enough money to repair the item
-                .Condition("Can Afford Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.RepairCost((EquipSlot)repairSlot))
-
-                // Repair the item in the specified slot
-=======
                 .Condition("MerchantFrame Available", time =>
                 {
                     if (_objectManager.MerchantFrame != null) return true;
@@ -269,7 +246,6 @@ namespace BotRunner
                     return false;
                 })
                 .Condition("Can Afford Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.RepairCost((EquipSlot)repairSlot))
->>>>>>> cpp_physics_system
                 .Do("Repair Item", time =>
                 {
                     _objectManager.MerchantFrame.RepairByEquipSlot((EquipSlot)repairSlot);
@@ -283,12 +259,6 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages repairing all items.</returns>
         private IBehaviourTreeNode RepairAllItemsSequence => new BehaviourTreeBuilder()
             .Sequence("Repair All Items Sequence")
-<<<<<<< HEAD
-                // Ensure the bot has enough money to repair all items
-                .Condition("Can Afford Full Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.TotalRepairCost)
-
-                // Repair all damaged items
-=======
                 .Condition("MerchantFrame Available", time =>
                 {
                     if (_objectManager.MerchantFrame != null) return true;
@@ -296,7 +266,6 @@ namespace BotRunner
                     return false;
                 })
                 .Condition("Can Afford Full Repair", time => _objectManager.Player.Copper > _objectManager.MerchantFrame.TotalRepairCost)
->>>>>>> cpp_physics_system
                 .Do("Repair All Items", time =>
                 {
                     _objectManager.MerchantFrame.RepairAll();
@@ -329,8 +298,6 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages crafting the item.</returns>
         private IBehaviourTreeNode BuildCraftSequence(int craftSlotId) => new BehaviourTreeBuilder()
             .Sequence("Craft Sequence")
-<<<<<<< HEAD
-=======
                 // Ensure CraftFrame is available (null on BG bot)
                 .Condition("CraftFrame Available", time =>
                 {
@@ -338,7 +305,6 @@ namespace BotRunner
                     Log.Warning("[BOT RUNNER] CraftFrame is null — requires FG bot or packet-based path");
                     return false;
                 })
->>>>>>> cpp_physics_system
                 // Ensure the bot can craft the item
                 .Condition("Can Craft Item", time => _objectManager.CraftFrame.HasMaterialsNeeded(craftSlotId))
 

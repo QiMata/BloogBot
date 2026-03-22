@@ -13,12 +13,8 @@ namespace DruidFeral.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD:BotProfiles/DruidFeralCombat/Tasks/PvERotationTask.cs
-            if (Update(3))
-=======
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (target != null && Update(GetMeleeRange(target)))
->>>>>>> cpp_physics_system:BotProfiles/DruidFeral/Tasks/PvERotationTask.cs
                 return;
 
             if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingTouch))

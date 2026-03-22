@@ -99,20 +99,14 @@ namespace WoWSharpClient
 
             _handlers[Opcode.SMSG_INITIAL_SPELLS] = SpellHandler.HandleInitialSpells;
             _handlers[Opcode.SMSG_LEARNED_SPELL] = SpellHandler.HandleLearnedSpell;
-<<<<<<< HEAD
-=======
             _handlers[Opcode.SMSG_SUPERCEDED_SPELL] = SpellHandler.HandleSupercededSpell;
             _handlers[Opcode.SMSG_REMOVED_SPELL] = SpellHandler.HandleRemovedSpell;
->>>>>>> cpp_physics_system
             _handlers[Opcode.SMSG_SPELLLOGMISS] = SpellHandler.HandleSpellLogMiss;
             _handlers[Opcode.SMSG_SPELL_GO] = SpellHandler.HandleSpellGo;
             _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;
             _handlers[Opcode.SMSG_ATTACKSTART] = SpellHandler.HandleAttackStart;
             _handlers[Opcode.SMSG_ATTACKSTOP] = SpellHandler.HandleAttackStop;
-<<<<<<< HEAD
-=======
             _handlers[Opcode.SMSG_CANCEL_COMBAT] = SpellHandler.HandleCancelCombat;
->>>>>>> cpp_physics_system
             _handlers[Opcode.SMSG_ATTACKERSTATEUPDATE] = SpellHandler.HandleAttackerStateUpdate;
             _handlers[Opcode.SMSG_DESTROY_OBJECT] = SpellHandler.HandleDestroyObject;
             _handlers[Opcode.SMSG_CAST_FAILED] = SpellHandler.HandleCastFailed;
@@ -121,11 +115,8 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_LOG_XPGAIN] = SpellHandler.HandleLogXpGain;
             _handlers[Opcode.SMSG_LEVELUP_INFO] = SpellHandler.HandleLevelUpInfo;
             _handlers[Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM] = SpellHandler.HandleGameObjectCustomAnim;
-<<<<<<< HEAD
-=======
 
             _handlers[Opcode.SMSG_PET_SPELLS] = PetHandler.HandlePetSpells;
->>>>>>> cpp_physics_system
 
             _handlers[Opcode.SMSG_STANDSTATE_UPDATE] = StandStateHandler.HandleStandStateUpdate;
             _handlers[Opcode.SMSG_CORPSE_RECLAIM_DELAY] = DeathHandler.HandleCorpseReclaimDelay;

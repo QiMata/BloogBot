@@ -172,16 +172,6 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void SignalEventHook(nint eventNamePtrPtr, nint formatPtr, uint firstArgPtr)
         {
-<<<<<<< HEAD
-            _eventCount++;
-            // Log first 20 events unconditionally, then only log interesting events (errors, skills, chat)
-            if (_eventCount <= 20
-                || eventName.StartsWith("UI_ERROR")
-                || eventName.StartsWith("UI_INFO")
-                || eventName.StartsWith("CHAT_MSG_SKILL")
-                || eventName == "CHAT_MSG_SYSTEM")
-                DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
-=======
             // CRITICAL: This runs on WoW's main thread via native assembly detour.
             // ANY unhandled exception propagates into WoW's native stack → ERROR #132 crash.
             // Delegates use nint params to prevent CLR marshaling AVs (which happen BEFORE
@@ -190,7 +180,6 @@ namespace ForegroundBotRunner.Mem.Hooks
             {
                 if (Paused) return;
                 _eventCount++;
->>>>>>> cpp_physics_system
 
                 // eventNamePtrPtr is a ptr-to-ptr: dereference to get actual string pointer.
                 // This dereference was moved here from the code cave ('mov edi, [edi]')
@@ -284,37 +273,6 @@ namespace ForegroundBotRunner.Mem.Hooks
             signalEventNoArgsDelegate = new SignalEventNoArgsDelegate(SignalEventNoArgsHook);
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventNoArgsDelegate);
 
-<<<<<<< HEAD
-            var instructions = new[]
-            {
-                "push esi",
-                "call 0x007040D0",
-                "pushfd",
-                "pushad",
-                "mov edi, [edi]",
-                "push edi",
-                $"call 0x{(uint) addrToDetour:X}",
-                "popad",
-                "popfd",
-                $"jmp 0x{(uint) MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
-            };
-            var signalEventNoArgsDetour = MemoryManager.InjectAssembly("SignalEventNoArgsDetour", instructions);
-            MemoryManager.InjectAssembly("SignalEventNoArgsHook", (uint)MemoryAddresses.SignalEventNoParamsFunPtr, "jmp " + signalEventNoArgsDetour);
-
-            // Verify hook was written
-            var hookBytes = MemoryManager.ReadBytes((nint)MemoryAddresses.SignalEventNoParamsFunPtr, 5);
-            if (hookBytes != null && hookBytes[0] == 0xE9)
-                DiagLog($"SignalEventNoArgs hook INSTALLED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8} → detour 0x{(uint)signalEventNoArgsDetour:X8}");
-            else
-                DiagLog($"SignalEventNoArgs hook FAILED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
-        }
-
-        private static void SignalEventNoArgsHook(string eventName)
-        {
-            _eventCount++;
-            if (_eventCount <= 20)
-                DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
-=======
             // Get SafeCallback1 from FastCall.dll for SEH protection
             var safeCallback1Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback1@8", "SafeCallback1");
 
@@ -352,7 +310,6 @@ namespace ForegroundBotRunner.Mem.Hooks
                     $"jmp 0x{(uint)MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
                 ];
             }
->>>>>>> cpp_physics_system
 
             var signalEventNoArgsDetour = MemoryManager.InjectAssembly("SignalEventNoArgsDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventNoArgsHook", (uint)MemoryAddresses.SignalEventNoParamsFunPtr, "jmp " + signalEventNoArgsDetour);

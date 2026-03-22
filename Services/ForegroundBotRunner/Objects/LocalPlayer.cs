@@ -208,9 +208,11 @@ namespace ForegroundBotRunner.Objects
 
         public uint Copper => 0;
 
-        // FG bot auto-attack is started via StateManager action, not this property.
-        // Safe to return false — BotRunnerService behavior tree only runs for BG bot.
-        public bool IsAutoAttacking => false;
+        // Track auto-attack state to avoid spamming CastSpellByName('Attack') every tick.
+        // Set true when StartMeleeAttack() fires the Lua, cleared on StopAllMovement/target death.
+        // The behavior tree checks !IsAutoAttacking before calling StartMeleeAttack().
+        internal bool _isAutoAttacking;
+        public bool IsAutoAttacking => _isAutoAttacking;
 
         public bool CanResurrect =>
             InGhostForm &&

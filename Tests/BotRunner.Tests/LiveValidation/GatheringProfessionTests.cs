@@ -1,9 +1,5 @@
 using System;
 using System.Collections.Generic;
-<<<<<<< HEAD
-using System.Diagnostics;
-=======
->>>>>>> cpp_physics_system
 using System.Linq;
 using System.Threading.Tasks;
 using BotRunner.Combat;
@@ -18,27 +14,16 @@ namespace BotRunner.Tests.LiveValidation;
 /// Gathering profession integration tests (Mining + Herbalism).
 ///
 /// Strategy:
-<<<<<<< HEAD
-///   1. Teleport to Orgrimmar (safe zone) for GM setup — avoids mob aggro/targeting issues
-///   2. Query MaNGOS gameobject table for existing node spawns on Kalimdor
-///   3. Teleport ~30 yards from each spawn, detect the node, pathfind to it
-///   4. Interact and verify skill increase
-=======
 ///   1. Teleport to Orgrimmar (safe zone) for setup — learn spells, set skills
 ///   2. For mining, query Valley of Trials copper spawns and dispatch StartGatheringRoute
 ///      so GatheringRouteTask owns route optimization, movement, discovery, and gather
 ///   3. For herbalism, query Durotar herb spawns and dispatch StartGatheringRoute
 ///      so GatheringRouteTask owns route optimization, movement, discovery, and gather
 ///   4. Interact and verify gather success / skill progression metrics
->>>>>>> cpp_physics_system
 ///
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GatheringProfessionTests" --configuration Release -v n
 /// </summary>
-<<<<<<< HEAD
-[RequiresMangosStack]
-=======
->>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class GatheringProfessionTests
 {
@@ -58,26 +43,12 @@ public class GatheringProfessionTests
     private const uint SilverleafEntry = 1618;
     private const uint EarthrootEntry = 1619;
 
-<<<<<<< HEAD
-    // Gathering channel = ~3s. Wait 8s for margin + loot.
-    private const int GatherChannelWaitMs = 8000;
-
-=======
->>>>>>> cpp_physics_system
     // Orgrimmar (safe zone, no hostile mobs) for GM setup
     private const int OrgrimmarMap = 1;
     private const float OrgX = 1629.4f;
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
-<<<<<<< HEAD
-    // How far away from node to teleport (yards). Far enough to require navigation.
-    private const float TeleportOffset = 25f;
-    // BG navigation arrival tolerance (yards). Must be within ~5y for interaction.
-    private const float NavTolerance = 4f;
-
-=======
->>>>>>> cpp_physics_system
     public GatheringProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -93,88 +64,6 @@ public class GatheringProfessionTests
     [SkippableFact]
     public async Task Mining_GatherCopperVein_SkillIncreases()
     {
-<<<<<<< HEAD
-        // --- Find copper vein spawns in the DB (Kalimdor — Durotar low-level zone) ---
-        var spawns = await _bot.QueryGameObjectSpawnsAsync(CopperVeinEntry, mapFilter: 1, limit: 10);
-        global::Tests.Infrastructure.Skip.If(spawns.Count == 0, "No Copper Vein spawns in gameobject table (entry 1731).");
-        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations");
-
-        // --- FG FIRST: native WoW right-click interaction (gold standard) ---
-        var fgAccount = _bot.FgAccountName;
-        if (fgAccount != null && _bot.ForegroundBot != null)
-        {
-            // Park BG bot nearby so CombatCoordinator doesn't send
-            // competing GOTO actions that overwrite the test's navigation.
-            var bgParkAccount = _bot.BgAccountName;
-            if (bgParkAccount != null)
-            {
-                _output.WriteLine("[BG] Parking BG bot in Orgrimmar (prevents CombatCoordinator interference)");
-                await _bot.BotTeleportAsync(bgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
-            }
-
-            _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
-            await PrepareMining(fgAccount, "FG");
-
-            await _bot.RefreshSnapshotsAsync();
-            uint fgSkillBefore = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"FG initial mining skill: {fgSkillBefore}");
-
-            bool fgGathered = await TryGatherAtSpawns(fgAccount, "FG", spawns,
-                CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
-                initialSkill: fgSkillBefore,
-                gatherSpellId: MiningGatherSpell, parkAccount: _bot.BgAccountName);
-
-            await _bot.RefreshSnapshotsAsync();
-            uint fgSkillAfter = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"FG Results: gathered={fgGathered}, skill {fgSkillBefore} → {fgSkillAfter}");
-
-            // Soft-check FG: don't block BG test if FG has stale skill state
-            // (e.g., after WoW.exe restart mid-session).  Final assertion at end covers both.
-            if (!fgGathered)
-                _output.WriteLine($"WARNING — FG: Failed to gather Copper Vein. skill={fgSkillAfter}.");
-            if (fgSkillAfter <= fgSkillBefore)
-                _output.WriteLine($"WARNING — FG: Mining skill did not increase ({fgSkillBefore} → {fgSkillAfter}).");
-        }
-        else
-        {
-            _output.WriteLine("FG bot not available — skipping FG mining test.");
-        }
-
-        // --- BG: headless protocol emulation ---
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
-
-        // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
-        // that overwrite the GatherNode behavior tree during the mining channel.
-        var fgParkAccount = _bot.FgAccountName;
-        if (fgParkAccount != null)
-        {
-            _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
-            await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
-        }
-
-        await PrepareMining(bgAccount, "BG");
-
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-        _output.WriteLine($"BG initial mining skill: {bgSkillBefore}");
-        global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG mining skill already capped ({bgSkillBefore}); cannot assert further increase.");
-
-        bool bgGathered = await TryGatherAtSpawns(bgAccount, "BG", spawns,
-            CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
-            initialSkill: bgSkillBefore,
-            gatherSpellId: MiningGatherSpell, parkAccount: _bot.FgAccountName);
-
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillAfter = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-        _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
-
-        Assert.True(bgGathered,
-            $"BG: Failed to gather Copper Vein at any of {spawns.Count} locations. skill={bgSkillAfter}.");
-        Assert.True(bgSkillAfter > bgSkillBefore,
-            $"BG: Mining skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
-=======
         var valleyCandidates = GatheringRouteSelection.SelectValleyCopperVeinCandidates(
             await _bot.QueryGameObjectSpawnsNearAsync(
                 [CopperVeinEntry],
@@ -324,7 +213,6 @@ public class GatheringProfessionTests
         {
             await ReturnToSafeZoneAsync(bgAccountForRoute, "BG");
         }
->>>>>>> cpp_physics_system
     }
 
     // =====================================================================
@@ -334,8 +222,6 @@ public class GatheringProfessionTests
     [SkippableFact]
     public async Task Herbalism_GatherHerb_SkillIncreases()
     {
-<<<<<<< HEAD
-=======
         uint[] herbEntries = [PeacebloomEntry, SilverleafEntry, EarthrootEntry];
 
         var herbCandidates = GatheringRouteSelection.SelectDurotarHerbCandidates(
@@ -435,57 +321,10 @@ public class GatheringProfessionTests
         }
 
         // --- BG: headless protocol emulation ---
->>>>>>> cpp_physics_system
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
 
-<<<<<<< HEAD
-        // --- Find herb spawns in Kalimdor (Durotar/Mulgore — low-level zones) ---
-        var allSpawns = new List<(int map, float x, float y, float z, uint entry)>();
-        foreach (var entry in new[] { PeacebloomEntry, SilverleafEntry, EarthrootEntry })
-        {
-            var spawns = await _bot.QueryGameObjectSpawnsAsync(entry, mapFilter: 1, limit: 5);
-            foreach (var s in spawns)
-                allSpawns.Add((s.map, s.x, s.y, s.z, entry));
-        }
-        global::Tests.Infrastructure.Skip.If(allSpawns.Count == 0,
-            "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
-        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations");
-
-        // --- Prepare: learn Herbalism + set skill ---
-        await PrepareHerbalism(bgAccount, "BG");
-
-        // --- Record initial skill ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-        _output.WriteLine($"Initial herbalism skill: BG={bgSkillBefore}");
-        global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
-
-        // --- Try each spawn location ---
-        var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
-
-        bool bgGathered = false;
-        foreach (var entry in herbEntries)
-        {
-            var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
-            bgGathered = await TryGatherAtSpawns(bgAccount, "BG", entrySpawns,
-                entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
-                initialSkill: bgSkillBefore,
-                gatherSpellId: HerbalismGatherSpell);
-            if (bgGathered) break;
-        }
-
-        // --- Assert ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-        _output.WriteLine($"Results: BG gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
-
-        Assert.True(bgGathered,
-            $"BG: Failed to gather herb at any of {allSpawns.Count} locations. skill={bgSkillAfter}.");
-        Assert.True(bgSkillAfter > bgSkillBefore,
-            $"BG: Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
-=======
         try
         {
             var fgParkAccount = _bot.FgAccountName;
@@ -534,7 +373,6 @@ public class GatheringProfessionTests
         {
             await ReturnToSafeZoneAsync(bgAccount, "BG");
         }
->>>>>>> cpp_physics_system
     }
 
     // =====================================================================
@@ -542,21 +380,12 @@ public class GatheringProfessionTests
     // =====================================================================
     /// <summary>
     /// Snapshot-driven mining setup: apply only missing preconditions.
-<<<<<<< HEAD
-=======
     /// Self-targeting is applied before GM commands that require it (.learn, .setskill).
->>>>>>> cpp_physics_system
     /// </summary>
     private async Task PrepareMining(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
 
-<<<<<<< HEAD
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: true);
-        await Task.Delay(500);
-
-=======
->>>>>>> cpp_physics_system
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
         if (bagCount >= 12)
@@ -566,20 +395,6 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
-<<<<<<< HEAD
-        var currentMining = GetSkill(label, GatheringData.MINING_SKILL_ID);
-        if (currentMining < 1)
-        {
-            await EnsureSelfSelectionForBgAsync(account, label);
-            _output.WriteLine($"[{label}] Applying mining skills (.learn/.setskill)");
-            await _bot.BotLearnSpellAsync(account, MiningApprentice);
-            await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
-            await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
-        }
-        else
-        {
-            _output.WriteLine($"[{label}] Mining skill already present ({currentMining}) - skipping learn/setskill");
-=======
         // Self-target before GM commands that require it (.learn, .setskill).
         await EnsureSelfSelectionAsync(account);
 
@@ -591,7 +406,6 @@ public class GatheringProfessionTests
         {
             var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
             AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.MINING_SKILL_ID} 1 300");
->>>>>>> cpp_physics_system
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -609,21 +423,12 @@ public class GatheringProfessionTests
     }
     /// <summary>
     /// Snapshot-driven herbalism setup: apply only missing preconditions.
-<<<<<<< HEAD
-=======
     /// Self-targeting is applied before GM commands that require it (.learn, .setskill).
->>>>>>> cpp_physics_system
     /// </summary>
     private async Task PrepareHerbalism(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
 
-<<<<<<< HEAD
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: true);
-        await Task.Delay(500);
-
-=======
->>>>>>> cpp_physics_system
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
         if (bagCount >= 12)
@@ -633,22 +438,6 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
-<<<<<<< HEAD
-        var currentHerbalism = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
-        if (currentHerbalism < 1)
-        {
-            await EnsureSelfSelectionForBgAsync(account, label);
-            _output.WriteLine($"[{label}] Applying herbalism skills (.learn/.setskill)");
-            await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
-            await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
-            await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
-            await Task.Delay(500);
-        }
-        else
-        {
-            _output.WriteLine($"[{label}] Herbalism skill already present ({currentHerbalism}) - skipping learn/setskill");
-        }
-=======
         // Self-target before GM commands that require it (.learn, .setskill).
         await EnsureSelfSelectionAsync(account);
 
@@ -662,129 +451,12 @@ public class GatheringProfessionTests
             AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300");
             await Task.Delay(500);
         }
->>>>>>> cpp_physics_system
 
         await _bot.RefreshSnapshotsAsync();
         var skillCheck = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
         _output.WriteLine($"[{label}] Herbalism setup state: skill={skillCheck}");
     }
 
-<<<<<<< HEAD
-    /// <summary>
-    /// Try gathering at natural spawn locations.
-    ///
-    /// Strategy: teleport near known spawn points (from DB), use .respawn to force
-    /// depleted nodes back, then scan the character's NearbyObjects for the node.
-    /// NO .gobject add - we only gather naturally-spawning nodes.
-    /// </summary>
-    private async Task<bool> TryGatherAtSpawns(string account, string label,
-        List<(int map, float x, float y, float z)> spawns,
-        uint nodeEntry, uint skillId, string nodeName,
-        uint initialSkill,
-        uint gatherSpellId = 0, string? parkAccount = null)
-    {
-        int maxLocations = Math.Min(spawns.Count, 5);
-
-        // Enter gameplay mode once for the full gather loop.
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true);
-        await Task.Delay(500);
-
-        // Park the other bot once to reduce coordinator interference.
-        if (parkAccount != null)
-            await _bot.BotTeleportAsync(parkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
-
-        for (int loc = 0; loc < maxLocations; loc++)
-        {
-            var (map, spawnX, spawnY, spawnZ) = spawns[loc];
-
-            // Z+3 offset to avoid MaNGOS undermap detection
-            float safeZ = spawnZ + 3f;
-            _output.WriteLine($"[{label}] Location {loc + 1}/{maxLocations}: checking natural {nodeName} near ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1})");
-
-            await _bot.BotTeleportAsync(account, map, spawnX, spawnY, safeZ);
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
-
-            await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: false);
-            await Task.Delay(1500);
-
-            // --- Scan for the node in NearbyObjects ---
-            ulong nodeGuid = 0;
-            float nodeX = 0, nodeY = 0, nodeZ = 0;
-            var sw = Stopwatch.StartNew();
-            while (sw.Elapsed < TimeSpan.FromSeconds(10))
-            {
-                await _bot.RefreshSnapshotsAsync();
-                var snap = GetSnapshot(label);
-                var gameObjects = snap?.NearbyObjects?.ToList() ?? [];
-
-                var node = gameObjects.FirstOrDefault(go => go.Entry == nodeEntry);
-                if (node != null)
-                {
-                    nodeGuid = node.Base?.Guid ?? 0;
-                    var nodePos = node.Base?.Position;
-                    if (nodePos != null)
-                    {
-                        nodeX = nodePos.X;
-                        nodeY = nodePos.Y;
-                        nodeZ = nodePos.Z;
-                    }
-                    break;
-                }
-
-                await Task.Delay(1500);
-            }
-
-            if (nodeGuid == 0)
-            {
-                _output.WriteLine($"  [{label}] No natural {nodeName} detected at this location, trying next...");
-                continue;
-            }
-
-            await _bot.RefreshSnapshotsAsync();
-            var preSnap = GetSnapshot(label);
-            var playerPos = preSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            float startDist = 0;
-            if (playerPos != null)
-                startDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
-            _output.WriteLine($"  [{label}] Found {nodeName}: 0x{nodeGuid:X} at ({nodeX:F1}, {nodeY:F1}, {nodeZ:F1}), dist={startDist:F1}y");
-
-            if (startDist > 3f)
-            {
-                await _bot.BotTeleportAsync(account, map, nodeX + 1f, nodeY, nodeZ + 3f);
-                await _bot.WaitForZStabilizationAsync(account, waitMs: 3000);
-            }
-
-            await _bot.RefreshSnapshotsAsync();
-            playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
-            float finalDist = playerPos != null ? Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ) : startDist;
-            _output.WriteLine($"  [{label}] Sending GatherNode (dist={finalDist:F1}y, spell={gatherSpellId})...");
-
-            var gatherParams = new ActionMessage
-            {
-                ActionType = ActionType.GatherNode,
-                Parameters = { new RequestParameter { LongParam = (long)nodeGuid } }
-            };
-            if (gatherSpellId > 0)
-                gatherParams.Parameters.Add(new RequestParameter { IntParam = (int)gatherSpellId });
-            await _bot.SendActionAndWaitAsync(account, gatherParams, delayMs: GatherChannelWaitMs);
-
-            await _bot.RefreshSnapshotsAsync();
-            uint skillNow = GetSkill(label, skillId);
-            _output.WriteLine($"  [{label}] Skill after gather: {skillNow}");
-
-            if (skillNow > initialSkill)
-            {
-                _output.WriteLine($"  [{label}] SUCCESS! Skill increased {initialSkill} -> {skillNow}");
-                return true;
-            }
-
-            _output.WriteLine($"  [{label}] Skill did not increase yet ({initialSkill} -> {skillNow}), trying next location...");
-        }
-
-        return false;
-    }
-
-=======
     private ActionMessage BuildGatheringRouteAction(
         uint gatherSpellId,
         IReadOnlyCollection<uint> nodeEntries,
@@ -915,7 +587,6 @@ public class GatheringProfessionTests
         await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
     }
 
->>>>>>> cpp_physics_system
     private async Task EnsureAliveAndAtSetupLocationAsync(string account, string label)
     {
         await _bot.RefreshSnapshotsAsync();
@@ -941,11 +612,7 @@ public class GatheringProfessionTests
         var needsTeleport = true;
         if (pos != null)
         {
-<<<<<<< HEAD
-            var distToOrg = Distance(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
-=======
             var distToOrg = LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
->>>>>>> cpp_physics_system
             needsTeleport = distToOrg > 80f;
         }
 
@@ -953,27 +620,6 @@ public class GatheringProfessionTests
         {
             _output.WriteLine($"[{label}] Moving to safe setup zone (Orgrimmar)");
             await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
-<<<<<<< HEAD
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 5000);
-        }
-    }
-
-    private async Task EnsureSelfSelectionForBgAsync(string account, string label)
-    {
-        if (label != "BG")
-            return;
-
-        await _bot.RefreshSnapshotsAsync();
-        var playerGuid = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
-        if (playerGuid == 0)
-            return;
-
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.StartMeleeAttack,
-            Parameters = { new RequestParameter { LongParam = (long)playerGuid } }
-        }, delayMs: 500);
-=======
             await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
         }
     }
@@ -987,7 +633,6 @@ public class GatheringProfessionTests
     {
         await _bot.BotSelectSelfAsync(account);
         await Task.Delay(300);
->>>>>>> cpp_physics_system
     }
 
     private int GetBagItemCount(string label)
@@ -999,10 +644,6 @@ public class GatheringProfessionTests
         return bags != null && bags.Values.Any(v => v == itemId);
     }
 
-<<<<<<< HEAD
-    private static float Distance(float x1, float y1, float z1, float x2, float y2, float z2)
-        => (float)Math.Sqrt(Math.Pow(x1 - x2, 2) + Math.Pow(y1 - y2, 2) + Math.Pow(z1 - z2, 2));
-=======
     /// <summary>
     /// Best-effort return to safe zone (Orgrimmar) after test completion or failure.
     /// Prevents leaving the bot stranded at a remote gathering location.
@@ -1029,7 +670,6 @@ public class GatheringProfessionTests
             _output.WriteLine($"[{label}] Cleanup warning: safe zone return failed — {ex.Message}");
         }
     }
->>>>>>> cpp_physics_system
 
     private uint GetSkill(string label, uint skillId)
     {
@@ -1042,8 +682,6 @@ public class GatheringProfessionTests
 
     private WoWActivitySnapshot? GetSnapshot(string label)
         => label == "FG" ? _bot.ForegroundBot : _bot.BackgroundBot;
-<<<<<<< HEAD
-=======
 
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
     {
@@ -1051,6 +689,5 @@ public class GatheringProfessionTests
         var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
->>>>>>> cpp_physics_system
 }
 

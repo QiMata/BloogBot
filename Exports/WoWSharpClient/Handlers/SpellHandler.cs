@@ -61,13 +61,6 @@ namespace WoWSharpClient.Handlers
             try
             {
                 uint spellId = reader.ReadUInt32();
-<<<<<<< HEAD
-                var existing = WoWSharpObjectManager.Instance.Spells;
-                if (existing != null && !existing.Exists(s => s.Id == spellId))
-                {
-                    existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
-                    Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
-=======
                 lock (WoWSharpObjectManager.Instance.SpellLock)
                 {
                     var existing = WoWSharpObjectManager.Instance.Spells;
@@ -125,7 +118,6 @@ namespace WoWSharpClient.Handlers
                     var removed = existing.RemoveAll(s => s.Id == spellId);
                     Log.Information("[SpellHandler] Removed spell: {SpellId} (removed={Removed}, total={Count})",
                         spellId, removed, existing.Count);
->>>>>>> cpp_physics_system
                 }
             }
             catch (EndOfStreamException) { }
@@ -545,14 +537,10 @@ namespace WoWSharpClient.Handlers
 
                 var player = WoWSharpObjectManager.Instance.Player;
                 if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
-<<<<<<< HEAD
-                    localPlayer.IsAutoAttacking = true;
-=======
                 {
                     localPlayer.IsAutoAttacking = true;
                     localPlayer.TargetGuid = targetGuid;
                 }
->>>>>>> cpp_physics_system
             }
             catch (EndOfStreamException) { }
         }
@@ -570,10 +558,6 @@ namespace WoWSharpClient.Handlers
                 ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
 
                 var player = WoWSharpObjectManager.Instance.Player;
-<<<<<<< HEAD
-                if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
-                    localPlayer.IsAutoAttacking = false;
-=======
                 if (player is Models.WoWLocalPlayer localPlayer)
                 {
                     bool isUs = attackerGuid == localPlayer.Guid;
@@ -582,18 +566,11 @@ namespace WoWSharpClient.Handlers
                     if (isUs)
                         localPlayer.IsAutoAttacking = false;
                 }
->>>>>>> cpp_physics_system
             }
             catch (EndOfStreamException) { }
         }
 
         /// <summary>
-<<<<<<< HEAD
-        /// Handles SMSG_GAMEOBJECT_CUSTOM_ANIM (0x0B3).
-        /// Format: uint64 guid, uint32 anim
-        /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact (CMSG_GAMEOBJ_USE)
-        /// so the catch happens instantly without requiring external polling.
-=======
         /// SMSG_CANCEL_COMBAT (0x14E) — server cancels all combat state.
         /// Sent when a mob evades or combat is otherwise terminated server-side.
         /// Empty payload — just clears IsAutoAttacking so the bot re-sends
@@ -615,7 +592,6 @@ namespace WoWSharpClient.Handlers
         /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact
         /// (CMSG_GAMEOBJ_USE) so the task-owned loot window can open, but we do not
         /// auto-loot here. FishingTask is responsible for consuming the loot window.
->>>>>>> cpp_physics_system
         /// </summary>
         public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data)
         {
@@ -629,25 +605,6 @@ namespace WoWSharpClient.Handlers
 
                 var om = WoWSharpObjectManager.Instance;
                 var obj = om.GetObjectByGuid(guid);
-<<<<<<< HEAD
-                if (obj is not Models.WoWGameObject go) return;
-
-                // Fish bite: anim 0 on a bobber created by our player
-                if (anim == 0 && go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid)
-                {
-                    Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);
-                    om.InteractWithGameObject(guid);
-
-                    // Auto-loot the catch after server processes interaction
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(1500);
-                        Log.Information("[FishBite] Auto-looting slot 0...");
-                        om.AutoStoreLootItem(0);
-                        await Task.Delay(500);
-                        om.ReleaseLoot(guid);
-                        Log.Information("[FishBite] Released loot for bobber 0x{Guid:X}", guid);
-=======
 
                 Log.Information("[CustomAnim] Guid=0x{Guid:X} Anim={Anim} ObjFound={Found} ObjType={Type}",
                     guid, anim, obj != null, obj?.GetType().Name ?? "null");
@@ -681,14 +638,11 @@ namespace WoWSharpClient.Handlers
                         await Task.Delay(75).ConfigureAwait(false);
                         ((GameData.Core.Interfaces.IObjectManager)om).ForceStopImmediate();
                         om.InteractWithGameObject(guid);
->>>>>>> cpp_physics_system
                     });
                 }
             }
             catch (EndOfStreamException) { }
         }
-<<<<<<< HEAD
-=======
 
 
 
@@ -747,7 +701,6 @@ namespace WoWSharpClient.Handlers
                 Log.Warning("[SpellHandler] Error parsing MSG_CHANNEL_UPDATE: {Message}", ex.Message);
             }
         }
->>>>>>> cpp_physics_system
     }
 }
 

@@ -74,11 +74,7 @@ namespace BotRunner.Tests.Combat
         {
             var config = new BotBehaviorConfig();
             Assert.Equal(40.0f, config.GatherDetectRange);
-<<<<<<< HEAD
-            Assert.Equal(30.0f, config.FishingPoolDetectRange);
-=======
             Assert.Equal(80.0f, config.FishingPoolDetectRange);
->>>>>>> cpp_physics_system
             Assert.Equal(8, config.MaxFishingCasts);
             Assert.Equal(30_000, config.FishingCooldownMs);
             Assert.Equal(120_000, config.CraftCooldownMs);

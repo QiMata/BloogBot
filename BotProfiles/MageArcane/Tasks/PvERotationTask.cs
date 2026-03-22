@@ -1,18 +1,13 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
-<<<<<<< HEAD
-=======
 using GameData.Core.Models;
->>>>>>> cpp_physics_system
 using static BotRunner.Constants.Spellbook;
 
 namespace MageArcane.Tasks
 {
     public class PvERotationTask : CombatRotationTask, IBotTask
     {
-<<<<<<< HEAD
-=======
         // Vanilla 1.12.1 mage base spell ranges
         private const float ArcaneMissilesBaseRange = 30f;
         private const float ArcaneBarrageBaseRange = 30f;
@@ -21,7 +16,6 @@ namespace MageArcane.Tasks
         private const float CounterspellBaseRange = 30f;
         private const float FlamestrikeBaseRange = 30f;
 
->>>>>>> cpp_physics_system
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()

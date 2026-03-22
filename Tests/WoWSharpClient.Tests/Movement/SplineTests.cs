@@ -140,8 +140,6 @@ namespace WoWSharpClient.Tests.Movement
 
             controller.Remove(2);
         }
-<<<<<<< HEAD
-=======
 
         [Fact]
         public void HasActiveSpline_TrueAfterAdd()
@@ -225,6 +223,5 @@ namespace WoWSharpClient.Tests.Movement
             Assert.False(controller.HasActiveSpline(1));
             Assert.True(controller.HasActiveSpline(2));
         }
->>>>>>> cpp_physics_system
     }
 }

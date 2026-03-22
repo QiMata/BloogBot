@@ -29,17 +29,11 @@ namespace HunterSurvival.Tasks
                 return;
 
             ObjectManager.StopAllMovement();
-<<<<<<< HEAD
-            IWoWItem rangedWeapon = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
-            bool canShoot = rangedWeapon != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&
-                             ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 34;
-=======
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             var meleeRange = GetMeleeRange(target);
             IWoWItem rangedWeapon = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
             var distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
             bool canShoot = rangedWeapon != null && distanceToTarget > HunterDeadZone && distanceToTarget < rangedRange;
->>>>>>> cpp_physics_system
 
             if (canShoot)
             {
@@ -55,17 +49,10 @@ namespace HunterSurvival.Tasks
             }
 
             // melee — apply Wing Clip then kite back to ranged distance
-<<<<<<< HEAD
-            if (rangedWeapon != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
-                return;
-            TryCastSpell(MongooseBite, 0, 5);
-            TryCastSpell(RaptorStrike, 0, 5);
-=======
             if (rangedWeapon != null && TryCastSpell(WingClip, 0f, meleeRange, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
                 return;
             TryCastSpell(MongooseBite, 0f, meleeRange);
             TryCastSpell(RaptorStrike, 0f, meleeRange);
->>>>>>> cpp_physics_system
         }
 
         public override void PerformCombatRotation() => Update();

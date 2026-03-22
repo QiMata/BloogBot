@@ -20,12 +20,6 @@ namespace WoWStateManager.Listeners
         public ConcurrentDictionary<string, WoWActivitySnapshot> CurrentActivityMemberList { get; } = new();
 
         /// <summary>
-<<<<<<< HEAD
-        /// Pending actions queued by external callers (e.g. test fixtures via port 8088).
-        /// Stored per-account and consumed in FIFO order on subsequent bot polls.
-        /// </summary>
-        private readonly ConcurrentDictionary<string, ConcurrentQueue<ActionMessage>> _pendingActions = new();
-=======
         /// Maximum number of pending actions per account. Prevents unbounded growth if a bot stops polling.
         /// </summary>
         private const int MaxPendingActionsPerAccount = 50;
@@ -40,7 +34,6 @@ namespace WoWStateManager.Listeners
         /// Stored per-account and consumed in FIFO order on subsequent bot polls.
         /// </summary>
         private readonly ConcurrentDictionary<string, ConcurrentQueue<TimestampedAction>> _pendingActions = new();
->>>>>>> cpp_physics_system
 
         /// <summary>
         /// After delivering a forwarded action, suppress CombatCoordinator for that account
@@ -65,14 +58,10 @@ namespace WoWStateManager.Listeners
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
-<<<<<<< HEAD
-            _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
-=======
             _soapClient = soapClient;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
             if (IsCoordinatorDisabled)
                 logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1 (at startup)");
->>>>>>> cpp_physics_system
             characterSettings.ForEach(settings => CurrentActivityMemberList.TryAdd(settings.AccountName, new()));
         }
 
@@ -101,11 +90,7 @@ namespace WoWStateManager.Listeners
                 var charInfo = !string.IsNullOrEmpty(characterName) ? $", Character='{characterName}'" : "";
                 var errCount = request.RecentErrors?.Count ?? 0;
                 var errSuffix = errCount > 0 ? $", RecentErrors={errCount}" : "";
-<<<<<<< HEAD
-                _logger.LogInformation($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
-=======
                 _logger.LogDebug($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
->>>>>>> cpp_physics_system
             }
 
             // Handle "?" account name - assign to Foreground account (only FG bots send "?")
@@ -167,10 +152,6 @@ namespace WoWStateManager.Listeners
             // Use FIFO so rapid multi-step setup actions (target -> chat command, etc.) are not dropped.
             if (_pendingActions.TryGetValue(accountName, out var pendingQueue))
             {
-<<<<<<< HEAD
-                while (pendingQueue.TryDequeue(out var pendingAction))
-                {
-=======
                 while (pendingQueue.TryDequeue(out var timestampedAction))
                 {
                     // Drop stale actions that have exceeded TTL
@@ -182,7 +163,6 @@ namespace WoWStateManager.Listeners
 
                     var pendingAction = timestampedAction.Action;
 
->>>>>>> cpp_physics_system
                     // Drop stale chat actions if the sender is dead/ghost.
                     // Action forwarding can be delayed by coordinator suppression; by delivery time the bot may have died.
                     if (pendingAction.ActionType == ActionType.SendChat && IsDeadOrGhostState(response, out var deadReason))
@@ -195,10 +175,7 @@ namespace WoWStateManager.Listeners
                     // Suppress CombatCoordinator so multi-second forwarded actions
                     // are not overwritten on the next poll cycle.
                     _coordinatorSuppressedUntil[accountName] = DateTime.UtcNow.AddSeconds(_coordinatorSuppressionSeconds);
-<<<<<<< HEAD
-=======
                     Console.WriteLine($"[ACTION-DIAG] INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType}");
->>>>>>> cpp_physics_system
                     _logger.LogInformation($"INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType} (coordinator suppressed {_coordinatorSuppressionSeconds}s)");
                     break;
                 }
@@ -220,28 +197,16 @@ namespace WoWStateManager.Listeners
         /// Queues an action to be delivered to the specified bot on its next poll.
         /// Used by the test fixture (via port 8088) to send commands to bots.
         /// </summary>
-<<<<<<< HEAD
-        public void EnqueueAction(string accountName, ActionMessage action)
-=======
         /// <summary>
         /// Returns true if the action was successfully enqueued, false if it was dropped (e.g. dead/ghost state).
         /// </summary>
         public bool EnqueueAction(string accountName, ActionMessage action)
->>>>>>> cpp_physics_system
         {
             if (action.ActionType == ActionType.SendChat
                 && CurrentActivityMemberList.TryGetValue(accountName, out var current)
                 && IsDeadOrGhostState(current, out var deadReason))
             {
                 _logger.LogInformation($"DROPPING QUEUED ACTION for '{accountName}': SendChat blocked while dead/ghost ({deadReason})");
-<<<<<<< HEAD
-                return;
-            }
-
-            var queue = _pendingActions.GetOrAdd(accountName, _ => new ConcurrentQueue<ActionMessage>());
-            queue.Enqueue(action);
-            _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
-=======
                 return false;
             }
 
@@ -257,7 +222,6 @@ namespace WoWStateManager.Listeners
             Console.WriteLine($"[ACTION-DIAG] QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
             _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
             return true;
->>>>>>> cpp_physics_system
         }
 
         private static bool IsDeadOrGhostState(WoWActivitySnapshot? snap, out string reason)
@@ -284,26 +248,11 @@ namespace WoWStateManager.Listeners
             if (standState == standStateDead)
                 reasons.Add("standState=dead");
 
-<<<<<<< HEAD
-            var deadTextSeen =
-                (snap?.RecentErrors?.Any(e =>
-                    e.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false)
-                || (snap?.RecentChatMessages?.Any(m =>
-                    m.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
-                    m.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
-                    m.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false);
-
-            if (deadTextSeen)
-                reasons.Add("deadTextSeen=1");
-=======
             // NOTE: The former "deadTextSeen" heuristic (any RecentChatMessages/RecentErrors containing
             // "dead") was removed. It caused false positives: a "[SYSTEM] You are dead." message from a
             // prior test stayed in the 50-message rolling window and permanently blocked all subsequent
             // chat actions for the rest of the session, even after the character was revived.
             // health=0, ghostFlag, and standState=dead are real-time game-state fields and sufficient.
->>>>>>> cpp_physics_system
 
             if (reasons.Count == 0)
                 return false;
@@ -312,14 +261,6 @@ namespace WoWStateManager.Listeners
             return true;
         }
 
-<<<<<<< HEAD
-        private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
-        {
-            // Skip if a forwarded action was recently delivered — let it complete without interference
-            if (_coordinatorSuppressedUntil.TryGetValue(accountName, out var until) && DateTime.UtcNow < until)
-                return;
-
-=======
         /// <summary>
         /// Wraps an ActionMessage with an enqueue timestamp for TTL expiry.
         /// </summary>
@@ -349,7 +290,6 @@ namespace WoWStateManager.Listeners
                     return;
             }
 
->>>>>>> cpp_physics_system
             if (CurrentActivityMemberList.Count < 2)
             {
                 _logger.LogDebug($"COMBAT_COORD_DEBUG: Skipping — only {CurrentActivityMemberList.Count} members");

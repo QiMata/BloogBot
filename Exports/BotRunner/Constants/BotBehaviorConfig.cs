@@ -103,11 +103,7 @@ public class BotBehaviorConfig
     public float GatherDetectRange { get; set; } = 40.0f;
 
     /// <summary>Detection range for fishing pools (yards).</summary>
-<<<<<<< HEAD
-    public float FishingPoolDetectRange { get; set; } = 30.0f;
-=======
     public float FishingPoolDetectRange { get; set; } = 80.0f;
->>>>>>> cpp_physics_system
 
     /// <summary>Max casts at a single fishing pool before moving on.</summary>
     public int MaxFishingCasts { get; set; } = 8;

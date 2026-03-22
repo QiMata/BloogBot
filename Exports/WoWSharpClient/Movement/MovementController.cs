@@ -88,26 +88,18 @@ namespace WoWSharpClient.Movement
         private uint _lastPacketTime;
         private MovementFlags _lastSentFlags = player.MovementFlags;
         private bool _forceStopAfterReset;
-<<<<<<< HEAD
-        private const uint PACKET_INTERVAL_MS = 500;
-=======
         // When true, sync _lastPacketPosition to current player position on next Update().
         // Needed because Reset() runs before the teleport position is applied to _player.
         private bool _needsPacketPositionSync;
         // WoW.exe heartbeat timer: 100ms (0x5E2110, mov ecx 0x64).
         // Only sends when position has actually changed (gated by 0x5E22D0).
         private const uint PACKET_INTERVAL_MS = 100;
->>>>>>> cpp_physics_system
         private uint _latestGameTimeMs;
         private uint _staleForwardSuppressUntilMs;
         private int _staleForwardNoDisplacementTicks;
         private int _staleForwardRecoveryCount;
         private const float STALE_FORWARD_DISPLACEMENT_EPSILON = 0.05f;
-<<<<<<< HEAD
-        private const int STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD = 30;
-=======
         private const int STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD = 15;
->>>>>>> cpp_physics_system
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RESET_MS = 2000;
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS = 1500;
         private const MovementFlags STALE_RECOVERY_MOVEMENT_MASK =
@@ -115,8 +107,6 @@ namespace WoWSharpClient.Movement
             MovementFlags.MOVEFLAG_BACKWARD |
             MovementFlags.MOVEFLAG_STRAFE_LEFT |
             MovementFlags.MOVEFLAG_STRAFE_RIGHT;
-<<<<<<< HEAD
-=======
         private const MovementFlags FORCED_STOP_CLEAR_MASK =
             MovementFlags.MOVEFLAG_FORWARD |
             MovementFlags.MOVEFLAG_BACKWARD |
@@ -153,7 +143,6 @@ namespace WoWSharpClient.Movement
         /// trigger higher-level recovery (unstuck, respawn, GM fallback).
         /// </summary>
         public event Action<int /*level*/, Position /*position*/>? OnStuckRecoveryRequired;
->>>>>>> cpp_physics_system
 
         // Debug tracking
         private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
@@ -178,8 +167,6 @@ namespace WoWSharpClient.Movement
             _frameCounter++;
             _latestGameTimeMs = gameTimeMs;
 
-<<<<<<< HEAD
-=======
             // Deferred position sync: Reset() captured pre-teleport position.
             // Now that the teleport destination has been applied to _player, sync it.
             if (_needsPacketPositionSync)
@@ -191,16 +178,11 @@ namespace WoWSharpClient.Movement
                     _player.Position.X, _player.Position.Y, _player.Position.Z);
             }
 
->>>>>>> cpp_physics_system
             if (_forceStopAfterReset)
             {
                 SendForcedStopPacket(gameTimeMs);
             }
 
-<<<<<<< HEAD
-            if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
-                && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
-=======
             // Consume pending knockback impulse from SMSG_MOVE_KNOCK_BACK.
             // Must happen before the idle early-return so knockback is never dropped.
             if (WoWSharpObjectManager.Instance?.TryConsumePendingKnockback(out float kbVx, out float kbVy, out float kbVz) == true)
@@ -228,7 +210,6 @@ namespace WoWSharpClient.Movement
             // This prevents crafting, fishing, and other channeled spells from being
             // cancelled by physics-generated position updates.
             if (_player.IsChanneling || _player.IsCasting)
->>>>>>> cpp_physics_system
             {
                 return;
             }
@@ -272,12 +253,6 @@ namespace WoWSharpClient.Movement
                 Log.Information("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y expected={Expected:F3}y flags=0x{Flags:X}",
                     _frameCounter, deltaSec, frameDelta, deltaSec * _player.RunSpeed, (uint)_player.MovementFlags);
             }
-<<<<<<< HEAD
-
-            ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
-            _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
-=======
->>>>>>> cpp_physics_system
 
             ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
             _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
@@ -479,17 +454,10 @@ namespace WoWSharpClient.Movement
             var oldPos = _player.Position;
 
             // Diagnostic: detect if physics returned unchanged position while movement was expected.
-<<<<<<< HEAD
-            // Dead-reckoning fallback has been REMOVED — the physics engine should handle all movement.
-            // If physics returns same position, it means: no movement flags, collision blocked, or engine error.
-            float dx = output.NewPosX - oldPos.X;
-            float dy = output.NewPosY - oldPos.Y;
-=======
             // Compare against the INPUT position sent to C++, not _player.Position which may
             // have been modified by a teleport on another thread during the gRPC call.
             float dx = output.NewPosX - _physicsInputX;
             float dy = output.NewPosY - _physicsInputY;
->>>>>>> cpp_physics_system
             bool physicsMovedUs = MathF.Abs(dx) >= 0.001f || MathF.Abs(dy) >= 0.001f;
 
             if (!physicsMovedUs && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
@@ -500,8 +468,6 @@ namespace WoWSharpClient.Movement
                     Log.Warning("[MovementController] Physics returned same position (no dead-reckoning). " +
                         "Count={Count} flags=0x{Flags:X} dt={Dt:F4}",
                         _deadReckonCount, (uint)_player.MovementFlags, deltaSec);
-<<<<<<< HEAD
-=======
                 }
                 if (_deadReckonCount <= 5 || _deadReckonCount == 50)
                 {
@@ -657,32 +623,12 @@ namespace WoWSharpClient.Movement
                     Log.Warning("[MovementController] No ground for 30 frames at ({X:F1}, {Y:F1}, {Z:F1}). " +
                         "Physics may be missing collision geometry here.",
                         output.NewPosX, output.NewPosY, output.NewPosZ);
->>>>>>> cpp_physics_system
                 }
             }
-            else if (physicsMovedUs)
+            else
             {
                 _noGroundFrameCount = 0;
 
-<<<<<<< HEAD
-            // Z interpolation from path waypoints when physics doesn't provide valid ground
-            bool physicsHasGround = output.GroundZ > -50000f;
-            if (!physicsHasGround)
-            {
-                if (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
-                {
-                    output.NewPosZ = InterpolatePathZ(output.NewPosX, output.NewPosY, oldPos.Z);
-                }
-                else
-                {
-                    // No ground data AND no path — keep current Z to prevent falling through world.
-                    // This happens when terrain isn't loaded (e.g. after teleport before physics catches up).
-                    output.NewPosZ = oldPos.Z;
-                    output.NewVelX = 0;
-                    output.NewVelY = 0;
-                    output.NewVelZ = 0;
-                    output.FallTime = 0;
-=======
                 // When physics HAS valid ground but still reports FALLINGFAR, the DOWN pass
                 // capsule sweep missed the ground surface (e.g. Valley of Trials slope terrain).
                 // Strip FALLINGFAR to prevent IsPlayerAirborne() from blocking MoveToward(),
@@ -828,7 +774,6 @@ namespace WoWSharpClient.Movement
                     _teleportZ = float.NaN;
                     _teleportClampFrames = 0;
                     _teleportZGraceFrames = 0;
->>>>>>> cpp_physics_system
                 }
             }
 
@@ -999,16 +944,6 @@ namespace WoWSharpClient.Movement
             _prev2OutX = _prevOutX; _prev2OutY = _prevOutY; _prev2OutZ = _prevOutZ;
             _prevOutX = output.NewPosX; _prevOutY = output.NewPosY; _prevOutZ = output.NewPosZ;
 
-<<<<<<< HEAD
-            // Persist StepV2 continuity outputs for next tick.
-            // Don't store sentinel GroundZ (-100000) — keep last valid value so physics can recover.
-            if (physicsHasGround)
-            {
-                _prevGroundZ = output.GroundZ;
-                _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
-            }
-=======
->>>>>>> cpp_physics_system
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
             _standingOnLocal = new Vector3(output.StandingOnLocalX, output.StandingOnLocalY, output.StandingOnLocalZ);
@@ -1228,27 +1163,6 @@ namespace WoWSharpClient.Movement
         private void SendForcedStopPacket(uint gameTimeMs)
         {
             // Always emit a true MSG_MOVE_STOP before resuming movement after reset/recovery.
-<<<<<<< HEAD
-            // Without this ordering, a freshly re-applied forward flag can downgrade the packet
-            // to heartbeat/start-forward and leave stale movement state uncleared server-side.
-            var resumeFlags = _player.MovementFlags;
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-
-            var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, buffer);
-
-            _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
-            _lastPacketTime = gameTimeMs;
-            _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-            _forceStopAfterReset = false;
-            _staleForwardNoDisplacementTicks = 0;
-            _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-
-            _player.MovementFlags = resumeFlags;
-
-            Log.Information("[MovementController] Forced MSG_MOVE_STOP dispatched before movement resume (restoreFlags=0x{Flags:X})",
-                (uint)resumeFlags);
-=======
             // Clear directional intent, but preserve active physics state such as falling/swimming.
             // Do not immediately restore pre-stop movement flags in this tick.
             // Let bot logic re-issue movement intent on the next tick so stale forward/strafe
@@ -1274,7 +1188,6 @@ namespace WoWSharpClient.Movement
             Log.Information("[MovementController] Forced {Opcode} dispatched; flags now 0x{Flags:X} for clean resume.",
                 opcode,
                 (uint)_player.MovementFlags);
->>>>>>> cpp_physics_system
         }
 
         private static bool IsBefore(uint nowMs, uint targetMs)
@@ -1301,19 +1214,6 @@ namespace WoWSharpClient.Movement
             if (!hasHorizontalIntent || transientMotionState)
             {
                 _staleForwardNoDisplacementTicks = 0;
-<<<<<<< HEAD
-                return;
-            }
-
-            if (frameDelta < STALE_FORWARD_DISPLACEMENT_EPSILON)
-                _staleForwardNoDisplacementTicks++;
-            else
-                _staleForwardNoDisplacementTicks = 0;
-
-            if (_staleForwardNoDisplacementTicks < STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD)
-                return;
-
-=======
                 // Track last-known-good position when moving freely
                 if (frameDelta >= STALE_FORWARD_DISPLACEMENT_EPSILON)
                     _lastKnownGoodPosition = new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
@@ -1336,29 +1236,10 @@ namespace WoWSharpClient.Movement
             // Stuck threshold reached — escalate recovery level
             _consecutiveStuckLevels++;
             var stuckLevel = Math.Min(_consecutiveStuckLevels, 3);
->>>>>>> cpp_physics_system
             var stuckFlags = flags;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardRecoveryCount++;
 
-<<<<<<< HEAD
-            _velocity = Vector3.Zero;
-            _fallTimeMs = 0;
-            _pendingDepen = Vector3.Zero;
-            _standingOnInstanceId = 0;
-            _standingOnLocal = Vector3.Zero;
-            _currentPath = null;
-            _currentWaypointIndex = 0;
-
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-            _lastSentFlags = stuckFlags;
-            _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
-            _lastPacketTime = 0;
-            _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-
-            Log.Warning("[MovementController] Recovered stale forward movement (recoveries={Recoveries}, frameDelta={FrameDelta:F3}, flags=0x{Flags:X}). Scheduled stop/reset packet.",
-                _staleForwardRecoveryCount, frameDelta, (uint)stuckFlags);
-=======
             switch (stuckLevel)
             {
                 case 1:
@@ -1420,7 +1301,6 @@ namespace WoWSharpClient.Movement
                     OnStuckRecoveryRequired?.Invoke(stuckLevel, _lastKnownGoodPosition);
                     break;
             }
->>>>>>> cpp_physics_system
         }
 
         private Opcode DetermineOpcode(MovementFlags current, MovementFlags previous)
@@ -1492,21 +1372,12 @@ namespace WoWSharpClient.Movement
             _player.MovementFlags = ClearForcedStopIntent(_player.MovementFlags);
             var opcode = DetermineOpcode(_player.MovementFlags, _lastSentFlags);
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-<<<<<<< HEAD
-            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, buffer);
-            _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-            _forceStopAfterReset = false;
-            _staleForwardNoDisplacementTicks = 0;
-            _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-            Log.Debug("[MovementController] MSG_MOVE_STOP (forced)");
-=======
             _ = _client.SendMovementOpcodeAsync(opcode, buffer);
             _lastSentFlags = _player.MovementFlags;
             _forceStopAfterReset = false;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
             Log.Debug("[MovementController] {Opcode} (forced stop) flags=0x{Flags:X}", opcode, (uint)_player.MovementFlags);
->>>>>>> cpp_physics_system
         }
 
         private static MovementFlags ClearForcedStopIntent(MovementFlags flags)
@@ -1660,9 +1531,6 @@ namespace WoWSharpClient.Movement
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _lastSentFlags = hadMovementToClear ? stopSeedFlags : MovementFlags.MOVEFLAG_NONE;
             _forceStopAfterReset = hadMovementToClear;
-<<<<<<< HEAD
-            _lastPacketTime = 0;
-=======
             // Sync packet tracking to current position immediately.
             // For login (OnLoginVerifyWorld), position is already set before Reset().
             // For teleport (NotifyTeleportIncoming), position may be pre-teleport here,
@@ -1671,7 +1539,6 @@ namespace WoWSharpClient.Movement
             _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
             _lastPacketTime = _latestGameTimeMs;
             _needsPacketPositionSync = true;
->>>>>>> cpp_physics_system
 
             _prevGroundZ = _player.Position.Z;
             _prevGroundNormal = new Vector3(0, 0, 1);

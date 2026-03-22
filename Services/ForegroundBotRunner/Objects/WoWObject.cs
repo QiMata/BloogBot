@@ -19,17 +19,6 @@ namespace ForegroundBotRunner.Objects
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         private delegate void RightClickGameObjDelegate(nint objectPtr);
-<<<<<<< HEAD
-
-        // 0x60BEA0 = CGUnit_C::OnRightClick(int autoLoot) — for units/NPCs
-        private static readonly RightClickUnitDelegate rightClickUnitFunction =
-            Marshal.GetDelegateForFunctionPointer<RightClickUnitDelegate>(0x60BEA0);
-
-        // 0x5F8660 = CGGameObject_C::OnRightClick() — for game objects (no extra params)
-        private static readonly RightClickGameObjDelegate rightClickGameObjectFunction =
-            Marshal.GetDelegateForFunctionPointer<RightClickGameObjDelegate>(0x5F8660);
-=======
->>>>>>> cpp_physics_system
 
         // 0x60BEA0 = CGUnit_C::OnRightClick(int autoLoot) — for units/NPCs
         private static readonly RightClickUnitDelegate rightClickUnitFunction =
@@ -256,8 +245,6 @@ namespace ForegroundBotRunner.Objects
 
         public void Interact()
         {
-<<<<<<< HEAD
-=======
             // Guard: don't call native right-click if the object manager is torn down
             // or the object pointer is stale (e.g. mining node despawned during zone transition).
             if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero)
@@ -265,7 +252,6 @@ namespace ForegroundBotRunner.Objects
             if (Pointer == nint.Zero)
                 return;
 
->>>>>>> cpp_physics_system
             if (ObjectType == WoWObjectType.GameObj)
                 rightClickGameObjectFunction(Pointer);  // CGGameObject_C::OnRightClick — no extra params
             else

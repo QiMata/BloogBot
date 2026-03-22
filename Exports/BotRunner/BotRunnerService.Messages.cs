@@ -101,8 +101,6 @@ namespace BotRunner
                 }
             }
         }
-<<<<<<< HEAD
-=======
 
         private void EnqueueDiagnosticMessage(string message)
         {
@@ -113,6 +111,5 @@ namespace BotRunner
                     _recentChatMessages.Dequeue();
             }
         }
->>>>>>> cpp_physics_system
     }
 }

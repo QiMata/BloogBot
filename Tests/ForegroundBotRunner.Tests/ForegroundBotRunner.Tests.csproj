@@ -13,19 +13,6 @@
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
-<<<<<<< HEAD:Tests/WWoW.RecordedTests.PathingTests.Tests/WWoW.RecordedTests.PathingTests.Tests.csproj
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\WWoW.RecordedTests.PathingTests\WWoW.RecordedTests.PathingTests.csproj" />
-    <ProjectReference Include="..\..\WWoW.RecordedTests.Shared\WWoW.RecordedTests.Shared.csproj" />
-  </ItemGroup>
-  <PropertyGroup>
-    <RunSettingsFilePath>$(MSBuildProjectDirectory)\..\test.runsettings</RunSettingsFilePath>
-  </PropertyGroup>
-</Project>
-=======
   <ItemGroup>
     <ProjectReference Include="..\..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" />
   </ItemGroup>
@@ -36,4 +23,3 @@
     <RunSettingsFilePath>$(MSBuildProjectDirectory)\..\test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 </Project>
->>>>>>> cpp_physics_system:Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj

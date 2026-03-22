@@ -307,12 +307,6 @@ namespace WoWSharpClient.Models
 
         public bool HasBuff(string name) => Buffs.Any(a => a.Name == name);
         public bool HasDebuff(string name) => Debuffs.Any(a => a.Name == name);
-<<<<<<< HEAD
-        public bool DismissBuff(string buffName)
-        {
-            // TODO: Send CMSG_CANCEL_AURA when WoWUnit has client access
-            return false;
-=======
 
         /// <summary>
         /// Rebuilds Buffs/Debuffs lists from raw AuraFields + AuraFlags (object update data).
@@ -355,7 +349,6 @@ namespace WoWSharpClient.Models
             if (buff == null) return false;
             WoWSharpObjectManager.Instance.CancelAura(buff.Id);
             return true;
->>>>>>> cpp_physics_system
         }
 
         public IEnumerable<ISpellEffect> GetDebuffs() =>

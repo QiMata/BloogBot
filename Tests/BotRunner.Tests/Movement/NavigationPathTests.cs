@@ -1,13 +1,9 @@
 using BotRunner.Clients;
 using BotRunner.Movement;
-<<<<<<< HEAD
-using GameData.Core.Models;
-=======
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 using System.Collections.Generic;
->>>>>>> cpp_physics_system
 
 namespace BotRunner.Tests.Movement;
 
@@ -46,11 +42,7 @@ public class NavigationPathTests
         {
             pathfindingCalls++;
             return end.X > 50
-<<<<<<< HEAD
-                ? [start, new Position(0, 20, 0)]
-=======
                 ? [start, new Position(80, 0, 0)]
->>>>>>> cpp_physics_system
                 : [start, new Position(20, 0, 0)];
         });
 
@@ -72,19 +64,6 @@ public class NavigationPathTests
         Assert.Equal(0, firstWaypoint.Y);
         Assert.Equal(20, secondWaypoint!.X);
         Assert.Equal(0, secondWaypoint.Y);
-<<<<<<< HEAD
-        Assert.Equal(0, thirdWaypoint!.X);
-        Assert.Equal(20, thirdWaypoint.Y);
-    }
-
-    private sealed class DelegatePathfindingClient(
-        Func<uint, Position, Position, bool, Position[]> getPath) : PathfindingClient
-    {
-        private readonly Func<uint, Position, Position, bool, Position[]> _getPath = getPath;
-
-        public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
-            => _getPath(mapId, start, end, smoothPath);
-=======
         Assert.Equal(80, thirdWaypoint!.X);
         Assert.Equal(0, thirdWaypoint.Y);
     }
@@ -1108,6 +1087,5 @@ public class NavigationPathTests
 
         public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
             => _getGroundZ?.Invoke(mapId, position, maxSearchDist) ?? (position.Z, true);
->>>>>>> cpp_physics_system
     }
 }

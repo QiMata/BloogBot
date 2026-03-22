@@ -51,10 +51,7 @@ namespace BotRunner
             Communication.ActionType.LeaveGroup => CharacterAction.LeaveGroup,
             Communication.ActionType.DisbandGroup => CharacterAction.DisbandGroup,
             Communication.ActionType.StartMeleeAttack => CharacterAction.StartMeleeAttack,
-<<<<<<< HEAD
-=======
             Communication.ActionType.StartRangedAttack => CharacterAction.StartRangedAttack,
->>>>>>> cpp_physics_system
             Communication.ActionType.StopAttack => CharacterAction.StopAttack,
             Communication.ActionType.CastSpell => CharacterAction.CastSpell,
             Communication.ActionType.StopCast => CharacterAction.StopCast,
@@ -84,8 +81,6 @@ namespace BotRunner
             Communication.ActionType.GatherNode => CharacterAction.GatherNode,
             Communication.ActionType.SendChat => CharacterAction.SendChat,
             Communication.ActionType.SetFacing => CharacterAction.SetFacing,
-<<<<<<< HEAD
-=======
             Communication.ActionType.VisitVendor => CharacterAction.VisitVendor,
             Communication.ActionType.VisitTrainer => CharacterAction.VisitTrainer,
             Communication.ActionType.VisitFlightMaster => CharacterAction.VisitFlightMaster,
@@ -95,7 +90,6 @@ namespace BotRunner
             Communication.ActionType.StartDungeoneering => CharacterAction.StartDungeoneering,
             Communication.ActionType.ConvertToRaid => CharacterAction.ConvertToRaid,
             Communication.ActionType.ChangeRaidSubgroup => CharacterAction.ChangeRaidSubgroup,
->>>>>>> cpp_physics_system
             _ => null,
         };
 
@@ -135,26 +129,19 @@ namespace BotRunner
             return result;
         }
 
-<<<<<<< HEAD
-        private sealed class BotRunnerContext(IObjectManager objectManager, Stack<IBotTask> tasks, IDependencyContainer container, Constants.BotBehaviorConfig config) : IBotContext
-=======
         private sealed class BotRunnerContext(
             IObjectManager objectManager,
             Stack<IBotTask> tasks,
             IDependencyContainer container,
             Constants.BotBehaviorConfig config,
             Action<string> addDiagnosticMessage) : IBotContext
->>>>>>> cpp_physics_system
         {
             public IObjectManager ObjectManager => objectManager;
             public Stack<IBotTask> BotTasks => tasks;
             public IDependencyContainer Container => container;
             public Constants.BotBehaviorConfig Config => config;
             public IWoWEventHandler EventHandler => objectManager.EventHandler;
-<<<<<<< HEAD
-=======
             public void AddDiagnosticMessage(string message) => addDiagnosticMessage(message);
->>>>>>> cpp_physics_system
         }
 
         /// <summary>

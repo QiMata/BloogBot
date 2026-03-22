@@ -35,12 +35,8 @@ namespace HunterBeastMastery.Tasks
             if (!EnsureTarget())
                 return;
 
-<<<<<<< HEAD
-            if (Update(28))
-=======
             var rangedRange = GetSpellRange(RangedAttackRange);
             if (Update(rangedRange))
->>>>>>> cpp_physics_system
                 return;
 
             ObjectManager.StopAllMovement();
@@ -75,17 +71,10 @@ namespace HunterBeastMastery.Tasks
             else
             {
                 // melee — apply Wing Clip then kite back to ranged distance
-<<<<<<< HEAD
-                if (gun != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
-                    return;
-                TryCastSpell(MongooseBite, 0, 5);
-                TryCastSpell(RaptorStrike, 0, 5);
-=======
                 if (gun != null && TryCastSpell(WingClip, 0f, meleeRange, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
                     return;
                 TryCastSpell(MongooseBite, 0f, meleeRange);
                 TryCastSpell(RaptorStrike, 0f, meleeRange);
->>>>>>> cpp_physics_system
             }
         }
     }

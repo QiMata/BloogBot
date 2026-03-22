@@ -20,10 +20,6 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GroupFormationTests" --configuration Release
 /// </summary>
-<<<<<<< HEAD
-[RequiresMangosStack]
-=======
->>>>>>> cpp_physics_system
 [Collection(LiveValidationCollection.Name)]
 public class GroupFormationTests
 {
@@ -45,16 +41,12 @@ public class GroupFormationTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG account not available.");
-<<<<<<< HEAD
-        global::Tests.Infrastructure.Skip.If(_bot.ForegroundBot == null, "FG snapshot not available; requires dual-client run.");
-=======
 
         await _bot.EnsureCleanSlateAsync(bgAccount!, "BG");
         await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
 
         var fgActionable = await _bot.CheckFgActionableAsync();
         global::Tests.Infrastructure.Skip.If(!fgActionable, "FG bot not actionable after clean-slate probe; requires dual-client run with stable FG.");
->>>>>>> cpp_physics_system
 
         // Step 1: deterministic clean start from snapshot state (no GM chat disband).
         await EnsureNotGroupedAsync(bgAccount!, "BG");
@@ -72,26 +64,6 @@ public class GroupFormationTests
         var bgName = bgStart.CharacterName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgName), "BG character name missing; cannot send invite by name.");
 
-<<<<<<< HEAD
-        // Step 2: FG invites BG by name.
-        _output.WriteLine($"[GROUP] FG invites BG by name: {bgName}");
-        await _bot.SendActionAndWaitAsync(fgAccount!, new ActionMessage
-        {
-            ActionType = ActionType.SendGroupInvite,
-            Parameters = { new RequestParameter { StringParam = bgName } }
-        }, delayMs: 1200);
-
-        // Step 3: BG accepts invite.
-        _output.WriteLine("[GROUP] BG accepts invite");
-        await _bot.SendActionAndWaitAsync(bgAccount!, new ActionMessage
-        {
-            ActionType = ActionType.AcceptGroupInvite
-        }, delayMs: 1500);
-
-        // Step 4: assert group state from snapshots.
-        var formed = await WaitForGroupFormationAsync(fgAccount!, bgAccount!, timeoutMs: 20000);
-        Assert.True(formed.formed, formed.details);
-=======
         fgActionable = await _bot.CheckFgActionableAsync();
         global::Tests.Infrastructure.Skip.If(!fgActionable, "FG bot lost actionability before group invite dispatch.");
 
@@ -132,7 +104,6 @@ public class GroupFormationTests
         }
 
         Assert.True(formResult.formed, formResult.details);
->>>>>>> cpp_physics_system
 
         // Step 5: deterministic cleanup and verification.
         await EnsureNotGroupedAsync(bgAccount!, "BG");
