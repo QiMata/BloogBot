@@ -19,10 +19,12 @@ internal static class CombatTestHelpers
     public const float MobAreaZ = 60f; // Z+3 offset from spawn table (~57) to avoid UNDERMAP detection
     public const float MobAreaRadius = 80f;
 
-    // Observer offset: 15y behind the mob area so FG camera sees the fight
-    public const float ObserverX = MobAreaX + 15f;
-    public const float ObserverY = MobAreaY;
-    public const float ObserverZ = MobAreaZ;
+    // Observer: on the road south of the mob area (flat, walkable terrain).
+    // Previous offset (MobAreaX+15) placed the FG bot on a steep slope that
+    // clipped underground. The road at (-290, -4400) is reliably flat.
+    public const float ObserverX = -290f;
+    public const float ObserverY = -4400f;
+    public const float ObserverZ = 55f;
 
     public static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3101, 3124];
     public const uint OneHandMaceSpell = 198;
