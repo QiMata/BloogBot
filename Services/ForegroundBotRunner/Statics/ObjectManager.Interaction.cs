@@ -714,5 +714,108 @@ namespace ForegroundBotRunner.Statics
 
             Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
         }
+
+        public async Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default)
+        {
+            var obj = Objects.FirstOrDefault(o => o.Guid == npcGuid);
+            if (obj is not Objects.WoWObject wowObj)
+            {
+                Log.Warning("[FG-NPC] NPC GUID 0x{Guid:X} not found in object manager.", npcGuid);
+                return;
+            }
+
+            ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
+            await Task.Delay(150, ct);
+        }
+
+        public async Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(vendorGuid, ct);
+            if (!await WaitForMerchantWindowAsync(ct))
+            {
+                Log.Warning("[FG-VENDOR] Merchant window did not open for buy vendor 0x{Guid:X}.", vendorGuid);
+                return;
+            }
+
+            int merchantSlot = ResolveMerchantSlot(itemId);
+            if (merchantSlot <= 0)
+            {
+                Log.Warning("[FG-VENDOR] Item {ItemId} not found in merchant inventory for vendor 0x{Guid:X}.", itemId, vendorGuid);
+                MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+                return;
+            }
+
+            MainThreadLuaCall(VendorInteractionHelper.BuildBuyMerchantItemLua(merchantSlot, quantity));
+            await Task.Delay(150, ct);
+            MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+        }
+
+        public async Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(vendorGuid, ct);
+            if (!await WaitForMerchantWindowAsync(ct))
+            {
+                Log.Warning("[FG-VENDOR] Merchant window did not open for sell vendor 0x{Guid:X}.", vendorGuid);
+                return;
+            }
+
+            ulong itemGuid = VendorInteractionHelper.ResolveSellItemGuid(
+                bagId,
+                slotId,
+                GetContainedItems().Select(item => item.Guid).ToList(),
+                (resolvedBagId, resolvedSlotId) => GetContainedItem(resolvedBagId, resolvedSlotId)?.Guid ?? 0);
+
+            if (itemGuid == 0)
+            {
+                Log.Warning("[FG-VENDOR] Could not resolve item GUID for bag={BagId} slot={SlotId}.", bagId, slotId);
+                MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+                return;
+            }
+
+            ThreadSynchronizer.RunOnMainThread(() =>
+                Functions.SellItemByGuid(
+                    VendorInteractionHelper.NormalizeQuantity(quantity),
+                    vendorGuid,
+                    itemGuid));
+
+            await Task.Delay(150, ct);
+            MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+        }
+
+        public async Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(vendorGuid, ct);
+            if (!await WaitForMerchantWindowAsync(ct))
+            {
+                Log.Warning("[FG-VENDOR] Merchant window did not open for repair vendor 0x{Guid:X}.", vendorGuid);
+                return;
+            }
+
+            MainThreadLuaCall(VendorInteractionHelper.RepairAllLua);
+            await Task.Delay(150, ct);
+            MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+        }
+
+        private async Task<bool> WaitForMerchantWindowAsync(CancellationToken ct)
+        {
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var result = MainThreadLuaCallWithResult(VendorInteractionHelper.MerchantOpenProbeLua);
+                if (result.Length > 0 && result[0] == "1")
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static int ResolveMerchantSlot(uint itemId)
+        {
+            var result = MainThreadLuaCallWithResult(VendorInteractionHelper.BuildResolveMerchantSlotLua(itemId));
+            if (result.Length == 0)
+                return 0;
+
+            return int.TryParse(result[0], out int merchantSlot) ? merchantSlot : 0;
+        }
     }
 }

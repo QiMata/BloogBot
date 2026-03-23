@@ -283,8 +283,25 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 149)
+- **Last updated:** 2026-03-23 (session 150)
 - **Branch:** `main`
+- **Session 150 — FG vendor interaction parity slice shipped:**
+  - `ForegroundBotRunner` no longer inherits interface default no-ops for merchant flows: the injected object manager now resolves NPC GUIDs to live objects, right-clicks them on the main thread, waits for the merchant frame, and executes buy/sell/repair through the real in-client interaction surface.
+  - Sequential-bag sell semantics now match the existing BG/runtime contract: `bagId == 0xFF` is treated as the ordered flattened bag view instead of a literal bag index, which keeps foreground vendor sell calls aligned with the rest of the stack.
+  - Added deterministic FG coverage for merchant-slot lookup Lua generation, quantity normalization, and sequential bag-slot GUID resolution used by the new sell path.
+- **Test baseline (session 150):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"`
+    - Passed (`5/5`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`75/75`)
+- **Files changed (session 150):**
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
+- **Next priorities:** finish the remaining FG interaction/action-surface sweep, then continue the remaining WoWSharpClient movement/system audit work without starting live integration yet
 - **Session 149 — FG snapshot descriptor parity slice shipped:**
   - `ForegroundBotRunner` no longer hardcodes player `Race/Class/Gender` or unit `FactionTemplate`/power maps on the injected path; those fields now come from the same descriptor-backed `UNIT_FIELD_BYTES_0`, `UNIT_FIELD_FACTIONTEMPLATE`, and `UNIT_FIELD_POWER/MAXPOWER*` values the BG object model already consumes.
   - `LocalPlayer` now uses the descriptor-backed identity fields instead of mixing Lua/global-class fallbacks into the object model, which removes a real FG/BG divergence for capsule sizing, combat-role selection, corpse retrieval, and snapshot consumers that see the player through `IWoWPlayer`.

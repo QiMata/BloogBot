@@ -23,6 +23,7 @@
 - [x] Restore descriptor-backed `Coinage`/`Copper` plus local state helpers (`InBattleground`, `HasQuestTargets`) so FG snapshots stop hardcoding those fields.
 - [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
 - [x] Restore descriptor-backed FG `Race/Class/Gender`, `FactionTemplate`, and power reads so the injected object model matches the BG snapshot surface for combat/movement consumers.
+- [x] Restore foreground vendor interaction methods (`InteractWithNpcAsync`, buy/sell/repair) so FG runtime behavior no longer falls back to interface default no-ops for merchant flows.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -35,6 +36,20 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
+  - `ObjectManager` now implements the foreground vendor interaction surface instead of inheriting interface default no-ops: NPC interaction is routed through a real right-click on the resolved object, vendor buy/sell/repair wait for the merchant frame on the main thread, and sequential-bag `0xFF` sell semantics now match the BG/runtime expectations.
+  - Added focused FG helper tests that pin merchant-slot Lua generation, quantity normalization, and sequential-bag item GUID resolution used by the new sell path.
+  - Merchant interactions now close the vendor window after buy/sell/repair operations so injected runs do not leave stale UI state behind between actions.
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"` -> `5 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `75 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
+  - Next command:
+  - `rg -n "MerchantFrame => null|CompleteQuest|TurnInQuest|AcceptQuestFromNpcAsync|SellItemToVendorAsync|RepairAllItemsAsync" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Previous delta:
   - `WoWUnit` now reads descriptor-backed `FactionTemplate`, `Powers`, and `MaxPowers` instead of returning hardcoded placeholders, so FG snapshots expose the same unit-power and faction-template fields the BG path already uses.
   - `WoWPlayer` now derives `Race`, `Class`, and `Gender` from `UNIT_FIELD_BYTES_0`, and `LocalPlayer` now uses that same descriptor-backed path instead of mixing in Lua/global-class fallbacks.
   - Added memory-backed FG tests that pin the `IWoWPlayer` interface path for local-player `Race/Class/Gender` plus descriptor-backed faction-template and mana/rage/energy reads.
