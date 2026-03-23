@@ -6,7 +6,7 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Finish the movement opcode completeness sweep against the client dispatch table and close any remaining ACK/application gaps, especially any binary-backed flight/control toggles still missing.
+1. Finish the movement opcode completeness sweep against the client dispatch table and close any remaining ACK/application gaps; the Vanilla player/controller/observer matrix is now covered, so only binary-backed leftovers should remain.
 2. Continue the spline audit from the new server-time/facing fixes and confirm whether any binary-backed modes beyond those still differ.
 3. Add recorded-motion validation for remote extrapolation and knockback handling.
 4. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
@@ -15,20 +15,21 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `MovementHandler` now parses/applies the remaining local-player movement flag toggle opcodes for water-walk, land-walk, hover, unhover, feather-fall, and normal-fall.
-  - `WoWSharpObjectManager` now mutates the local player and emits the correct ACK payload for those movement-control packets before the next heartbeat can diverge.
-  - Remote units now apply the missing server-controlled spline speed and flag opcodes so object-manager state stays aligned with mover packets during server-owned movement.
+  - `MovementHandler` now parses the remaining observer-side player movement broadcasts from the Vanilla 1.12.1 sender matrix, including hover/feather-fall, run/walk mode, and the missing run-back, walk, swim-back, and turn-rate speed packets.
+  - `WorldClient` and `OpCodeDispatcher` now bridge the full Vanilla player/controller/observer movement matrix instead of leaving those observer opcodes silently unhandled.
+  - Deterministic tests now cover the complete controller speed family plus the observer-side speed/flag broadcast surface for remote units.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ServerControlledMovementFlagChanges_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineSpeedOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineFlagOpcodes_UpdateRemoteUnitState" -v n` -> `20 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1317 passed`, `1 skipped`
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ForceSpeedChangeOpcodes_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementSpeedOpcodes_UpdateRemoteUnitState" -v n` -> `22 passed`
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n` -> `1 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1336 passed`, `1 skipped`
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n` -> `117 passed`
 - Files changed:
   - `Exports/WoWSharpClient/Client/WorldClient.cs`
   - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
   - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
-  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - Next command:
-  - `Get-Content Exports/WoWSharpClient/Handlers/MovementHandler.cs | Select-Object -Skip 120 -First 220`
+  - `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`

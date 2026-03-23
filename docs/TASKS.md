@@ -283,8 +283,33 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 137)
+- **Last updated:** 2026-03-23 (session 138)
 - **Branch:** `main`
+- **Session 138 — observer movement opcode parity slice shipped:**
+  - BG now handles the remaining observer-side player movement broadcasts from the Vanilla 1.12.1 movement sender matrix: `MSG_MOVE_SET_RUN_MODE`, `MSG_MOVE_SET_WALK_MODE`, `MSG_MOVE_SET_RUN_BACK_SPEED`, `MSG_MOVE_SET_WALK_SPEED`, `MSG_MOVE_SET_SWIM_BACK_SPEED`, `MSG_MOVE_SET_TURN_RATE`, `MSG_MOVE_FEATHER_FALL`, and `MSG_MOVE_HOVER`.
+  - `MovementHandler` now parses those broadcasts through the same remote-unit state path as the existing observer movement packets, so remote units pick up player-owned speed and flag changes instead of silently dropping them.
+  - `WorldClient` and `OpCodeDispatcher` bridge registration now matches the full Vanilla player/observer movement matrix from `MovementPacketSender.cpp` / `MovementPacketSender.h`.
+  - Deterministic managed coverage now exercises the full controller speed-change family plus the observer-side flag and speed broadcast matrix end to end.
+- **Test baseline (session 138):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ForceSpeedChangeOpcodes_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementSpeedOpcodes_UpdateRemoteUnitState" -v n`
+    - Passed (`22/22`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n`
+    - Passed (`1/1`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1336/1337`, `1 skipped`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n`
+    - Passed (`117/117`)
+- **Files changed (session 138):**
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, the remaining spline-mode audit, a recorded directional remote-unit extrapolation fixture, any binary-backed movement/system gaps still left after the now-covered Vanilla opcode sweep, and the FG hardening audit
 - **Session 137 — movement opcode completeness slice shipped:**
   - BG now handles the remaining local-player movement flag toggle opcodes end to end for `SMSG_MOVE_WATER_WALK`, `SMSG_MOVE_LAND_WALK`, `SMSG_MOVE_SET_HOVER`, `SMSG_MOVE_UNSET_HOVER`, `SMSG_MOVE_FEATHER_FALL`, and `SMSG_MOVE_NORMAL_FALL`.
   - `WoWSharpObjectManager` mutates the local player state before sending the matching ACK packets, so managed state and on-wire acknowledgements stay aligned with WoW.exe behavior.

@@ -14,13 +14,13 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added deterministic coverage for local-player movement flag toggle packets, verifying parse -> player-state mutation -> ACK payload for water-walk, land-walk, hover, unhover, feather-fall, and normal-fall.
-  - Added deterministic remote-unit coverage for the missing server-controlled spline speed and spline flag opcodes so mover-state regressions now fail in managed tests instead of only in live parity checks.
+  - Added deterministic coverage for the full controller speed-change family so run, run-back, swim, walk, swim-back, and turn-rate ACK/application now all have direct managed proof.
+  - Added deterministic remote-unit coverage for the observer-side player movement broadcast matrix, including hover/feather-fall, run/walk mode, and the missing run-back, walk, swim-back, and turn-rate speed packets.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ServerControlledMovementFlagChanges_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineSpeedOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineFlagOpcodes_UpdateRemoteUnitState" -v n` -> `20 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1317 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ForceSpeedChangeOpcodes_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementSpeedOpcodes_UpdateRemoteUnitState" -v n` -> `22 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1336 passed`, `1 skipped`
 - Files changed:
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
 - Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs | Select-Object -Skip 2100 -First 220`
+  - `Get-Content Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs | Select-Object -First 260`

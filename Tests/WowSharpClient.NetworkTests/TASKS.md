@@ -41,7 +41,7 @@ All P0 tasks completed. See `TASKS_ARCHIVE.md`.
 ## Session Handoff
 - Last updated: 2026-03-23
 - Active task: Keep bridge-registration coverage aligned with movement parity work from `Exports/WoWSharpClient`.
-- Last delta: Added bridge-registration coverage for the current movement opcode parity sweep so `WorldClient` keeps routing the local flag-toggle opcodes plus the missing spline rate/flag opcodes through the legacy movement handler map.
+- Last delta: Added bridge-registration coverage for the observer-side Vanilla movement broadcasts so `WorldClient` now routes the full player/controller/observer movement matrix through the legacy movement handler map.
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore` -> succeeded
@@ -51,5 +51,5 @@ All P0 tasks completed. See `TASKS_ARCHIVE.md`.
   - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - Blockers: None.
 - Next task: Extend bridge coverage again if the remaining dispatch-table audit finds more movement/control opcodes.
-- Next command: `Get-Content Exports/WoWSharpClient/Client/WorldClient.cs | Select-Object -Skip 240 -First 120`
+- Next command: `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`
 - Discovery: `WorldClient.RegisterWorldHandlers()` still registers `HandleAttackStart` before `BridgeToLegacy(SMSG_ATTACKSTART, SpellHandler.HandleAttackStart)`, so the reactive `AttackStateChanged` subject is likely shadowed by the legacy bridge registration. This remains a separate latent bug, not part of the current movement parity slice.

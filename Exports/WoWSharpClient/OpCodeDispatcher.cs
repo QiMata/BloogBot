@@ -86,10 +86,18 @@ namespace WoWSharpClient
             _handlers[Opcode.MSG_MOVE_START_TURN_RIGHT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_STOP_TURN] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_FACING] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_RUN_MODE] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_WALK_MODE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_ROOT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_UNROOT] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_RUN_BACK_SPEED] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_WALK_SPEED] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_RUN_SPEED] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_SWIM_BACK_SPEED] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_SWIM_SPEED] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_TURN_RATE] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_FEATHER_FALL] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_HOVER] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_WATER_WALK] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_HEARTBEAT] = MovementHandler.HandleUpdateMovement;
 

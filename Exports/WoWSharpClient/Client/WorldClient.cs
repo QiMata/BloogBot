@@ -329,10 +329,18 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.MSG_MOVE_START_TURN_RIGHT, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_STOP_TURN, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_SET_FACING, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_RUN_MODE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_WALK_MODE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_ROOT, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_UNROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_RUN_BACK_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_WALK_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_SET_RUN_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_SWIM_BACK_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_SET_SWIM_SPEED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_TURN_RATE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_FEATHER_FALL, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_HOVER, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_WATER_WALK, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.MSG_MOVE_HEARTBEAT, Handlers.MovementHandler.HandleUpdateMovement);
         }

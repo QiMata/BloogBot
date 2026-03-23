@@ -477,10 +477,13 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Theory]
+    [InlineData(Opcode.SMSG_FORCE_RUN_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK, 8.5f)]
+    [InlineData(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK, 4.25f)]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK, 5.5f)]
     [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, 2.5f)]
     [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, 1.25f)]
     [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
-    public void MissingForceChangeOpcodes_ParseApplyAndAck(
+    public void ForceSpeedChangeOpcodes_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
         float newValue)
@@ -526,6 +529,15 @@ public class ObjectManagerWorldSessionTests
 
         switch (serverOpcode)
         {
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                Assert.Equal(newValue, player.RunSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.RunBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                Assert.Equal(newValue, player.SwimSpeed, 5);
+                break;
             case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
                 Assert.Equal(newValue, player.WalkSpeed, 5);
                 break;
@@ -709,6 +721,119 @@ public class ObjectManagerWorldSessionTests
             Assert.False(unit.MovementFlags.HasFlag(flag));
     }
 
+    [Theory]
+    [InlineData(Opcode.MSG_MOVE_ROOT, MovementFlags.MOVEFLAG_ROOT, true)]
+    [InlineData(Opcode.MSG_MOVE_UNROOT, MovementFlags.MOVEFLAG_ROOT, false)]
+    [InlineData(Opcode.MSG_MOVE_WATER_WALK, MovementFlags.MOVEFLAG_WATERWALKING, true)]
+    [InlineData(Opcode.MSG_MOVE_WATER_WALK, MovementFlags.MOVEFLAG_WATERWALKING, false)]
+    [InlineData(Opcode.MSG_MOVE_HOVER, MovementFlags.MOVEFLAG_HOVER, true)]
+    [InlineData(Opcode.MSG_MOVE_HOVER, MovementFlags.MOVEFLAG_HOVER, false)]
+    [InlineData(Opcode.MSG_MOVE_FEATHER_FALL, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
+    [InlineData(Opcode.MSG_MOVE_FEATHER_FALL, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    [InlineData(Opcode.MSG_MOVE_SET_WALK_MODE, MovementFlags.MOVEFLAG_WALK_MODE, true)]
+    [InlineData(Opcode.MSG_MOVE_SET_RUN_MODE, MovementFlags.MOVEFLAG_WALK_MODE, false)]
+    public void ObserverMovementFlagOpcodes_UpdateRemoteUnitState(
+        Opcode serverOpcode,
+        MovementFlags flag,
+        bool apply)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x125;
+        const ulong remoteGuid = 0xF130000000001113ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+        var movementFlags = apply ? flag : MovementFlags.MOVEFLAG_NONE;
+
+        MovementHandler.HandleUpdateMovement(
+            serverOpcode,
+            BuildMessageMovePayload(remoteGuid, movementFlags, new Position(45f, 55f, 65f), 1.75f));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        if (apply)
+            Assert.True(unit.MovementFlags.HasFlag(flag));
+        else
+            Assert.False(unit.MovementFlags.HasFlag(flag));
+
+        Assert.Equal(45f, unit.Position.X, 5);
+        Assert.Equal(55f, unit.Position.Y, 5);
+        Assert.Equal(65f, unit.Position.Z, 5);
+        Assert.Equal(1.75f, unit.Facing, 5);
+    }
+
+    [Theory]
+    [InlineData(Opcode.MSG_MOVE_SET_RUN_SPEED, 8.5f)]
+    [InlineData(Opcode.MSG_MOVE_SET_RUN_BACK_SPEED, 4.25f)]
+    [InlineData(Opcode.MSG_MOVE_SET_WALK_SPEED, 2.0f)]
+    [InlineData(Opcode.MSG_MOVE_SET_SWIM_SPEED, 5.5f)]
+    [InlineData(Opcode.MSG_MOVE_SET_SWIM_BACK_SPEED, 1.5f)]
+    [InlineData(Opcode.MSG_MOVE_SET_TURN_RATE, 3.2f)]
+    public void ObserverMovementSpeedOpcodes_UpdateRemoteUnitState(
+        Opcode serverOpcode,
+        float newValue)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x126;
+        const ulong remoteGuid = 0xF130000000001114ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+
+        MovementHandler.HandleUpdateMovement(
+            serverOpcode,
+            BuildMessageMoveSpeedPayload(remoteGuid, MovementFlags.MOVEFLAG_FORWARD, new Position(70f, 80f, 90f), 0.25f, newValue));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        switch (serverOpcode)
+        {
+            case Opcode.MSG_MOVE_SET_RUN_SPEED:
+                Assert.Equal(newValue, unit.RunSpeed, 5);
+                break;
+            case Opcode.MSG_MOVE_SET_RUN_BACK_SPEED:
+                Assert.Equal(newValue, unit.RunBackSpeed, 5);
+                break;
+            case Opcode.MSG_MOVE_SET_WALK_SPEED:
+                Assert.Equal(newValue, unit.WalkSpeed, 5);
+                break;
+            case Opcode.MSG_MOVE_SET_SWIM_SPEED:
+                Assert.Equal(newValue, unit.SwimSpeed, 5);
+                break;
+            case Opcode.MSG_MOVE_SET_SWIM_BACK_SPEED:
+                Assert.Equal(newValue, unit.SwimBackSpeed, 5);
+                break;
+            case Opcode.MSG_MOVE_SET_TURN_RATE:
+                Assert.Equal(newValue, unit.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+
+        Assert.Equal(70f, unit.Position.X, 5);
+        Assert.Equal(80f, unit.Position.Y, 5);
+        Assert.Equal(90f, unit.Position.Z, 5);
+        Assert.Equal(0.25f, unit.Facing, 5);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(
@@ -778,6 +903,54 @@ public class ObjectManagerWorldSessionTests
         return ms.ToArray();
     }
 
+    private static byte[] BuildMessageMovePayload(
+        ulong guid,
+        MovementFlags movementFlags,
+        Position position,
+        float facing)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing));
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildMessageMoveSpeedPayload(
+        ulong guid,
+        MovementFlags movementFlags,
+        Position position,
+        float facing,
+        float speed)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing));
+        writer.Write(speed);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildMovementInfoPayload(
+        ulong guid,
+        MovementFlags movementFlags,
+        Position position,
+        float facing)
+    {
+        var player = new WoWLocalPlayer(new HighGuid(guid))
+        {
+            MovementFlags = movementFlags,
+            Position = position,
+            Facing = facing,
+            FallTime = 0,
+        };
+
+        return MovementPacketHandler.BuildMovementInfoBuffer(
+            player,
+            clientTimeMs: 1234u,
+            fallTimeMs: 0u);
+    }
+
     private static byte[] BuildMonsterMovePayload(
         ulong guid,
         Position start,
@@ -837,6 +1010,15 @@ public class ObjectManagerWorldSessionTests
             case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
                 WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange += handler;
                 break;
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceRunSpeedChange += handler;
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceRunBackSpeedChange += handler;
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceSwimSpeedChange += handler;
+                break;
             case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
                 WoWSharpEventEmitter.Instance.OnForceSwimBackSpeedChange += handler;
                 break;
@@ -854,6 +1036,15 @@ public class ObjectManagerWorldSessionTests
         {
             case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
                 WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange -= handler;
+                break;
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceRunSpeedChange -= handler;
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceRunBackSpeedChange -= handler;
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceSwimSpeedChange -= handler;
                 break;
             case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
                 WoWSharpEventEmitter.Instance.OnForceSwimBackSpeedChange -= handler;

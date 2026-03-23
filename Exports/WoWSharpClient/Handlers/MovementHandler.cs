@@ -351,10 +351,26 @@ namespace WoWSharpClient.Handlers
                                 ParseMessageMove(reader)
                             );
                             break;
+                        case Opcode.MSG_MOVE_SET_RUN_MODE:
+                        case Opcode.MSG_MOVE_SET_WALK_MODE:
                         case Opcode.MSG_MOVE_ROOT:
                         case Opcode.MSG_MOVE_UNROOT:
+                        case Opcode.MSG_MOVE_FEATHER_FALL:
+                        case Opcode.MSG_MOVE_HOVER:
                         case Opcode.MSG_MOVE_WATER_WALK:
                             ParseMessageMove(reader);
+                            break;
+                        case Opcode.MSG_MOVE_SET_RUN_BACK_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.RunBackSpeed = speed
+                            );
+                            break;
+                        case Opcode.MSG_MOVE_SET_WALK_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.WalkSpeed = speed
+                            );
                             break;
                         case Opcode.MSG_MOVE_SET_RUN_SPEED:
                             ParseMessageMoveWithTrailingSpeed(
@@ -362,10 +378,22 @@ namespace WoWSharpClient.Handlers
                                 (movementBlock, speed) => movementBlock.RunSpeed = speed
                             );
                             break;
+                        case Opcode.MSG_MOVE_SET_SWIM_BACK_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.SwimBackSpeed = speed
+                            );
+                            break;
                         case Opcode.MSG_MOVE_SET_SWIM_SPEED:
                             ParseMessageMoveWithTrailingSpeed(
                                 reader,
                                 (movementBlock, speed) => movementBlock.SwimSpeed = speed
+                            );
+                            break;
+                        case Opcode.MSG_MOVE_SET_TURN_RATE:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.TurnRate = speed
                             );
                             break;
                         case Opcode.MSG_MOVE_START_BACKWARD:
