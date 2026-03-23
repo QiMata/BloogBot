@@ -6,7 +6,7 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Add recorded-motion validation for remote extrapolation and knockback handling.
+1. Keep recorded-motion validation in place for remote extrapolation and knockback handling.
 2. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
 3. Keep the movement opcode sweep closed by only adding new bridge/application handlers when a binary-backed non-cheat gap is found.
 
@@ -14,20 +14,14 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now cover the remaining non-cheat observer movement rebroadcasts from the Vanilla dispatch sweep: `MSG_MOVE_START_SWIM`, `MSG_MOVE_STOP_SWIM`, `MSG_MOVE_START_PITCH_UP`, `MSG_MOVE_START_PITCH_DOWN`, `MSG_MOVE_STOP_PITCH`, and `MSG_MOVE_SET_PITCH`.
-  - Remote units now retain swimming state and `SwimPitch` when those packets arrive instead of dropping the updates, which closes the last normal observer-side movement opcode gap found in the current 1.12.1 dispatch-table audit.
-  - The remaining opcode names absent from the dispatcher/bridge are cheat/debug-only paths (`*_CHEAT`, logging/collision/gravity toggles, raw-position ack), not runtime parity gaps for normal movement.
+  - `WoWUnitExtrapolationTests` now includes replay-backed coverage from real movement recordings instead of only synthetic vector math.
+  - Added a slow-walk Undercity fixture that proves the `<3y/s` WoW.exe jitter guard returns the raw server position even when a nearby unit keeps walking for another half-second.
+  - Added a fast-running Blackrock Spire fixture that stays within `0.02y` horizontal drift against observed motion, proving the positive extrapolation path against a real remote-unit trajectory instead of only hand-authored test data.
 - Validation/tests run:
-  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObserverMovementPitchOpcodes_UpdateRemoteUnitSwimPitch" -v n` -> `16 passed`
-  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~BridgeRegistration_MovementOpcodes_Registered" -v n` -> `1 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1346 passed`, `1 skipped`
-  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n` -> `117 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~WoWUnitExtrapolationTests" -v n` -> `8 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -v n` -> `1351 passed`, `1 skipped`
 - Files changed:
-  - `Exports/WoWSharpClient/Client/WorldClient.cs`
-  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
-  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
-  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
 - Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs | Select-Object -First 260`
+  - `Get-Content docs/TASKS.md | Select-Object -Skip 283 -First 80`

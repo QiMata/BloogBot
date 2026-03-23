@@ -1,5 +1,6 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using Navigation.Physics.Tests;
 using WoWSharpClient.Models;
 
 namespace WoWSharpClient.Tests.Models;
@@ -120,6 +121,83 @@ public class WoWUnitExtrapolationTests
         Assert.Equal(32f, predicted.Z, 3);
     }
 
+    [Fact]
+    public void GetExtrapolatedPosition_RecordedUndercityNpcWalk_BelowJitterThreshold_ReturnsCurrentPosition()
+    {
+        const string recordingName = "Dralrahgra_Undercity_2026-03-06_11-04-19";
+        const ulong unitGuid = 17379391038426224136ul; // Tawny Grisette
+        const int startFrame = 506;
+        const int calibrationFrame = 512;
+        const int targetFrame = 536;
+
+        var recording = RecordingLoader.LoadFromFile(RecordingLoader.FindRecordingByFilename(recordingName));
+        var start = GetRecordedUnit(recording, startFrame, unitGuid);
+        var calibration = GetRecordedUnit(recording, calibrationFrame, unitGuid);
+        var target = GetRecordedUnit(recording, targetFrame, unitGuid);
+
+        var directionalFlags = ToDirectionalMovementFlags(start.MovementFlags);
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, directionalFlags);
+
+        float inferredSpeed = Distance2D(start.Position, calibration.Position) /
+            SecondsBetween(recording, startFrame, calibrationFrame);
+
+        var unit = CreateUnit(
+            ToPosition(start.Position),
+            directionalFlags,
+            facing: start.Facing,
+            runSpeed: inferredSpeed,
+            runBackSpeed: inferredSpeed,
+            timestampMs: (uint)recording.Frames[startFrame].FrameTimestamp);
+
+        var predicted = unit.GetExtrapolatedPosition((uint)recording.Frames[targetFrame].FrameTimestamp);
+        var startPosition = ToPosition(start.Position);
+        var targetPosition = ToPosition(target.Position);
+
+        Assert.True(inferredSpeed < 3.0f, $"Fixture speed {inferredSpeed:F3}y/s should stay below the jitter threshold.");
+        Assert.Equal(startPosition.X, predicted.X, 3);
+        Assert.Equal(startPosition.Y, predicted.Y, 3);
+        Assert.Equal(startPosition.Z, predicted.Z, 3);
+        Assert.True(
+            Distance2D(startPosition, targetPosition) > 1.0f,
+            "Fixture should show visible real-world drift so the jitter guard is meaningfully exercised.");
+    }
+
+    [Fact]
+    public void GetExtrapolatedPosition_RecordedBlackrockRunner_MatchesObservedPosition()
+    {
+        const string recordingName = "Dralrahgra_Blackrock_Spire_2026-02-08_12-04-53";
+        const ulong unitGuid = 17379391114628341262ul; // Rage Talon Dragonspawn
+        const int startFrame = 3;
+        const int calibrationFrame = 9;
+        const int targetFrame = 15;
+
+        var recording = RecordingLoader.LoadFromFile(RecordingLoader.FindRecordingByFilename(recordingName));
+        var start = GetRecordedUnit(recording, startFrame, unitGuid);
+        var calibration = GetRecordedUnit(recording, calibrationFrame, unitGuid);
+        var target = GetRecordedUnit(recording, targetFrame, unitGuid);
+
+        var directionalFlags = ToDirectionalMovementFlags(start.MovementFlags);
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, directionalFlags);
+
+        float inferredSpeed = Distance2D(start.Position, calibration.Position) /
+            SecondsBetween(recording, startFrame, calibrationFrame);
+
+        var unit = CreateUnit(
+            ToPosition(start.Position),
+            directionalFlags,
+            facing: start.Facing,
+            runSpeed: inferredSpeed,
+            runBackSpeed: inferredSpeed,
+            timestampMs: (uint)recording.Frames[startFrame].FrameTimestamp);
+
+        var predicted = unit.GetExtrapolatedPosition((uint)recording.Frames[targetFrame].FrameTimestamp);
+        var targetPosition = ToPosition(target.Position);
+
+        Assert.True(
+            Distance2D(predicted, targetPosition) < 0.02f,
+            $"Recorded fast-run replay drifted {Distance2D(predicted, targetPosition):F4}y in XY.");
+    }
+
     private static WoWUnit CreateUnit(
         Position position,
         MovementFlags movementFlags,
@@ -139,4 +217,38 @@ public class WoWUnitExtrapolationTests
             ExtrapolationTimeMs = timestampMs,
         };
     }
+
+    private static RecordedUnit GetRecordedUnit(MovementRecording recording, int frameIndex, ulong guid)
+    {
+        foreach (var unit in recording.Frames[frameIndex].NearbyUnits)
+        {
+            if (unit.Guid == guid)
+                return unit;
+        }
+
+        throw new InvalidOperationException($"Unit 0x{guid:X} missing at frame {frameIndex}.");
+    }
+
+    private static MovementFlags ToDirectionalMovementFlags(uint rawMovementFlags)
+    {
+        const MovementFlags directionalMask =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_BACKWARD |
+            MovementFlags.MOVEFLAG_STRAFE_LEFT |
+            MovementFlags.MOVEFLAG_STRAFE_RIGHT;
+
+        return (MovementFlags)rawMovementFlags & directionalMask;
+    }
+
+    private static float SecondsBetween(MovementRecording recording, int startFrame, int endFrame)
+        => (recording.Frames[endFrame].FrameTimestamp - recording.Frames[startFrame].FrameTimestamp) * 0.001f;
+
+    private static float Distance2D(RecordedPosition start, RecordedPosition end)
+        => Distance2D(ToPosition(start), ToPosition(end));
+
+    private static float Distance2D(Position start, Position end)
+        => MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
+
+    private static Position ToPosition(RecordedPosition position)
+        => new(position.X, position.Y, position.Z);
 }

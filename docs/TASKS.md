@@ -283,8 +283,21 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 144)
+- **Last updated:** 2026-03-23 (session 145)
 - **Branch:** `main`
+- **Session 145 — recorded remote-unit extrapolation proof shipped:**
+  - `WoWUnitExtrapolationTests` now includes replay-backed fixtures from real nearby-unit trajectories instead of only synthetic movement vectors.
+  - Added a slow-walk Undercity fixture that proves the WoW.exe `<3y/s` jitter filter returns the raw server position even when the recorded NPC keeps moving for another half-second, so low-speed drift suppression is now backed by capture data.
+  - Added a fast Blackrock Spire runner fixture that stays within `0.02y` horizontal drift against observed motion, which closes the remaining “recorded directional remote-unit extrapolation fixture” gap called out in earlier sessions.
+- **Test baseline (session 145):**
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~WoWUnitExtrapolationTests" -v n`
+    - Passed (`8/8`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -v n`
+    - Passed (`1351/1351`, `1 skipped`; `dumpbin` still missing in the vcpkg `applocal.ps1` post-step, unchanged and non-blocking)
+- **Files changed (session 145):**
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
+- **Next priorities:** `7.9` additional transport replay data and a final movement/packet parity sweep for anything still only decompiled but not binary-backed
 - **Session 144 — FG spell snapshot parity slice shipped:**
   - `ForegroundBotRunner` now reconciles spell knowledge from two sources instead of letting the next refresh overwrite event-driven gains: the main-thread `LEARNED_SPELL` / `UNLEARNED_SPELL` hook path updates sticky learned/removed IDs immediately, while `RefreshSpells()` publishes `stable IDs + sticky learns - sticky removals`.
   - The immediate event path now handles unlearns as first-class deltas, updates the thread-safe `KnownSpellIds` snapshot right away, and keeps `LocalPlayer.RawSpellBookIds` in sync when the player object is live.
@@ -299,7 +312,6 @@ if (transportGuid != 0) {
   - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
   - `Services/ForegroundBotRunner/TASKS.md`
   - `Tests/ForegroundBotRunner.Tests/SpellKnowledgeReconcilerTests.cs`
-- **Next priorities:** `7.9` additional transport replay data, a recorded directional remote-unit extrapolation fixture so the remaining parity gaps are proven against capture data, and a final movement/packet parity sweep for anything still only decompiled but not binary-backed
 - **Session 143 — FG WndProc/offset hardening slice shipped:**
   - `ForegroundBotRunner` now exposes the live `ThreadSynchronizer` WndProc gate as a pure helper (`ThreadSynchronizerGateEvaluator`) so the packet-driven/heuristic safety rules are deterministic and unit-testable without touching the injected hook path.
   - New FG tests now pin the gate’s critical cases: pre-world charselect allowance, valid-world seeding, invalid-map transition blocking, `ConnectionStateMachine.IsLuaSafe` blocking, valid-map auto-pause on map change, and object-manager teardown blocking.
