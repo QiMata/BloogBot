@@ -63,6 +63,9 @@ namespace WoWSharpClient.Models
         internal MovementFlags ExtrapolationFlags { get; set; }
         internal float ExtrapolationFacing { get; set; }
         internal Position? ExtrapolationBasePosition { get; set; }
+        private const float ExtrapolationDirectionEpsilon = 0.0001f;
+        // WoW.exe movement constant VA 0x0081DA54: sin(45°) = 0.70710677.
+        private const float DiagonalDamping = 0.70710677f;
 
         /// <summary>
         /// Predicts this unit's current position by extrapolating from the last known
@@ -77,19 +80,63 @@ namespace WoWSharpClient.Models
             uint elapsed = currentTimeMs - ExtrapolationTimeMs;
             if (elapsed > 1500) return Position; // Stale — don't extrapolate
 
-            // Only extrapolate if unit has directional movement flags
+            // Only extrapolate if unit has directional movement flags.
             var dirFlags = ExtrapolationFlags & (MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
                 | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             if (dirFlags == MovementFlags.MOVEFLAG_NONE) return Position;
 
-            float speed = (dirFlags & MovementFlags.MOVEFLAG_BACKWARD) != 0 ? RunBackSpeed : RunSpeed;
+            bool moveForward = (dirFlags & MovementFlags.MOVEFLAG_FORWARD) != 0;
+            bool moveBackward = (dirFlags & MovementFlags.MOVEFLAG_BACKWARD) != 0;
+            bool strafeLeft = (dirFlags & MovementFlags.MOVEFLAG_STRAFE_LEFT) != 0;
+            bool strafeRight = (dirFlags & MovementFlags.MOVEFLAG_STRAFE_RIGHT) != 0;
+
+            float speed = moveBackward && !moveForward ? RunBackSpeed : RunSpeed;
             if (speed * speed < 9f) return Position;   // Jitter filter: <3 y/s
             if (speed * speed > 3600f) return Position; // Teleport filter: >60 y/s
 
-            float dt = elapsed * 0.001f;
             float facing = ExtrapolationFacing;
-            float dx = MathF.Cos(facing) * speed * dt;
-            float dy = MathF.Sin(facing) * speed * dt;
+            float cos = MathF.Cos(facing);
+            float sin = MathF.Sin(facing);
+            float dirX = 0f;
+            float dirY = 0f;
+
+            if (moveForward)
+            {
+                dirX += cos;
+                dirY += sin;
+            }
+
+            if (moveBackward)
+            {
+                dirX -= cos;
+                dirY -= sin;
+            }
+
+            if (strafeLeft)
+            {
+                dirX -= sin;
+                dirY += cos;
+            }
+
+            if (strafeRight)
+            {
+                dirX += sin;
+                dirY -= cos;
+            }
+
+            if ((moveForward || moveBackward) && (strafeLeft || strafeRight))
+            {
+                dirX *= DiagonalDamping;
+                dirY *= DiagonalDamping;
+            }
+
+            float magnitudeSquared = dirX * dirX + dirY * dirY;
+            if (magnitudeSquared < ExtrapolationDirectionEpsilon * ExtrapolationDirectionEpsilon)
+                return Position;
+
+            float dt = elapsed * 0.001f;
+            float dx = dirX * speed * dt;
+            float dy = dirY * speed * dt;
 
             return new Position(
                 ExtrapolationBasePosition.X + dx,

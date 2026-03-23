@@ -280,8 +280,27 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 133)
+- **Last updated:** 2026-03-23 (session 134)
 - **Branch:** `main`
+- **Session 134 — extrapolation seeding + knockback validation slice shipped:**
+  - `WoWUnit.GetExtrapolatedPosition()` now matches the same directional basis the physics layer uses for backward, strafe, and diagonal movement (`sin(45°)` damping from WoW.exe `VA 0x0081DA54`)
+  - `WoWSharpObjectManager` now seeds remote-unit extrapolation state on create/add movement blocks, not only on later updates, which fixes a real gap in BG remote-position prediction startup
+  - Added deterministic tests for backward/strafe/diagonal extrapolation math, remote-unit add-path extrapolation seeding, knockback parse -> ACK -> pending-impulse state, and `MovementController` knockback impulse consumption into physics input
+  - The current `20240815` WoWSharpClient packet fixture does not contain directional remote-unit segments suitable for a recorded extrapolation accuracy gate; the remaining extrapolation work is a better capture/fixture, not another code-path patch
+- **Test baseline (session 134):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WoWUnitExtrapolationTests|FullyQualifiedName~ObjectManagerWorldSessionTests.RemoteUnitAdd_PrimesExtrapolationStateFromMovementBlock|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_ParseStoresImpulseClearsDirectionAndAcks|FullyQualifiedName~MovementControllerTests.PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity" -v n`
+    - Passed (`6/6`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1286/1287`, `1 skipped`)
+- **Files changed (session 134):**
+  - `Exports/WoWSharpClient/Models/WoWUnit.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then complete the spline-mode audit, add a directional remote-unit capture for recorded extrapolation accuracy, and continue the broader movement opcode / FG binary hardening sweep
 - **Session 133 — managed force-speed parity slice shipped:**
   - BG now handles the remaining server-forced movement rate opcodes end to end: `SMSG_FORCE_WALK_SPEED_CHANGE`, `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE`, and `SMSG_FORCE_TURN_RATE_CHANGE`
   - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route those packets through the same ACK/application path as the existing run/swim speed changes

@@ -1473,72 +1473,7 @@ namespace WoWSharpClient
 
         private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data)
         {
-            // Diagnostic: detect when 2-arg overload writes local player position (always writes)
-            if (unit is WoWLocalPlayer)
-            {
-                float dx = data.X - unit.Position.X;
-                float dy = data.Y - unit.Position.Y;
-                float dist = MathF.Sqrt(dx * dx + dy * dy);
-                if (dist > 0.1f)
-                {
-                    Log.Warning("[POS_OVERWRITE_ADD] Server ADD writing local player pos: " +
-                        "cur=({CurX:F3},{CurY:F3},{CurZ:F3}) new=({NewX:F3},{NewY:F3},{NewZ:F3}) delta={Dist:F3}",
-                        unit.Position.X, unit.Position.Y, unit.Position.Z,
-                        data.X, data.Y, data.Z, dist);
-                }
-            }
-            unit.MovementFlags = data.MovementFlags;
-            unit.LastUpdated = data.LastUpdated;
-            unit.Position.X = data.X;
-            unit.Position.Y = data.Y;
-            unit.Position.Z = data.Z;
-            unit.Facing = data.Facing;
-            unit.TransportGuid = data.TransportGuid ?? 0;
-            if (unit.TransportGuid == 0)
-            {
-                unit.TransportOffset = new Position(0, 0, 0);
-                unit.TransportOrientation = 0f;
-                unit.TransportLastUpdated = 0;
-            }
-            else
-            {
-                unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
-                unit.TransportOrientation = data.TransportOrientation ?? unit.TransportOrientation;
-                unit.TransportLastUpdated = data.TransportLastUpdated ?? unit.TransportLastUpdated;
-                Instance.SyncTransportPassengerWorldPosition(unit);
-            }
-            unit.SwimPitch = data.SwimPitch ?? 0f;
-            unit.FallTime = data.FallTime;
-            unit.JumpVerticalSpeed = data.JumpVerticalSpeed ?? 0f;
-            unit.JumpSinAngle = data.JumpSinAngle ?? 0f;
-            unit.JumpCosAngle = data.JumpCosAngle ?? 0f;
-            unit.JumpHorizontalSpeed = data.JumpHorizontalSpeed ?? 0f;
-            unit.SplineElevation = data.SplineElevation ?? 0f;
-
-            if (data.MovementBlockUpdate != null)
-            {
-                unit.WalkSpeed = data.MovementBlockUpdate.WalkSpeed;
-                unit.RunSpeed = data.MovementBlockUpdate.RunSpeed;
-                unit.RunBackSpeed = data.MovementBlockUpdate.RunBackSpeed;
-                unit.SwimSpeed = data.MovementBlockUpdate.SwimSpeed;
-                unit.SwimBackSpeed = data.MovementBlockUpdate.SwimBackSpeed;
-                unit.TurnRate = data.MovementBlockUpdate.TurnRate;
-                unit.SplineFlags = data.MovementBlockUpdate.SplineFlags ?? SplineFlags.None;
-                unit.SplineFinalPoint = data.MovementBlockUpdate.SplineFinalPoint ?? unit.SplineFinalPoint;
-                unit.SplineTargetGuid = data.MovementBlockUpdate.SplineTargetGuid ?? 0;
-                unit.SplineFinalOrientation = data.MovementBlockUpdate.SplineFinalOrientation ?? 0f;
-                unit.SplineTimePassed = data.MovementBlockUpdate.SplineTimePassed ?? 0;
-                unit.SplineDuration = data.MovementBlockUpdate.SplineDuration ?? 0;
-                unit.SplineId = data.MovementBlockUpdate.SplineId ?? 0;
-                unit.SplineNodes = data.MovementBlockUpdate.SplineNodes ?? [];
-                unit.SplineFinalDestination = data.MovementBlockUpdate.SplineFinalDestination ?? unit.SplineFinalDestination;
-                unit.SplineType = data.MovementBlockUpdate.SplineType;
-                unit.SplineTargetGuid = data.MovementBlockUpdate.FacingTargetGuid;
-                unit.FacingAngle = data.MovementBlockUpdate.FacingAngle;
-                unit.FacingSpot = data.MovementBlockUpdate.FacingSpot;
-                unit.SplineTimestamp = data.MovementBlockUpdate.SplineTimestamp;
-                unit.SplinePoints = data.MovementBlockUpdate.SplinePoints;
-            }
+            ApplyMovementData(unit, data, allowPositionWrite: true, allowMovementFlagWrite: true);
         }
 
     }

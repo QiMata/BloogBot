@@ -861,6 +861,46 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity()
+        {
+            ClearPendingKnockback();
+
+            PhysicsInput? capturedInput = null;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Callback<PhysicsInput>(input => capturedInput = input)
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ,
+                    NewVelX = input.VelX,
+                    NewVelY = input.VelY,
+                    NewVelZ = input.VelZ,
+                    IsGrounded = false,
+                    GroundNz = 1f,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50,
+                });
+
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT;
+            SetPendingKnockback(4f, -2f, 6f);
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.NotNull(capturedInput);
+            Assert.Equal(4f, capturedInput!.VelX, 3);
+            Assert.Equal(-2f, capturedInput.VelY, 3);
+            Assert.Equal(6f, capturedInput.VelZ, 3);
+            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.MovementFlags);
+            Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+            Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+
+            Assert.False(WoWSharpObjectManager.Instance.TryConsumePendingKnockback(out _, out _, out _));
+        }
+
+        [Fact]
         public void SetPath_StartsAtFirstWaypoint()
         {
             var path = new[]
@@ -965,6 +1005,38 @@ namespace WoWSharpClient.Tests.Movement
             var field = typeof(MovementController).GetField("_currentPath", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(field);
             return field!.GetValue(controller) as Position[];
+        }
+
+        private static void SetPendingKnockback(float vx, float vy, float vz)
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            SetPrivateField(objectManager, "_pendingKnockbackVelX", vx);
+            SetPrivateField(objectManager, "_pendingKnockbackVelY", vy);
+            SetPrivateField(objectManager, "_pendingKnockbackVelZ", vz);
+            SetPrivateField(objectManager, "_hasPendingKnockback", true);
+        }
+
+        private static void ClearPendingKnockback()
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            SetPrivateField(objectManager, "_pendingKnockbackVelX", 0f);
+            SetPrivateField(objectManager, "_pendingKnockbackVelY", 0f);
+            SetPrivateField(objectManager, "_pendingKnockbackVelZ", 0f);
+            SetPrivateField(objectManager, "_hasPendingKnockback", false);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var type = target.GetType();
+            FieldInfo? field = null;
+            while (type != null && field == null)
+            {
+                field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                type = type.BaseType;
+            }
+
+            Assert.NotNull(field);
+            field!.SetValue(target, value);
         }
     }
 }
