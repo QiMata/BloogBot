@@ -2,6 +2,7 @@
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Models
 {
@@ -19,6 +20,12 @@ namespace WoWSharpClient.Models
         public uint ArtKit { get; set; }
         public uint AnimProgress { get; set; }
         public string Name { get; set; } = string.Empty;
+        public SplineType MovementSplineType { get; set; }
+        public ulong MovementSplineTargetGuid { get; set; }
+        public float MovementFacingAngle { get; set; }
+        public Position MovementFacingSpot { get; set; } = new(0, 0, 0);
+        public uint MovementSplineTimestamp { get; set; }
+        public List<Position> MovementSplinePoints { get; set; } = [];
 
         public override WoWObject Clone()
         {
@@ -44,6 +51,12 @@ namespace WoWSharpClient.Models
             ArtKit = source.ArtKit;
             AnimProgress = source.AnimProgress;
             Name = source.Name;
+            MovementSplineType = source.MovementSplineType;
+            MovementSplineTargetGuid = source.MovementSplineTargetGuid;
+            MovementFacingAngle = source.MovementFacingAngle;
+            MovementFacingSpot = source.MovementFacingSpot;
+            MovementSplineTimestamp = source.MovementSplineTimestamp;
+            MovementSplinePoints = [.. source.MovementSplinePoints];
 
             if (Rotation.Length != source.Rotation.Length)
                 Rotation = new float[source.Rotation.Length];

@@ -228,7 +228,7 @@ if (transportGuid != 0) {
 | 7.2 | Implement world↔transport coordinate transform in `CollisionStepWoW` matching 0x633840 | **Done** |
 | 7.3 | Transform displacement by transport orientation matrix before collision (0x4549A0 `Vec3TransformCoord`) | **Done** |
 | 7.4 | Inverse-transform result position back to transport-local after collision | **Done** |
-| 7.5 | Handle elevator spline evaluation — Undercity elevators use gameobject transport splines | Open |
+| 7.5 | Handle elevator spline evaluation — Undercity elevators use gameobject transport splines | **Done** |
 | 7.6 | Update `MovementController` to track transport state and switch coordinate frames | **Done** |
 | 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | **Done** |
 | 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | **Done** |
@@ -246,8 +246,11 @@ if (transportGuid != 0) {
   - `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget`: transport avg `0.0303y`, p99 `0.2169y`, max `0.3619y`
   - `ElevatorRideV2_FrameByFrame_PositionMatchesRecording`: avg `0.0142y`, steady-state p99 `0.1190y`, max `0.3619y`
   - `AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds`: avg `0.0124y`, p99 `0.1279y`, worst `2.2577y`
+- Managed/runtime transport mover parity is now in place:
+  - direct `SMSG_MONSTER_MOVE` routing now activates gameobject transport splines at runtime,
+  - moving transport gameobjects advance their own spline state in the object manager loop,
+  - passengers riding those movers stay stable in transport-local coordinates while their world coordinates resync each spline tick.
 - Remaining P7 follow-ups are narrower:
-  - `7.5` explicit elevator spline evaluation audit for runtime movers
   - `7.9` additional Orgrimmar elevator replay coverage
 
 ### Key Files

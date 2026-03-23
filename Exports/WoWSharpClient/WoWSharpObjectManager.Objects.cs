@@ -287,6 +287,34 @@ namespace WoWSharpClient
             }
         }
 
+        private static void ApplyMovementData(WoWGameObject gameObject, MovementInfoUpdate data)
+        {
+            gameObject.LastUpdated = data.LastUpdated;
+            gameObject.Position = new Position(data.X, data.Y, data.Z);
+
+            if (data.MovementBlockUpdate == null)
+            {
+                gameObject.Facing = data.Facing;
+            }
+            else if (data.MovementBlockUpdate.SplineType == SplineType.FacingAngle)
+            {
+                gameObject.Facing = TransportCoordinateHelper.NormalizeFacing(
+                    data.MovementBlockUpdate.FacingAngle);
+            }
+
+            if (data.MovementBlockUpdate != null)
+            {
+                gameObject.MovementSplineType = data.MovementBlockUpdate.SplineType;
+                gameObject.MovementSplineTargetGuid = data.MovementBlockUpdate.FacingTargetGuid;
+                gameObject.MovementFacingAngle = data.MovementBlockUpdate.FacingAngle;
+                gameObject.MovementFacingSpot = data.MovementBlockUpdate.FacingSpot;
+                gameObject.MovementSplineTimestamp = data.MovementBlockUpdate.SplineTimestamp;
+                gameObject.MovementSplinePoints = [.. data.MovementBlockUpdate.SplinePoints];
+            }
+
+            Instance.SyncTransportPassengerWorldPositions();
+        }
+
 
         private static void ApplyContainerFieldDiffs(
             WoWContainer container,

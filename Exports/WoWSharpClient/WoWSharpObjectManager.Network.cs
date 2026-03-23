@@ -220,16 +220,12 @@ namespace WoWSharpClient
                                         if (newObject is WoWUnit unit)
                                         {
                                             ApplyMovementData(unit, update.MovementData);
+                                            TryActivateSpline(update.Guid, update.MovementData, newObject is WoWLocalPlayer);
                                         }
                                         else if (newObject is WoWGameObject gameObj)
                                         {
-                                            // Apply position from CREATE_OBJECT movement block to game objects.
-                                            // Without this, bobbers/dynamic objects stay at (0,0,0) and never
-                                            // appear in NearbyObjects or get matched by SMSG_GAMEOBJECT_CUSTOM_ANIM.
-                                            gameObj.Position = new Position(
-                                                update.MovementData.X,
-                                                update.MovementData.Y,
-                                                update.MovementData.Z);
+                                            ApplyMovementData(gameObj, update.MovementData);
+                                            TryActivateSpline(update.Guid, update.MovementData, false);
                                         }
 
                                         Log.Verbose("[Movement-Add] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
@@ -329,6 +325,16 @@ namespace WoWSharpClient
                                             update.Guid, movementData.X, movementData.Y,
                                             movementData.Z, (uint)movementData.MovementFlags,
                                             obj is WoWLocalPlayer ? " [LOCAL]" : "");
+                                    }
+                                    else if (update.MovementData != null && obj is WoWGameObject gameObj)
+                                    {
+                                        var movementData = update.MovementData;
+                                        ApplyMovementData(gameObj, movementData);
+                                        TryActivateSpline(update.Guid, movementData, false);
+
+                                        Log.Verbose("[Movement-Update-GO] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
+                                            update.Guid, movementData.X, movementData.Y,
+                                            movementData.Z, (uint)movementData.MovementFlags);
                                     }
 
                                     // Pet discovery on field update (SummonedBy may arrive in a later update)

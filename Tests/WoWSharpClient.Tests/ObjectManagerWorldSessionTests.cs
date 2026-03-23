@@ -277,6 +277,82 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void DirectMonsterMove_GameObjectTransportSplineMovesPassengers()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x203;
+        const ulong transportGuid = 0xF120000000000789ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            transportGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.GameObj,
+            new MovementInfoUpdate
+            {
+                Guid = transportGuid,
+                X = 100f,
+                Y = 200f,
+                Z = 50f,
+                Facing = MathF.PI / 2f,
+            },
+            new Dictionary<uint, object?>()));
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            playerGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Update,
+            WoWObjectType.Player,
+            new MovementInfoUpdate
+            {
+                Guid = playerGuid,
+                X = 101f,
+                Y = 202f,
+                Z = 53f,
+                Facing = 2.0f,
+                MovementFlags = MovementFlags.MOVEFLAG_ONTRANSPORT,
+                TransportGuid = transportGuid,
+                TransportOffset = new Position(2f, -1f, 3f),
+                TransportOrientation = 2.0f - (MathF.PI / 2f),
+            },
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var transport = Assert.IsType<WoWGameObject>(objectManager.GetObjectByGuid(transportGuid));
+        transport.Position = new Position(100f, 200f, 50f);
+        transport.Facing = MathF.PI / 2f;
+
+        uint startTime = unchecked((uint)Environment.TickCount64 + 2000u);
+        MovementHandler.HandleUpdateMovement(
+            Opcode.SMSG_MONSTER_MOVE,
+            BuildMonsterMovePayload(
+                transportGuid,
+                new Position(100f, 200f, 50f),
+                startTime,
+                durationMs: 1000u,
+                points: [new Position(100f, 200f, 60f)]));
+        UpdateProcessingHelper.DrainPendingUpdates();
+        WaitForCondition(() => Splines.Instance.HasActiveSpline(transportGuid));
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        Assert.Equal(50f, transport.Position.Z, 2);
+        Assert.Equal(53f, player.Position.Z, 2);
+
+        Splines.Instance.Update(500f);
+
+        Assert.Equal(55f, transport.Position.Z, 2);
+        Assert.Equal(101f, player.Position.X, 2);
+        Assert.Equal(202f, player.Position.Y, 2);
+        Assert.Equal(58f, player.Position.Z, 2);
+        Assert.Equal(2f, player.TransportOffset.X, 2);
+        Assert.Equal(-1f, player.TransportOffset.Y, 2);
+        Assert.Equal(3f, player.TransportOffset.Z, 2);
+
+        Splines.Instance.Remove(transportGuid);
+    }
+
+    [Fact]
     public void RemoteUnitAdd_PrimesExtrapolationStateFromMovementBlock()
     {
         ResetObjectManager();

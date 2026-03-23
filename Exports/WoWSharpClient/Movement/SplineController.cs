@@ -240,6 +240,18 @@ namespace WoWSharpClient.Movement
                         woWUnit.Facing = nextFacing;
                     }
                 }
+                else if (WoWSharpObjectManager.Instance.GetObjectByGuid(guid) is WoWGameObject gameObject)
+                {
+                    var previousSplinePosition = new Position(
+                        gameObject.Position.X,
+                        gameObject.Position.Y,
+                        gameObject.Position.Z);
+                    var nextSplinePosition = active.Step(dtMs);
+                    var nextFacing = ResolveFacing(gameObject, previousSplinePosition, nextSplinePosition);
+                    gameObject.Position = nextSplinePosition;
+                    gameObject.Facing = nextFacing;
+                    WoWSharpObjectManager.Instance.SyncTransportPassengerWorldPositions();
+                }
                 else
                     _active.Remove(guid); // object vanished
             }
@@ -261,6 +273,25 @@ namespace WoWSharpClient.Movement
                     return unit.Facing;
                 default:
                     return FaceTowards(previousPosition, nextPosition, unit.Facing);
+            }
+        }
+
+        internal static float ResolveFacing(WoWGameObject gameObject, Position previousPosition, Position nextPosition)
+        {
+            switch (gameObject.MovementSplineType)
+            {
+                case SplineType.FacingAngle:
+                    return TransportCoordinateHelper.NormalizeFacing(gameObject.MovementFacingAngle);
+                case SplineType.FacingSpot:
+                    return FaceTowards(nextPosition, gameObject.MovementFacingSpot, gameObject.Facing);
+                case SplineType.FacingTarget:
+                    if (WoWSharpObjectManager.Instance.GetObjectByGuid(gameObject.MovementSplineTargetGuid) is WoWObject target)
+                        return FaceTowards(nextPosition, target.Position, gameObject.Facing);
+                    return gameObject.Facing;
+                case SplineType.Stop:
+                    return gameObject.Facing;
+                default:
+                    return FaceTowards(previousPosition, nextPosition, gameObject.Facing);
             }
         }
 
