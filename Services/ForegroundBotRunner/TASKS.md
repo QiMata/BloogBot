@@ -25,6 +25,7 @@
 - [x] Restore descriptor-backed FG `Race/Class/Gender`, `FactionTemplate`, and power reads so the injected object model matches the BG snapshot surface for combat/movement consumers.
 - [x] Restore foreground vendor interaction methods (`InteractWithNpcAsync`, buy/sell/repair) so FG runtime behavior no longer falls back to interface default no-ops for merchant flows.
 - [x] Restore non-null FG `GossipFrame` / `QuestFrame` / `MerchantFrame` surfaces plus task-owned quest/vendor async helpers so BotRunner no longer hits null/default-interface paths on the injected client.
+- [x] Restore FG flight-master discovery/activation and a non-null `TaxiFrame` surface so task-driven taxi discovery no longer falls back to interface defaults.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -37,6 +38,22 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
+  - `ObjectManager` now exposes a live foreground `TaxiFrame` and implements `DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, so the injected flight-master task path no longer inherits interface defaults.
+  - Added a Lua-backed `FgTaxiFrame` wrapper that reads taxi-node metadata from the open taxi map, tracks reachable/current nodes, and drives `TakeTaxiNode(...)` directly for FG activation.
+  - Added deterministic FG taxi-frame coverage that proves node metadata, unlocked-state checks, and node selection all route through the expected client-side Lua surface.
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"` -> `5 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `85 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgTaxiFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - Next command:
+  - `rg -n "DepositExcessItemsAsync|PostAuctionItemsAsync|CraftAvailableRecipesAsync|TrainerFrame => null|TalentFrame => null|CraftFrame => null" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Previous delta:
   - `ObjectManager` now exposes real foreground `GossipFrame`, `QuestFrame`, and `MerchantFrame` implementations instead of returning `null`, so legacy BotRunner FG action paths can interact with live WoW UI state again.
   - Added foreground `QuickVendorVisitAsync`, `AcceptQuestFromNpcAsync`, and `TurnInQuestAsync` implementations; vendor visits now sell junk with the same coarse junk heuristic as BG, then repair and buy requested items while the merchant window is open.
   - NPC interaction now caches the active GUID and explicitly targets the NPC before right-click interaction, which stabilizes follow-on quest/vendor frame actions that need the current conversation target.

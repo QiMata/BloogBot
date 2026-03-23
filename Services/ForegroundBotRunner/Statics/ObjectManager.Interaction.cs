@@ -824,6 +824,45 @@ namespace ForegroundBotRunner.Statics
             Log.Warning("[FG-QUEST] Turn-in flow did not complete for quest {QuestId} at NPC 0x{Guid:X}.", questId, npcGuid);
         }
 
+        public async Task<IReadOnlyList<uint>> DiscoverTaxiNodesAsync(ulong flightMasterGuid, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(flightMasterGuid, ct);
+            if (!await WaitForTaxiMapAsync(ct))
+            {
+                Log.Warning("[FG-TAXI] Taxi map did not open for flight master 0x{Guid:X}.", flightMasterGuid);
+                return Array.Empty<uint>();
+            }
+
+            return _fgTaxiFrame.Nodes
+                .Skip(1)
+                .Where(node => _fgTaxiFrame.HasNodeUnlocked(node.NodeNumber))
+                .Select(node => (uint)node.NodeNumber)
+                .ToList();
+        }
+
+        public async Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default)
+        {
+            if (!_fgTaxiFrame.IsOpen)
+            {
+                await InteractWithNpcAsync(flightMasterGuid, ct);
+                if (!await WaitForTaxiMapAsync(ct))
+                {
+                    Log.Warning("[FG-TAXI] Taxi map did not open for activate-flight vendor 0x{Guid:X}.", flightMasterGuid);
+                    return false;
+                }
+            }
+
+            if (!_fgTaxiFrame.HasNodeUnlocked((int)destinationNodeId))
+            {
+                Log.Warning("[FG-TAXI] Destination node {NodeId} is not unlocked in the current taxi map.", destinationNodeId);
+                return false;
+            }
+
+            _fgTaxiFrame.SelectNode((int)destinationNodeId);
+            await Task.Delay(150, ct);
+            return true;
+        }
+
         public async Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default)
         {
             var obj = Objects.FirstOrDefault(o => o.Guid == npcGuid);
@@ -930,6 +969,18 @@ namespace ForegroundBotRunner.Statics
                 return 0;
 
             return int.TryParse(result[0], out int merchantSlot) ? merchantSlot : 0;
+        }
+
+        private async Task<bool> WaitForTaxiMapAsync(CancellationToken ct)
+        {
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                if (_fgTaxiFrame.IsOpen)
+                    return true;
+            }
+
+            return false;
         }
     }
 }

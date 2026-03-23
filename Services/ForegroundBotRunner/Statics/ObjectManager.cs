@@ -131,6 +131,8 @@ namespace ForegroundBotRunner.Statics
 
         private readonly FgQuestFrame _fgQuestFrame;
 
+        private readonly FgTaxiFrame _fgTaxiFrame;
+
 
 
         public ObjectManager(IWoWEventHandler eventHandler, IWoWActivitySnapshot parProbe)
@@ -169,6 +171,9 @@ namespace ForegroundBotRunner.Statics
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua),
                 () => GetActiveNpcInteractionGuid());
+            _fgTaxiFrame = new FgTaxiFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);

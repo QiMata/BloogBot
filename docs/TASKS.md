@@ -283,8 +283,26 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 151)
+- **Last updated:** 2026-03-23 (session 152)
 - **Branch:** `main`
+- **Session 152 — FG taxi discovery parity slice shipped:**
+  - `ForegroundBotRunner` now exposes a live `TaxiFrame` and implements foreground `DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, so the injected flight-master task path no longer falls back to interface defaults.
+  - Added a Lua-backed `FgTaxiFrame` wrapper that reads taxi-node metadata from the visible taxi map, tracks reachable/current nodes, and drives `TakeTaxiNode(...)` directly for FG flight activation.
+- **Test baseline (session 152):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"`
+    - Passed (`5/5`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`85/85`)
+- **Files changed (session 152):**
+  - `Services/ForegroundBotRunner/Frames/FgTaxiFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+- **Next priorities:** finish the remaining FG default-interface/task-surface gaps that still matter to actionable flows, then re-sweep the repo for any remaining code-only parity gaps before the first big live validation chunk
 - **Session 151 — FG frame/action-surface parity slice shipped:**
   - `ForegroundBotRunner` now exposes live `GossipFrame`, `QuestFrame`, and `MerchantFrame` objects backed by the injected client UI instead of returning `null`, which restores the remaining legacy FG BotRunner action surface for vendor/quest/gossip flows.
   - FG now implements the task-owned `QuickVendorVisitAsync`, `AcceptQuestFromNpcAsync`, and `TurnInQuestAsync` paths instead of inheriting interface defaults; quick vendor visits sell coarse junk, repair if possible, and buy requested items while the merchant frame stays open.

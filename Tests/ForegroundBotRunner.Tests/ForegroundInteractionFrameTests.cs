@@ -123,6 +123,39 @@ public sealed class ForegroundInteractionFrameTests
         Assert.Contains(calls, call => call.Contains("RepairAllItems()"));
     }
 
+    [Fact]
+    public void TaxiFrame_UsesLuaNodeMetadataAndSelectsReachableNode()
+    {
+        var calls = new List<string>();
+        var frame = new FgTaxiFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("NumTaxiNodes()"))
+                    return ["2"];
+                if (lua.Contains("TaxiNodeName(1)"))
+                    return ["Orgrimmar", "0", "CURRENT"];
+                if (lua.Contains("TaxiNodeName(2)"))
+                    return ["Crossroads", "50", "REACHABLE"];
+                if (lua.Contains("TaxiFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        Assert.True(frame.IsOpen);
+        Assert.Equal(2, frame.NodesAvailable);
+        Assert.Equal("Orgrimmar", frame.CurrentNodeName);
+        Assert.True(frame.HasNodeUnlocked(2));
+        Assert.Equal("Crossroads", frame.Nodes[2].Name);
+        Assert.Equal(50, frame.Nodes[2].Cost);
+
+        frame.SelectNode(2);
+
+        Assert.Contains(calls, call => call.Contains("TakeTaxiNode(2)"));
+    }
+
     private sealed class TestItem : IWoWItem
     {
         public string Name { get; init; } = string.Empty;
