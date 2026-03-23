@@ -1,17 +1,35 @@
 using System.Collections.Generic;
 using System;
+using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using static GameData.Core.Enums.UpdateFields;
+using WoWSharpClient.Client;
+using WoWSharpClient.Handlers;
 using WoWSharpClient.Models;
+using WoWSharpClient.Parsers;
 using WoWSharpClient.Tests.Handlers;
 using WoWSharpClient.Tests.Util;
+using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Tests;
 
 [Collection("Sequential ObjectManager tests")]
 public class ObjectManagerWorldSessionTests
 {
+    private readonly ObjectManagerFixture _fixture;
+
+    public ObjectManagerWorldSessionTests(ObjectManagerFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public void ResetWorldSessionState_ClearsObjectsAndPreservesGuid()
     {
@@ -134,5 +152,166 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(241f, objectManager.Player.Position.Y, 3);
         Assert.Equal(63f, objectManager.Player.Position.Z, 3);
         Assert.Equal(MathF.PI + (2.0f - MathF.PI / 2f), objectManager.Player.Facing, 3);
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, 2.5f)]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, 1.25f)]
+    [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
+    public void MissingForceChangeOpcodes_ParseApplyAndAck(
+        Opcode serverOpcode,
+        Opcode ackOpcode,
+        float newValue)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x0102030405060708ul;
+        const uint movementCounter = 77u;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = (WoWLocalPlayer)objectManager.Player;
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 1.25f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.WalkSpeed = 1.5f;
+        player.SwimBackSpeed = 0.75f;
+        player.TurnRate = 2.0f;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+
+        RequiresAcknowledgementArgs? capturedArgs = null;
+        EventHandler<RequiresAcknowledgementArgs> handler = (_, args) => capturedArgs = args;
+        SubscribeForceChange(serverOpcode, handler);
+
+        try
+        {
+            MovementHandler.HandleUpdateMovement(
+                serverOpcode,
+                BuildGuidCounterSpeedPayload(playerGuid, movementCounter, newValue));
+        }
+        finally
+        {
+            UnsubscribeForceChange(serverOpcode, handler);
+        }
+
+        Assert.NotNull(capturedArgs);
+        Assert.Equal(playerGuid, capturedArgs!.Guid);
+        Assert.Equal(movementCounter, capturedArgs.Counter);
+        Assert.Equal(newValue, capturedArgs.Speed, 5);
+
+        switch (serverOpcode)
+        {
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.WalkSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.SwimBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                Assert.Equal(newValue, player.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+
+        var sent = Assert.Single(sentPackets);
+        Assert.Equal(ackOpcode, sent.opcode);
+
+        using var ms = new MemoryStream(sent.payload);
+        using var reader = new BinaryReader(ms);
+
+        Assert.Equal(playerGuid, reader.ReadUInt64());
+        Assert.Equal(movementCounter, reader.ReadUInt32());
+
+        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
+        Assert.Equal(player.Position.X, ackMovement.X, 5);
+        Assert.Equal(player.Position.Y, ackMovement.Y, 5);
+        Assert.Equal(player.Position.Z, ackMovement.Z, 5);
+        Assert.Equal(player.Facing, ackMovement.Facing, 5);
+        Assert.Equal(player.MovementFlags, ackMovement.MovementFlags);
+        Assert.Equal(newValue, reader.ReadSingle(), 5);
+        Assert.Equal(ms.Length, ms.Position);
+    }
+
+    private void ResetObjectManager()
+    {
+        WoWSharpObjectManager.Instance.Initialize(
+            _fixture._woWClient.Object,
+            _fixture._pathfindingClient.Object,
+            NullLogger<WoWSharpObjectManager>.Instance);
+    }
+
+    private static Mock<IWorldClient> CreateWorldClientRecorder(out List<(Opcode opcode, byte[] payload)> sentPackets)
+    {
+        var packets = new List<(Opcode opcode, byte[] payload)>();
+        var mockWorldClient = new Mock<IWorldClient>();
+        mockWorldClient
+            .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => packets.Add((opcode, payload)))
+            .Returns(Task.CompletedTask);
+        sentPackets = packets;
+        return mockWorldClient;
+    }
+
+    private static byte[] BuildGuidCounterSpeedPayload(ulong guid, uint counter, float value)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        writer.Write(counter);
+        writer.Write(value);
+        return ms.ToArray();
+    }
+
+    private static void SubscribeForceChange(Opcode opcode, EventHandler<RequiresAcknowledgementArgs> handler)
+    {
+        switch (opcode)
+        {
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange += handler;
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceSwimBackSpeedChange += handler;
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceTurnRateChange += handler;
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {opcode}");
+        }
+    }
+
+    private static void UnsubscribeForceChange(Opcode opcode, EventHandler<RequiresAcknowledgementArgs> handler)
+    {
+        switch (opcode)
+        {
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange -= handler;
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceSwimBackSpeedChange -= handler;
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                WoWSharpEventEmitter.Instance.OnForceTurnRateChange -= handler;
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {opcode}");
+        }
+    }
+
+    private static void SetPrivateField(object target, string fieldName, object value)
+    {
+        var type = target.GetType();
+        FieldInfo? field = null;
+        while (type != null && field == null)
+        {
+            field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            type = type.BaseType;
+        }
+        Assert.NotNull(field);
+        field!.SetValue(target, value);
     }
 }

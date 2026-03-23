@@ -118,3 +118,14 @@ All P0 tasks completed. See TASKS_ARCHIVE.md.
 - Next command: Check `docs/TASKS.md` for any remaining items.
 - Discovery: `WorldClient.RegisterWorldHandlers()` registers `HandleAttackStart` (reactive subject) then `BridgeToLegacy(SMSG_ATTACKSTART, SpellHandler.HandleAttackStart)` which overwrites it via `MessageRouter.AddOrUpdate`. The reactive `AttackStateChanged` subject is never emitted for attack start/stop opcodes. This is a latent bug — the bridge handler should be wired to ALSO emit to the reactive subject, or the registration order should be reversed. Filed as an observation, not blocking.
 >>>>>>> cpp_physics_system
+
+## 2026-03-23 Session Note (Force-Speed Bridge Coverage)
+- Pass result: `delta shipped`
+- Local delta: `WorldClient` bridge coverage now explicitly includes the new managed movement parity opcodes for forced walk-speed, swim-back-speed, and turn-rate updates, keeping bridge registration in lockstep with the legacy movement handler map.
+- Validation:
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n` -> `1 passed`
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n` -> `117 passed`
+- Files changed:
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- Next command: `Get-Content Tests/WowSharpClient.NetworkTests/WorldClientTests.cs | Select-Object -First 260`

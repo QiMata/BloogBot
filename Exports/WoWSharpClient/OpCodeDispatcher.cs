@@ -44,10 +44,12 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_MOVE_WATER_WALK] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_MOVE_ROOT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_MOVE_UNROOT] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.SMSG_FORCE_WALK_SPEED_CHANGE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_RUN_SPEED_CHANGE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.SMSG_FORCE_TURN_RATE_CHANGE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_SPLINE_MOVE_FEATHER_FALL] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_SPLINE_MOVE_LAND_WALK] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_SPLINE_MOVE_NORMAL_FALL] = MovementHandler.HandleUpdateMovement;

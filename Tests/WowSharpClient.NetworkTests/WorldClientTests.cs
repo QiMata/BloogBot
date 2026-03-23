@@ -300,6 +300,9 @@ namespace WowSharpClient.NetworkTests
                 Opcode.MSG_MOVE_HEARTBEAT,
                 Opcode.MSG_MOVE_JUMP,
                 Opcode.MSG_MOVE_SET_FACING,
+                Opcode.SMSG_FORCE_WALK_SPEED_CHANGE,
+                Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE,
+                Opcode.SMSG_FORCE_TURN_RATE_CHANGE,
             };
 
             foreach (var opcode in movementOpcodes)

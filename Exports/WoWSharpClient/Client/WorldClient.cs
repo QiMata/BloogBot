@@ -289,10 +289,12 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_MOVE_WATER_WALK, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_MOVE_ROOT, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_MOVE_UNROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_RUN_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_FEATHER_FALL, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_LAND_WALK, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_NORMAL_FALL, Handlers.MovementHandler.HandleUpdateMovement);

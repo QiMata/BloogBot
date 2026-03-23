@@ -260,6 +260,26 @@ namespace WoWSharpClient
             );
         }
 
+        private void EventEmitter_OnForceSwimBackSpeedChange(
+            object? sender,
+            RequiresAcknowledgementArgs e
+        )
+        {
+            var player = (WoWLocalPlayer)Player;
+            player.SwimBackSpeed = e.Speed;
+            Serilog.Log.Information("[SPEED] SwimBackSpeed changed to {Speed:F2} y/s", e.Speed);
+
+            _ = _woWClient.SendMSGPackedAsync(
+                Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,
+                MovementPacketHandler.BuildForceSpeedChangeAck(
+                    player,
+                    e.Counter,
+                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                    e.Speed
+                )
+            );
+        }
+
         /// <summary>
         /// Called when SplineController finishes or removes a spline.
         /// If it's the local player, restore physics control.
@@ -294,6 +314,26 @@ namespace WoWSharpClient
             );
         }
 
+        private void EventEmitter_OnForceWalkSpeedChange(
+            object? sender,
+            RequiresAcknowledgementArgs e
+        )
+        {
+            var player = (WoWLocalPlayer)Player;
+            player.WalkSpeed = e.Speed;
+            Serilog.Log.Information("[SPEED] WalkSpeed changed to {Speed:F2} y/s", e.Speed);
+
+            _ = _woWClient.SendMSGPackedAsync(
+                Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK,
+                MovementPacketHandler.BuildForceSpeedChangeAck(
+                    player,
+                    e.Counter,
+                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                    e.Speed
+                )
+            );
+        }
+
 
         private void EventEmitter_OnForceRunSpeedChange(
             object? sender,
@@ -306,6 +346,26 @@ namespace WoWSharpClient
 
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
+                MovementPacketHandler.BuildForceSpeedChangeAck(
+                    player,
+                    e.Counter,
+                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                    e.Speed
+                )
+            );
+        }
+
+        private void EventEmitter_OnForceTurnRateChange(
+            object? sender,
+            RequiresAcknowledgementArgs e
+        )
+        {
+            var player = (WoWLocalPlayer)Player;
+            player.TurnRate = e.Speed;
+            Serilog.Log.Information("[SPEED] TurnRate changed to {Speed:F2} rad/s", e.Speed);
+
+            _ = _woWClient.SendMSGPackedAsync(
+                Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK,
                 MovementPacketHandler.BuildForceSpeedChangeAck(
                     player,
                     e.Counter,

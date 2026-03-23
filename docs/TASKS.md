@@ -280,8 +280,36 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 132)
+- **Last updated:** 2026-03-23 (session 133)
 - **Branch:** `main`
+- **Session 133 — managed force-speed parity slice shipped:**
+  - BG now handles the remaining server-forced movement rate opcodes end to end: `SMSG_FORCE_WALK_SPEED_CHANGE`, `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE`, and `SMSG_FORCE_TURN_RATE_CHANGE`
+  - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route those packets through the same ACK/application path as the existing run/swim speed changes
+  - `WoWSharpObjectManager` now applies walk speed, swim-back speed, and turn-rate updates to the local player model before echoing the matching ACK packet
+  - Added deterministic managed tests that cover parse -> event -> player-state mutation -> ACK payload for all three opcodes plus bridge registration coverage in `WowSharpClient.NetworkTests`
+- **Test baseline (session 133):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MissingForceChangeOpcodes_ParseApplyAndAck" -v n`
+    - Passed (`3/3`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n`
+    - Passed (`1/1`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1280/1281`, `1 skipped`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n`
+    - Passed (`117/117`)
+- **Files changed (session 133):**
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (knockback/extrapolation validation, spline audit, broader movement opcode completeness, FG hardening)
 - **Session 132 — swim collision parity slice shipped:**
   - `PhysicsMovement.cpp` swim movement now resolves against real world geometry instead of free-integrating through submerged terrain
   - Swim collision uses WoW.exe’s `0.5` swim-branch displacement constant (`VA 0x007FFA24`) as two half-step submerged collision substeps
@@ -304,7 +332,6 @@ if (transportGuid != 0) {
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsMovement.cpp`
   - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
-- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (force-speed/opcode completeness, knockback/extrapolation validation, spline audit, FG hardening)
 - **Session 131 — P7 transport/elevator parity shipped:**
   - Added BG transport coordinate helpers and moved transport-local/world transforms into shared managed code
   - Fixed movement packet serialization so world position/facing stay in the base block and transport-local offset/orientation stay in the transport block

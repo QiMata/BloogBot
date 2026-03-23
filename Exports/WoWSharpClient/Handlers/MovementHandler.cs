@@ -156,6 +156,11 @@ namespace WoWSharpClient.Handlers
                                 ParseGuidCounterPacket(reader)
                             );
                             break;
+                        case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                            WoWSharpEventEmitter.Instance.FireOnForceWalkSpeedChange(
+                                ParseGuidCounterSpeedPacket(reader)
+                            );
+                            break;
                         case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceRunSpeedChange(
                                 ParseGuidCounterSpeedPacket(reader)
@@ -168,6 +173,16 @@ namespace WoWSharpClient.Handlers
                             break;
                         case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceSwimSpeedChange(
+                                ParseGuidCounterSpeedPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                            WoWSharpEventEmitter.Instance.FireOnForceSwimBackSpeedChange(
+                                ParseGuidCounterSpeedPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                            WoWSharpEventEmitter.Instance.FireOnForceTurnRateChange(
                                 ParseGuidCounterSpeedPacket(reader)
                             );
                             break;

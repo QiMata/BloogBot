@@ -135,3 +135,14 @@ All P0 tasks completed. No active items.
   - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
 - Next command: `Get-Content Tests/WoWSharpClient.Tests/Movement/SplineControllerTests.cs | Select-Object -First 260`
+
+## 2026-03-23 Session Note (Force-Speed Parity)
+- Pass result: `delta shipped`
+- Local delta: added deterministic coverage for the previously-missing walk-speed, swim-back-speed, and turn-rate force-change path so each opcode now proves parse -> event -> player state mutation -> ACK payload parity.
+- Validation:
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MissingForceChangeOpcodes_ParseApplyAndAck" -v n` -> `3 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1280 passed`, `1 skipped`
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+- Next command: `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitTests.cs | Select-Object -First 260`

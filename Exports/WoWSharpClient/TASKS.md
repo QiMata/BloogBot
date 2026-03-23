@@ -184,3 +184,21 @@ Move completed items to `Exports/WoWSharpClient/TASKS_ARCHIVE.md`.
   - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
   - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
 - Next command: `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`
+
+## 2026-03-23 Session Note (Force-Speed Parity)
+- Pass result: `delta shipped`
+- Local delta: managed BG movement now handles the missing server-forced walk-speed, swim-back-speed, and turn-rate opcodes end to end across dispatcher, legacy bridge, event emitter, object manager state application, and ACK generation.
+- Validation:
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MissingForceChangeOpcodes_ParseApplyAndAck" -v n` -> `3 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1280 passed`, `1 skipped`
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n` -> `117 passed`
+- Files changed:
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+- Next command: `Get-Content Exports/WoWSharpClient/Models/WoWUnit.cs | Select-Object -First 220`
