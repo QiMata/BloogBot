@@ -19,7 +19,7 @@
 
 2. FG snapshot parity
 - [ ] Keep FG snapshot data complete and comparable with the BG path.
-- [ ] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
+- [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -32,21 +32,17 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `ThreadSynchronizer`'s WndProc block/allow decision is now centralized in a pure `ThreadSynchronizerGateEvaluator`, so the live WM_USER hook path keeps the same behavior while the state-gating rules are deterministic and unit-testable.
-  - Added `ThreadSynchronizerGateTests` to pin the critical safety cases: pre-world charselect allowance, valid-world seeding, invalid-map transition blocking, packet-driven `IsLuaSafe` blocking, valid-map auto-pause on map change, and manager-base teardown blocking.
-  - Extended the FG binary-backed offset audit past the packet hooks into the movement/snapshot fields used by runtime snapshots: corpse globals, player class/character count, object-manager base, movement-info facing/transport/fall/speed/move-spline offsets, and the distinction between the `0x00672170` `CMap::VectorIntersect` wrapper and `World::Intersect` at `0x006AA160`.
-  - Re-ran the full `ForegroundBotRunner.Tests` suite after the audit; `ConnectionStateMachine` and packet-fallback coverage stayed green with no further code changes required.
+  - FG `SpellList` parity now uses a shared reconciliation model between the main-thread `LEARNED_SPELL` / `UNLEARNED_SPELL` hook path and the throttled `RefreshSpells()` rescan path.
+  - Immediate event publication now handles both learned and removed spell names, updates the thread-safe snapshot used by `KnownSpellIds`, and keeps `LocalPlayer.RawSpellBookIds` synchronized when the local player object exists.
+  - `RefreshSpells()` now publishes `stable spell IDs + sticky learned deltas - sticky removed deltas`, which prevents learned talent/passive spells from disappearing when the static array or Lua enumeration temporarily misses them.
+  - Added deterministic `SpellKnowledgeReconcilerTests` so the FG spell snapshot rules are pinned without requiring a live talent learn/unlearn cycle.
 - Validation/tests run:
   - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
-  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build -v n`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release -v n`
 - Files changed:
-  - `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs`
-  - `Services/ForegroundBotRunner/Mem/Offsets.cs`
-  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
   - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/WoWExeImage.cs`
-  - `Tests/ForegroundBotRunner.Tests/OffsetsBinaryAuditTests.cs`
-  - `Tests/ForegroundBotRunner.Tests/ThreadSynchronizerGateTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/SpellKnowledgeReconcilerTests.cs`
 - Next command:
-  - `Get-Content Services/ForegroundBotRunner/Objects/LocalPlayer.cs | Select-Object -First 260`
+  - `Get-ChildItem Tests/Navigation.Physics.Tests/Recordings | Select-Object Name`

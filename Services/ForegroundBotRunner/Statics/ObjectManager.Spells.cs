@@ -15,6 +15,35 @@ using System.IO;
 
 namespace ForegroundBotRunner.Statics
 {
+    internal readonly record struct SpellKnowledgeState(
+        HashSet<uint> PublishedIds,
+        HashSet<uint> StickyLearnedIds,
+        HashSet<uint> StickyRemovedIds);
+
+    internal static class SpellKnowledgeReconciler
+    {
+        internal static SpellKnowledgeState Reconcile(
+            IReadOnlyCollection<uint> stableIds,
+            IReadOnlyCollection<uint> stickyLearnedIds,
+            IReadOnlyCollection<uint> stickyRemovedIds)
+        {
+            var nextStickyLearnedIds = new HashSet<uint>(stickyLearnedIds);
+            var nextStickyRemovedIds = new HashSet<uint>(stickyRemovedIds);
+
+            foreach (var stableId in stableIds)
+            {
+                nextStickyLearnedIds.Remove(stableId);
+                nextStickyRemovedIds.Remove(stableId);
+            }
+
+            var publishedIds = new HashSet<uint>(stableIds);
+            publishedIds.UnionWith(nextStickyLearnedIds);
+            publishedIds.ExceptWith(nextStickyRemovedIds);
+
+            return new SpellKnowledgeState(publishedIds, nextStickyLearnedIds, nextStickyRemovedIds);
+        }
+    }
+
     public partial class ObjectManager
     {
 
@@ -67,10 +96,15 @@ namespace ForegroundBotRunner.Statics
             var charName = localPlayer.Name ?? string.Empty;
             if (charName != _persistentLearnedCharacter)
             {
+                var previousCharacter = _persistentLearnedCharacter;
                 _persistentLearnedIds.Clear();
+                _eventLearnedIds.Clear();
+                _eventRemovedIds.Clear();
+                _pendingLearnedSpellNames.Clear();
+                _pendingUnlearnedSpellNames.Clear();
                 _persistentLearnedCharacter = charName;
                 _initialSpellsSeeded = false;
-                DiagLog($"[SPELLBOOK] Character changed → '{charName}' (was '{_persistentLearnedCharacter}'), resetting spell list");
+                DiagLog($"[SPELLBOOK] Character changed -> '{charName}' (was '{previousCharacter}'), resetting spell list");
             }
 
             // STEP 1: Always scan the static spell array at 0x00B700F0.
@@ -80,16 +114,14 @@ namespace ForegroundBotRunner.Statics
             // Clear and rebuild each tick so unlearned spells (.unlearn, SMSG_REMOVED_SPELL)
             // are reflected. The 2s throttle prevents excessive rebuilds. Lua and talent
             // enumeration steps below re-add any spells not in the static array.
+            var stableSpellIds = new HashSet<uint>();
             {
-                _persistentLearnedIds.Clear();
-
-                const nint LocalPlayerSpellsBase = 0x00B700F0;
                 int scanned = 0;
                 for (int i = 0; i < 1024; i++)
                 {
-                    var spellId = (uint)MemoryManager.ReadInt(LocalPlayerSpellsBase + i * 4);
+                    var spellId = (uint)MemoryManager.ReadInt(MemoryAddresses.LocalPlayerSpellsBase + i * 4);
                     if (spellId == 0) break;
-                    _persistentLearnedIds.Add(spellId);
+                    stableSpellIds.Add(spellId);
                     scanned++;
                 }
                 if (scanned > 0 && !_initialSpellsSeeded)
@@ -111,15 +143,7 @@ namespace ForegroundBotRunner.Statics
             if (_spellNameCacheBuilt)
             {
                 // STEP 3: Flush any LEARNED_SPELL events that arrived before the cache was ready.
-                if (_pendingLearnedSpellNames.Count > 0)
-                {
-                    var pending = _pendingLearnedSpellNames.ToArray();
-                    _pendingLearnedSpellNames.Clear();
-                    foreach (var name in pending)
-                        if (_spellNameToIds.TryGetValue(name, out var ids))
-                            foreach (var id in ids)
-                                _persistentLearnedIds.Add(id);
-                }
+                FlushPendingSpellNameDeltas();
 
                 // STEP 4: Enumerate spell book via Lua using GetNumSpellTabs/GetSpellTabInfo.
                 // This is the correct vanilla 1.12.1 API (GetNumSpells does not exist in 1.12.1).
@@ -142,15 +166,10 @@ namespace ForegroundBotRunner.Statics
                     if (luaResult != null && luaResult.Length > 0 && !string.IsNullOrEmpty(luaResult[0]))
                     {
                         var names = luaResult[0].Split('|', StringSplitOptions.RemoveEmptyEntries);
-                        int added = 0;
-                        foreach (var name in names)
-                            if (_spellNameToIds.TryGetValue(name.Trim(), out var ids))
-                                foreach (var id in ids)
-                                    if (_persistentLearnedIds.Add(id))
-                                        added++;
+                        int added = MergeNamedSpellIdsIntoStableSet(names, stableSpellIds);
 
                         if (added > 0)
-                            DiagLog($"[SPELLBOOK] Lua tabs: {names.Length} names, +{added} new IDs, total={_persistentLearnedIds.Count}");
+                            DiagLog($"[SPELLBOOK] Lua tabs: {names.Length} names, +{added} new IDs, total={stableSpellIds.Count}");
                     }
                     else
                     {
@@ -185,15 +204,10 @@ namespace ForegroundBotRunner.Statics
                     if (talentResult != null && talentResult.Length > 0 && !string.IsNullOrEmpty(talentResult[0]))
                     {
                         var names = talentResult[0].Split('|', StringSplitOptions.RemoveEmptyEntries);
-                        int added = 0;
-                        foreach (var name in names)
-                            if (_spellNameToIds.TryGetValue(name.Trim(), out var ids))
-                                foreach (var id in ids)
-                                    if (_persistentLearnedIds.Add(id))
-                                        added++;
+                        int added = MergeNamedSpellIdsIntoStableSet(names, stableSpellIds);
 
                         if (added > 0)
-                            DiagLog($"[SPELLBOOK] Lua talents: {names.Length} spent, +{added} new IDs, total={_persistentLearnedIds.Count}");
+                            DiagLog($"[SPELLBOOK] Lua talents: {names.Length} spent, +{added} new IDs, total={stableSpellIds.Count}");
                     }
                 }
                 catch (Exception ex)
@@ -202,12 +216,13 @@ namespace ForegroundBotRunner.Statics
                 }
             }
 
-            // Always publish the current known spell set.
-            var spellSnapshot = new HashSet<uint>(_persistentLearnedIds);
-            localPlayer.RawSpellBookIds = spellSnapshot;
-            // Also update the thread-safe snapshot so KnownSpellIds returns the right set
-            // even if LocalPlayer is recreated by SMSG_UPDATE_OBJECT before the next RefreshSpells tick.
-            _lastKnownSpellIds = spellSnapshot;
+            var reconciledSpellKnowledge = SpellKnowledgeReconciler.Reconcile(
+                stableSpellIds,
+                _eventLearnedIds,
+                _eventRemovedIds);
+            _eventLearnedIds = reconciledSpellKnowledge.StickyLearnedIds;
+            _eventRemovedIds = reconciledSpellKnowledge.StickyRemovedIds;
+            PublishKnownSpellIds(localPlayer, reconciledSpellKnowledge.PublishedIds);
 
             // Diagnostic
             if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 2)
@@ -217,6 +232,71 @@ namespace ForegroundBotRunner.Statics
                 DiagLog($"SPELLBOOK-DIAG: 16462 {(found ? "FOUND" : "NOT FOUND")} " +
                         $"(total={_persistentLearnedIds.Count}, seeded={_initialSpellsSeeded}, cacheBuilt={_spellNameCacheBuilt})");
             }
+        }
+
+        private int MergeNamedSpellIdsIntoStableSet(IEnumerable<string> names, HashSet<uint> stableSpellIds)
+        {
+            int added = 0;
+            foreach (var name in names)
+            {
+                if (!_spellNameToIds.TryGetValue(name.Trim(), out var ids))
+                    continue;
+
+                foreach (var id in ids)
+                {
+                    if (stableSpellIds.Add(id))
+                        added++;
+                }
+            }
+
+            return added;
+        }
+
+        private void FlushPendingSpellNameDeltas()
+        {
+            FlushPendingSpellNameDeltas(_pendingLearnedSpellNames, learned: true);
+            FlushPendingSpellNameDeltas(_pendingUnlearnedSpellNames, learned: false);
+        }
+
+        private void FlushPendingSpellNameDeltas(List<string> pendingNames, bool learned)
+        {
+            if (pendingNames.Count == 0)
+                return;
+
+            var pending = pendingNames.ToArray();
+            pendingNames.Clear();
+            foreach (var name in pending)
+            {
+                if (_spellNameToIds.TryGetValue(name, out var ids))
+                    ApplyResolvedSpellIds(ids, learned);
+                else
+                    pendingNames.Add(name);
+            }
+        }
+
+        private void ApplyResolvedSpellIds(IEnumerable<uint> ids, bool learned)
+        {
+            foreach (var id in ids)
+            {
+                if (learned)
+                {
+                    _eventRemovedIds.Remove(id);
+                    _eventLearnedIds.Add(id);
+                }
+                else
+                {
+                    _eventLearnedIds.Remove(id);
+                    _eventRemovedIds.Add(id);
+                }
+            }
+        }
+
+        private void PublishKnownSpellIds(LocalPlayer localPlayer, IReadOnlyCollection<uint> knownSpellIds)
+        {
+            var spellSnapshot = new HashSet<uint>(knownSpellIds);
+            _persistentLearnedIds = spellSnapshot;
+            localPlayer.RawSpellBookIds = spellSnapshot;
+            _lastKnownSpellIds = spellSnapshot;
         }
 
 
@@ -293,6 +373,10 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         private HashSet<uint> _persistentLearnedIds = new();
 
+        private HashSet<uint> _eventLearnedIds = new();
+
+        private HashSet<uint> _eventRemovedIds = new();
+
 
         private string _persistentLearnedCharacter = string.Empty;
 
@@ -355,6 +439,8 @@ namespace ForegroundBotRunner.Statics
         /// was ready. Flushed into _persistentLearnedIds once the cache is built.
         /// </summary>
         private readonly List<string> _pendingLearnedSpellNames = new();
+
+        private readonly List<string> _pendingUnlearnedSpellNames = new();
 
         /// <summary>
         /// Maps spell name → list of spell IDs from the client spell DB (0x00C0D788 pointer chain).

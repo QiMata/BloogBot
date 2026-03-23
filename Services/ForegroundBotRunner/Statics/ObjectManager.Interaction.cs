@@ -166,6 +166,7 @@ namespace ForegroundBotRunner.Statics
             //      Deflection 16462 which appear in talent data but not the spell book array)
             if (args.EventName == "LEARNED_SPELL" || args.EventName == "UNLEARNED_SPELL")
             {
+                bool learned = args.EventName == "LEARNED_SPELL";
                 var spellName = args.Parameters.Length > 0 ? args.Parameters[0] as string : null;
                 DiagLog($"[SPELLBOOK] {args.EventName} event: '{spellName ?? "(null)"}' params={args.Parameters.Length}");
                 Log.Information("[SPELLBOOK] {Event} via WoW hook: {SpellName}", args.EventName, spellName ?? "(null)");
@@ -176,16 +177,35 @@ namespace ForegroundBotRunner.Statics
                 {
                     if (_spellNameCacheBuilt && _spellNameToIds.TryGetValue(spellName, out var ids))
                     {
-                        foreach (var id in ids)
-                            _persistentLearnedIds.Add(id);
-                        // Publish immediately so KnownSpellIds sees it without waiting for RefreshSpells().
-                        _lastKnownSpellIds = new HashSet<uint>(_persistentLearnedIds);
-                        DiagLog($"[SPELLBOOK] '{spellName}' → {ids.Count} IDs added (total={_persistentLearnedIds.Count})");
+                        ApplyResolvedSpellIds(ids, learned);
+
+                        var publishedIds = new HashSet<uint>(_lastKnownSpellIds);
+                        if (learned)
+                            publishedIds.UnionWith(ids);
+                        else
+                            publishedIds.ExceptWith(ids);
+
+                        if (Player is LocalPlayer localPlayer)
+                            PublishKnownSpellIds(localPlayer, publishedIds);
+                        else
+                        {
+                            _persistentLearnedIds = publishedIds;
+                            _lastKnownSpellIds = publishedIds;
+                        }
+
+                        var action = learned ? "added" : "removed";
+                        DiagLog($"[SPELLBOOK] '{spellName}' -> {ids.Count} IDs {action} (total={publishedIds.Count})");
                     }
                     else
                     {
-                        _pendingLearnedSpellNames.Add(spellName);
-                        DiagLog($"[SPELLBOOK] '{spellName}' queued ({(_spellNameCacheBuilt ? "not in cache" : "cache not ready")})");
+                        if (learned)
+                            _pendingLearnedSpellNames.Add(spellName);
+                        else
+                            _pendingUnlearnedSpellNames.Add(spellName);
+
+                        DiagLog(
+                            $"[SPELLBOOK] '{spellName}' queued for {(learned ? "learn" : "unlearn")} " +
+                            $"({(_spellNameCacheBuilt ? "not in cache" : "cache not ready")})");
                     }
                 }
 

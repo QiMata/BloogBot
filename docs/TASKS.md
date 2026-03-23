@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 143)
+- **Last updated:** 2026-03-23 (session 144)
 - **Branch:** `main`
+- **Session 144 — FG spell snapshot parity slice shipped:**
+  - `ForegroundBotRunner` now reconciles spell knowledge from two sources instead of letting the next refresh overwrite event-driven gains: the main-thread `LEARNED_SPELL` / `UNLEARNED_SPELL` hook path updates sticky learned/removed IDs immediately, while `RefreshSpells()` publishes `stable IDs + sticky learns - sticky removals`.
+  - The immediate event path now handles unlearns as first-class deltas, updates the thread-safe `KnownSpellIds` snapshot right away, and keeps `LocalPlayer.RawSpellBookIds` in sync when the player object is live.
+  - Added deterministic `SpellKnowledgeReconcilerTests` to pin the exact contract: stable IDs pass through, sticky learned IDs stay visible when stable sources miss them, stable rescans clear sticky deltas when they confirm the spell state, and sticky removals mask IDs only while the stable sources are missing them.
+- **Test baseline (session 144):**
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release -v n`
+    - Passed (`54/54`; `dumpbin` still missing in the vcpkg `applocal.ps1` post-step, unchanged and non-blocking)
+- **Files changed (session 144):**
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/SpellKnowledgeReconcilerTests.cs`
+- **Next priorities:** `7.9` additional transport replay data, a recorded directional remote-unit extrapolation fixture so the remaining parity gaps are proven against capture data, and a final movement/packet parity sweep for anything still only decompiled but not binary-backed
 - **Session 143 — FG WndProc/offset hardening slice shipped:**
   - `ForegroundBotRunner` now exposes the live `ThreadSynchronizer` WndProc gate as a pure helper (`ThreadSynchronizerGateEvaluator`) so the packet-driven/heuristic safety rules are deterministic and unit-testable without touching the injected hook path.
   - New FG tests now pin the gate’s critical cases: pre-world charselect allowance, valid-world seeding, invalid-map transition blocking, `ConnectionStateMachine.IsLuaSafe` blocking, valid-map auto-pause on map change, and object-manager teardown blocking.
@@ -305,7 +320,6 @@ if (transportGuid != 0) {
   - `Tests/ForegroundBotRunner.Tests/OffsetsBinaryAuditTests.cs`
   - `Tests/ForegroundBotRunner.Tests/ThreadSynchronizerGateTests.cs`
   - `Tests/ForegroundBotRunner.Tests/WoWExeImage.cs`
-- **Next priorities:** FG snapshot parity (`SpellList` / learned-talent visibility), `7.9` additional transport replay data, and a recorded directional remote-unit extrapolation fixture so the remaining parity gaps can move from “implemented but data-blocked” to “proven”
 - **Session 142 — Orgrimmar transport replay blocker pinned:**
   - Added deterministic coverage for the only in-repo Orgrimmar-area transport recording, `Dralrahgra_Durotar_2026-02-08_11-06-02`, which is the Orgrimmar-to-Undercity zeppelin rather than an elevator.
   - `PhysicsReplayTests` now proves the ground-side boarding/disembark windows around that recording still replay cleanly (`avg=0.0043y`, `p99=0.0887y`) even though the ride itself is not simulatable from current data.
@@ -320,7 +334,6 @@ if (transportGuid != 0) {
   - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
   - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
   - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
-- **Next priorities:** FG snapshot parity (`SpellList` / learned-talent visibility), then any remaining packet/dispatch parity gaps that can be closed without new live captures
 - **Session 141 — deterministic knockback/extrapolation parity hardening shipped:**
   - `Navigation.Physics.Tests` now includes a direct knockback-arc parity test that validates `FALLINGFAR` airborne motion against WoW gravity and end-of-frame vertical velocity, covering the same native path used after `SMSG_MOVE_KNOCK_BACK` seeds BG physics.
   - The test-side movement-bit map in `NavigationInterop` was corrected to match `PhysicsBridge.h`; the previous enum had `FallingFar` and `Flying` swapped plus `OnTransport` on the wrong bit, which could silently invalidate airborne/transport assertions without touching runtime code.
