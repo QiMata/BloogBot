@@ -60,6 +60,12 @@ namespace WoWSharpClient
         public event EventHandler<CharacterActionArgs> OnCharacterStartBackwards;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceMoveRoot;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceMoveUnroot;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveWaterWalk;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveLandWalk;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveSetHover;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveUnsetHover;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveFeatherFall;
+        public event EventHandler<RequiresAcknowledgementArgs> OnMoveNormalFall;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceWalkSpeedChange;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceRunSpeedChange;
         public event EventHandler<RequiresAcknowledgementArgs> OnForceRunBackSpeedChange;
@@ -231,6 +237,12 @@ namespace WoWSharpClient
         internal void FireOnCharacterStartBackwards(ulong guid) => OnCharacterStartBackwards?.Invoke(this, new CharacterActionArgs(guid));
         internal void FireOnForceMoveRoot(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceMoveRoot?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceMoveUnroot(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceMoveUnroot?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveWaterWalk(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveWaterWalk?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveLandWalk(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveLandWalk?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveSetHover(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveSetHover?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveUnsetHover(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveUnsetHover?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveFeatherFall(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveFeatherFall?.Invoke(this, requiresAcknowledgementArgs);
+        internal void FireOnMoveNormalFall(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnMoveNormalFall?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceWalkSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceWalkSpeedChange?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceRunSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceRunSpeedChange?.Invoke(this, requiresAcknowledgementArgs);
         internal void FireOnForceRunBackSpeedChange(RequiresAcknowledgementArgs requiresAcknowledgementArgs) => OnForceRunBackSpeedChange?.Invoke(this, requiresAcknowledgementArgs);

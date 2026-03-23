@@ -410,6 +410,52 @@ namespace WoWSharpClient
             );
         }
 
+        // VMaNGOS MovementPacketSender.cpp / MovementPacketSender.h:
+        // - SMSG_MOVE_WATER_WALK / SMSG_MOVE_LAND_WALK -> CMSG_MOVE_WATER_WALK_ACK
+        // - SMSG_MOVE_SET_HOVER / SMSG_MOVE_UNSET_HOVER -> CMSG_MOVE_HOVER_ACK
+        // - SMSG_MOVE_FEATHER_FALL / SMSG_MOVE_NORMAL_FALL -> CMSG_MOVE_FEATHER_FALL_ACK
+        // Payload is packed guid + counter on 1.12.1, and the ACK echoes full MovementInfo.
+
+        private void EventEmitter_OnMoveWaterWalk(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: true, Opcode.CMSG_MOVE_WATER_WALK_ACK);
+
+        private void EventEmitter_OnMoveLandWalk(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: false, Opcode.CMSG_MOVE_WATER_WALK_ACK);
+
+        private void EventEmitter_OnMoveSetHover(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_HOVER, apply: true, Opcode.CMSG_MOVE_HOVER_ACK);
+
+        private void EventEmitter_OnMoveUnsetHover(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_HOVER, apply: false, Opcode.CMSG_MOVE_HOVER_ACK);
+
+        private void EventEmitter_OnMoveFeatherFall(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: true, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
+
+        private void EventEmitter_OnMoveNormalFall(object? sender, RequiresAcknowledgementArgs e)
+            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: false, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
+
+        private void SendMovementFlagToggleAck(
+            RequiresAcknowledgementArgs e,
+            MovementFlags flag,
+            bool apply,
+            Opcode ackOpcode)
+        {
+            var player = (WoWLocalPlayer)Player;
+            if (apply)
+                player.MovementFlags |= flag;
+            else
+                player.MovementFlags &= ~flag;
+
+            _ = _woWClient.SendMSGPackedAsync(
+                ackOpcode,
+                MovementPacketHandler.BuildForceMoveAck(
+                    player,
+                    e.Counter,
+                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
+                )
+            );
+        }
+
 
         /// <summary>
         /// Called by MovementHandler BEFORE queuing a teleport position update,

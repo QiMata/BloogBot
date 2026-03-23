@@ -283,8 +283,36 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 134)
+- **Last updated:** 2026-03-23 (session 137)
 - **Branch:** `main`
+- **Session 137 — movement opcode completeness slice shipped:**
+  - BG now handles the remaining local-player movement flag toggle opcodes end to end for `SMSG_MOVE_WATER_WALK`, `SMSG_MOVE_LAND_WALK`, `SMSG_MOVE_SET_HOVER`, `SMSG_MOVE_UNSET_HOVER`, `SMSG_MOVE_FEATHER_FALL`, and `SMSG_MOVE_NORMAL_FALL`.
+  - `WoWSharpObjectManager` mutates the local player state before sending the matching ACK packets, so managed state and on-wire acknowledgements stay aligned with WoW.exe behavior.
+  - Remote-unit state now applies the missing server-controlled spline rate opcodes (`RUN`, `RUN_BACK`, `SWIM`, `WALK`, `SWIM_BACK`, `TURN_RATE`) and spline flag toggles for water-walk, safe-fall, hover, and start/stop swim.
+  - Added deterministic managed coverage for local ACK/application, remote spline state mutation, and `WorldClient` bridge registration for the new movement opcode surface.
+- **Test baseline (session 137):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ServerControlledMovementFlagChanges_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineSpeedOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.SplineFlagOpcodes_UpdateRemoteUnitState" -v n`
+    - Passed (`20/20`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n`
+    - Passed (`1/1`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1317/1318`, `1 skipped`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n`
+    - Passed (`117/117`)
+- **Files changed (session 137):**
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, the remaining spline-mode audit, a recorded directional remote-unit extrapolation fixture, any binary-backed movement opcode gaps still left after the dispatch-table sweep, and the FG hardening audit
 - **Session 134 — extrapolation seeding + knockback validation slice shipped:**
   - `WoWUnit.GetExtrapolatedPosition()` now matches the same directional basis the physics layer uses for backward, strafe, and diagonal movement (`sin(45°)` damping from WoW.exe `VA 0x0081DA54`)
   - `WoWSharpObjectManager` now seeds remote-unit extrapolation state on create/add movement blocks, not only on later updates, which fixes a real gap in BG remote-position prediction startup
@@ -328,9 +356,9 @@ if (transportGuid != 0) {
   - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
   - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
   - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
-- `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
-- `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-- `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (knockback/extrapolation validation, spline audit, broader movement opcode completeness, FG hardening)
 - **Session 136 — direct monster-move runtime parity slice shipped:**
   - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route direct `SMSG_MONSTER_MOVE` and `SMSG_MONSTER_MOVE_TRANSPORT` packets through the same managed state-update path as compressed monster moves.

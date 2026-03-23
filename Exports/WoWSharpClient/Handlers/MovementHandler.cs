@@ -156,6 +156,36 @@ namespace WoWSharpClient.Handlers
                                 ParseGuidCounterPacket(reader)
                             );
                             break;
+                        case Opcode.SMSG_MOVE_WATER_WALK:
+                            WoWSharpEventEmitter.Instance.FireOnMoveWaterWalk(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_MOVE_LAND_WALK:
+                            WoWSharpEventEmitter.Instance.FireOnMoveLandWalk(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_MOVE_SET_HOVER:
+                            WoWSharpEventEmitter.Instance.FireOnMoveSetHover(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_MOVE_UNSET_HOVER:
+                            WoWSharpEventEmitter.Instance.FireOnMoveUnsetHover(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_MOVE_FEATHER_FALL:
+                            WoWSharpEventEmitter.Instance.FireOnMoveFeatherFall(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
+                        case Opcode.SMSG_MOVE_NORMAL_FALL:
+                            WoWSharpEventEmitter.Instance.FireOnMoveNormalFall(
+                                ParseGuidCounterPacket(reader)
+                            );
+                            break;
                         case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceWalkSpeedChange(
                                 ParseGuidCounterSpeedPacket(reader)
@@ -208,41 +238,59 @@ namespace WoWSharpClient.Handlers
                             break;
                         }
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
-                        {
-                            ulong splineRunGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineRunGuid);
-                            if (unit != null)
-                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_WALK_MODE;
-                            Log.Information("[SPLINE] {Guid:X} set run mode", splineRunGuid);
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_WALK_MODE, apply: false, "set run mode");
                             break;
-                        }
                         case Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE:
-                        {
-                            ulong splineWalkGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineWalkGuid);
-                            if (unit != null)
-                                unit.MovementFlags |= MovementFlags.MOVEFLAG_WALK_MODE;
-                            Log.Information("[SPLINE] {Guid:X} set walk mode", splineWalkGuid);
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_WALK_MODE, apply: true, "set walk mode");
                             break;
-                        }
                         case Opcode.SMSG_SPLINE_MOVE_ROOT:
-                        {
-                            ulong splineMoveRootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveRootGuid);
-                            if (unit != null)
-                                unit.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
-                            Log.Information("[SPLINE] {Guid:X} rooted", splineMoveRootGuid);
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_ROOT, apply: true, "rooted");
                             break;
-                        }
                         case Opcode.SMSG_SPLINE_MOVE_UNROOT:
-                        {
-                            ulong splineMoveUnrootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(splineMoveUnrootGuid);
-                            if (unit != null)
-                                unit.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
-                            Log.Information("[SPLINE] {Guid:X} unrooted", splineMoveUnrootGuid);
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_ROOT, apply: false, "unrooted");
                             break;
-                        }
+                        case Opcode.SMSG_SPLINE_MOVE_WATER_WALK:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_WATERWALKING, apply: true, "water walk");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_LAND_WALK:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_WATERWALKING, apply: false, "land walk");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_FEATHER_FALL:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_SAFE_FALL, apply: true, "feather fall");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_NORMAL_FALL:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_SAFE_FALL, apply: false, "normal fall");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_SET_HOVER:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_HOVER, apply: true, "set hover");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_UNSET_HOVER:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_HOVER, apply: false, "unset hover");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_START_SWIM:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_SWIMMING, apply: true, "start swim");
+                            break;
+                        case Opcode.SMSG_SPLINE_MOVE_STOP_SWIM:
+                            ApplySplineFlagToggle(reader, MovementFlags.MOVEFLAG_SWIMMING, apply: false, "stop swim");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_RUN_SPEED:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.RunSpeed = speed, "run speed");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_RUN_BACK_SPEED:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.RunBackSpeed = speed, "run back speed");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_SWIM_SPEED:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.SwimSpeed = speed, "swim speed");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_WALK_SPEED:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.WalkSpeed = speed, "walk speed");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_SWIM_BACK_SPEED:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.SwimBackSpeed = speed, "swim back speed");
+                            break;
+                        case Opcode.SMSG_SPLINE_SET_TURN_RATE:
+                            ApplySplineSpeedChange(reader, (unit, speed) => unit.TurnRate = speed, "turn rate");
+                            break;
                         case Opcode.MSG_MOVE_TIME_SKIPPED:
                             WoWSharpEventEmitter.Instance.FireOnMoveTimeSkipped(
                                 ParseGuidCounterPacket(reader)
@@ -441,10 +489,67 @@ namespace WoWSharpClient.Handlers
                     QueueMonsterMoveUpdate(guid, moveData);
                     break;
                 case Opcode.SMSG_SPLINE_SET_RUN_SPEED:
-                    ulong tarGuid = ReaderUtils.ReadPackedGuid(reader);
-                    float runSpeed = reader.ReadSingle();
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.RunSpeed = speed, "run speed");
+                    break;
+                case Opcode.SMSG_SPLINE_SET_RUN_BACK_SPEED:
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.RunBackSpeed = speed, "run back speed");
+                    break;
+                case Opcode.SMSG_SPLINE_SET_SWIM_SPEED:
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.SwimSpeed = speed, "swim speed");
+                    break;
+                case Opcode.SMSG_SPLINE_SET_WALK_SPEED:
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.WalkSpeed = speed, "walk speed");
+                    break;
+                case Opcode.SMSG_SPLINE_SET_SWIM_BACK_SPEED:
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.SwimBackSpeed = speed, "swim back speed");
+                    break;
+                case Opcode.SMSG_SPLINE_SET_TURN_RATE:
+                    ApplySplineSpeedChange(guid, reader.ReadSingle(), (unit, speed) => unit.TurnRate = speed, "turn rate");
                     break;
             }
+        }
+
+        private static void ApplySplineSpeedChange(
+            BinaryReader reader,
+            Action<WoWUnit, float> apply,
+            string description)
+        {
+            ulong guid = ReaderUtils.ReadPackedGuid(reader);
+            float speed = reader.ReadSingle();
+            ApplySplineSpeedChange(guid, speed, apply, description);
+        }
+
+        private static void ApplySplineSpeedChange(
+            ulong guid,
+            float speed,
+            Action<WoWUnit, float> apply,
+            string description)
+        {
+            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(guid);
+            if (unit != null)
+                apply(unit, speed);
+
+            Log.Information("[SPLINE] {Guid:X} {Description}={Speed:F2}",
+                guid, description, speed);
+        }
+
+        private static void ApplySplineFlagToggle(
+            BinaryReader reader,
+            MovementFlags flag,
+            bool apply,
+            string description)
+        {
+            ulong guid = ReaderUtils.ReadPackedGuid(reader);
+            var unit = WoWSharpObjectManager.Instance?.GetUnitByGuid(guid);
+            if (unit != null)
+            {
+                if (apply)
+                    unit.MovementFlags |= flag;
+                else
+                    unit.MovementFlags &= ~flag;
+            }
+
+            Log.Information("[SPLINE] {Guid:X} {Description}", guid, description);
         }
 
         private static MovementInfoUpdate ParseMonsterMove(BinaryReader reader)

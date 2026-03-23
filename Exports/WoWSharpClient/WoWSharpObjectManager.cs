@@ -115,6 +115,12 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnChatMessage += EventEmitter_OnChatMessage;
             WoWSharpEventEmitter.Instance.OnForceMoveRoot += EventEmitter_OnForceMoveRoot;
             WoWSharpEventEmitter.Instance.OnForceMoveUnroot += EventEmitter_OnForceMoveUnroot;
+            WoWSharpEventEmitter.Instance.OnMoveWaterWalk += EventEmitter_OnMoveWaterWalk;
+            WoWSharpEventEmitter.Instance.OnMoveLandWalk += EventEmitter_OnMoveLandWalk;
+            WoWSharpEventEmitter.Instance.OnMoveSetHover += EventEmitter_OnMoveSetHover;
+            WoWSharpEventEmitter.Instance.OnMoveUnsetHover += EventEmitter_OnMoveUnsetHover;
+            WoWSharpEventEmitter.Instance.OnMoveFeatherFall += EventEmitter_OnMoveFeatherFall;
+            WoWSharpEventEmitter.Instance.OnMoveNormalFall += EventEmitter_OnMoveNormalFall;
             WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange +=
                 EventEmitter_OnForceWalkSpeedChange;
             WoWSharpEventEmitter.Instance.OnForceRunSpeedChange +=
