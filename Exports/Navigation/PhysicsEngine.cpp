@@ -509,9 +509,44 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     G3D::Vector3 endBoxMin(endX - skin, endY - skin, adjustedMinZ);
     G3D::Vector3 endBoxMax(endX + skin, endY + skin, adjustedMaxZ);
 
-    // Step 5: Test terrain at end AABB (0x6721B0 TestTerrain)
+    // Step 5a: SWEEP 1 — full displacement (0x633D1C)
+    // WoW.exe sweeps the AABB from start to end, detecting wall collisions.
+    G3D::Vector3 startBoxMin(startX - skin, startY - skin, adjustedMinZ);
+    G3D::Vector3 startBoxMax(startX + skin, startY + skin, adjustedMaxZ);
+    G3D::Vector3 displacement(dirN.x * sweepDist, dirN.y * sweepDist, 0);
+    std::vector<SceneQuery::AABBContact> sweepContacts;
+    SceneQuery::SweepAABB(input.mapId, startBoxMin, startBoxMax, displacement, sweepContacts);
+
+    // If swept test found wall contacts, reduce end position
+    for (const auto& sc : sweepContacts) {
+        if (!sc.walkable && sc.distance < sweepDist) {
+            // Wall hit during sweep — clamp end position to before the wall
+            float wallDist = std::max(0.0f, sc.distance - skin);
+            float scale = wallDist / sweepDist;
+            endX = startX + dirN.x * wallDist;
+            endY = startY + dirN.y * wallDist;
+            endBoxMin = G3D::Vector3(endX - skin, endY - skin, adjustedMinZ);
+            endBoxMax = G3D::Vector3(endX + skin, endY + skin, adjustedMaxZ);
+            break;
+        }
+    }
+
+    // Step 5b: SWEEP 2 — half-step with √2-contracted AABB (0x633DEB)
+    float halfDist = speedDt * 0.5f;
+    float halfEndX = startX + dirN.x * halfDist;
+    float halfEndY = startY + dirN.y * halfDist;
+    float contracted = skin * sqrt2;
+    G3D::Vector3 halfBoxMin(halfEndX - contracted, halfEndY - contracted, adjustedMinZ);
+    G3D::Vector3 halfBoxMax(halfEndX + contracted, halfEndY + contracted, adjustedMaxZ);
+    std::vector<SceneQuery::AABBContact> halfContacts;
+    SceneQuery::TestTerrainAABB(input.mapId, halfBoxMin, halfBoxMax, halfContacts);
+
+    // Step 5c: Test terrain at end AABB (0x6721B0 TestTerrain)
     std::vector<SceneQuery::AABBContact> contacts;
     SceneQuery::TestTerrainAABB(input.mapId, endBoxMin, endBoxMax, contacts);
+
+    // Merge half-step contacts into main contacts (WoW.exe uses both)
+    contacts.insert(contacts.end(), halfContacts.begin(), halfContacts.end());
 
     // Find the best walkable ground contact — highest surface AT or BELOW
     // the character's step-up range. WoW.exe's heightmap always returns the

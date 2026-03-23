@@ -4,6 +4,7 @@
 #include "PhysicsEngine.h"
 #include "PhysicsHelpers.h"
 #include "SceneQuery.h"
+#include "VMapDefinitions.h"
 #include "VMapLog.h"
 #include <cmath>
 #include <sstream>
@@ -135,123 +136,22 @@ void ProcessAirMovement(
     if (vz0 > 1e-4f)
         return;
 
-    // Continuous ground collision detection.
-    // Sweep downward with a generous margin to detect nearby walkable ground.
-    // However, only snap to ground when the character's predicted position (endPos)
-    // is at or below the ground surface — prevents premature landing when the
-    // character is still above ground (e.g., near the apex of a jump on a slope).
-    const float r = input.radius;
-    const float h = input.height;
-    constexpr float AIR_SWEEP_MARGIN = 0.5f;   // Generous sweep to detect nearby ground
-    constexpr float LANDING_TOLERANCE = 0.3f;   // Snap when endPos is within 0.3y of ground
+    // WoW.exe-style landing detection: query terrain at the predicted end position.
+    // Uses GetGroundZ (barycentric point-in-triangle) matching WoW.exe's heightmap.
+    // The character lands when endPos.z is at or below the terrain surface.
+    constexpr float LANDING_TOLERANCE = 0.3f;
 
-    CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(startPos.x, startPos.y, startPos.z, r, h);
-    G3D::Vector3 downDir(0, 0, -1);
-    float fallDist = std::max(0.0f, startPos.z - endPos.z);
-    float sweepDist = fallDist + AIR_SWEEP_MARGIN;
+    float groundZ = SceneQuery::GetGroundZ(input.mapId, endPos.x, endPos.y,
+        endPos.z + PhysicsConstants::STEP_HEIGHT,
+        PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT);
 
-    std::vector<SceneHit> downHits;
-    G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
-    SceneQuery::SweepCapsule(input.mapId, cap, downDir, sweepDist, downHits, playerFwd);
-
-    const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-    const SceneHit* bestNP = nullptr;
-    float bestTOI = FLT_MAX;
-    float bestZ = -FLT_MAX;
-
-    for (size_t i = 0; i < downHits.size(); ++i) {
-        const auto& hhit = downHits[i];
-        if (hhit.startPenetrating) continue;
-        if (hhit.normal.z < walkableCosMin) continue;
-
-        bool better = false;
-        if (!bestNP) better = true;
-        else {
-            if ((hhit.instanceId == 0) && (bestNP->instanceId != 0)) better = true;
-            else if ((hhit.instanceId == bestNP->instanceId)) {
-                if (hhit.distance < bestTOI - 1e-6f) better = true;
-                else if (std::fabs(hhit.distance - bestTOI) <= 1e-6f && hhit.point.z < bestZ) better = true;
-            }
-        }
-        if (better) {
-            bestNP = &hhit;
-            bestTOI = hhit.distance;
-            bestZ = hhit.point.z;
-        }
+    if (VMAP::IsValidHeight(groundZ) && endPos.z <= groundZ + LANDING_TOLERANCE) {
+        st.z = groundZ;
+        st.vz = 0.0f;
+        st.isGrounded = true;
+        st.groundNormal = G3D::Vector3(0, 0, 1); // Approximate — GetGroundZ doesn't return normal
     }
-
-    if (bestNP) {
-        float toiDist = bestNP->distance;
-        if (toiDist <= sweepDist + 1e-4f) {
-            float nx = bestNP->normal.x, ny = bestNP->normal.y, nz = bestNP->normal.z;
-            float px = bestNP->point.x,  py = bestNP->point.y,  pz = bestNP->point.z;
-            float snapZ = pz;
-            if (std::fabs(nz) > 1e-6f) {
-                snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
-            }
-            // Only snap when the character's predicted end position is at or below
-            // the ground surface. This prevents premature landing when the character
-            // is still clearly above the ground (rising or near jump apex).
-            if (endPos.z <= snapZ + LANDING_TOLERANCE) {
-                st.z = snapZ;
-                st.vz = 0.0f;
-                st.isGrounded = true;
-                st.groundNormal = bestNP->normal.directionOrZero();
-            }
-        }
-    } else if (!downHits.empty()) {
-        // Fallback for penetrating walkable contacts (character starts inside geometry).
-        // SceneCache overlap normals are oriented by OrientNormalForOverlap: FROM capsule
-        // center TOWARD triangle contact. For ground below the capsule center, the normal
-        // points DOWNWARD (nz < 0). Use fabs(nz) for the walkable check — same as
-        // ApplyVerticalDepenetration — to accept both ground and overhead contacts.
-        // Then pick the contact closest to the character's feet (startPos.z).
-        const SceneHit* bestPen = nullptr;
-        float bestPenZ = -FLT_MAX;
-        float bestPenErr = FLT_MAX;
-        for (const auto& hhit : downHits) {
-            if (!hhit.startPenetrating) continue;
-            if (std::fabs(hhit.normal.z) < walkableCosMin) continue;
-            if (hhit.distance > sweepDist + 1e-4f) continue;
-
-            bool better = false;
-            float hitErr = std::fabs(hhit.point.z - startPos.z);
-            if (!bestPen) better = true;
-            else {
-                // Prefer terrain (instanceId==0) over WMO instances
-                if ((hhit.instanceId == 0) && (bestPen->instanceId != 0)) better = true;
-                else if ((hhit.instanceId != 0) && (bestPen->instanceId == 0)) { /* keep terrain */ }
-                else if (hitErr < bestPenErr) better = true;
-            }
-            if (better) {
-                bestPen = &hhit;
-                bestPenZ = hhit.point.z;
-                bestPenErr = hitErr;
-            }
-        }
-        if (bestPen) {
-            float nx = bestPen->normal.x, ny = bestPen->normal.y, nz = bestPen->normal.z;
-            float px = bestPen->point.x,  py = bestPen->point.y,  pz = bestPen->point.z;
-            float snapZ = pz;
-            if (std::fabs(nz) > 1e-6f) {
-                snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
-            }
-            // Reject overhead geometry: don't snap to a surface significantly ABOVE the
-            // character's starting position. For a falling character, legitimate ground
-            // is AT or BELOW their feet. WMO walkways/ramps that the capsule's top
-            // hemisphere overlaps can have walkable normals but are 1-2y above feet.
-            // Allow a small tolerance (LANDING_TOLERANCE) for slope precision.
-            if (snapZ <= startPos.z + LANDING_TOLERANCE) {
-                st.z = snapZ;
-                st.vz = 0.0f;
-                st.isGrounded = true;
-                // Store ground normal with consistent upward orientation
-                G3D::Vector3 gn = bestPen->normal.directionOrZero();
-                if (gn.z < 0.0f) { gn.x = -gn.x; gn.y = -gn.y; gn.z = -gn.z; }
-                st.groundNormal = gn;
-            }
-        }
-    }
+    // Old capsule landing detection DELETED — using GetGroundZ (WoW.exe parity)
 }
 
 void ProcessSwimMovement(
