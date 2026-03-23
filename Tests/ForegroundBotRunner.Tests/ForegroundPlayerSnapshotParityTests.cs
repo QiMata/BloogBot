@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
 
 namespace ForegroundBotRunner.Tests;
@@ -52,6 +53,46 @@ public sealed class ForegroundPlayerSnapshotParityTests
         Assert.True(player.HasQuestTargets);
     }
 
+    [Fact]
+    public void LocalPlayer_InterfaceRaceClassGender_UseUnitBytes0()
+    {
+        using var fixture = new PlayerMemoryFixture();
+        fixture.WritePackedUnitBytes0((byte)Race.Orc, (byte)Class.Warrior, (byte)Gender.Female, 0);
+
+        var player = fixture.CreateLocalPlayer();
+        IWoWPlayer asPlayer = player;
+
+        Assert.Equal(Race.Orc, player.Race);
+        Assert.Equal(Class.Warrior, player.Class);
+        Assert.Equal(Gender.Female, player.Gender);
+        Assert.Equal(Race.Orc, asPlayer.Race);
+        Assert.Equal(Class.Warrior, asPlayer.Class);
+        Assert.Equal(Gender.Female, asPlayer.Gender);
+    }
+
+    [Fact]
+    public void UnitPowersAndFactionTemplate_ReadDescriptorFields()
+    {
+        using var fixture = new PlayerMemoryFixture();
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_POWER1, 1500u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_POWER2, 420u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_POWER4, 95u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER1, 2000u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER2, 1000u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER4, 100u);
+        fixture.WriteDescriptorUInt(UpdateFields.EUnitFields.UNIT_FIELD_FACTIONTEMPLATE, 104u);
+
+        var unit = fixture.CreateUnit();
+
+        Assert.Equal(104u, unit.FactionTemplate);
+        Assert.Equal(1500u, unit.Powers[Powers.MANA]);
+        Assert.Equal(420u, unit.Powers[Powers.RAGE]);
+        Assert.Equal(95u, unit.Powers[Powers.ENERGY]);
+        Assert.Equal(2000u, unit.MaxPowers[Powers.MANA]);
+        Assert.Equal(1000u, unit.MaxPowers[Powers.RAGE]);
+        Assert.Equal(100u, unit.MaxPowers[Powers.ENERGY]);
+    }
+
     [Theory]
     [InlineData(0u, false)]
     [InlineData(1u, false)]
@@ -90,8 +131,19 @@ public sealed class ForegroundPlayerSnapshotParityTests
         public LocalPlayer CreateLocalPlayer()
             => new(_objectBase, new HighGuid(1ul), WoWObjectType.Player);
 
+        public WoWUnit CreateUnit()
+            => new(_objectBase, new HighGuid(2ul), WoWObjectType.Unit);
+
         public void WriteDescriptorUInt(UpdateFields.EPlayerFields field, uint value)
             => Marshal.WriteInt32(nint.Add(_descriptorBase, (int)field * sizeof(uint)), unchecked((int)value));
+
+        public void WriteDescriptorUInt(UpdateFields.EUnitFields field, uint value)
+            => Marshal.WriteInt32(nint.Add(_descriptorBase, (int)field * sizeof(uint)), unchecked((int)value));
+
+        public void WritePackedUnitBytes0(byte race, byte @class, byte gender, byte powerType)
+            => WriteDescriptorUInt(
+                UpdateFields.EUnitFields.UNIT_FIELD_BYTES_0,
+                race | ((uint)@class << 8) | ((uint)gender << 16) | ((uint)powerType << 24));
 
         public void Dispose()
         {

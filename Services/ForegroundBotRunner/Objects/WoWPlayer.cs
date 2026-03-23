@@ -40,9 +40,9 @@ namespace ForegroundBotRunner.Objects
 
         public bool IsDrinking => HasBuff("Drink");
 
-        public Race Race => default;
+        public Race Race => Bytes0.Length > 0 ? (Race)Bytes0[0] : Race.None;
 
-        public Class Class => default;
+        public Class Class => Bytes0.Length > 1 ? (Class)Bytes0[1] : 0;
 
         public HighGuid DuelArbiter => new HighGuid(new byte[4], new byte[4]);
 
@@ -247,7 +247,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint[] CombatRating => Array.Empty<uint>();
 
-        public Gender Gender => default;
+        public Gender Gender => Bytes0.Length > 2 ? (Gender)Bytes0[2] : Gender.None;
 
         public void OfferTrade()
         {

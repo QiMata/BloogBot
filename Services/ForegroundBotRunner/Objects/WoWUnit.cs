@@ -284,9 +284,23 @@ namespace ForegroundBotRunner.Objects
 
         public IWoWUnit Target => null;
 
-        public Dictionary<Powers, uint> Powers => new Dictionary<Powers, uint>();
+        public Dictionary<Powers, uint> Powers => new()
+        {
+            [GameData.Core.Enums.Powers.MANA] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_POWER1),
+            [GameData.Core.Enums.Powers.RAGE] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_POWER2),
+            [GameData.Core.Enums.Powers.FOCUS] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_POWER3),
+            [GameData.Core.Enums.Powers.ENERGY] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_POWER4),
+            [GameData.Core.Enums.Powers.HAPPINESS] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_POWER5),
+        };
 
-        public Dictionary<Powers, uint> MaxPowers => new Dictionary<Powers, uint>();
+        public Dictionary<Powers, uint> MaxPowers => new()
+        {
+            [GameData.Core.Enums.Powers.MANA] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER1),
+            [GameData.Core.Enums.Powers.RAGE] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER2),
+            [GameData.Core.Enums.Powers.FOCUS] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER3),
+            [GameData.Core.Enums.Powers.ENERGY] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER4),
+            [GameData.Core.Enums.Powers.HAPPINESS] = ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_MAXPOWER5),
+        };
 
         public uint DisplayId => 0;
 
@@ -296,7 +310,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint AnimProgress => 0;
 
-        public uint FactionTemplate => 0;
+        public uint FactionTemplate => ReadUIntDescriptorField(UpdateFields.EUnitFields.UNIT_FIELD_FACTIONTEMPLATE);
 
         public uint TypeId => 0; // Units are not GameObjects; TypeId only meaningful for WoWGameObject
 
@@ -457,6 +471,15 @@ namespace ForegroundBotRunner.Objects
                 (packed >> 16) & 0xFF,
                 (packed >> 24) & 0xFF
             ];
+        }
+
+        internal uint ReadUIntDescriptorField(UpdateFields.EUnitFields field)
+        {
+            var descriptorPtr = GetDescriptorPtr();
+            if (descriptorPtr == nint.Zero)
+                return 0;
+
+            return MemoryManager.ReadUint(descriptorPtr + (int)field * 4);
         }
 
         /// <summary>

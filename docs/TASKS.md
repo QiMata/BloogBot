@@ -283,8 +283,26 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 148)
+- **Last updated:** 2026-03-23 (session 149)
 - **Branch:** `main`
+- **Session 149 — FG snapshot descriptor parity slice shipped:**
+  - `ForegroundBotRunner` no longer hardcodes player `Race/Class/Gender` or unit `FactionTemplate`/power maps on the injected path; those fields now come from the same descriptor-backed `UNIT_FIELD_BYTES_0`, `UNIT_FIELD_FACTIONTEMPLATE`, and `UNIT_FIELD_POWER/MAXPOWER*` values the BG object model already consumes.
+  - `LocalPlayer` now uses the descriptor-backed identity fields instead of mixing Lua/global-class fallbacks into the object model, which removes a real FG/BG divergence for capsule sizing, combat-role selection, corpse retrieval, and snapshot consumers that see the player through `IWoWPlayer`.
+  - Added memory-backed FG tests that prove the interface path sees the corrected local-player `Race/Class/Gender` values and that mana/rage/energy plus faction-template reads round-trip from descriptor memory.
+- **Test baseline (session 149):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundPlayerSnapshotParityTests" --logger "console;verbosity=minimal"`
+    - Passed (`12/12`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`68/68`)
+- **Files changed (session 149):**
+  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
+  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+  - `Services/ForegroundBotRunner/Objects/WoWUnit.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPlayerSnapshotParityTests.cs`
+- **Next priorities:** keep the no-live-tests rule in place, then finish the remaining FG interaction-surface and live-validation expectation sweep before the final big validation chunk
 - **Session 148 — BotRunner FG coinage assertion cleanup shipped:**
   - `EconomyInteractionTests` and `NpcInteractionTests` no longer carry the stale “FG coinage is a stub” branches; both suites now assert FG coinage movement directly like BG.
   - `Tests/BotRunner.Tests/TASKS.md` had a committed merge conflict, so it was replaced with a clean current-state tracker before recording this delta.

@@ -22,6 +22,7 @@
 - [x] Make `MovementRecorder` transport captures self-contained by resolving the active transport outside visible-object enumeration and serializing transport-local offset/orientation from the real mover pose.
 - [x] Restore descriptor-backed `Coinage`/`Copper` plus local state helpers (`InBattleground`, `HasQuestTargets`) so FG snapshots stop hardcoding those fields.
 - [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
+- [x] Restore descriptor-backed FG `Race/Class/Gender`, `FactionTemplate`, and power reads so the injected object model matches the BG snapshot surface for combat/movement consumers.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -34,17 +35,18 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `ObjectManager` now has an internal GUID-resolution path that falls back to the object-manager linked list, so FG can still resolve a transport gameobject even when visible-object enumeration drops it mid-ride.
-  - `MovementRecorder` now records transport-local offset from the player’s main position fields, derives relative transport orientation from the resolved mover pose, reconstructs player world position from that mover pose for distance checks, and explicitly injects the ridden transport into `NearbyGameObjects`.
-  - Added deterministic `MovementRecorderTransportHelperTests` that pin the transport local→world transform, relative-facing math, zero-guid clearing, and explicit transport snapshot de-duplication.
+  - `WoWUnit` now reads descriptor-backed `FactionTemplate`, `Powers`, and `MaxPowers` instead of returning hardcoded placeholders, so FG snapshots expose the same unit-power and faction-template fields the BG path already uses.
+  - `WoWPlayer` now derives `Race`, `Class`, and `Gender` from `UNIT_FIELD_BYTES_0`, and `LocalPlayer` now uses that same descriptor-backed path instead of mixing in Lua/global-class fallbacks.
+  - Added memory-backed FG tests that pin the `IWoWPlayer` interface path for local-player `Race/Class/Gender` plus descriptor-backed faction-template and mana/rage/energy reads.
 - Validation/tests run:
   - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundBotRunner.Tests.MovementRecorderTransportHelperTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundBotRunner.Tests.ForegroundPlayerSnapshotParityTests" --logger "console;verbosity=minimal"` -> `12 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `68 passed`
 - Files changed:
-  - `Services/ForegroundBotRunner/MovementRecorder.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.ObjectEnumeration.cs`
+  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
+  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+  - `Services/ForegroundBotRunner/Objects/WoWUnit.cs`
   - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/MovementRecorderTransportHelperTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPlayerSnapshotParityTests.cs`
 - Next command:
-  - `rg -n "WoWPlayer\\.Coinage is a stub|skip coinage assertion" Tests/BotRunner.Tests/LiveValidation`
+  - `rg -n "MerchantFrame => null|BuyItemFromVendorAsync|SellItemToVendorAsync|RepairAllItemsAsync" Services/ForegroundBotRunner Exports/BotRunner Tests/BotRunner.Tests -g '!**/bin/**' -g '!**/obj/**'`

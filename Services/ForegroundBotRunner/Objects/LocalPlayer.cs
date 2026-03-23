@@ -35,13 +35,9 @@ namespace ForegroundBotRunner.Objects
         public static bool TargetInMeleeRange =>
             Functions.LuaCallWithResult("{0} = CheckInteractDistance(\"target\", 3)")[0] == "1";
 
-        public new Class Class => (Class)MemoryManager.ReadByte(MemoryAddresses.LocalPlayerClass);
-        public new Race Race =>
-            Enum.GetValues(typeof(Race))
-                .Cast<Race>()
-                .FirstOrDefault(v =>
-                    v.GetDescription() == Functions.LuaCallWithResult("{0} = UnitRace('player')")[0]
-                );
+        public new Class Class => base.Class;
+        public new Race Race => base.Race;
+        public new Gender Gender => base.Gender;
 
         public Position CorpsePosition =>
             new(
