@@ -8,22 +8,21 @@
 ## Active Priorities
 1. Add recorded directional remote-unit packet fixtures so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
 2. Add focused knockback trajectory coverage against parsed movement impulses.
-3. Add movement-opcode sweep tests as new gaps are discovered in the dispatch-table audit, including server-controlled mover flag/rate packets.
+3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
 
 ## Session Handoff
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added parser coverage for the real Vanilla `SMSG_MONSTER_MOVE` wire shapes, including linear destination-plus-packed-offset payloads and cyclic smooth (`Flying|Cyclic|EnterCycle`) payload normalization.
-  - Added `ActiveSpline` coverage for cyclic Catmull-Rom wrap behavior so the first and closing segments both use wrapped control points instead of endpoint clamping.
-  - Updated the shared object-manager monster-move payload helper so future runtime tests emit the real packet layout instead of the earlier simplified point list.
+  - Added observer-state coverage for the remaining non-cheat Vanilla movement rebroadcasts discovered in the dispatch-table sweep: swim start/stop plus pitch start/stop/set.
+  - Remote-unit tests now prove those packets update `MOVEFLAG_SWIMMING` and `SwimPitch` through the same managed path the object manager uses at runtime.
+  - `WorldClient` bridge-registration coverage now includes the new swim/pitch opcodes, reducing the outstanding movement-opcode work to future binary-backed discoveries rather than known gaps.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnFirstSegment|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnClosingSegment" -v n` -> `5 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1340 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObserverMovementPitchOpcodes_UpdateRemoteUnitSwimPitch" -v n` -> `16 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1346 passed`, `1 skipped`
 - Files changed:
-  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - Next command:
   - `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs | Select-Object -First 260`

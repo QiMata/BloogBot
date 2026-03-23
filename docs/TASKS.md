@@ -283,8 +283,31 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 139)
+- **Last updated:** 2026-03-23 (session 140)
 - **Branch:** `main`
+- **Session 140 — observer swim/pitch opcode parity slice shipped:**
+  - BG now handles the last non-cheat observer movement rebroadcasts still missing from the Vanilla 1.12.1 dispatch sweep: `MSG_MOVE_START_SWIM`, `MSG_MOVE_STOP_SWIM`, `MSG_MOVE_START_PITCH_UP`, `MSG_MOVE_START_PITCH_DOWN`, `MSG_MOVE_STOP_PITCH`, and `MSG_MOVE_SET_PITCH`.
+  - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route those packets through the same parse-and-apply path as the rest of the observer movement matrix, so remote units keep `MOVEFLAG_SWIMMING` and `SwimPitch` in sync instead of silently dropping those updates.
+  - Deterministic coverage now proves remote-unit swim-flag toggles and pitch updates apply end to end, and the world-client bridge test includes the newly-registered opcodes.
+  - The remaining opcode-enum names still absent from the dispatcher/bridge are cheat/debug paths (`*_CHEAT`, toggle logging/collision/gravity, raw-position ack), not normal Vanilla movement rebroadcasts.
+- **Test baseline (session 140):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObserverMovementPitchOpcodes_UpdateRemoteUnitSwimPitch" -v n`
+    - Passed (`16/16`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~BridgeRegistration_MovementOpcodes_Registered" -v n`
+    - Passed (`1/1`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1346/1347`, `1 skipped`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n`
+    - Passed (`117/117`)
+- **Files changed (session 140):**
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, a recorded directional remote-unit extrapolation fixture, focused knockback trajectory coverage, the FG hardening audit, and any binary-backed non-cheat movement/system gaps that remain after those.
 - **Session 139 — reachable spline wire/runtime parity slice shipped:**
   - BG `SMSG_MONSTER_MOVE` parsing now matches the Vanilla/VMaNGOS wire formats instead of assuming a single simplified point list:
     - linear paths rebuild their node sequence from the transmitted destination plus packed `appendPackXYZ` offsets,

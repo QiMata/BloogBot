@@ -86,10 +86,16 @@ namespace WoWSharpClient
             _handlers[Opcode.MSG_MOVE_START_TURN_RIGHT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_STOP_TURN] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_FACING] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_START_PITCH_UP] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_START_PITCH_DOWN] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_STOP_PITCH] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_RUN_MODE] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_WALK_MODE] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_START_SWIM] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_STOP_SWIM] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_ROOT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_UNROOT] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.MSG_MOVE_SET_PITCH] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_RUN_BACK_SPEED] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_WALK_SPEED] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.MSG_MOVE_SET_RUN_SPEED] = MovementHandler.HandleUpdateMovement;

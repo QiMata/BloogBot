@@ -732,6 +732,8 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.MSG_MOVE_FEATHER_FALL, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
     [InlineData(Opcode.MSG_MOVE_SET_WALK_MODE, MovementFlags.MOVEFLAG_WALK_MODE, true)]
     [InlineData(Opcode.MSG_MOVE_SET_RUN_MODE, MovementFlags.MOVEFLAG_WALK_MODE, false)]
+    [InlineData(Opcode.MSG_MOVE_START_SWIM, MovementFlags.MOVEFLAG_SWIMMING, true)]
+    [InlineData(Opcode.MSG_MOVE_STOP_SWIM, MovementFlags.MOVEFLAG_SWIMMING, false)]
     public void ObserverMovementFlagOpcodes_UpdateRemoteUnitState(
         Opcode serverOpcode,
         MovementFlags flag,
@@ -769,6 +771,50 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(55f, unit.Position.Y, 5);
         Assert.Equal(65f, unit.Position.Z, 5);
         Assert.Equal(1.75f, unit.Facing, 5);
+    }
+
+    [Theory]
+    [InlineData(Opcode.MSG_MOVE_START_PITCH_UP, 0.35f)]
+    [InlineData(Opcode.MSG_MOVE_START_PITCH_DOWN, -0.55f)]
+    [InlineData(Opcode.MSG_MOVE_STOP_PITCH, 0f)]
+    [InlineData(Opcode.MSG_MOVE_SET_PITCH, 0.8f)]
+    public void ObserverMovementPitchOpcodes_UpdateRemoteUnitSwimPitch(
+        Opcode serverOpcode,
+        float swimPitch)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x127;
+        const ulong remoteGuid = 0xF130000000001115ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+
+        MovementHandler.HandleUpdateMovement(
+            serverOpcode,
+            BuildMessageMovePayload(
+                remoteGuid,
+                MovementFlags.MOVEFLAG_SWIMMING,
+                new Position(46f, 56f, 66f),
+                0.5f,
+                swimPitch));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        Assert.True(unit.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_SWIMMING));
+        Assert.Equal(swimPitch, unit.SwimPitch, 5);
+        Assert.Equal(46f, unit.Position.X, 5);
+        Assert.Equal(56f, unit.Position.Y, 5);
+        Assert.Equal(66f, unit.Position.Z, 5);
+        Assert.Equal(0.5f, unit.Facing, 5);
     }
 
     [Theory]
@@ -907,12 +953,13 @@ public class ObjectManagerWorldSessionTests
         ulong guid,
         MovementFlags movementFlags,
         Position position,
-        float facing)
+        float facing,
+        float? swimPitch = null)
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         ReaderUtils.WritePackedGuid(writer, guid);
-        writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing));
+        writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing, swimPitch));
         return ms.ToArray();
     }
 
@@ -935,7 +982,8 @@ public class ObjectManagerWorldSessionTests
         ulong guid,
         MovementFlags movementFlags,
         Position position,
-        float facing)
+        float facing,
+        float? swimPitch = null)
     {
         var player = new WoWLocalPlayer(new HighGuid(guid))
         {
@@ -943,6 +991,7 @@ public class ObjectManagerWorldSessionTests
             Position = position,
             Facing = facing,
             FallTime = 0,
+            SwimPitch = swimPitch ?? 0f,
         };
 
         return MovementPacketHandler.BuildMovementInfoBuffer(

@@ -352,6 +352,11 @@ namespace WoWSharpClient.Handlers
                                 ParseMessageMove(reader)
                             );
                             break;
+                        case Opcode.MSG_MOVE_START_PITCH_UP:
+                        case Opcode.MSG_MOVE_START_PITCH_DOWN:
+                        case Opcode.MSG_MOVE_STOP_PITCH:
+                        case Opcode.MSG_MOVE_START_SWIM:
+                        case Opcode.MSG_MOVE_STOP_SWIM:
                         case Opcode.MSG_MOVE_SET_RUN_MODE:
                         case Opcode.MSG_MOVE_SET_WALK_MODE:
                         case Opcode.MSG_MOVE_ROOT:
@@ -359,6 +364,9 @@ namespace WoWSharpClient.Handlers
                         case Opcode.MSG_MOVE_FEATHER_FALL:
                         case Opcode.MSG_MOVE_HOVER:
                         case Opcode.MSG_MOVE_WATER_WALK:
+                            ParseMessageMove(reader);
+                            break;
+                        case Opcode.MSG_MOVE_SET_PITCH:
                             ParseMessageMove(reader);
                             break;
                         case Opcode.MSG_MOVE_SET_RUN_BACK_SPEED:
