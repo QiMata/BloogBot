@@ -27,6 +27,13 @@ public static class ReplayEngine
 {
     private const uint TELEPORT_TO_PLANE = 0x08000000;
     private const uint SPLINE_ELEVATION = 0x04000000;
+    private const float InvalidHeight = -200000.0f;
+
+    private static PhysicsOutput CreateResetOutput() => new()
+    {
+        FallStartZ = InvalidHeight,
+        StepUpBaseZ = InvalidHeight,
+    };
 
     /// <summary>
     /// Replays a full recording through PhysicsStepV2 and returns calibration results.
@@ -178,7 +185,7 @@ public static class ReplayEngine
         CalibrationResult result,
         string recordingName = "")
     {
-        var prevOutput = new PhysicsOutput();
+        var prevOutput = CreateResetOutput();
         float prevGroundZ = frames[0].Position.Z;
         int fallStartFrameIndex = -1;
 
@@ -203,7 +210,7 @@ public static class ReplayEngine
             if (!currentOnTransport && nextOnTransport)
             {
                 fallStartFrameIndex = -1;
-                prevOutput = new PhysicsOutput();
+                prevOutput = CreateResetOutput();
                 var transport = FindTransportGO(nextFrame, nextFrame.TransportGuid)
                              ?? FindTransportGO(currentFrame, nextFrame.TransportGuid);
                 if (transport != null)
@@ -223,7 +230,7 @@ public static class ReplayEngine
             if (currentOnTransport && !nextOnTransport)
             {
                 fallStartFrameIndex = -1;
-                prevOutput = new PhysicsOutput();
+                prevOutput = CreateResetOutput();
                 prevGroundZ = nextFrame.Position.Z;
                 result.AddSkippedTransportTransition(i);
                 continue;
@@ -272,7 +279,7 @@ public static class ReplayEngine
             if (tdx * tdx + tdy * tdy + tdz * tdz > 50f * 50f)
             {
                 fallStartFrameIndex = -1;
-                prevOutput = new PhysicsOutput();
+                prevOutput = CreateResetOutput();
                 prevGroundZ = nextWorldZ;
                 result.AddSkippedTeleport(i);
                 continue;

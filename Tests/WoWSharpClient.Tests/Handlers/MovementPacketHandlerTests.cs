@@ -1,5 +1,6 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using System;
 using System.IO;
 using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
@@ -36,6 +37,17 @@ namespace WoWSharpClient.Tests.Handlers
             // Verify entire buffer was consumed (no trailing bytes, no short read)
             Assert.Equal(buffer.Length, ms.Position);
             return result;
+        }
+
+        private static Position LocalToWorld(Position localOffset, Position transportPosition, float transportFacing)
+        {
+            float cosO = MathF.Cos(transportFacing);
+            float sinO = MathF.Sin(transportFacing);
+
+            return new Position(
+                transportPosition.X + localOffset.X * cosO - localOffset.Y * sinO,
+                transportPosition.Y + localOffset.X * sinO + localOffset.Y * cosO,
+                transportPosition.Z + localOffset.Z);
         }
 
         [Fact]
@@ -147,16 +159,21 @@ namespace WoWSharpClient.Tests.Handlers
         [Fact]
         public void Transport_RoundTrips()
         {
-            var player = CreatePlayer(10.5f, -3.2f, 8.1f, 0.0f,
-                MovementFlags.MOVEFLAG_ONTRANSPORT);
-
-            // Set up transport object with GUID and position
             var transport = new WoWGameObject(new HighGuid(0x0000F0011234ABCDul))
             {
                 Position = new Position(1568.3f, -4395.1f, 17.2f),
                 Facing = 3.14f
             };
+            var localOffset = new Position(10.5f, -3.2f, 8.1f);
+            var worldPosition = LocalToWorld(localOffset, transport.Position, transport.Facing);
+            const float localFacing = 0.35f;
+
+            var player = CreatePlayer(worldPosition.X, worldPosition.Y, worldPosition.Z, transport.Facing + localFacing,
+                MovementFlags.MOVEFLAG_ONTRANSPORT);
             player.Transport = transport;
+            player.TransportGuid = transport.Guid;
+            player.TransportOffset = localOffset;
+            player.TransportOrientation = localFacing;
 
             uint clientTime = 600000;
             uint fallTime = 0;
@@ -167,15 +184,14 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.True(parsed.HasTransport);
             Assert.Equal(0x0000F0011234ABCDul, parsed.TransportGuid);
             Assert.NotNull(parsed.TransportOffset);
-            Assert.Equal(1568.3f, parsed.TransportOffset.X);
-            Assert.Equal(-4395.1f, parsed.TransportOffset.Y);
-            Assert.Equal(17.2f, parsed.TransportOffset.Z);
-            Assert.Equal(3.14f, parsed.TransportOrientation);
-
-            // Player local coords
-            Assert.Equal(10.5f, parsed.X);
-            Assert.Equal(-3.2f, parsed.Y);
-            Assert.Equal(8.1f, parsed.Z);
+            Assert.Equal(localOffset.X, parsed.TransportOffset.X);
+            Assert.Equal(localOffset.Y, parsed.TransportOffset.Y);
+            Assert.Equal(localOffset.Z, parsed.TransportOffset.Z);
+            Assert.Equal(localFacing, parsed.TransportOrientation);
+            Assert.Equal(worldPosition.X, parsed.X);
+            Assert.Equal(worldPosition.Y, parsed.Y);
+            Assert.Equal(worldPosition.Z, parsed.Z);
+            Assert.Equal(transport.Facing + localFacing, parsed.Facing);
         }
 
         [Fact]
@@ -217,7 +233,15 @@ namespace WoWSharpClient.Tests.Handlers
                 Position = new Position(100f, 200f, 300f),
                 Facing = 2.0f
             };
+            var localOffset = new Position(5.0f, -2.0f, 3.0f);
+            var worldPosition = LocalToWorld(localOffset, transport.Position, transport.Facing);
+            const float localFacing = -0.5f;
+            player.Position = worldPosition;
+            player.Facing = transport.Facing + localFacing;
             player.Transport = transport;
+            player.TransportGuid = transport.Guid;
+            player.TransportOffset = localOffset;
+            player.TransportOrientation = localFacing;
 
             uint clientTime = 999999;
             uint fallTime = 1200;
@@ -227,17 +251,17 @@ namespace WoWSharpClient.Tests.Handlers
             // Core fields
             Assert.Equal(flags, parsed.MovementFlags);
             Assert.Equal(clientTime, parsed.LastUpdated);
-            Assert.Equal(5.0f, parsed.X);
-            Assert.Equal(-2.0f, parsed.Y);
-            Assert.Equal(3.0f, parsed.Z);
-            Assert.Equal(1.5f, parsed.Facing);
+            Assert.Equal(worldPosition.X, parsed.X);
+            Assert.Equal(worldPosition.Y, parsed.Y);
+            Assert.Equal(worldPosition.Z, parsed.Z);
+            Assert.Equal(transport.Facing + localFacing, parsed.Facing);
 
             // Transport
             Assert.Equal(999ul, parsed.TransportGuid);
-            Assert.Equal(100f, parsed.TransportOffset.X);
-            Assert.Equal(200f, parsed.TransportOffset.Y);
-            Assert.Equal(300f, parsed.TransportOffset.Z);
-            Assert.Equal(2.0f, parsed.TransportOrientation);
+            Assert.Equal(localOffset.X, parsed.TransportOffset.X);
+            Assert.Equal(localOffset.Y, parsed.TransportOffset.Y);
+            Assert.Equal(localOffset.Z, parsed.TransportOffset.Z);
+            Assert.Equal(localFacing, parsed.TransportOrientation);
 
             // Swim pitch
             Assert.Equal(0.45f, parsed.SwimPitch);

@@ -2101,14 +2101,24 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		constexpr uint32_t MAX_STEP_UP_HOLD = 5;    // ~80-85ms at 60fps
 		constexpr float STEP_UP_RISE_THRESHOLD = 0.25f;
 		constexpr float STEP_UP_DROP_TOLERANCE = 0.15f;
-		const float highestZ = std::max(st.z, preSafetyNetZ);
-		const float zRise = highestZ - input.z;
+		float persistedStepUpZ = std::max(st.z, preSafetyNetZ);
+		if (trustGroundedReplayInput) {
+			// Replay trust mode may briefly see an overhead/WMO shelf before the grounded
+			// refinement path clamps back to the floor. If we always persist the highest
+			// pre-refinement Z, transport exits can re-promote that bad surface for several
+			// frames. Only reuse preSafetyNetZ when the refined result still agrees closely.
+			constexpr float MAX_REPLAY_STEP_UP_DISAGREEMENT = 0.5f;
+			if ((persistedStepUpZ - st.z) > MAX_REPLAY_STEP_UP_DISAGREEMENT) {
+				persistedStepUpZ = st.z;
+			}
+		}
+		const float zRise = persistedStepUpZ - input.z;
 		const bool justSteppedUp = st.isGrounded && !isSwimming && !inputAirborneFlag
 			&& zRise > STEP_UP_RISE_THRESHOLD;
 
 		if (justSteppedUp) {
-			st.z = highestZ;
-			out.stepUpBaseZ = highestZ;
+			st.z = persistedStepUpZ;
+			out.stepUpBaseZ = persistedStepUpZ;
 			out.stepUpAge = 0;
 		} else if (input.stepUpBaseZ > PhysicsConstants::INVALID_HEIGHT
 				&& input.stepUpAge < MAX_STEP_UP_HOLD) {

@@ -34,6 +34,8 @@ namespace WoWSharpClient.Parsers
         }
 
         // WoW.exe 0x618909: flags are masked with 0x75A07DFF before writing to packets.
+        // WoW.exe 0x618C30 / 0x7C6340 then re-add MOVEFLAG_ONTRANSPORT when a transport
+        // GUID is present so the transport-local block is serialized on the wire.
         // This strips PENDING_*, ASCENDING, SPLINE_ENABLED, and LOCAL_DIRTY flags
         // that are internal to the client and not sent on the wire.
         private const uint OUTBOUND_FLAG_MASK = 0x75A07DFF;
@@ -46,25 +48,32 @@ namespace WoWSharpClient.Parsers
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
 
+            ulong transportGuid = p.TransportGuid != 0
+                ? p.TransportGuid
+                : p.Transport?.Guid ?? 0;
+            bool hasTransport = transportGuid != 0;
+            uint movementFlags = (uint)p.MovementFlags & OUTBOUND_FLAG_MASK;
+            if (hasTransport)
+                movementFlags |= (uint)MovementFlags.MOVEFLAG_ONTRANSPORT;
+
             /* 1) Flags + timestamp — apply WoW.exe outbound mask */
-            w.Write((uint)p.MovementFlags & OUTBOUND_FLAG_MASK);
+            w.Write(movementFlags);
             w.Write(clientTimeMs);
 
-            /* 2) Position */
+            /* 2) World position */
             w.Write(p.Position.X);
             w.Write(p.Position.Y);
             w.Write(p.Position.Z);
             w.Write(p.Facing);
 
-            /* 3) Transport */
-            if (p.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT) &&
-                p.Transport != null)
+            /* 3) Transport-local offset */
+            if (hasTransport)
             {
-                w.Write(p.Transport.Guid);
-                w.Write(p.Transport.Position.X);
-                w.Write(p.Transport.Position.Y);
-                w.Write(p.Transport.Position.Z);
-                w.Write(p.Transport.Facing);
+                w.Write(transportGuid);
+                w.Write(p.TransportOffset.X);
+                w.Write(p.TransportOffset.Y);
+                w.Write(p.TransportOffset.Z);
+                w.Write(p.TransportOrientation);
             }
 
             /* 4) Swim pitch */

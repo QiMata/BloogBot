@@ -552,22 +552,28 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
         // Also check dynamic objects (elevators, doors) — their meshes
         // aren't in the pre-cached scene file.
         float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+        const float zMax = z + maxSearchDist;
+        const float zMin = z - maxSearchDist;
+        const bool sceneOk = sceneZ > PhysicsConstants::INVALID_HEIGHT + 1.0f
+            && sceneZ >= zMin
+            && sceneZ <= zMax;
+        const bool dynOk = dynZ > PhysicsConstants::INVALID_HEIGHT + 1.0f
+            && dynZ >= zMin
+            && dynZ <= zMax;
 
         // If only one source has a valid result, return it
-        if (dynZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
-            // Scene cache returned a result — but verify it's valid.
-            // If invalid (underground gap), fall through to VMAP+BIH.
-            if (sceneZ > PhysicsConstants::INVALID_HEIGHT + 1.0f)
+        if (!dynOk) {
+            // Scene cache returned a result — but verify it is within the caller's
+            // search window. Underground/WMO edge queries can otherwise return a
+            // floor from another level (for example Z=0 instead of the Undercity
+            // floor at Z≈-43), which is worse than falling through to VMAP/BIH.
+            if (sceneOk)
                 return sceneZ;
             // else: fall through to VMAP+ADT+BIH below
-        } else if (sceneZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f) {
+        } else if (!sceneOk) {
             return dynZ;
         } else {
             // Both valid — pick closest to query Z within acceptance window
-            float zMax = z + maxSearchDist;
-            float zMin = z - maxSearchDist;
-            bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
-            bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
             if (sceneOk && dynOk)
                 return (std::fabs(sceneZ - z) <= std::fabs(dynZ - z)) ? sceneZ : dynZ;
             if (dynOk) return dynZ;

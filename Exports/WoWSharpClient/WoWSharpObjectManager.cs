@@ -238,6 +238,9 @@ namespace WoWSharpClient
                 // 1. Advance every monster/NPC spline before physics
                 Splines.Instance.Update((float)delta.TotalMilliseconds);
 
+                // 1a. Keep passenger world positions in sync with moving transports.
+                SyncTransportPassengerWorldPositions();
+
                 // 2. Handle ping heartbeat
                 HandlePingHeartbeat((long)now.TotalMilliseconds);
 

@@ -224,17 +224,31 @@ if (transportGuid != 0) {
 
 | # | Task | Status |
 |---|------|--------|
-| 7.1 | Detect transport entry/exit in physics replay frames (transportGuid field changes) | Open |
-| 7.2 | Implement world↔transport coordinate transform in `CollisionStepWoW` matching 0x633840 | Open |
-| 7.3 | Transform displacement by transport orientation matrix before collision (0x4549A0 `Vec3TransformCoord`) | Open |
-| 7.4 | Inverse-transform result position back to transport-local after collision | Open |
+| 7.1 | Detect transport entry/exit in physics replay frames (transportGuid field changes) | **Done** |
+| 7.2 | Implement world↔transport coordinate transform in `CollisionStepWoW` matching 0x633840 | **Done** |
+| 7.3 | Transform displacement by transport orientation matrix before collision (0x4549A0 `Vec3TransformCoord`) | **Done** |
+| 7.4 | Inverse-transform result position back to transport-local after collision | **Done** |
 | 7.5 | Handle elevator spline evaluation — Undercity elevators use gameobject transport splines | Open |
-| 7.6 | Update `MovementController` to track transport state and switch coordinate frames | Open |
-| 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | Open |
-| 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | Open |
+| 7.6 | Update `MovementController` to track transport state and switch coordinate frames | **Done** |
+| 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | **Done** |
+| 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | **Done** |
 | 7.9 | Add Orgrimmar elevator recording/parity test | Open |
-| 7.10 | Fix physics replay to exclude transport-transition frames from ground mode scoring | Open |
-| 7.11 | Calibration gate: ground avg < 0.08y, transport avg < 0.15y, aggregate p99 < 2.0y | Open |
+| 7.10 | Fix physics replay to exclude transport-transition frames from ground mode scoring | **Done** |
+| 7.11 | Calibration gate: ground avg < 0.08y, transport avg < 0.15y, aggregate p99 < 2.0y | **Done** |
+
+### Latest Outcome (2026-03-23)
+
+- Transport packet/world-state parity is now implemented for BG:
+  - wire packets always serialize world `Position/Facing` plus transport-local offset/orientation when `MOVEFLAG_ONTRANSPORT` is active,
+  - `MovementController` now switches physics input/output between world and transport-local frames,
+  - `WoWSharpObjectManager` now keeps passenger world coordinates synced from transport-local state each game loop.
+- Native replay parity is back within the intended gate:
+  - `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget`: transport avg `0.0303y`, p99 `0.2169y`, max `0.3619y`
+  - `ElevatorRideV2_FrameByFrame_PositionMatchesRecording`: avg `0.0142y`, steady-state p99 `0.1190y`, max `0.3619y`
+  - `AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds`: avg `0.0124y`, p99 `0.1279y`, worst `2.2577y`
+- Remaining P7 follow-ups are narrower:
+  - `7.5` explicit elevator spline evaluation audit for runtime movers
+  - `7.9` additional Orgrimmar elevator replay coverage
 
 ### Key Files
 - `Exports/Navigation/PhysicsEngine.cpp` — `CollisionStepWoW` transport transform
@@ -268,6 +282,38 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-03-22 (session 130)
 - **Branch:** `main`
+- **Session 131 — P7 transport/elevator parity shipped:**
+  - Added BG transport coordinate helpers and moved transport-local/world transforms into shared managed code
+  - Fixed movement packet serialization so world position/facing stay in the base block and transport-local offset/orientation stay in the transport block
+  - Re-enabled `MOVEFLAG_ONTRANSPORT` on-wire when a transport GUID is present after WoW.exe flag masking
+  - `MovementController` now detects transport entry/exit, resets continuity correctly, includes active transports in physics nearby objects, and recomputes local offsets/orientation from world-space physics output
+  - `WoWSharpObjectManager` now continuously syncs passenger world position/facing from transport-local state
+  - Added WoWSharpClient transport tests plus an Undercity elevator replay parity test
+  - Fixed replay-harness sentinel resets (`StepUpBaseZ` / `FallStartZ`) for board/leave/teleport skips
+  - Fixed native step-up persistence so replay-ground refinement cannot re-promote a bad overhead surface after transport exit
+- **Test baseline (session 131):**
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1277/1278`, `1 skipped`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n`
+    - Passed (`29/29`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed"`
+    - Passed (`2/2`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=detailed"`
+    - Passed (`avg=0.0124y`, `p99=0.1279y`, `worst=2.2577y`)
+- **Files changed (session 131):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/Movement/TransportCoordinateHelper.cs`
+  - `Exports/WoWSharpClient/Parsers/MovementPacketHandler.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/MovementPacketHandlerTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+- **Next priorities:** finish P7.5/P7.9, then sweep the next WoW.exe parity gap (swim collision path at `0x633B5E`)
 - **Session 130 — P6 AABB Collision Rewrite COMPLETE:**
   - Deleted ~2100 lines of custom physics workarounds
   - Implemented WoW.exe CollisionStepWoW (VA 0x633840) with AABB terrain queries

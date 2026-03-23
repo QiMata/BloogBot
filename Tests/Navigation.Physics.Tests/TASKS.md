@@ -141,3 +141,15 @@ BRT-PAR-001 parity loop (2026-02-28) found **no physics/navigation regressions**
 - Blockers: deterministic native detour coverage is now in place, but it still does not tell us whether remaining live Ratchet failures come from bad returned paths or drift after the path is issued. The next owner work is service-side shoreline request/response logging.
 - Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
 >>>>>>> cpp_physics_system
+
+## 2026-03-23 Session Note
+- Pass result: `delta shipped`
+- Local delta: added Undercity elevator replay transport coverage and fixed replay reset/state handling so transport entry/exit no longer pollute parity metrics.
+- Validation:
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed"` -> `2 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=detailed"` -> passed (`avg=0.0124y`, `p99=0.1279y`, `worst=2.2577y`)
+- Files changed:
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`
+- Next command: `Get-Content Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs | Select-Object -Skip 100 -First 220`

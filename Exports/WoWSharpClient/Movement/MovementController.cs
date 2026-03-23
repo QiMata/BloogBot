@@ -4,6 +4,8 @@ using GameData.Core.Models;
 using Pathfinding;
 using Serilog;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -322,6 +324,29 @@ namespace WoWSharpClient.Movement
         // ======== PHYSICS ========
         private PhysicsOutput RunPhysics(float deltaSec)
         {
+            if (_player.TransportGuid != _lastTransportGuid)
+            {
+                ResetTransportContinuity();
+                _lastTransportGuid = _player.TransportGuid;
+            }
+
+            var physicsPosition = _player.Position;
+            var physicsFacing = _player.Facing;
+            WoWGameObject? activeTransport = null;
+            if (TryGetActiveTransport(out activeTransport))
+            {
+                _player.TransportOffset = TransportCoordinateHelper.WorldToLocal(
+                    _player.Position,
+                    activeTransport.Position,
+                    activeTransport.Facing);
+                _player.TransportOrientation = TransportCoordinateHelper.WorldToLocalFacing(
+                    _player.Facing,
+                    activeTransport.Facing);
+
+                physicsPosition = _player.TransportOffset;
+                physicsFacing = _player.TransportOrientation;
+            }
+
             // Build physics input from current player state
             var input = new PhysicsInput
             {
@@ -329,10 +354,10 @@ namespace WoWSharpClient.Movement
                 MapId = _player.MapId,
                 MovementFlags = (uint)_player.MovementFlags,
 
-                PosX = _player.Position.X,
-                PosY = _player.Position.Y,
-                PosZ = _player.Position.Z,
-                Facing = _player.Facing,
+                PosX = physicsPosition.X,
+                PosY = physicsPosition.Y,
+                PosZ = physicsPosition.Z,
+                Facing = physicsFacing,
                 SwimPitch = _player.SwimPitch,
 
                 VelX = _velocity.X,
@@ -379,6 +404,8 @@ namespace WoWSharpClient.Movement
                 StepUpAge = _stepUpAge,
             };
 
+            input.NearbyObjects.Add(BuildPhysicsNearbyObjects(_player.Position, activeTransport));
+
             // Save the position and flags we're sending to C++ for race-detection and diagnostics.
             // If a teleport modifies _player.Position during the gRPC call,
             // ApplyPhysicsResult will detect the divergence and discard the stale result.
@@ -388,6 +415,86 @@ namespace WoWSharpClient.Movement
             _physicsInputFlags = input.MovementFlags;
 
             return _physics.PhysicsStep(input);
+        }
+
+        private void ResetTransportContinuity()
+        {
+            _prevGroundZ = _player.Position.Z;
+            _prevGroundNormal = new Vector3(0, 0, 1);
+            _pendingDepen = Vector3.Zero;
+            _standingOnInstanceId = 0;
+            _standingOnLocal = Vector3.Zero;
+            _stepUpBaseZ = -200000f;
+            _stepUpAge = 0;
+
+            if (_player.TransportGuid == 0)
+            {
+                _player.TransportOffset = new Position(0, 0, 0);
+                _player.TransportOrientation = 0f;
+            }
+        }
+
+        private bool TryGetActiveTransport(out WoWGameObject? transport)
+        {
+            transport = null;
+            if (_player.TransportGuid == 0)
+                return false;
+
+            if (_player.Transport is WoWGameObject cachedTransport &&
+                cachedTransport.Guid == _player.TransportGuid &&
+                cachedTransport.DisplayId != 0)
+            {
+                transport = cachedTransport;
+            }
+            else if (WoWSharpObjectManager.Instance.GetObjectByGuid(_player.TransportGuid) is WoWGameObject resolvedTransport)
+            {
+                transport = resolvedTransport;
+            }
+
+            if (transport != null)
+                _player.Transport = transport;
+
+            return transport != null;
+        }
+
+        private DynamicObjectProto[] BuildPhysicsNearbyObjects(Position referencePosition, WoWGameObject? activeTransport)
+        {
+            const float maxRangeSq = 100f * 100f;
+            var nearbyObjects = new List<DynamicObjectProto>();
+            var seenGuids = new HashSet<ulong>();
+
+            void AddGameObject(WoWGameObject gameObject, bool forceInclude)
+            {
+                if (gameObject.Guid == 0 || gameObject.DisplayId == 0 || !seenGuids.Add(gameObject.Guid))
+                    return;
+
+                float dx = gameObject.Position.X - referencePosition.X;
+                float dy = gameObject.Position.Y - referencePosition.Y;
+                float dz = gameObject.Position.Z - referencePosition.Z;
+                float distSq = dx * dx + dy * dy + dz * dz;
+                if (!forceInclude && distSq > maxRangeSq)
+                    return;
+
+                nearbyObjects.Add(new DynamicObjectProto
+                {
+                    Guid = gameObject.Guid,
+                    DisplayId = gameObject.DisplayId,
+                    X = gameObject.Position.X,
+                    Y = gameObject.Position.Y,
+                    Z = gameObject.Position.Z,
+                    Orientation = gameObject.Facing,
+                    Scale = gameObject.ScaleX > 0f ? gameObject.ScaleX : 1f,
+                    GoState = (uint)gameObject.GoState,
+                });
+            }
+
+            if (activeTransport != null)
+                AddGameObject(activeTransport, forceInclude: true);
+
+            foreach (var gameObject in WoWSharpObjectManager.Instance.Objects.OfType<WoWGameObject>())
+                AddGameObject(gameObject, forceInclude: gameObject.Guid == _player.TransportGuid);
+
+            return [.. nearbyObjects];
         }
 
         private int _deadReckonCount = 0;
@@ -409,6 +516,7 @@ namespace WoWSharpClient.Movement
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
+        private ulong _lastTransportGuid = player.TransportGuid;
         // Per-frame packet tracking for recording — set by SendMovementPacket,
         // captured by the recording in the NEXT frame's physics tick, then reset.
         private uint _frameSentOpcode = 0;
@@ -431,6 +539,7 @@ namespace WoWSharpClient.Movement
 
             // Apply position directly from physics — no guards, no clamping
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
+            _player.Facing = output.Orientation;
             _player.SwimPitch = output.Pitch;
 
             // Apply velocity
@@ -463,6 +572,22 @@ namespace WoWSharpClient.Movement
             var inputFlags = _player.MovementFlags & ~PhysicsFlags;
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
             _player.MovementFlags = inputFlags | newPhysicsFlags;
+
+            if (TryGetActiveTransport(out var activeTransport))
+            {
+                _player.TransportOffset = TransportCoordinateHelper.WorldToLocal(
+                    _player.Position,
+                    activeTransport.Position,
+                    activeTransport.Facing);
+                _player.TransportOrientation = TransportCoordinateHelper.WorldToLocalFacing(
+                    _player.Facing,
+                    activeTransport.Facing);
+            }
+            else if (_player.TransportGuid == 0)
+            {
+                _player.TransportOffset = new Position(0, 0, 0);
+                _player.TransportOrientation = 0f;
+            }
 
             // Advance waypoint if arrived
             AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);

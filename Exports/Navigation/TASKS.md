@@ -204,3 +204,16 @@ Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
 - Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
 - Blockers: the returned route is stronger, but the remaining Ratchet fishing failures can still be route-shape or runtime-execution drift. The next slice needs shoreline-focused request/response logging so live failures can be attributed to bad native output versus movement/collide-slide drift after the path is returned.
 >>>>>>> cpp_physics_system
+
+## 2026-03-23 Session Note
+- Pass result: `delta shipped`
+- Local delta: transport replay parity now survives elevator disembark without latching onto the wrong upper WMO surface; replay reset paths also restore `StepUpBaseZ`/`FallStartZ` sentinels on transport and teleport skips.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed"` -> `2 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=detailed"` -> passed (`avg=0.0124y`, `p99=0.1279y`, `worst=2.2577y`)
+- Files changed:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/SceneQuery.cpp`
+- Next command: `Get-Content Exports/Navigation/PhysicsMovement.cpp | Select-Object -First 260`

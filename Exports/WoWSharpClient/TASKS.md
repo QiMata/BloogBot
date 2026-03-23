@@ -170,3 +170,17 @@ Move completed items to `Exports/WoWSharpClient/TASKS_ARCHIVE.md`.
 - Next command: continue with next queue file
 - Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.
 >>>>>>> cpp_physics_system
+
+## 2026-03-23 Session Note
+- Pass result: `delta shipped`
+- Local delta: BG transport parity now uses shared world/local transforms across packet serialization, physics input/output, and object-manager passenger sync.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1277 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementPacketHandlerTests|FullyQualifiedName~MovementControllerTests|FullyQualifiedName~ObjectManagerWorldSessionTests" -v n` -> `58 passed`
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/Movement/TransportCoordinateHelper.cs`
+  - `Exports/WoWSharpClient/Parsers/MovementPacketHandler.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+- Next command: `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`

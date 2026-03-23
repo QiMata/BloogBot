@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
 using Pathfinding;
+using System;
 using System.Reflection;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -58,6 +59,8 @@ namespace WoWSharpClient.Tests.Movement
                     NewPosX = input.PosX,
                     NewPosY = input.PosY,
                     NewPosZ = input.PosZ,
+                    Orientation = input.Facing,
+                    Pitch = input.SwimPitch,
                     NewVelX = 0, NewVelY = 0, NewVelZ = 0,
                     IsGrounded = true,
                     GroundZ = input.PosZ,
@@ -234,11 +237,11 @@ namespace WoWSharpClient.Tests.Movement
             _sentPackets.Clear();
 
             // 150ms later — no heartbeat yet (PACKET_INTERVAL_MS = 200)
-            _controller.Update(0.05f, 1150);
+            _controller.Update(0.05f, 1050);
             Assert.Empty(_sentPackets);
 
             // 200ms total — heartbeat fires
-            _controller.Update(0.05f, 1200);
+            _controller.Update(0.05f, 1100);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -272,11 +275,11 @@ namespace WoWSharpClient.Tests.Movement
             _sentPackets.Clear();
 
             // At t=1250 (150ms since last packet) — no heartbeat
-            _controller.Update(0.05f, 1250);
+            _controller.Update(0.05f, 1150);
             Assert.Empty(_sentPackets);
 
             // At t=1300 (200ms since last packet) — heartbeat
-            _controller.Update(0.05f, 1300);
+            _controller.Update(0.05f, 1200);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -372,6 +375,101 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(7.0f, capturedInput.RunSpeed);
             Assert.Equal(0.1f, capturedInput.DeltaTime, 3);
             Assert.Equal((uint)MovementFlags.MOVEFLAG_FORWARD, capturedInput.MovementFlags);
+        }
+
+        [Fact]
+        public void PhysicsStep_OnTransport_UsesLocalCoordinatesAndIncludesTransportObject()
+        {
+            PhysicsInput? capturedInput = null;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Callback<PhysicsInput>(input => capturedInput = input)
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = 110f,
+                    NewPosY = 210f,
+                    NewPosZ = 55f,
+                    Orientation = 2.2f,
+                    IsGrounded = true,
+                    GroundZ = 55f,
+                    GroundNz = 1,
+                    MovementFlags = input.MovementFlags,
+                });
+
+            var transport = new WoWGameObject(new HighGuid(0xF120000000000001ul))
+            {
+                Position = new Position(100f, 200f, 50f),
+                Facing = MathF.PI / 2f,
+                DisplayId = 455,
+                ScaleX = 1f,
+            };
+
+            _player.Transport = transport;
+            _player.TransportGuid = transport.Guid;
+            _player.Position = new Position(110f, 210f, 55f);
+            _player.Facing = 2.2f;
+            _player.TransportOffset = new Position(10f, -10f, 5f);
+            _player.TransportOrientation = _player.Facing - transport.Facing;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
+
+            _controller.Update(0.1f, 3000);
+
+            Assert.NotNull(capturedInput);
+            Assert.Equal(10f, capturedInput.PosX, 3);
+            Assert.Equal(-10f, capturedInput.PosY, 3);
+            Assert.Equal(5f, capturedInput.PosZ, 3);
+            Assert.Equal(_player.TransportOrientation, capturedInput.Facing, 3);
+            Assert.Equal(transport.Guid, capturedInput.TransportGuid);
+            Assert.Single(capturedInput.NearbyObjects);
+            Assert.Equal(transport.Guid, capturedInput.NearbyObjects[0].Guid);
+            Assert.Equal(transport.Position.X, capturedInput.NearbyObjects[0].X, 3);
+            Assert.Equal(transport.Position.Y, capturedInput.NearbyObjects[0].Y, 3);
+            Assert.Equal(transport.Position.Z, capturedInput.NearbyObjects[0].Z, 3);
+        }
+
+        [Fact]
+        public void PhysicsResult_OnTransport_RecomputesLocalOffsetFromWorldOutput()
+        {
+            var transport = new WoWGameObject(new HighGuid(0xF120000000000002ul))
+            {
+                Position = new Position(100f, 200f, 50f),
+                Facing = MathF.PI / 2f,
+                DisplayId = 455,
+                ScaleX = 1f,
+            };
+
+            _player.Transport = transport;
+            _player.TransportGuid = transport.Guid;
+            _player.Position = new Position(101f, 202f, 53f);
+            _player.Facing = 2.1f;
+            _player.TransportOffset = new Position(2f, -1f, 3f);
+            _player.TransportOrientation = _player.Facing - transport.Facing;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_ONTRANSPORT;
+
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns(new PhysicsOutput
+                {
+                    NewPosX = 102f,
+                    NewPosY = 204f,
+                    NewPosZ = 53f,
+                    Orientation = 2.1f,
+                    IsGrounded = true,
+                    GroundZ = 53f,
+                    GroundNz = 1f,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_ONTRANSPORT,
+                });
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.Equal(102f, _player.Position.X, 3);
+            Assert.Equal(204f, _player.Position.Y, 3);
+            Assert.Equal(53f, _player.Position.Z, 3);
+            Assert.Equal(4f, _player.TransportOffset.X, 3);
+            Assert.Equal(-2f, _player.TransportOffset.Y, 3);
+            Assert.Equal(3f, _player.TransportOffset.Z, 3);
+            Assert.Equal(2.1f - transport.Facing, _player.TransportOrientation, 3);
+            Assert.Equal(2.1f, _player.Facing, 3);
         }
 
         [Fact]
@@ -844,25 +942,20 @@ namespace WoWSharpClient.Tests.Movement
         {
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
-            // t=0: START_FORWARD
             _controller.Update(0.05f, 0);
             Assert.Single(_sentPackets);
 
-            // t=100: no heartbeat (PACKET_INTERVAL_MS = 200)
-            _controller.Update(0.05f, 100);
+            _controller.Update(0.05f, 50);
             Assert.Single(_sentPackets);
 
-            // t=200: first heartbeat
-            _controller.Update(0.05f, 200);
+            _controller.Update(0.05f, 100);
             Assert.Equal(2, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
 
-            // t=300: no heartbeat
-            _controller.Update(0.05f, 300);
+            _controller.Update(0.05f, 150);
             Assert.Equal(2, _sentPackets.Count);
 
-            // t=400: second heartbeat
-            _controller.Update(0.05f, 400);
+            _controller.Update(0.05f, 200);
             Assert.Equal(3, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
         }

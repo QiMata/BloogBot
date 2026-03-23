@@ -1,5 +1,6 @@
 using BotRunner.Movement;
 using GameData.Core.Models;
+using Navigation.Physics.Tests.Helpers;
 using Pathfinding;
 using System;
 using System.Collections.Generic;
@@ -271,5 +272,27 @@ public class ElevatorScenarioTests(ITestOutputHelper output)
 
         Assert.NotNull(target);
         _output.WriteLine($"Transport target: ({target.X:F1}, {target.Y:F1}, {target.Z:F1})");
+    }
+}
+
+[Collection("PhysicsEngine")]
+public class ElevatorPhysicsParityTests(PhysicsEngineFixture fixture, ITestOutputHelper output)
+{
+    private readonly PhysicsEngineFixture _fixture = fixture;
+    private readonly ITestOutputHelper _output = output;
+
+    [Fact]
+    public void UndercityElevatorReplay_TransportAverageStaysWithinParityTarget()
+    {
+        var result = _fixture.ReplayCache.GetOrReplay(Recordings.UndercityElevatorV2, _output, _fixture.IsInitialized);
+        if (result.FrameCount == 0)
+            return;
+
+        var transportStats = result.OnTransportStats();
+        _output.WriteLine($"Undercity elevator transport avg={transportStats.avg:F4} p99={transportStats.p99:F4} max={transportStats.max:F4}");
+
+        Assert.True(transportStats.count > 0, "Expected on-transport frames in the Undercity elevator replay.");
+        Assert.True(transportStats.avg < 0.15f,
+            $"Undercity elevator transport avg {transportStats.avg:F4}y exceeds the 0.15y parity target.");
     }
 }

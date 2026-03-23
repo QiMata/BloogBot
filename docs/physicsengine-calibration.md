@@ -85,6 +85,7 @@ If steps 1-3 are skipped, calibration work will likely repeat failed attempts.
 ## Do Not Repeat
 
 - Do not reapply the geometry-derived support-trend replacement from run2 as-is.
+- Do not let step-up persistence re-promote a pre-refinement overhead surface after replay-ground refinement has already clamped back to the captured floor.
 - Do not run multiple simultaneous hypotheses in one test pass.
 - Do not recalibrate by re-scanning unrelated systems (MovementController/task-wide state) for this stream.
 
@@ -110,3 +111,21 @@ Suggested log capture:
 ```powershell
 dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --filter "FullyQualifiedName=PathfindingService.Tests.PhysicsEngineTests.StepPhysics_RecordingReplay_FallFromHeight_FrameByFrameVariance" --logger "console;verbosity=detailed" | Tee-Object logs/physicsengine-variance-YYYYMMDD-runN.txt
 ```
+
+## 2026-03-23 Transport Parity Addendum
+
+- Scope note:
+  - This pass targeted transport/elevator replay parity rather than the original fall-from-height replay.
+  - The same calibration hygiene rules still applied because the failure was in `PhysicsEngine` replay behavior.
+- Behavioral change shipped:
+  - `PhysicsEngine.cpp`: replay step-up persistence now refuses to persist `preSafetyNetZ` when replay-ground refinement disagrees by more than `0.5y`, which prevents transport-exit overhead surfaces from being held for several frames.
+  - `ReplayEngine.cs`: all board/leave/teleport skips now reset `FallStartZ` and `StepUpBaseZ` to `INVALID_HEIGHT` instead of zero.
+- Validation:
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed"`
+    - `ElevatorRideV2_FrameByFrame_PositionMatchesRecording`: `avg=0.0142y`, `steady-state p99=0.1190y`, `max=0.3619y`
+    - `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget`: `transport avg=0.0303y`, `p99=0.2169y`, `max=0.3619y`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=detailed"`
+    - aggregate clean metrics: `avg=0.0124y`, `p99=0.1279y`, `worst=2.2577y`
+- Frame-pattern note:
+  - The large post-disembark Undercity spike (`sim Z≈61.656` vs `rec Z≈55.242`) was not missing geometry.
+  - `GetGroundZ` already returned the correct floor when queried near foot level; the regression came from a higher pre-refinement surface being persisted after the floor had already been corrected.

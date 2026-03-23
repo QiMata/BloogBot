@@ -123,3 +123,15 @@ All P0 tasks completed. No active items.
 - Next task: None (local queue complete). Proceed to next queue file per rule 8.
 - Next command: `Get-Content -Path 'Tests/WoWSimulation/TASKS.md' -TotalCount 360`.
 >>>>>>> cpp_physics_system
+
+## 2026-03-23 Session Note
+- Pass result: `delta shipped`
+- Local delta: transport packet round-trips, transport-local physics input, and passenger world-sync behavior now have focused deterministic coverage.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementPacketHandlerTests|FullyQualifiedName~MovementControllerTests|FullyQualifiedName~ObjectManagerWorldSessionTests" -v n` -> `58 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1277 passed`, `1 skipped`
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Handlers/MovementPacketHandlerTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+- Next command: `Get-Content Tests/WoWSharpClient.Tests/Movement/SplineControllerTests.cs | Select-Object -First 260`

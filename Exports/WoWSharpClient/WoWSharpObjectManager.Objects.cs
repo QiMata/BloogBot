@@ -124,6 +124,33 @@ namespace WoWSharpClient
                 return _objects.OfType<WoWUnit>().FirstOrDefault(u => u.Guid == guid);
         }
 
+        internal void SyncTransportPassengerWorldPositions()
+        {
+            if (Player is WoWUnit playerUnit)
+                SyncTransportPassengerWorldPosition(playerUnit);
+
+            foreach (var unit in Objects.OfType<WoWUnit>().Where(u => Player == null || u.Guid != Player.Guid))
+                SyncTransportPassengerWorldPosition(unit);
+        }
+
+        internal void SyncTransportPassengerWorldPosition(WoWUnit unit)
+        {
+            if (unit.TransportGuid == 0)
+                return;
+
+            if (GetObjectByGuid(unit.TransportGuid) is not WoWGameObject transport)
+                return;
+
+            unit.Transport = transport;
+            unit.Position = TransportCoordinateHelper.LocalToWorld(
+                unit.TransportOffset,
+                transport.Position,
+                transport.Facing);
+            unit.Facing = TransportCoordinateHelper.LocalToWorldFacing(
+                unit.TransportOrientation,
+                transport.Facing);
+        }
+
         /// <summary>
         /// Units that are alive and have a hostile faction reaction (Hated/Hostile/Unfriendly/Neutral).
         /// Matches ForegroundBotRunner ObjectManager.Combat.cs logic.
@@ -213,9 +240,19 @@ namespace WoWSharpClient
                 }
             }
             unit.TransportGuid = data.TransportGuid ?? 0;
-            unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
-            unit.TransportOrientation = data.TransportOrientation ?? 0f;
-            unit.TransportLastUpdated = data.TransportLastUpdated ?? 0;
+            if (unit.TransportGuid == 0)
+            {
+                unit.TransportOffset = new Position(0, 0, 0);
+                unit.TransportOrientation = 0f;
+                unit.TransportLastUpdated = 0;
+            }
+            else
+            {
+                unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
+                unit.TransportOrientation = data.TransportOrientation ?? unit.TransportOrientation;
+                unit.TransportLastUpdated = data.TransportLastUpdated ?? unit.TransportLastUpdated;
+                Instance.SyncTransportPassengerWorldPosition(unit);
+            }
             unit.SwimPitch = data.SwimPitch ?? 0f;
             unit.FallTime = data.FallTime;
             unit.JumpVerticalSpeed = data.JumpVerticalSpeed ?? 0f;
@@ -1457,9 +1494,19 @@ namespace WoWSharpClient
             unit.Position.Z = data.Z;
             unit.Facing = data.Facing;
             unit.TransportGuid = data.TransportGuid ?? 0;
-            unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
-            unit.TransportOrientation = data.TransportOrientation ?? 0f;
-            unit.TransportLastUpdated = data.TransportLastUpdated ?? 0;
+            if (unit.TransportGuid == 0)
+            {
+                unit.TransportOffset = new Position(0, 0, 0);
+                unit.TransportOrientation = 0f;
+                unit.TransportLastUpdated = 0;
+            }
+            else
+            {
+                unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
+                unit.TransportOrientation = data.TransportOrientation ?? unit.TransportOrientation;
+                unit.TransportLastUpdated = data.TransportLastUpdated ?? unit.TransportLastUpdated;
+                Instance.SyncTransportPassengerWorldPosition(unit);
+            }
             unit.SwimPitch = data.SwimPitch ?? 0f;
             unit.FallTime = data.FallTime;
             unit.JumpVerticalSpeed = data.JumpVerticalSpeed ?? 0f;
