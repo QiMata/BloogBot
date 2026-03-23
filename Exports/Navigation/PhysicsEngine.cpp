@@ -517,12 +517,15 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     std::vector<SceneQuery::AABBContact> sweepContacts;
     SceneQuery::SweepAABB(input.mapId, startBoxMin, startBoxMax, displacement, sweepContacts);
 
-    // If swept test found wall contacts, reduce end position
+    // If swept test found true WALL contacts (not steep ground), reduce end position.
+    // WoW.exe only clamps for contacts with significant horizontal normal (actual walls).
     for (const auto& sc : sweepContacts) {
-        if (!sc.walkable && sc.distance < sweepDist) {
-            // Wall hit during sweep — clamp end position to before the wall
+        if (sc.walkable) continue;
+        // Require strong horizontal normal to classify as wall (not steep terrain)
+        float hNormalMag = std::sqrt(sc.normal.x * sc.normal.x + sc.normal.y * sc.normal.y);
+        if (hNormalMag < 0.5f) continue; // Skip steep ground — only walls
+        if (sc.distance > 0 && sc.distance < sweepDist) {
             float wallDist = std::max(0.0f, sc.distance - skin);
-            float scale = wallDist / sweepDist;
             endX = startX + dirN.x * wallDist;
             endY = startY + dirN.y * wallDist;
             endBoxMin = G3D::Vector3(endX - skin, endY - skin, adjustedMinZ);
