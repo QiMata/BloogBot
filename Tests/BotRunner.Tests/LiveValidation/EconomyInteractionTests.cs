@@ -171,11 +171,7 @@ public class EconomyInteractionTests
             var fgSnapAfter = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
             var fgCoinageAfter = fgSnapAfter?.Player?.Coinage ?? 0;
             _output.WriteLine($"  [FG] Coinage after: {fgCoinageAfter} (delta={fgCoinageAfter - fgCoinageBefore})");
-            // FG WoWPlayer.Coinage is a stub (always 0) — skip assertion until implemented
-            if (fgCoinageBefore > 0)
-                Assert.True(fgCoinageAfter > fgCoinageBefore, $"FG coinage should increase after collecting mail (before={fgCoinageBefore}, after={fgCoinageAfter})");
-            else
-                _output.WriteLine($"  [FG] Skipping coinage assertion — FG WoWPlayer.Coinage is stub (always 0)");
+            Assert.True(fgCoinageAfter > fgCoinageBefore, $"FG coinage should increase after collecting mail (before={fgCoinageBefore}, after={fgCoinageAfter})");
         }
     }
 

@@ -283,8 +283,22 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 147)
+- **Last updated:** 2026-03-23 (session 148)
 - **Branch:** `main`
+- **Session 148 — BotRunner FG coinage assertion cleanup shipped:**
+  - `EconomyInteractionTests` and `NpcInteractionTests` no longer carry the stale “FG coinage is a stub” branches; both suites now assert FG coinage movement directly like BG.
+  - `Tests/BotRunner.Tests/TASKS.md` had a committed merge conflict, so it was replaced with a clean current-state tracker before recording this delta.
+  - The deterministic BotRunner snapshot/protobuf slice still passes, so the assertion cleanup did not disturb the serialized movement/snapshot contract.
+- **Test baseline (session 148):**
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`
+    - Passed (`17/17`)
+- **Files changed (session 148):**
+  - `Tests/BotRunner.Tests/LiveValidation/EconomyInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- **Next priorities:** sweep the remaining live-validation suites for obsolete FG/BG divergence assumptions, then finish the final code-only parity sweep before any live validation chunk
 - **Session 147 — FG transport recorder parity slice shipped:**
   - `ForegroundBotRunner` can now resolve the active transport by GUID even when the mover is missing from visible-object enumeration, using the object-manager linked list as a fallback instead of dropping transport state on the floor.
   - `MovementRecorder` now serializes transport-local offset from the player’s main position fields, derives relative transport orientation from the resolved transport pose, reconstructs player world position from that transport pose for distance checks, and explicitly injects the ridden transport into `NearbyGameObjects` when the visible-object pass missed it.

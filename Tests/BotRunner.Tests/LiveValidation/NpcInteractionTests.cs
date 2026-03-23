@@ -96,10 +96,8 @@ public class NpcInteractionTests
                 $"This is a navigation/gossip/interaction bug. LearnLatency={fgMetrics.LearnLatencyMs}ms");
             Assert.True(fgMetrics.SpellCountAfter > fgMetrics.SpellCountBefore,
                 $"FG: spell list should grow. Before={fgMetrics.SpellCountBefore}, after={fgMetrics.SpellCountAfter}");
-            // FG WoWPlayer.Coinage is a stub (always 0) — skip coinage assertion for FG
-            if (fgMetrics.CoinageBefore > 0)
-                Assert.True(fgMetrics.CoinageAfter < fgMetrics.CoinageBefore,
-                    $"FG: trainer should spend copper. Before={fgMetrics.CoinageBefore}, after={fgMetrics.CoinageAfter}");
+            Assert.True(fgMetrics.CoinageAfter < fgMetrics.CoinageBefore,
+                $"FG: trainer should spend copper. Before={fgMetrics.CoinageBefore}, after={fgMetrics.CoinageAfter}");
         }
         else
         {
