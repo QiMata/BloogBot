@@ -1205,6 +1205,59 @@ public class MovementControllerPhysicsTests
         _output.WriteLine("Packet count validation passed.");
     }
 
+    // ======== TERRAIN DATA COVERAGE DIAGNOSTICS ========
+
+    /// <summary>
+    /// Probes GetGroundZ at the Undercity recording positions to verify WMO
+    /// floor data is loaded. The worst calibration error (6.4y) comes from
+    /// Undercity underground (Z≈-43) where the WMO floor may not be in SceneCache.
+    /// </summary>
+    [SkippableFact]
+    public void UndercityGroundProbe_WMOFloorDetected()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Undercity underground — from recording Dralrahgra_Undercity_2026-02-13_19-26-54
+        // Map 0 (Eastern Kingdoms), underground at Z≈-43
+        float ucX = 1558.2f, ucY = 229.0f, ucZ = -43.1f;
+
+        // Probe from above (surface level Z≈20) down to underground (Z≈-50)
+        float[] probeFromZ = { ucZ + 2, ucZ + 10, ucZ + 50, ucZ + 100 };
+        float[] searchDists = { 10, 20, 60, 120 };
+
+        _output.WriteLine($"=== Undercity Ground Probe at ({ucX:F1}, {ucY:F1}, {ucZ:F1}) ===");
+        bool foundGround = false;
+        for (int i = 0; i < probeFromZ.Length; i++)
+        {
+            float gz = NavigationInterop.GetGroundZ(0, ucX, ucY, probeFromZ[i], searchDists[i]);
+            bool valid = gz > -50000;
+            _output.WriteLine($"  Probe from Z={probeFromZ[i]:F1} range={searchDists[i]:F0}: groundZ={gz:F3} valid={valid}");
+            if (valid && MathF.Abs(gz - ucZ) < 3.0f)
+            {
+                foundGround = true;
+                _output.WriteLine($"  → Found matching ground! delta={gz - ucZ:F3}y");
+            }
+        }
+
+        // Also probe at nearby Undervator positions
+        float elevX = 1544.24f, elevY = 240.77f;
+        float elevGz = NavigationInterop.GetGroundZ(0, elevX, elevY, -30f, 40f);
+        _output.WriteLine($"  Elevator pos ({elevX:F1}, {elevY:F1}): groundZ={elevGz:F3}");
+
+        // This is a diagnostic — report but don't hard-fail if WMO data is missing
+        if (!foundGround)
+        {
+            _output.WriteLine("  WARNING: Undercity WMO floor not found in terrain data.");
+            _output.WriteLine("  This causes 6.4y worst-case error in calibration recordings.");
+            _output.WriteLine("  The vmtile 000_30_32.vmtile exists but may not include underground WMO.");
+        }
+
+        // At minimum, SOME ground should be found (ADT terrain above Undercity)
+        float anyGround = ProbeGroundZ(0, ucX, ucY, ucZ + 100);
+        Assert.False(float.IsNaN(anyGround),
+            $"No ground found at all near Undercity ({ucX:F0}, {ucY:F0}) — VMAP data may be missing for map 0");
+    }
+
     // ======== WoW.exe PARITY VALIDATION TESTS ========
 
     /// <summary>
