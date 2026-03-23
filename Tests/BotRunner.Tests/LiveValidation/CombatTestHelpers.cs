@@ -147,7 +147,8 @@ internal static class CombatTestHelpers
         string combatAccount, string observerAccount)
     {
         // Leave any group/raid from previous tests (RFC raid leaves FG in group)
-        await bot.SendGmChatCommandAsync(observerAccount, ".group disband");
+        // VMaNGOS uses .group remove, not .group disband
+        await bot.SendGmChatCommandAsync(observerAccount, ".group remove");
         await bot.SendGmChatCommandAsync(observerAccount, ".gm on");
 
         // Teleport FG observer near the mob area. BotTeleportAsync uses .go xyz

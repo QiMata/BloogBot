@@ -2561,10 +2561,11 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
         }
     }
 
-	// Rescue occasional false-airborne outcomes: if input was not airborne and
-	// we are very close to a support surface, clamp back to grounded.
-	// This keeps single-frame state flips from introducing large replay deltas.
-	if (!st.isGrounded && !isSwimming && !inputAirborneFlag) {
+	// False-airborne rescue: only for REPLAY calibration mode.
+	// Live mode uses AABB CollisionStepWoW which doesn't have false-airborne issues.
+	// Replay mode needs this because recordings were captured with the real WoW.exe
+	// client which has different ground detection geometry.
+	if (!st.isGrounded && !isSwimming && !inputAirborneFlag && trustGroundedReplayInput) {
 		const float probeR = std::max(0.05f, r);
 		const float diagR = probeR * 0.707f;
 		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
