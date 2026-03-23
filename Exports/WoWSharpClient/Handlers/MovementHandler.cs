@@ -191,6 +191,22 @@ namespace WoWSharpClient.Handlers
                                 ParseKnockBackPacket(reader)
                             );
                             break;
+                        case Opcode.SMSG_MONSTER_MOVE:
+                        {
+                            ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
+                            var moveData = ParseMonsterMove(reader);
+                            QueueMonsterMoveUpdate(moverGuid, moveData);
+                            break;
+                        }
+                        case Opcode.SMSG_MONSTER_MOVE_TRANSPORT:
+                        {
+                            ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
+                            ulong transportGuid = ReaderUtils.ReadPackedGuid(reader);
+                            var moveData = ParseMonsterMove(reader);
+                            ApplyTransportMoveState(moveData, transportGuid);
+                            QueueMonsterMoveUpdate(moverGuid, moveData);
+                            break;
+                        }
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
                         {
                             ulong splineRunGuid = ReaderUtils.ReadPackedGuid(reader);
@@ -416,28 +432,13 @@ namespace WoWSharpClient.Handlers
             {
                 case Opcode.SMSG_MONSTER_MOVE:
                     var moveData = ParseMonsterMove(reader);
-                    WoWSharpObjectManager.Instance.QueueUpdate(
-                        new WoWSharpObjectManager.ObjectStateUpdate(
-                            guid,
-                            WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                            WoWObjectType.Unit,
-                            moveData,
-                            []
-                        )
-                    );
+                    QueueMonsterMoveUpdate(guid, moveData);
                     break;
                 case Opcode.SMSG_MONSTER_MOVE_TRANSPORT:
-                    ulong transportGuid = ReaderUtils.ReadPackedGuid(reader); // skip transport guid
+                    ulong transportGuid = ReaderUtils.ReadPackedGuid(reader);
                     moveData = ParseMonsterMove(reader);
-                    WoWSharpObjectManager.Instance.QueueUpdate(
-                        new WoWSharpObjectManager.ObjectStateUpdate(
-                            guid,
-                            WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                            WoWObjectType.Unit,
-                            moveData,
-                            []
-                        )
-                    );
+                    ApplyTransportMoveState(moveData, transportGuid);
+                    QueueMonsterMoveUpdate(guid, moveData);
                     break;
                 case Opcode.SMSG_SPLINE_SET_RUN_SPEED:
                     ulong tarGuid = ReaderUtils.ReadPackedGuid(reader);
@@ -514,6 +515,25 @@ namespace WoWSharpClient.Handlers
         {
             int shift = 32 - bits;
             return (int)(value << shift) >> shift;
+        }
+
+        private static void QueueMonsterMoveUpdate(ulong moverGuid, MovementInfoUpdate moveData)
+        {
+            WoWSharpObjectManager.Instance.QueueUpdate(
+                new WoWSharpObjectManager.ObjectStateUpdate(
+                    moverGuid,
+                    WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                    WoWObjectType.Unit,
+                    moveData,
+                    []
+                )
+            );
+        }
+
+        private static void ApplyTransportMoveState(MovementInfoUpdate moveData, ulong transportGuid)
+        {
+            moveData.TransportGuid = transportGuid;
+            moveData.TransportOffset = new Position(moveData.X, moveData.Y, moveData.Z);
         }
     }
 }

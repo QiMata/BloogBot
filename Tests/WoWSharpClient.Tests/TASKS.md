@@ -14,16 +14,15 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added monster-move parser coverage proving spline start time is preserved from `SMSG_MONSTER_MOVE`.
-  - Added deterministic spline runtime coverage for mid-spline activation from server time, exact cyclic boundary timing, and `SplineType` facing resolution.
-  - Extended clone regression coverage so `MovementBlockUpdate.Clone()` now protects the new spline start-time field too.
+  - Added direct `SMSG_MONSTER_MOVE` runtime coverage proving remote units activate managed splines and advance in world space without the network pipeline in the loop.
+  - Added direct `SMSG_MONSTER_MOVE_TRANSPORT` runtime coverage proving transport-local offsets advance along the spline and resync to correct world coordinates/facing.
+  - Fixed the deterministic update-drain helper so movement-only updates are observed reliably instead of being lost behind object-count-only heuristics.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests|FullyQualifiedName~SplineFacingTests|FullyQualifiedName~MovementBlockUpdateCloneBugTests" -v n` -> `33 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1294 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~DirectMonsterMove" -v n` -> `2 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1296 passed`, `1 skipped`
 - Files changed:
-  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementBlockUpdateCloneBugTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Util/UpdateProcessingHelper.cs`
 - Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs | Select-Object -First 260`
+  - `Get-Content Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs | Select-Object -Skip 160 -First 140`

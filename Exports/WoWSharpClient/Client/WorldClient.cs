@@ -277,6 +277,7 @@ namespace WoWSharpClient.Client
 
             // Movement packets
             BridgeToLegacy(Opcode.SMSG_MONSTER_MOVE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MONSTER_MOVE_TRANSPORT, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_COMPRESSED_MOVES, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_MOVE_FEATHER_FALL, Handlers.MovementHandler.HandleUpdateMovement);
             BridgeToLegacy(Opcode.SMSG_MOVE_KNOCK_BACK, Handlers.MovementHandler.HandleUpdateMovement);

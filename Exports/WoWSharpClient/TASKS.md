@@ -15,22 +15,22 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `SMSG_MONSTER_MOVE` parsing now carries the server spline start time through to managed runtime state instead of throwing it away.
-  - `SplineController` now seeds new active splines from server start time, preserves the last point at the exact cyclic boundary, and resolves runtime facing from `SplineType`.
-  - New deterministic coverage proves monster-move parsing, mid-spline activation, cyclic boundary timing, and facing resolution without live-only instrumentation.
+  - Direct `SMSG_MONSTER_MOVE` and `SMSG_MONSTER_MOVE_TRANSPORT` now route through the managed movement handler, dispatcher, and legacy world-client bridge instead of falling through as unhandled packets.
+  - Transport movers now advance splines in transport-local space, then resync world position/facing from the owning transport after each spline step.
+  - `WoWSharpObjectManager` now guarantees a valid world-time tracker before runtime spline activation, which fixes direct monster-move processing before the normal game loop/login-verify path spins up.
+  - Test queue draining now waits for pending movement-only updates instead of assuming object-count stability means processing is complete.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests|FullyQualifiedName~SplineFacingTests|FullyQualifiedName~MovementBlockUpdateCloneBugTests" -v n` -> `33 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementBlockUpdate|FullyQualifiedName~MovementInfoUpdate" -v n` -> `27 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1294 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~DirectMonsterMove" -v n` -> `2 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1296 passed`, `1 skipped`
 - Files changed:
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
   - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
-  - `Exports/WoWSharpClient/Models/MovementBlockUpdate.cs`
   - `Exports/WoWSharpClient/Movement/SplineController.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
   - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
-  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementBlockUpdateCloneBugTests.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Util/UpdateProcessingHelper.cs`
 - Next command:
-  - `Get-Content Exports/WoWSharpClient/Handlers/MovementHandler.cs | Select-Object -Skip 140 -First 180`
+  - `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`

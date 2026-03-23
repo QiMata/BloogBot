@@ -102,6 +102,9 @@ namespace WoWSharpClient
             _logger = logger;
             _pathfindingClient = pathfindingClient;
             _woWClient = wowClient;
+            _worldTimeTracker = new WorldTimeTracker();
+            _lastPositionUpdate = _worldTimeTracker.NowMS;
+            _physicsTimeAccumulator = 0f;
 
             WoWSharpEventEmitter.Instance.OnLoginFailure += EventEmitter_OnLoginFailure;
             WoWSharpEventEmitter.Instance.OnLoginVerifyWorld += EventEmitter_OnLoginVerifyWorld;

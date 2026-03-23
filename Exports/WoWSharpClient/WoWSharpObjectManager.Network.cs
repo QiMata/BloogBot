@@ -174,6 +174,8 @@ namespace WoWSharpClient
             _pendingUpdates.Enqueue(update);
         }
 
+        internal int PendingUpdateCount => _pendingUpdates.Count;
+
 
         public async Task ProcessUpdatesAsync(CancellationToken token)
         {
@@ -627,19 +629,21 @@ namespace WoWSharpClient
                 new(moveData.X, moveData.Y, moveData.Z)
             };
             points.AddRange(block.SplinePoints);
+            var worldTimeTracker = _worldTimeTracker ??= new WorldTimeTracker();
+            uint currentWorldTimeMs = (uint)worldTimeTracker.NowMS.TotalMilliseconds;
 
             var spline = new Spline(
                 owner: guid,
                 id: block.SplineId ?? 0,
                 t0: block.SplineStartTime != 0
                     ? block.SplineStartTime
-                    : (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                    : currentWorldTimeMs,
                 flags: block.SplineFlags ?? SplineFlags.None,
                 pts: points,
                 durationMs: block.SplineTimestamp
             );
 
-            Splines.Instance.AddOrUpdate(spline, (uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+            Splines.Instance.AddOrUpdate(spline, currentWorldTimeMs);
 
             // For local player: suppress physics while server controls movement
             if (isLocalPlayer)

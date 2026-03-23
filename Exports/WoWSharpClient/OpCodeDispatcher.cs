@@ -33,6 +33,8 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_COMPRESSED_UPDATE_OBJECT] = ObjectUpdateHandler.HandleUpdateObject;
 
             _handlers[Opcode.SMSG_COMPRESSED_MOVES] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.SMSG_MONSTER_MOVE] = MovementHandler.HandleUpdateMovement;
+            _handlers[Opcode.SMSG_MONSTER_MOVE_TRANSPORT] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_MOVE_FEATHER_FALL] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_MOVE_KNOCK_BACK] = MovementHandler.HandleUpdateMovement;
             _handlers[Opcode.SMSG_MOVE_LAND_WALK] = MovementHandler.HandleUpdateMovement;

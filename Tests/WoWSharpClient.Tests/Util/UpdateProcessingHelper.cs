@@ -14,9 +14,9 @@ namespace WoWSharpClient.Tests.Util
     internal static class UpdateProcessingHelper
     {
         /// <summary>
-        /// Kicks off ProcessUpdatesAsync and polls until the Objects collection
-        /// stabilizes (no new objects added for two consecutive check intervals),
-        /// indicating all pending updates have been drained.
+        /// Kicks off ProcessUpdatesAsync and polls until both the pending update queue
+        /// and object count remain stable for multiple intervals. This avoids cutting
+        /// off movement-only updates, which do not change object count.
         /// </summary>
         /// <param name="maxWaitMs">Maximum time to wait before giving up (default 5000ms).</param>
         /// <param name="stabilityIntervalMs">How long the count must remain stable to consider processing complete (default 50ms).</param>
@@ -27,16 +27,18 @@ namespace WoWSharpClient.Tests.Util
 
             var deadline = DateTime.UtcNow.AddMilliseconds(maxWaitMs);
             int lastCount = WoWSharpObjectManager.Instance.Objects.Count();
+            int lastPendingCount = WoWSharpObjectManager.Instance.PendingUpdateCount;
             int stableChecks = 0;
             const int requiredStableChecks = 3;
 
-            // Poll until object count stabilizes or timeout
+            // Poll until both object count and pending queue stabilize or timeout.
             while (DateTime.UtcNow < deadline)
             {
                 Thread.Sleep(stabilityIntervalMs);
 
                 int currentCount = WoWSharpObjectManager.Instance.Objects.Count();
-                if (currentCount == lastCount)
+                int currentPendingCount = WoWSharpObjectManager.Instance.PendingUpdateCount;
+                if (currentCount == lastCount && currentPendingCount == 0 && lastPendingCount == 0)
                 {
                     stableChecks++;
                     if (stableChecks >= requiredStableChecks)
@@ -46,6 +48,7 @@ namespace WoWSharpClient.Tests.Util
                 {
                     stableChecks = 0;
                     lastCount = currentCount;
+                    lastPendingCount = currentPendingCount;
                 }
             }
 

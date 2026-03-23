@@ -222,10 +222,23 @@ namespace WoWSharpClient.Movement
 
                 if (woWUnit != null)
                 {
-                    var previousPosition = new Position(woWUnit.Position.X, woWUnit.Position.Y, woWUnit.Position.Z);
-                    var nextPosition = active.Step(dtMs);
-                    woWUnit.Position = nextPosition;
-                    woWUnit.Facing = ResolveFacing(woWUnit, previousPosition, nextPosition);
+                    var previousSplinePosition = woWUnit.TransportGuid != 0
+                        ? new Position(woWUnit.TransportOffset.X, woWUnit.TransportOffset.Y, woWUnit.TransportOffset.Z)
+                        : new Position(woWUnit.Position.X, woWUnit.Position.Y, woWUnit.Position.Z);
+                    var nextSplinePosition = active.Step(dtMs);
+                    var nextFacing = ResolveFacing(woWUnit, previousSplinePosition, nextSplinePosition);
+
+                    if (woWUnit.TransportGuid != 0)
+                    {
+                        woWUnit.TransportOffset = nextSplinePosition;
+                        woWUnit.TransportOrientation = nextFacing;
+                        WoWSharpObjectManager.Instance.SyncTransportPassengerWorldPosition(woWUnit);
+                    }
+                    else
+                    {
+                        woWUnit.Position = nextSplinePosition;
+                        woWUnit.Facing = nextFacing;
+                    }
                 }
                 else
                     _active.Remove(guid); // object vanished

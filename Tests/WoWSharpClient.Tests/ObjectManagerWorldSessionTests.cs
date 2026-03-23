@@ -14,6 +14,7 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
+using WoWSharpClient.Movement;
 using WoWSharpClient.Tests.Handlers;
 using WoWSharpClient.Tests.Util;
 using WoWSharpClient.Utils;
@@ -152,6 +153,127 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(241f, objectManager.Player.Position.Y, 3);
         Assert.Equal(63f, objectManager.Player.Position.Z, 3);
         Assert.Equal(MathF.PI + (2.0f - MathF.PI / 2f), objectManager.Player.Facing, 3);
+    }
+
+    [Fact]
+    public void DirectMonsterMove_ActivatesSplineAndMovesUnit()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x201;
+        const ulong remoteGuid = 0xF130000000000777ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        uint startTime = unchecked((uint)Environment.TickCount64 + 2000u);
+        MovementHandler.HandleUpdateMovement(
+            Opcode.SMSG_MONSTER_MOVE,
+            BuildMonsterMovePayload(
+                remoteGuid,
+                new Position(0f, 0f, 0f),
+                startTime,
+                durationMs: 1000u,
+                points: [new Position(10f, 0f, 0f)]));
+        UpdateProcessingHelper.DrainPendingUpdates();
+        WaitForCondition(() => Splines.Instance.HasActiveSpline(remoteGuid));
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+        Assert.Equal(startTime, unit.LastUpdated);
+        Assert.True(Splines.Instance.HasActiveSpline(remoteGuid));
+
+        Splines.Instance.Update(500f);
+
+        Assert.Equal(5f, unit.Position.X, 2);
+        Assert.Equal(0f, unit.Position.Y, 2);
+        Assert.Equal(0f, unit.Position.Z, 2);
+        Assert.Equal(0f, unit.Facing, 2);
+
+        Splines.Instance.Remove(remoteGuid);
+    }
+
+    [Fact]
+    public void DirectMonsterMoveTransport_StepsLocalOffsetAndSyncsWorldPosition()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x202;
+        const ulong remoteGuid = 0xF130000000000778ul;
+        const ulong transportGuid = 0xF120000000000456ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            transportGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.GameObj,
+            new MovementInfoUpdate
+            {
+                Guid = transportGuid,
+                X = 100f,
+                Y = 200f,
+                Z = 50f,
+                Facing = MathF.PI / 2f,
+            },
+            new Dictionary<uint, object?>()));
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var transport = Assert.IsType<WoWGameObject>(objectManager.GetObjectByGuid(transportGuid));
+        transport.Position = new Position(100f, 200f, 50f);
+        transport.Facing = MathF.PI / 2f;
+
+        uint startTime = unchecked((uint)Environment.TickCount64 + 2000u);
+        MovementHandler.HandleUpdateMovement(
+            Opcode.SMSG_MONSTER_MOVE_TRANSPORT,
+            BuildMonsterMoveTransportPayload(
+                remoteGuid,
+                transportGuid,
+                new Position(2f, -1f, 3f),
+                startTime,
+                durationMs: 1000u,
+                points: [new Position(4f, -1f, 3f)]));
+        UpdateProcessingHelper.DrainPendingUpdates();
+        WaitForCondition(() =>
+        {
+            var movedUnit = objectManager.GetObjectByGuid(remoteGuid) as WoWUnit;
+            return movedUnit?.TransportGuid == transportGuid && Splines.Instance.HasActiveSpline(remoteGuid);
+        });
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+        Assert.Equal(transportGuid, unit.TransportGuid);
+        Assert.Equal(2f, unit.TransportOffset.X, 2);
+        Assert.Equal(-1f, unit.TransportOffset.Y, 2);
+        Assert.Equal(3f, unit.TransportOffset.Z, 2);
+        Assert.Equal(101f, unit.Position.X, 2);
+        Assert.Equal(202f, unit.Position.Y, 2);
+        Assert.Equal(53f, unit.Position.Z, 2);
+
+        Splines.Instance.Update(500f);
+
+        Assert.Equal(3f, unit.TransportOffset.X, 2);
+        Assert.Equal(-1f, unit.TransportOffset.Y, 2);
+        Assert.Equal(3f, unit.TransportOffset.Z, 2);
+        Assert.Equal(101f, unit.Position.X, 2);
+        Assert.Equal(203f, unit.Position.Y, 2);
+        Assert.Equal(53f, unit.Position.Z, 2);
+        Assert.Equal(0f, unit.TransportOrientation, 2);
+        Assert.Equal(MathF.PI / 2f, unit.Facing, 2);
+
+        Splines.Instance.Remove(remoteGuid);
     }
 
     [Fact]
@@ -403,6 +525,58 @@ public class ObjectManagerWorldSessionTests
         return ms.ToArray();
     }
 
+    private static byte[] BuildMonsterMovePayload(
+        ulong guid,
+        Position start,
+        uint startTime,
+        uint durationMs,
+        IReadOnlyList<Position> points)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        WriteMonsterMoveBody(writer, start, startTime, durationMs, points);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildMonsterMoveTransportPayload(
+        ulong guid,
+        ulong transportGuid,
+        Position localStart,
+        uint startTime,
+        uint durationMs,
+        IReadOnlyList<Position> points)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        ReaderUtils.WritePackedGuid(writer, transportGuid);
+        WriteMonsterMoveBody(writer, localStart, startTime, durationMs, points);
+        return ms.ToArray();
+    }
+
+    private static void WriteMonsterMoveBody(
+        BinaryWriter writer,
+        Position start,
+        uint startTime,
+        uint durationMs,
+        IReadOnlyList<Position> points)
+    {
+        Assert.NotEmpty(points);
+
+        writer.Write(start.X);
+        writer.Write(start.Y);
+        writer.Write(start.Z);
+        writer.Write(startTime);
+        writer.Write((byte)SplineType.Normal);
+        writer.Write((uint)SplineFlags.Runmode);
+        writer.Write(durationMs);
+        writer.Write((uint)points.Count);
+        writer.Write(points[0].X);
+        writer.Write(points[0].Y);
+        writer.Write(points[0].Z);
+    }
+
     private static void SubscribeForceChange(Opcode opcode, EventHandler<RequiresAcknowledgementArgs> handler)
     {
         switch (opcode)
@@ -450,5 +624,19 @@ public class ObjectManagerWorldSessionTests
         }
         Assert.NotNull(field);
         field!.SetValue(target, value);
+    }
+
+    private static void WaitForCondition(Func<bool> predicate, int timeoutMs = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+                return;
+
+            Thread.Sleep(10);
+        }
+
+        Assert.True(predicate());
     }
 }

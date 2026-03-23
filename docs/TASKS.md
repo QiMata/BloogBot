@@ -329,6 +329,29 @@ if (transportGuid != 0) {
 - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
 - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (knockback/extrapolation validation, spline audit, broader movement opcode completeness, FG hardening)
+- **Session 136 — direct monster-move runtime parity slice shipped:**
+  - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route direct `SMSG_MONSTER_MOVE` and `SMSG_MONSTER_MOVE_TRANSPORT` packets through the same managed state-update path as compressed monster moves.
+  - Transport spline playback now advances in transport-local coordinates and resyncs passenger world position/facing from the owning transport after each managed spline step.
+  - `WoWSharpObjectManager` now guarantees a valid monotonic world clock before runtime spline activation, fixing direct monster-move processing before the normal game loop/login-verify path is running.
+  - `UpdateProcessingHelper` now waits for pending movement-only updates instead of treating object-count stability as sufficient drain evidence.
+  - Added deterministic runtime tests covering direct world-space monster moves and direct transport-local monster moves end to end.
+- **Test baseline (session 136):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~DirectMonsterMove" -v n`
+    - Passed (`2/2`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1296/1297`, `1 skipped`)
+- **Files changed (session 136):**
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/Movement/SplineController.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Util/UpdateProcessingHelper.cs`
+- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then continue the remaining opcode/spline audit work and the FG hardening sweep
 - **Session 135 — managed spline runtime parity slice shipped:**
   - `SMSG_MONSTER_MOVE` parsing now preserves the monster-move server start time on the movement update instead of discarding it into an overloaded local field.
   - `SplineController` now seeds new splines from server start time so remote movement starts at the correct in-flight point when packets arrive late.
