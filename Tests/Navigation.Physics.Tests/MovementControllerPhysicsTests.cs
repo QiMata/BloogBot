@@ -1068,6 +1068,86 @@ public class MovementControllerPhysicsTests
     }
 
     /// <summary>
+    /// Simulates the combat approach: walk forward, stop, face target, verify
+    /// the player's position and facing are correct for melee attack.
+    /// This tests the exact flow that fails in live combat tests.
+    /// </summary>
+    [SkippableFact]
+    public void CombatApproach_StopAndFace_PositionAndFacingCorrect()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start at mob area, face toward a mob position
+        float mobX = -260f, mobY = -4385f, mobZ = 62f;
+        var (controller, player, mockClient) = CreateController(-284f, -4383f, 57f, facing: 0f);
+
+        // Phase 1: Walk toward mob for 3 seconds
+        float targetFacing = MathF.Atan2(mobY - player.Position.Y, mobX - player.Position.X);
+        if (targetFacing < 0) targetFacing += 2 * MathF.PI;
+        player.Facing = targetFacing;
+
+        var approachFrames = RunFramesWithTrace(controller, player, 60, 0.05f,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+
+        float approachEndX = player.Position.X;
+        float approachEndY = player.Position.Y;
+        float approachEndZ = player.Position.Z;
+        float distToMob = MathF.Sqrt(
+            (mobX - approachEndX) * (mobX - approachEndX) +
+            (mobY - approachEndY) * (mobY - approachEndY));
+
+        _output.WriteLine($"After approach: pos=({approachEndX:F1},{approachEndY:F1},{approachEndZ:F1}) dist={distToMob:F1}y");
+
+        // Phase 2: Stop movement (simulate StopAllMovement)
+        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+        controller.Update(0.05f, 4000); // One frame with no movement
+
+        float stoppedX = player.Position.X;
+        float stoppedY = player.Position.Y;
+        float stoppedZ = player.Position.Z;
+        _output.WriteLine($"After stop: pos=({stoppedX:F1},{stoppedY:F1},{stoppedZ:F1})");
+
+        // Phase 3: Face the mob
+        float combatFacing = MathF.Atan2(mobY - stoppedY, mobX - stoppedX);
+        if (combatFacing < 0) combatFacing += 2 * MathF.PI;
+        player.Facing = combatFacing;
+        controller.SendFacingUpdate(4050);
+
+        // Verify: position should be at the stopped location (not reset)
+        Assert.True(MathF.Abs(player.Position.X - stoppedX) < 0.1f,
+            $"Position X shifted after facing: {player.Position.X:F3} vs stopped {stoppedX:F3}");
+        Assert.True(MathF.Abs(player.Position.Y - stoppedY) < 0.1f,
+            $"Position Y shifted after facing: {player.Position.Y:F3} vs stopped {stoppedY:F3}");
+
+        // Verify: facing should point toward mob
+        float expectedFacing = MathF.Atan2(mobY - stoppedY, mobX - stoppedX);
+        if (expectedFacing < 0) expectedFacing += 2 * MathF.PI;
+        float facingDelta = MathF.Abs(player.Facing - expectedFacing);
+        if (facingDelta > MathF.PI) facingDelta = 2 * MathF.PI - facingDelta;
+        _output.WriteLine($"Facing: player={player.Facing:F3} expected={expectedFacing:F3} delta={facingDelta:F3} rad");
+        Assert.True(facingDelta < 0.1f,
+            $"Facing not toward mob: delta={facingDelta:F3} rad (max 0.1)");
+
+        // Verify: Z should be on terrain surface (not underground)
+        float groundZ = ProbeGroundZ(MapId, stoppedX, stoppedY, stoppedZ);
+        if (!float.IsNaN(groundZ))
+        {
+            float zGap = MathF.Abs(stoppedZ - groundZ);
+            _output.WriteLine($"Z gap from ground: {zGap:F3}y (ground={groundZ:F3})");
+            Assert.True(zGap < 3.0f,
+                $"Bot is {zGap:F1}y from ground surface — underground or floating");
+        }
+
+        // Verify: a MSG_MOVE_SET_FACING packet was sent
+        mockClient.Verify(c => c.SendMovementOpcodeAsync(
+            Opcode.MSG_MOVE_SET_FACING,
+            It.IsAny<byte[]>(),
+            It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce(),
+            "MSG_MOVE_SET_FACING should have been sent when facing the mob");
+    }
+
+    /// <summary>
     /// Validates that movement packets are sent at ~500ms intervals with correct position deltas.
     /// </summary>
     [Fact]

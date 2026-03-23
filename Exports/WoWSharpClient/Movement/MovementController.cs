@@ -727,10 +727,24 @@ namespace WoWSharpClient.Movement
         // ======== SPECIAL PACKETS ========
         public void SendFacingUpdate(uint gameTimeMs)
         {
-            // Called by bot when it changes facing directly
+            // WoW.exe sends MSG_MOVE_HEARTBEAT before SET_FACING to sync position.
+            // Without this, the server's position for the player may be stale (from
+            // the last heartbeat), causing the server to compute facing from a
+            // different position than the bot — leading to BADFACING rejections.
+            if (_lastSentFlags != MovementFlags.MOVEFLAG_NONE || _player.MovementFlags != _lastSentFlags)
+            {
+                // Send stop + position sync first
+                var stopBuffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
+                _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, stopBuffer);
+                _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
+                _lastPacketTime = gameTimeMs;
+            }
+
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
             _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer);
-            Log.Debug("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2}", _player.Facing);
+            _lastPacketTime = gameTimeMs;
+            Log.Information("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2} Pos=({X:F1},{Y:F1},{Z:F1})",
+                _player.Facing, _player.Position.X, _player.Position.Y, _player.Position.Z);
         }
 
         public void SendStopPacket(uint gameTimeMs)
