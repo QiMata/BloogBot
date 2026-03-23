@@ -283,8 +283,25 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 145)
+- **Last updated:** 2026-03-23 (session 146)
 - **Branch:** `main`
+- **Session 146 — FG coinage/local snapshot parity slice shipped:**
+  - `ForegroundBotRunner` no longer hardcodes player money to `0`: `WoWPlayer.Coinage` now reads `PLAYER_FIELD_COINAGE` from descriptor memory, which restores FG snapshot parity for vendor/mail/trainer flows that rely on copper totals.
+  - `LocalPlayer.Copper`, `InBattleground`, and `HasQuestTargets` now match the BG model’s behavior instead of staying pinned to trivial stub values.
+  - Added memory-backed FG unit tests that build a fake object/descriptor pair in-process and verify the injected object model reads coinage and quest-log state correctly without requiring a live client.
+- **Test baseline (session 146):**
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundPlayerSnapshotParityTests" --logger "console;verbosity=minimal"`
+    - Passed (`10/10`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`64/64`)
+- **Files changed (session 146):**
+  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
+  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPlayerSnapshotParityTests.cs`
+- **Next priorities:** `7.9` additional transport replay data, clearing the remaining stale FG coinage skip logic in live-validation tests before the final big integration pass, and a final movement/packet parity sweep for anything still only decompiled but not binary-backed
 - **Session 145 — recorded remote-unit extrapolation proof shipped:**
   - `WoWUnitExtrapolationTests` now includes replay-backed fixtures from real nearby-unit trajectories instead of only synthetic movement vectors.
   - Added a slow-walk Undercity fixture that proves the WoW.exe `<3y/s` jitter filter returns the raw server position even when the recorded NPC keeps moving for another half-second, so low-speed drift suppression is now backed by capture data.
@@ -297,7 +314,6 @@ if (transportGuid != 0) {
 - **Files changed (session 145):**
   - `Exports/WoWSharpClient/TASKS.md`
   - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
-- **Next priorities:** `7.9` additional transport replay data and a final movement/packet parity sweep for anything still only decompiled but not binary-backed
 - **Session 144 — FG spell snapshot parity slice shipped:**
   - `ForegroundBotRunner` now reconciles spell knowledge from two sources instead of letting the next refresh overwrite event-driven gains: the main-thread `LEARNED_SPELL` / `UNLEARNED_SPELL` hook path updates sticky learned/removed IDs immediately, while `RefreshSpells()` publishes `stable IDs + sticky learns - sticky removals`.
   - The immediate event path now handles unlearns as first-class deltas, updates the thread-safe `KnownSpellIds` snapshot right away, and keeps `LocalPlayer.RawSpellBookIds` in sync when the player object is live.

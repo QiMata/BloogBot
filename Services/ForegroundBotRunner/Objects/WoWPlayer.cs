@@ -203,7 +203,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint RestStateExperience => 0;
 
-        public uint Coinage => 0;
+        public uint Coinage => ReadUIntDescriptorField(UpdateFields.EPlayerFields.PLAYER_FIELD_COINAGE);
 
         public uint[] StatBonusesPos => Array.Empty<uint>();
 
@@ -264,6 +264,15 @@ namespace ForegroundBotRunner.Objects
                 (byte)((packed >> 16) & 0xFF),
                 (byte)((packed >> 24) & 0xFF)
             ];
+        }
+
+        internal uint ReadUIntDescriptorField(UpdateFields.EPlayerFields field)
+        {
+            var descriptorPtr = GetDescriptorPtr();
+            if (descriptorPtr == nint.Zero)
+                return 0;
+
+            return MemoryManager.ReadUint(descriptorPtr + (int)field * 4);
         }
     }
 }

@@ -13,6 +13,10 @@ namespace ForegroundBotRunner.Objects
 {
     public class LocalPlayer : WoWPlayer, IWoWLocalPlayer
     {
+        internal static readonly HashSet<uint> BattlegroundMapIds = [30u, 489u, 529u, 566u];
+
+        internal static bool IsBattlegroundMapId(uint mapId) => BattlegroundMapIds.Contains(mapId);
+
         internal LocalPlayer(nint pointer, HighGuid guid, WoWObjectType objectType)
             : base(pointer, guid, objectType) { }
 
@@ -206,7 +210,7 @@ namespace ForegroundBotRunner.Objects
 
         public bool TastyCorpsesNearby => false;
 
-        public uint Copper => 0;
+        public uint Copper => Coinage;
 
         // Track auto-attack state to avoid spamming CastSpellByName('Attack') every tick.
         // Set true when StartMeleeAttack() fires the Lua, cleared on StopAllMovement/target death.
@@ -250,7 +254,8 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public bool InBattleground => false;
-        public bool HasQuestTargets => false;
+        public bool InBattleground => IsBattlegroundMapId(MapId);
+
+        public bool HasQuestTargets => QuestLog.Any(slot => slot.QuestId != 0);
     }
 }
