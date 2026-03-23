@@ -283,8 +283,32 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 140)
+- **Last updated:** 2026-03-23 (session 141)
 - **Branch:** `main`
+- **Session 141 — deterministic knockback/extrapolation parity hardening shipped:**
+  - `Navigation.Physics.Tests` now includes a direct knockback-arc parity test that validates `FALLINGFAR` airborne motion against WoW gravity and end-of-frame vertical velocity, covering the same native path used after `SMSG_MOVE_KNOCK_BACK` seeds BG physics.
+  - The test-side movement-bit map in `NavigationInterop` was corrected to match `PhysicsBridge.h`; the previous enum had `FallingFar` and `Flying` swapped plus `OnTransport` on the wrong bit, which could silently invalidate airborne/transport assertions without touching runtime code.
+  - Flat-ground frame-by-frame validation now uses the same Crossroads open-plains fixture already used by the movement-speed suite, replacing an Orgrimmar Valley of Strength line that is no longer an unobstructed 1-second walk corridor in current map data.
+  - `WoWSharpClient.Tests` now pins the remaining implemented extrapolation guardrails: sub-jitter movement, teleport-speed outliers, and stale updates all prove `WoWUnit.GetExtrapolatedPosition(...)` returns the current position instead of manufacturing drift.
+  - The remaining extrapolation gap is still a data gap, not a managed-code gap: the repository does not yet contain a recorded directional remote-unit packet fixture suitable for replay-accuracy assertions against observed NPC motion.
+- **Test baseline (session 141):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests|FullyQualifiedName~MovementControllerPhysics" -v n`
+    - Passed (`42/42`)
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WoWUnitExtrapolationTests" -v n`
+    - Passed (`6/6`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1349/1350`, `1 skipped`)
+- **Files changed (session 141):**
+  - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
+- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, a recorded directional remote-unit extrapolation fixture, then the remaining FG hardening and binary-audit sweep
 - **Session 140 — observer swim/pitch opcode parity slice shipped:**
   - BG now handles the last non-cheat observer movement rebroadcasts still missing from the Vanilla 1.12.1 dispatch sweep: `MSG_MOVE_START_SWIM`, `MSG_MOVE_STOP_SWIM`, `MSG_MOVE_START_PITCH_UP`, `MSG_MOVE_START_PITCH_DOWN`, `MSG_MOVE_STOP_PITCH`, and `MSG_MOVE_SET_PITCH`.
   - `MovementHandler`, `OpCodeDispatcher`, and `WorldClient` now route those packets through the same parse-and-apply path as the rest of the observer movement matrix, so remote units keep `MOVEFLAG_SWIMMING` and `SwimPitch` in sync instead of silently dropping those updates.

@@ -7,10 +7,26 @@
 
 ## Active Priorities
 1. Add recorded directional remote-unit packet fixtures so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
-2. Add focused knockback trajectory coverage against parsed movement impulses.
+2. Keep remote extrapolation work focused on fixture-backed parity gaps; deterministic math thresholds and basis handling are already covered here.
 3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
 
 ## Session Handoff
+- Last updated: `2026-03-23`
+- Pass result: `delta shipped`
+- Last delta:
+  - Added deterministic extrapolation guardrail coverage for the WoW.exe-backed thresholds already implemented in `WoWUnit.GetExtrapolatedPosition(...)`: sub-jitter speed, teleport-speed outliers, and stale updates now all prove the method returns the current position instead of inventing drift.
+  - The remaining extrapolation gap is still fixture quality, not managed math: the repo does not yet contain a recorded directional remote-unit packet stream suitable for measured replay-accuracy assertions.
+  - Existing full-suite coverage still holds after the new threshold tests.
+- Validation/tests run:
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WoWUnitExtrapolationTests" -v n` -> `6 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1349 passed`, `1 skipped`
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
+- Next command:
+  - `rg -n "OrgrimmarElevator|elevator" Tests/Navigation.Physics.Tests Tests/WoWSharpClient.Tests docs -g "*.cs" -g "*.md"`
+
+## Prior Session
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
@@ -24,5 +40,3 @@
 - Files changed:
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
   - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
-- Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs | Select-Object -First 260`

@@ -35,7 +35,7 @@ public class FrameByFramePhysicsTests
     // ==========================================================================
 
     /// <summary>
-    /// Test walking on flat ground near Orgrimmar Valley of Strength.
+    /// Test walking on flat open ground in the Crossroads plains.
     /// Expected: Character maintains ground contact, moves at run speed.
     /// </summary>
     [Fact]
@@ -44,7 +44,7 @@ public class FrameByFramePhysicsTests
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
         // Arrange — Orgrimmar Valley of Strength, confirmed flat terrain
-        var start = WoWWorldCoordinates.Durotar.Orgrimmar.ValleyOfStrength;
+        var start = WoWWorldCoordinates.TestLocations.FlatTerrain;
 
         var input = CreateInput(start, MoveFlags.Forward, runSpeed: 7.0f);
 
@@ -288,6 +288,74 @@ public class FrameByFramePhysicsTests
         float peakZ = frames.Max(f => f.Position.Z);
         Assert.True(peakZ > startZ + 0.3f,
             $"Running jump should still gain height: peak={peakZ:F3}, start={startZ:F3}");
+    }
+
+    /// <summary>
+    /// Knockback uses the same airborne gravity integration as WoW.exe:
+    /// horizontal velocity is preserved while Z follows z0 + v0*t - 0.5*g*t^2.
+    /// Mirrors the SMSG_MOVE_KNOCK_BACK impulse path after MovementController
+    /// seeds vx/vy/vz and marks the player FALLINGFAR.
+    /// </summary>
+    [Fact]
+    public void KnockbackImpulse_AirborneTrajectoryMatchesWoWGravity()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var origin = WoWWorldCoordinates.TestLocations.FlatTerrain;
+        var start = new WorldPosition(origin.MapId, origin.X, origin.Y, origin.Z + 60.0f);
+
+        const float vSin = 0.6f;
+        const float vCos = 0.8f;
+        const float horizontalSpeed = 12.5f;
+        const float verticalSpeed = 6.25f;
+        float initialVx = horizontalSpeed * vCos;
+        float initialVy = horizontalSpeed * vSin;
+
+        var input = CreateInput(start, MoveFlags.FallingFar, runSpeed: 7.0f);
+        input.Vx = initialVx;
+        input.Vy = initialVy;
+        input.Vz = verticalSpeed;
+        input.Height = CharHeight;
+        input.Radius = CharRadius;
+
+        const float dt = 1.0f / 60.0f;
+        const int framesToSimulate = 30; // 0.5s, well above ground and below terminal velocity
+
+        var frames = SimulatePhysics(input, framesToSimulate, dt);
+        WriteFrameTrace("KnockbackImpulse", frames);
+
+        float maxHorizontalError = 0.0f;
+        float maxVerticalError = 0.0f;
+        float maxVzError = 0.0f;
+
+        foreach (var frame in frames)
+        {
+            float t = frame.Time;
+            float expectedX = start.X + initialVx * t;
+            float expectedY = start.Y + initialVy * t;
+            float expectedZ = start.Z + verticalSpeed * t - (0.5f * PhysicsTestConstants.Gravity * t * t);
+            float expectedVz = verticalSpeed - (PhysicsTestConstants.Gravity * t);
+
+            float horizontalError = MathF.Sqrt(
+                ((frame.Position.X - expectedX) * (frame.Position.X - expectedX)) +
+                ((frame.Position.Y - expectedY) * (frame.Position.Y - expectedY)));
+            float verticalError = MathF.Abs(frame.Position.Z - expectedZ);
+            float vzError = MathF.Abs(frame.Output.Vz - expectedVz);
+
+            maxHorizontalError = MathF.Max(maxHorizontalError, horizontalError);
+            maxVerticalError = MathF.Max(maxVerticalError, verticalError);
+            maxVzError = MathF.Max(maxVzError, vzError);
+
+            Assert.True(((MoveFlags)frame.Output.MoveFlags).HasFlag(MoveFlags.FallingFar),
+                $"Frame {frame.FrameNumber}: knockback should remain airborne, flags=0x{frame.Output.MoveFlags:X8}");
+        }
+
+        _output.WriteLine(
+            $"Knockback errors: horizontal={maxHorizontalError:F4}y vertical={maxVerticalError:F4}y vz={maxVzError:F4}y/s");
+
+        Assert.InRange(maxHorizontalError, 0.0f, 0.01f);
+        Assert.InRange(maxVerticalError, 0.0f, 0.02f);
+        Assert.InRange(maxVzError, 0.0f, 0.02f);
     }
 
     // ==========================================================================

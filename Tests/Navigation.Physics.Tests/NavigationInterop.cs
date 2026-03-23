@@ -225,12 +225,12 @@ public static partial class NavigationInterop
         PitchUp = 0x00000040,
         PitchDown = 0x00000080,
         Walking = 0x00000100,
-        OnTransport = 0x00000200,
         Jumping = 0x00002000,
         Falling = 0x00004000,
+        FallingFar = 0x00004000,
         Swimming = 0x00200000,
-        Flying = 0x02000000,
-        FallingFar = 0x01000000,
+        Flying = 0x01000000,
+        OnTransport = 0x02000000,
     }
 
     // ==========================================================================
