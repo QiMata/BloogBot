@@ -73,6 +73,12 @@ internal sealed class WoWExeImage
         return Encoding.ASCII.GetString(bytes, 0, length);
     }
 
+    public uint ReadUInt32(uint virtualAddress)
+    {
+        var bytes = ReadBytes(virtualAddress, sizeof(uint));
+        return BitConverter.ToUInt32(bytes, 0);
+    }
+
     public string GetSectionName(uint virtualAddress)
     {
         int rva = checked((int)(virtualAddress - ImageBase));

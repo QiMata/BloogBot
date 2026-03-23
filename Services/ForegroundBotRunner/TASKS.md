@@ -13,9 +13,9 @@
 
 ## Active Priorities
 1. FG binary hardening
-- [ ] Audit `Mem/ThreadSynchronizer.cs` against WoW.exe window-proc expectations and add deterministic coverage where feasible.
-- [ ] Extend the offset audit beyond packet/network globals to the remaining gameplay-critical struct offsets used by snapshots (`0x9B8/0x9BC/0x9C0/0x9E8`, quest log, corpse position, etc.).
-- [ ] Re-check `ConnectionStateMachine` and inferred packet fallbacks after the hook/offset audit is complete.
+- [x] Audit `Mem/ThreadSynchronizer.cs` against WoW.exe window-proc expectations and add deterministic coverage where feasible.
+- [x] Extend the offset audit beyond packet/network globals to the remaining gameplay-critical struct offsets used by snapshots (`0x9B8/0x9BC/0x9C0/0x9E8`, quest log, corpse position, etc.).
+- [x] Re-check `ConnectionStateMachine` and inferred packet fallbacks after the hook/offset audit is complete.
 
 2. FG snapshot parity
 - [ ] Keep FG snapshot data complete and comparable with the BG path.
@@ -32,24 +32,21 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `PacketLogger` now validates the configured `NetClient::ProcessMessage` VA against a real handler-table pattern scan and can fall back to the scanned address if the fixed offset ever drifts.
-  - The old pattern helper was tightened to match the actual 1.12.1 instruction shape (`mov eax, [esi+edi*4+0x74]`) instead of the stale non-SIB heuristic that no longer found the function.
-  - Added binary-backed unit coverage for the send/recv hook prologues, process-message discovery, version-string address, and movement-struct layout assumptions.
-  - Cleaned this task file and removed the stale merge-conflict state.
+  - `ThreadSynchronizer`'s WndProc block/allow decision is now centralized in a pure `ThreadSynchronizerGateEvaluator`, so the live WM_USER hook path keeps the same behavior while the state-gating rules are deterministic and unit-testable.
+  - Added `ThreadSynchronizerGateTests` to pin the critical safety cases: pre-world charselect allowance, valid-world seeding, invalid-map transition blocking, packet-driven `IsLuaSafe` blocking, valid-map auto-pause on map change, and manager-base teardown blocking.
+  - Extended the FG binary-backed offset audit past the packet hooks into the movement/snapshot fields used by runtime snapshots: corpse globals, player class/character count, object-manager base, movement-info facing/transport/fall/speed/move-spline offsets, and the distinction between the `0x00672170` `CMap::VectorIntersect` wrapper and `World::Intersect` at `0x006AA160`.
+  - Re-ran the full `ForegroundBotRunner.Tests` suite after the audit; `ConnectionStateMachine` and packet-fallback coverage stayed green with no further code changes required.
 - Validation/tests run:
   - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
   - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketLoggerBinaryAuditTests" -v n`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ConnectionStateMachineTests" -v n`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build -v n`
 - Files changed:
-  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+  - `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs`
   - `Services/ForegroundBotRunner/Mem/Offsets.cs`
-  - `Services/ForegroundBotRunner/Properties/AssemblyInfo.cs`
-  - `Services/ForegroundBotRunner/CLAUDE.md`
-  - `Services/ForegroundBotRunner/README.md`
+  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs`
   - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/PacketLoggerBinaryAuditTests.cs`
   - `Tests/ForegroundBotRunner.Tests/WoWExeImage.cs`
+  - `Tests/ForegroundBotRunner.Tests/OffsetsBinaryAuditTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/ThreadSynchronizerGateTests.cs`
 - Next command:
-  - `Get-Content Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs | Select-Object -First 260`
+  - `Get-Content Services/ForegroundBotRunner/Objects/LocalPlayer.cs | Select-Object -First 260`

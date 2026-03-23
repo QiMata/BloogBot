@@ -11,6 +11,48 @@ using Serilog;
 
 namespace ForegroundBotRunner.Mem
 {
+    internal readonly record struct DispatchGateDecision(
+        bool ShouldBlock,
+        bool ManagerBaseWasValid,
+        bool HasEnteredWorldOnce,
+        uint LastContinentId,
+        bool MapJustChanged);
+
+    internal static class ThreadSynchronizerGateEvaluator
+    {
+        internal static DispatchGateDecision Evaluate(
+            bool paused,
+            bool hasConnectionStateMachine,
+            bool isLuaSafe,
+            bool managerBaseValid,
+            uint continentId,
+            bool managerBaseWasValid,
+            bool hasEnteredWorldOnce,
+            uint lastContinentId)
+        {
+            bool nextManagerBaseWasValid = managerBaseWasValid || managerBaseValid;
+            bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
+            bool nextHasEnteredWorldOnce = hasEnteredWorldOnce || (managerBaseValid && isValidMap);
+            bool inTransition = nextHasEnteredWorldOnce && !isValidMap;
+            bool mapJustChanged = continentId != lastContinentId
+                && isValidMap
+                && lastContinentId != 0xFFFFFFFF
+                && lastContinentId != 0xFF;
+            bool shouldBlock = paused
+                || (hasConnectionStateMachine && !isLuaSafe)
+                || (nextManagerBaseWasValid && !managerBaseValid)
+                || inTransition
+                || mapJustChanged;
+
+            return new DispatchGateDecision(
+                shouldBlock,
+                nextManagerBaseWasValid,
+                nextHasEnteredWorldOnce,
+                continentId != lastContinentId ? continentId : lastContinentId,
+                mapJustChanged);
+        }
+    }
+
     static public class ThreadSynchronizer
     {
         [DllImport("user32.dll")]
@@ -325,84 +367,37 @@ namespace ForegroundBotRunner.Mem
 
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
 
-                // Safety gate: determine if Lua execution is safe on WoW's main thread.
-                // Primary: ConnectionStateMachine (packet-driven, deterministic).
-                // Fallback: heuristic ManagerBase + ContinentId reads (legacy path).
-                bool shouldBlock;
                 var csm = _connectionState;
-                if (csm != null)
+                bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                var gateDecision = ThreadSynchronizerGateEvaluator.Evaluate(
+                    paused: Paused,
+                    hasConnectionStateMachine: csm != null,
+                    isLuaSafe: csm?.IsLuaSafe ?? false,
+                    managerBaseValid: managerBaseValid,
+                    continentId: continentId,
+                    managerBaseWasValid: _objMgrWasValid,
+                    hasEnteredWorldOnce: _hasEnteredWorldOnce,
+                    lastContinentId: _wndProcLastContId);
+
+                _objMgrWasValid = gateDecision.ManagerBaseWasValid;
+                _hasEnteredWorldOnce = gateDecision.HasEnteredWorldOnce;
+
+                if (gateDecision.MapJustChanged)
                 {
-                    // Packet-driven: trust the state machine's deterministic IsLuaSafe.
-                    // Also respect ManagerBase and ContinentId as hard safety nets (catches
-                    // edge cases where packets haven't arrived yet but memory is already
-                    // torn down — e.g. cross-map teleport race window).
-                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
-                    if (managerBaseValid)
-                        _objMgrWasValid = true;
-
-                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
-                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
-                    if (managerBaseValid && isValidMap)
-                        _hasEnteredWorldOnce = true;
-                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
-
-                    // Detect map changes on the main thread (e.g., map 1 → 389 for RFC).
-                    // The background thread's Paused flag may not be set yet — this catches
-                    // the race where a WM_USER fires during a teleport before SimplePolling
-                    // can set Paused=true.
-                    bool mapJustChanged = false;
-                    if (continentId != _wndProcLastContId && isValidMap
-                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
-                    {
-                        mapJustChanged = true;
-                        Paused = true;
-                        Statics.ObjectManager.BeginTeleportPause();
-                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing");
-                    }
-                    if (continentId != _wndProcLastContId)
-                        _wndProcLastContId = continentId;
-
-                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
+                    Paused = true;
+                    Statics.ObjectManager.BeginTeleportPause();
+                    string suffix = csm != null ? string.Empty : " (legacy)";
+                    CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing{suffix}");
                 }
-                else
+
+                _wndProcLastContId = gateDecision.LastContinentId;
+
+                if (gateDecision.ShouldBlock)
                 {
-                    // Legacy heuristic path (before ConnectionStateMachine is registered).
-                    // _objMgrWasValid tracks if ManagerBase was ever non-zero (world server connected).
-                    // _hasEnteredWorldOnce tracks if we've actually been in a valid map.
-                    // Transition blocking only applies after _hasEnteredWorldOnce — otherwise
-                    // Lua calls at charselect (needed for login, realm selection) are blocked.
-                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
-                    if (managerBaseValid)
-                        _objMgrWasValid = true;
-
-                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
-                    bool isValidMap = continentId != 0xFF && continentId != 0xFFFFFFFF;
-
-                    // Track when we've actually been in a valid map (includes instance maps > 0xFF)
-                    if (managerBaseValid && isValidMap)
-                        _hasEnteredWorldOnce = true;
-
-                    // Only block for transitions AFTER we've been in a real map.
-                    // At initial charselect, _hasEnteredWorldOnce is false → Lua calls proceed.
-                    bool inTransition = _hasEnteredWorldOnce && !isValidMap;
-
-                    // Detect map changes on the main thread (legacy path)
-                    bool mapJustChanged = false;
-                    if (continentId != _wndProcLastContId && isValidMap
-                        && _wndProcLastContId != 0xFFFFFFFF && _wndProcLastContId != 0xFF)
-                    {
-                        mapJustChanged = true;
-                        Paused = true;
-                        Statics.ObjectManager.BeginTeleportPause();
-                        CrashTrace($"WndProc: MAP_CHANGE {_wndProcLastContId} → {continentId} — auto-pausing (legacy)");
-                    }
-                    if (continentId != _wndProcLastContId)
-                        _wndProcLastContId = continentId;
-
-                    shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition || mapJustChanged;
-                }
-                if (shouldBlock)
-                {
+                    // Primary path: ConnectionStateMachine (packet-driven, deterministic).
+                    // Fallback: legacy ManagerBase + ContinentId heuristics before the
+                    // state machine is registered.
                     var csmState = csm?.CurrentState.ToString() ?? "n/a";
                     DrainQueues($"paused={Paused} csmState={csmState}");
                     return 0;

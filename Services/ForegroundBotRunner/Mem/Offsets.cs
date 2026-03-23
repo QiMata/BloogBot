@@ -7,6 +7,7 @@
         /// </summary>
         public static class Player
         {
+            // Local player class byte, WoW.exe build 5875 VA 0x00C27E81.
             public static nint Class = 0xC27E81;
             public static nint IsIngame = 0xB4B424;
             public static nint IsGhost = 0x835A48;
@@ -17,15 +18,19 @@
             public static nint IsCasting = 0xCECA88;
             public static int ComboPoints1 = 0xE68;
             public static int ComboPoints2 = 0x1029;
+            // Character count at the char-select screen, WoW.exe build 5875 VA 0x00B42140.
             public static nint CharacterCount = 0x00B42140;
 
+            // LocalPlayer quest log descriptor block offset, base + 0x318.
             public static nint QuestLog = 0x318;
 
+            // Corpse world-position globals, WoW.exe build 5875 VAs 0x00B4E284..0x00B4E28C.
             public static nint CorpsePositionX = 0x00B4E284;
             public static nint CorpsePositionY = 0x00B4E288;
             public static nint CorpsePositionZ = 0x00B4E28C;
 
 
+            // CMovementInfo base on the player object, build 5875 offset +0x9A8.
             public static int MovementStruct = 0x9A8;
 
             public static nint IsLooting = 0xB71B48;
@@ -175,7 +180,10 @@
             public static nint LuaToString = 0x006F3690;
             public static nint LuaToNumber = 0x006F3620;
 
-            public static nint Intersect = 0x6aa160;
+            // World::Intersect, WoW.exe build 5875 VA 0x006AA160.
+            // This is distinct from MemoryAddresses.IntersectFunPtr (0x00672170),
+            // which is a small wrapper that forwards to CMap::VectorIntersect.
+            public static nint Intersect = 0x006AA160;
 
             public static nint CastSpell = 0x6E5A90;
             public static nint AbandonQuest = 0x5EAF40;
@@ -206,6 +214,7 @@
         public static class ObjectManager
         {
             public static nint CurObjGuid = 0x30;
+            // CGObjectManager singleton base pointer, WoW.exe build 5875 VA 0x00B41414.
             public static nint ManagerBase = 0x00B41414;
             public static nint PlayerGuid = 0xc0;
             public static nint FirstObj = 0xac;
@@ -225,6 +234,22 @@
             public static int PosX = 0x9B8;
             public static int PosY = 0x9BC;
             public static int PosZ = 0x9BC + 4;
+            public static int Facing = 0x9C4;
+            public static int SwimPitch = 0x9C8;
+            public static int TransportGuid = 0x9E0;
+            public static int JumpSinAngle = 0xA14;
+            public static int JumpCosAngle = 0xA18;
+            public static int FallStartTime = 0xA20;
+            public static int FallStartHeight = 0xA28;
+            public static int CurrentSpeed = 0xA2C;
+            public static int WalkSpeed = 0xA30;
+            public static int RunSpeed = 0xA34;
+            public static int RunBackSpeed = 0xA38;
+            public static int SwimSpeed = 0xA3C;
+            public static int SwimBackSpeed = 0xA40;
+            public static int TurnRate = 0xA44;
+            public static int MoveSplinePtr = 0xA4C;
+            public static int JumpVelocity = 0xA50;
             public static int AuraBase = 0xBC;
             public static int DebuffBase = 0x13C;
 

@@ -283,8 +283,29 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 142)
+- **Last updated:** 2026-03-23 (session 143)
 - **Branch:** `main`
+- **Session 143 — FG WndProc/offset hardening slice shipped:**
+  - `ForegroundBotRunner` now exposes the live `ThreadSynchronizer` WndProc gate as a pure helper (`ThreadSynchronizerGateEvaluator`) so the packet-driven/heuristic safety rules are deterministic and unit-testable without touching the injected hook path.
+  - New FG tests now pin the gate’s critical cases: pre-world charselect allowance, valid-world seeding, invalid-map transition blocking, `ConnectionStateMachine.IsLuaSafe` blocking, valid-map auto-pause on map change, and object-manager teardown blocking.
+  - The binary-backed FG offset audit now extends beyond the packet hooks into snapshot-critical movement/runtime fields: corpse globals, player class and character count, object-manager base, movement-info facing/transport/fall/speed/move-spline offsets, plus the audited distinction between the `0x00672170` `CMap::VectorIntersect` wrapper and `World::Intersect` at `0x006AA160`.
+  - `ConnectionStateMachine` and inferred packet fallback coverage were re-run after the audit; no further changes were required and the full FG deterministic suite remains green.
+- **Test baseline (session 143):**
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded (`dumpbin` still missing in the vcpkg `applocal.ps1` post-step; non-blocking and unchanged)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`50/50`)
+- **Files changed (session 143):**
+  - `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs`
+  - `Services/ForegroundBotRunner/Mem/Offsets.cs`
+  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/OffsetsBinaryAuditTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/ThreadSynchronizerGateTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/WoWExeImage.cs`
+- **Next priorities:** FG snapshot parity (`SpellList` / learned-talent visibility), `7.9` additional transport replay data, and a recorded directional remote-unit extrapolation fixture so the remaining parity gaps can move from “implemented but data-blocked” to “proven”
 - **Session 142 — Orgrimmar transport replay blocker pinned:**
   - Added deterministic coverage for the only in-repo Orgrimmar-area transport recording, `Dralrahgra_Durotar_2026-02-08_11-06-02`, which is the Orgrimmar-to-Undercity zeppelin rather than an elevator.
   - `PhysicsReplayTests` now proves the ground-side boarding/disembark windows around that recording still replay cleanly (`avg=0.0043y`, `p99=0.0887y`) even though the ride itself is not simulatable from current data.
@@ -299,7 +320,7 @@ if (transportGuid != 0) {
   - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
   - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
   - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
-- **Next priorities:** FG binary audit (`Mem/Offsets.cs`, `ThreadSynchronizer`, `ConnectionStateMachine`), then any remaining packet/dispatch parity gaps that can be closed without new live captures
+- **Next priorities:** FG snapshot parity (`SpellList` / learned-talent visibility), then any remaining packet/dispatch parity gaps that can be closed without new live captures
 - **Session 141 — deterministic knockback/extrapolation parity hardening shipped:**
   - `Navigation.Physics.Tests` now includes a direct knockback-arc parity test that validates `FALLINGFAR` airborne motion against WoW gravity and end-of-frame vertical velocity, covering the same native path used after `SMSG_MOVE_KNOCK_BACK` seeds BG physics.
   - The test-side movement-bit map in `NavigationInterop` was corrected to match `PhysicsBridge.h`; the previous enum had `FallingFar` and `Flying` swapped plus `OnTransport` on the wrong bit, which could silently invalidate airborne/transport assertions without touching runtime code.

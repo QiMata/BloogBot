@@ -15,7 +15,9 @@
         public static int GetUnitReactionFunPtr = 0x006061E0;
         public static int LuaCallFunPtr = 0x00704CD0;
         public static int GetTextFunPtr = 0x00703BF0;
-        public static int IntersectFunPtr = 0x00672170; // https://www.ownedcore.com/forums/world-of-warcraft/world-of-warcraft-bots-programs/wow-memory-editing/409609-fixed-cworld-intersect-raycasting-1-12-a.html
+        // Legacy wrapper that forwards to CMap::VectorIntersect (0x0069BFF0).
+        // Distinct from Offsets.Functions.Intersect / World::Intersect at 0x006AA160.
+        public static int IntersectFunPtr = 0x00672170;
         public static int SetTargetFunPtr = 0x00493540;
         public static int RetrieveCorpseFunPtr = 0x0048D260;
         public static int ReleaseCorpseFunPtr = 0x005E0AE0;
