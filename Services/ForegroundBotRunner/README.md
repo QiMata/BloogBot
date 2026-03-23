@@ -872,7 +872,7 @@ Each message in the buffer is a 2048-byte record. The buffer is circular — the
 | Name | Address | Type | Notes |
 |------|---------|------|-------|
 | `ClientServiceConnection` | `0xB41DA0` | `uint32 (ptr)` | Pointer to the active network connection object. **Null** = disconnected from server. Non-null = connected. |
-| `NetClient::ProcessMessage` | *(in-class)* | `void __thiscall (int tickCount, CDataStore* dataStore)` | Opcode handler dispatcher. `m_handlers[]` is at offset `+0x74` within the NetClient instance. |
+| `NetClient::ProcessMessage` | `0x00537AA0` | `void __thiscall (int tickCount, CDataStore* dataStore)` | Opcode handler dispatcher. `m_handlers[]` is at offset `+0x74` within the NetClient instance. |
 
 ### Packet Handling
 
@@ -904,7 +904,7 @@ WriteUInt32(0xCF0BC8, (uint)Environment.TickCount);
 
 | Name | Address | Type | Notes |
 |------|---------|------|-------|
-| `WoWVersionOffset` | `0x00837C0` | `uint32` | Contains the build number (`5875`). Can be read to verify you're attached to the correct client version. |
+| `WoWVersionOffset` | `0x00837C04` | `char*` | Points at the ASCII version string `1.12.1`. Use this to confirm the injected client build. |
 
 ---
 

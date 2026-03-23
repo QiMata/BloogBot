@@ -57,7 +57,8 @@
         public static class Map
         {
             /// <summary>
-            /// ContinentID - returns 0xFF during world loading
+            /// ContinentID runtime global. Returns 0xFF during world loading.
+            /// Verified against WoW.exe build 5875 VA 0x0086F694.
             /// </summary>
             public static nint ContinentId = 0x0086F694;
         }
@@ -68,15 +69,19 @@
         public static class Connection
         {
             /// <summary>
-            /// ClientConnection pointer - null when disconnected
+            /// ClientConnection runtime global - null when disconnected.
+            /// Verified against WoW.exe build 5875 VA 0x00B41DA0.
             /// </summary>
             public static nint ClientConnection = 0x00B41DA0;
         }
 
         public static class Misc
         {
+            // Lua state runtime global, WoW.exe build 5875 VA 0x00CEEF74.
             public static nint LuaState = 0x00CEEF74;
+            // ASCII version string "1.12.1", WoW.exe build 5875 VA 0x00837C04.
             public static nint GameVersion = 0x00837C04;
+            // Runtime world/map identifier global, WoW.exe build 5875 VA 0x0084C498.
             public static nint MapId = 0x84C498;
             public static nint AntiDc = 0x00B41D98;
             public static nint LoginState = 0xB41478;
@@ -135,7 +140,9 @@
             public static nint GetPtrForGuid = 0x464870;
             public static nint ClntObjMgrGetActivePlayer = 0x00468550;
             public static nint ClntObjMgrGetMapId = 0x00468580;
+            // NetClient::Send(CDataStore*), WoW.exe build 5875 VA 0x005379A0.
             public static nint NetClientSend = 0x005379A0;
+            // NetClient::ProcessMessage(int tickCount, CDataStore*), WoW.exe build 5875 VA 0x00537AA0.
             public static nint NetClientProcessMessage = 0x00537AA0;
             public static nint GetSpellCooldown = 0x006E13E0;
             public static nint GetSpellCooldownPtr1 = 0x00CECAEC;

@@ -518,6 +518,36 @@ if (transportGuid != 0) {
   - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
   - `Tests/WoWSharpClient.Tests/Movement/MovementBlockUpdateCloneBugTests.cs`
 - **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then continue the movement opcode/FG hardening sweep and any remaining spline modes that need binary-backed evidence
+- **Session 140 — FG receive-hook audit slice shipped:**
+  - `PacketLogger` no longer relies on a stale `ProcessMessage` fallback heuristic: the direct SMSG receive hook now validates the configured `NetClient::ProcessMessage` VA against the real handler-table access pattern used by the 1.12.1 client (`[this + opcode*4 + 0x74]`) and can fall back to the scanned address if the fixed VA drifts.
+  - Added binary-backed `ForegroundBotRunner.Tests` coverage against `D:\World of Warcraft\WoW.exe` for:
+    - `NetClient::Send` prologue bytes / safe overwrite size
+    - `NetClient::ProcessMessage` prologue bytes / safe overwrite size
+    - process-message discovery via the handler-table pattern
+    - `GameVersion` address contents (`"1.12.1"`)
+    - movement-struct offset relationships (`0x9A8 -> 0x9B8/0x9BC/0x9C0/0x9E8`)
+  - Cleaned the broken `Services/ForegroundBotRunner/TASKS.md` merge-conflict state and updated FG docs to reflect that packet logging now covers both send and recv hooks.
+- **Test baseline (session 140):**
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketLoggerBinaryAuditTests" -v n`
+    - Passed (`6/6`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ConnectionStateMachineTests" -v n`
+    - Passed (`34/34`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`40/40`)
+- **Files changed (session 140):**
+  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+  - `Services/ForegroundBotRunner/Mem/Offsets.cs`
+  - `Services/ForegroundBotRunner/Properties/AssemblyInfo.cs`
+  - `Services/ForegroundBotRunner/CLAUDE.md`
+  - `Services/ForegroundBotRunner/README.md`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/PacketLoggerBinaryAuditTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/WoWExeImage.cs`
+- **Next priorities:** keep the no-live-tests rule in place; remaining movement/system parity work is still P7.9 recording coverage, a recorded directional remote-unit extrapolation fixture, the `ThreadSynchronizer` WndProc safety audit, and the rest of the FG offset sweep
 - **Session 132 — swim collision parity slice shipped:**
   - `PhysicsMovement.cpp` swim movement now resolves against real world geometry instead of free-integrating through submerged terrain
   - Swim collision uses WoW.exe’s `0.5` swim-branch displacement constant (`VA 0x007FFA24`) as two half-step submerged collision substeps

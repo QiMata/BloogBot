@@ -28,7 +28,8 @@ namespace ForegroundBotRunner.Mem.Hooks
     ///
     /// 1.12.1 NetClient::ProcessMessage signature:
     ///   void __thiscall NetClient::ProcessMessage(int tickCount, CDataStore* dataStore)
-    ///   Address: found via runtime pattern scan (m_handlers at this+0x74)
+    ///   Address: 0x00537AA0 on build 5875, with runtime pattern validation against
+    ///            the handler table access at NetClient+0x74
     ///   CDataStore buffer starts with 16-bit opcode (SMSG)
     /// </summary>
     public static class PacketLogger
@@ -265,7 +266,7 @@ namespace ForegroundBotRunner.Mem.Hooks
         }
 
         // ===================================================================
-        // RECV HOOK — Detour NetClient::ProcessMessage (pattern-scanned)
+        // RECV HOOK — Detour NetClient::ProcessMessage
         // ===================================================================
         //
         // NetClient::ProcessMessage is __thiscall:
@@ -276,21 +277,42 @@ namespace ForegroundBotRunner.Mem.Hooks
         // The CDataStore buffer starts with a 16-bit SMSG opcode.
         // ProcessMessage looks up m_handlers[opcode] at this+0x74 and dispatches.
         //
-        // We find ProcessMessage at runtime by scanning for __thiscall functions
-        // near NetClient::Send that access offset 0x74 (the m_handlers array).
+        // We prefer the known 1.12.1 address from Offsets, then sanity-check it
+        // against a pattern scan that looks for the handler table access at this+0x74.
 
         private static void InstallRecvHook()
         {
-            // Known address: NetClient::ProcessMessage = 0x00537AA0 (1.12.1 build 5875)
-            // Confirmed via community reverse engineering (WowDevs/Fishbot, OwnedCore info dump).
-            // 0x100 bytes after NetClient::Send (0x005379A0).
-            var processMessageAddr = Offsets.Functions.NetClientProcessMessage;
+            // Known address: NetClient::ProcessMessage = 0x00537AA0 (1.12.1 build 5875).
+            // Keep the fixed VA for parity, but cross-check it at runtime so stale
+            // offsets fail loudly instead of silently hooking the wrong method.
+            var configuredAddr = Offsets.Functions.NetClientProcessMessage;
+            var scannedAddr = FindProcessMessageByPattern();
+            var processMessageAddr = configuredAddr;
+
+            if (scannedAddr != nint.Zero)
+            {
+                if (configuredAddr == nint.Zero)
+                {
+                    processMessageAddr = scannedAddr;
+                    DiagLog($"InstallRecvHook: ProcessMessage resolved by pattern scan at 0x{(uint)processMessageAddr:X8}");
+                }
+                else if (configuredAddr != scannedAddr)
+                {
+                    DiagLog($"InstallRecvHook WARNING: configured ProcessMessage 0x{(uint)configuredAddr:X8} != scanned 0x{(uint)scannedAddr:X8}; using scanned address");
+                    processMessageAddr = scannedAddr;
+                }
+                else
+                {
+                    DiagLog($"InstallRecvHook: configured ProcessMessage 0x{(uint)configuredAddr:X8} matches pattern scan");
+                }
+            }
+
             if (processMessageAddr == nint.Zero)
             {
                 DiagLog("InstallRecvHook: ProcessMessage address is zero — recv hook NOT installed");
                 return;
             }
-            DiagLog($"InstallRecvHook: Using known ProcessMessage address 0x{(uint)processMessageAddr:X8}");
+            DiagLog($"InstallRecvHook: Using ProcessMessage address 0x{(uint)processMessageAddr:X8}");
 
             _recvHookDelegate = new RecvHookDelegate(OnRecvPacket);
             var managedAddr = (uint)(nint)Marshal.GetFunctionPointerForDelegate(_recvHookDelegate);
@@ -307,7 +329,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             DiagLog($"InstallRecvHook: Original bytes at 0x{recvAddr:X8}: {BitConverter.ToString(_originalRecvBytes)}");
 
             // Walk instructions to find the first boundary at or past 5 bytes (JMP rel32 size).
-            int prologueSize = GetInstructionBoundary(_originalRecvBytes, 5);
+            int prologueSize = DetermineHookOverwriteSize(_originalRecvBytes, 5);
             if (prologueSize < 5 || prologueSize > 15)
             {
                 DiagLog($"InstallRecvHook: Could not determine safe prologue size (got {prologueSize}) — aborting");
@@ -425,6 +447,9 @@ namespace ForegroundBotRunner.Mem.Hooks
         /// instructions when overwriting a function prologue with a JMP rel32 (5 bytes).
         /// Only handles common x86 prologue/early-function instructions.
         /// </summary>
+        internal static int DetermineHookOverwriteSize(byte[] code, int minBytes)
+            => GetInstructionBoundary(code, minBytes);
+
         private static int GetInstructionBoundary(byte[] code, int minBytes)
         {
             int offset = 0;
@@ -592,6 +617,16 @@ namespace ForegroundBotRunner.Mem.Hooks
                 return nint.Zero;
             }
 
+            uint? candidate = FindProcessMessageCandidate(code, scanStart, sendAddr, DiagLog);
+            return candidate.HasValue ? (nint)candidate.Value : nint.Zero;
+        }
+
+        internal static uint? FindProcessMessageCandidate(
+            byte[] code,
+            uint scanStart,
+            uint sendAddr,
+            Action<string>? log = null)
+        {
             var candidates = new List<(uint addr, int score)>();
 
             for (int i = 0; i < code.Length - 120; i++)
@@ -601,61 +636,78 @@ namespace ForegroundBotRunner.Mem.Hooks
                     continue;
 
                 uint funcAddr = scanStart + (uint)i;
-                if (funcAddr == sendAddr) continue;
+                if (funcAddr == sendAddr)
+                    continue;
 
-                // Score the candidate based on ProcessMessage-like patterns
                 int score = 0;
-                bool has0x74Access = false;
+                bool hasHandlerTableAccess = false;
 
-                for (int j = i + 3; j < Math.Min(i + 80, code.Length - 3); j++)
+                for (int j = i + 3; j < Math.Min(i + 96, code.Length - 4); j++)
                 {
-                    // Pattern: mov reg, [reg+0x74] — access to m_handlers
-                    // ModR/M: mod=01 (8-bit disp), any reg, displacement = 0x74
                     if (code[j] == 0x8B)
                     {
                         byte modrm = code[j + 1];
                         byte mod = (byte)((modrm >> 6) & 3);
                         byte rm = (byte)(modrm & 7);
+
+                        // Pattern: mov reg, [reg+0x74]
                         if (mod == 1 && rm != 4 && code[j + 2] == 0x74)
                         {
-                            has0x74Access = true;
+                            hasHandlerTableAccess = true;
                             score += 10;
+                        }
+                        // Pattern: mov reg, [base + index*4 + 0x74]
+                        else if (mod == 1 && rm == 4 && j + 3 < code.Length && code[j + 3] == 0x74)
+                        {
+                            hasHandlerTableAccess = true;
+                            score += 10;
+
+                            byte sib = code[j + 2];
+                            byte scale = (byte)((sib >> 6) & 3);
+                            if (scale == 2)
+                                score += 4;
                         }
                     }
 
-                    // Pattern: movzx reg, word ptr [reg+offset] (0F B7) — 16-bit opcode read
+                    // Pattern: movzx reg, word ptr [...] — 16-bit opcode load.
                     if (j < code.Length - 2 && code[j] == 0x0F && code[j + 1] == 0xB7)
                         score += 5;
 
-                    // Pattern: call [reg+reg*4+offset] or indirect call — handler dispatch
+                    // Pattern: indirect call through a handler slot or vfunc.
                     if (code[j] == 0xFF)
+                    {
                         score += 2;
+                        if (j + 2 < code.Length && code[j + 1] == 0x52 && code[j + 2] == 0x40)
+                            score += 2;
+                    }
                 }
 
-                if (has0x74Access)
-                {
-                    candidates.Add((funcAddr, score));
-                    var bytes = BitConverter.ToString(code, i, Math.Min(12, code.Length - i));
-                    DiagLog($"  Candidate: 0x{funcAddr:X8} score={score} bytes={bytes}");
-                }
+                if (!hasHandlerTableAccess)
+                    continue;
+
+                candidates.Add((funcAddr, score));
+                var bytes = BitConverter.ToString(code, i, Math.Min(12, code.Length - i));
+                log?.Invoke($"  Candidate: 0x{funcAddr:X8} score={score} bytes={bytes}");
             }
 
             if (candidates.Count == 0)
             {
-                DiagLog("Pattern scan: NO candidates found with 0x74 access");
-                return nint.Zero;
+                log?.Invoke("Pattern scan: NO candidates found with 0x74 handler-table access");
+                return null;
             }
 
             if (candidates.Count == 1)
             {
-                DiagLog($"Pattern scan: unique match at 0x{candidates[0].addr:X8} (score={candidates[0].score})");
-                return (nint)candidates[0].addr;
+                log?.Invoke($"Pattern scan: unique match at 0x{candidates[0].addr:X8} (score={candidates[0].score})");
+                return candidates[0].addr;
             }
 
-            // Multiple candidates — pick the highest-scoring one
-            var best = candidates.OrderByDescending(c => c.score).First();
-            DiagLog($"Pattern scan: {candidates.Count} candidates, selected 0x{best.addr:X8} (score={best.score})");
-            return (nint)best.addr;
+            var best = candidates
+                .OrderByDescending(c => c.score)
+                .ThenBy(c => Math.Abs((long)c.addr - sendAddr))
+                .First();
+            log?.Invoke($"Pattern scan: {candidates.Count} candidates, selected 0x{best.addr:X8} (score={best.score})");
+            return best.addr;
         }
 
         // ===================================================================

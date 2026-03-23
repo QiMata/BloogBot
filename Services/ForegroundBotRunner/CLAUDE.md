@@ -24,7 +24,7 @@ Not launched directly — StateManager orchestrates the full pipeline:
 | `Mem/Offsets.cs` | 309 | Static memory offset table (1.12.1 addresses) |
 | `Mem/Functions.cs` | 263 | Lua call wrappers, LuaState access |
 | `Mem/ThreadSynchronizer.cs` | 423 | WndProc hook + WM_USER message queue for main-thread Lua |
-| `Mem/Hooks/PacketLogger.cs` | 344 | Hooks NetClient::Send for CMSG capture |
+| `Mem/Hooks/PacketLogger.cs` | 800+ | Hooks NetClient::Send and NetClient::ProcessMessage for CMSG/SMSG capture |
 | `Mem/Hooks/ConnectionStateMachine.cs` | 237 | State machine: DISCONNECTED → AUTHENTICATING → CHARSELECT → IN_WORLD |
 | `Mem/Hooks/SignalEventManager.cs` | 229 | Hooks WoW's SignalEvent system for game events |
 | `Mem/AntiWarden/WardenDisabler.cs` | 449 | Patches Warden anti-cheat detection |
@@ -100,7 +100,7 @@ Volatile flag that blocks ThreadSynchronizer WM_USER processing during world ent
 
 Written to `<WoW.exe dir>/WWoWLogs/`:
 - `crash_trace.log` — ACCESS_VIOLATION diagnostics
-- `packet_logger.log` — CMSG captures
+- `packet_logger.log` — CMSG/SMSG captures
 - `connection_state_machine.log` — State transitions
 - `signal_event_manager.log` — Game event hooks
 
