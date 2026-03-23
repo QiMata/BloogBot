@@ -232,7 +232,7 @@ if (transportGuid != 0) {
 | 7.6 | Update `MovementController` to track transport state and switch coordinate frames | **Done** |
 | 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | **Done** |
 | 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | **Done** |
-| 7.9 | Add Orgrimmar elevator recording/parity test | Open |
+| 7.9 | Add second Orgrimmar transport recording/parity test | Open — repo only has an older zeppelin capture with no in-flight `NearbyGameObjects`, so full transport replay remains blocked on better recording data |
 | 7.10 | Fix physics replay to exclude transport-transition frames from ground mode scoring | **Done** |
 | 7.11 | Calibration gate: ground avg < 0.08y, transport avg < 0.15y, aggregate p99 < 2.0y | **Done** |
 
@@ -251,7 +251,7 @@ if (transportGuid != 0) {
   - moving transport gameobjects advance their own spline state in the object manager loop,
   - passengers riding those movers stay stable in transport-local coordinates while their world coordinates resync each spline tick.
 - Remaining P7 follow-ups are narrower:
-  - `7.9` additional Orgrimmar elevator replay coverage
+  - `7.9` additional Orgrimmar transport replay coverage: the repo contains `Dralrahgra_Durotar_2026-02-08_11-06-02` (Orgrimmar zeppelin) but it loses dynamic object snapshots as soon as boarding starts, so only the ground-side transition windows can be replayed today.
 
 ### Key Files
 - `Exports/Navigation/PhysicsEngine.cpp` — `CollisionStepWoW` transport transform
@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 141)
+- **Last updated:** 2026-03-23 (session 142)
 - **Branch:** `main`
+- **Session 142 — Orgrimmar transport replay blocker pinned:**
+  - Added deterministic coverage for the only in-repo Orgrimmar-area transport recording, `Dralrahgra_Durotar_2026-02-08_11-06-02`, which is the Orgrimmar-to-Undercity zeppelin rather than an elevator.
+  - `PhysicsReplayTests` now proves the ground-side boarding/disembark windows around that recording still replay cleanly (`avg=0.0043y`, `p99=0.0887y`) even though the ride itself is not simulatable from current data.
+  - `ElevatorScenarioTests` now explicitly asserts why the in-flight zeppelin segment cannot be replayed today: the recording keeps `transportGuid` set but drops `NearbyGameObjects` to zero immediately after boarding, so the replay harness must skip those transport frames instead of fabricating mover state.
+  - Result: `7.9` is still open, but it is now concretely classified as a recording-data gap rather than an unexplained transport-physics regression.
+- **Test baseline (session 142):**
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~OrgrimmarZeppelinRide_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~OrgrimmarZeppelinReplay_SkipsInFlightFrames_WithoutDynamicObjectData" -v n`
+    - Passed (`2/2`)
+- **Files changed (session 142):**
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+- **Next priorities:** FG binary audit (`Mem/Offsets.cs`, `ThreadSynchronizer`, `ConnectionStateMachine`), then any remaining packet/dispatch parity gaps that can be closed without new live captures
 - **Session 141 — deterministic knockback/extrapolation parity hardening shipped:**
   - `Navigation.Physics.Tests` now includes a direct knockback-arc parity test that validates `FALLINGFAR` airborne motion against WoW gravity and end-of-frame vertical velocity, covering the same native path used after `SMSG_MOVE_KNOCK_BACK` seeds BG physics.
   - The test-side movement-bit map in `NavigationInterop` was corrected to match `PhysicsBridge.h`; the previous enum had `FallingFar` and `Flying` swapped plus `OnTransport` on the wrong bit, which could silently invalidate airborne/transport assertions without touching runtime code.

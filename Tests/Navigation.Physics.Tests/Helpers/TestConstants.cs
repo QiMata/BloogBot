@@ -71,6 +71,10 @@ public static class Recordings
     // Bottom→top, 1754 frames, 29s, Z range -43→+60, 9 GOs (3 elevators + 6 doors)
     // Note: all doors remain goState=1 throughout — MaNGOS doesn't send door transitions
     public const string UndercityElevatorV2 = "Dralrahgra_Undercity_2026-02-13_19-26-54";
+
+    // Orgrimmar transport - zeppelin departing the Orgrimmar tower toward Undercity.
+    // This is the only Orgrimmar transport recording currently present in-repo.
+    public const string OrgrimmarZeppelin = "Dralrahgra_Durotar_2026-02-08_11-06-02";
 }
 
 /// <summary>

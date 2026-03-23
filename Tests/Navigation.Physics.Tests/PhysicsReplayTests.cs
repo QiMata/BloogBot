@@ -120,6 +120,22 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         AssertPrecision(result, Tolerances.TransportAvg, Tolerances.TransportP99);
     }
 
+    [Fact]
+    public void OrgrimmarZeppelinRide_FrameByFrame_PositionMatchesRecording()
+    {
+        var result = _fixture.ReplayCache.GetOrReplay(Recordings.OrgrimmarZeppelin, _output, _fixture.IsInitialized);
+        if (result.FrameCount == 0) return;
+
+        LogCalibrationResult("orgrimmar_zeppelin", result, _output);
+
+        int transportFrames = result.FrameDetails.Count(f => f.IsOnTransport);
+        _output.WriteLine($"  Transport: {result.TransportTransitionCount} transitions, " +
+            $"{transportFrames} on-transport frames simulated, " +
+            $"{result.TransportFrameCount} transport frames skipped");
+
+        AssertPrecision(result, Tolerances.TransportAvg, Tolerances.TransportP99);
+    }
+
     // ==========================================================================
     // SWIMMING
     // ==========================================================================

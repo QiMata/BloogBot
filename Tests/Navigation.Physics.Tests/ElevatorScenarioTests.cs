@@ -295,4 +295,23 @@ public class ElevatorPhysicsParityTests(PhysicsEngineFixture fixture, ITestOutpu
         Assert.True(transportStats.avg < 0.15f,
             $"Undercity elevator transport avg {transportStats.avg:F4}y exceeds the 0.15y parity target.");
     }
+
+    [Fact]
+    public void OrgrimmarZeppelinReplay_SkipsInFlightFrames_WithoutDynamicObjectData()
+    {
+        var result = _fixture.ReplayCache.GetOrReplay(Recordings.OrgrimmarZeppelin, _output, _fixture.IsInitialized);
+        if (result.FrameCount == 0)
+            return;
+
+        int simulatedTransportFrames = result.FrameDetails.Count(f => f.IsOnTransport);
+        _output.WriteLine(
+            $"Orgrimmar zeppelin transport transitions={result.TransportTransitionCount} " +
+            $"simulated={simulatedTransportFrames} skipped={result.TransportFrameCount}");
+
+        Assert.True(result.TransportTransitionCount > 0,
+            "Expected the replay harness to detect an Orgrimmar transport transition.");
+        Assert.True(result.TransportFrameCount > 0,
+            "Expected in-flight transport frames to be skipped when no dynamic transport object data is recorded.");
+        Assert.Equal(0, simulatedTransportFrames);
+    }
 }
