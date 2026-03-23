@@ -179,20 +179,8 @@ SlideResult CollideAndSlide(
             remaining = 0.0f;
             result.distanceRemaining = 0.0f;
             result.finalPosition = currentPosition;
-
-            // Terrain-following: WoW.exe CollisionStep (0x633840) uses an AABB that
-            // dynamically extends vertically to encompass terrain on slopes. Our capsule
-            // SIDE pass moves horizontally and can end up below the terrain surface on
-            // uphill slopes. Query terrain Z and lift if needed.
-            if (horizontalOnly) {
-                float terrZ = SceneQuery::GetGroundZ(mapId, currentPosition.x, currentPosition.y,
-                    currentPosition.z + PhysicsConstants::STEP_HEIGHT,
-                    PhysicsConstants::STEP_DOWN_HEIGHT + PhysicsConstants::STEP_HEIGHT);
-                if (VMAP::IsValidHeight(terrZ) && terrZ > currentPosition.z) {
-                    currentPosition.z = terrZ;
-                    result.finalPosition = currentPosition;
-                }
-            }
+            // Terrain-following REMOVED — CollisionStepWoW handles ground Z
+            // via AABB terrain test with barycentric interpolation.
             break;
         }
 
@@ -207,15 +195,7 @@ SlideResult CollideAndSlide(
         result.finalPosition = currentPosition;
 
         // Terrain-following after collision advance (same as above)
-        if (horizontalOnly) {
-            float terrZ = SceneQuery::GetGroundZ(mapId, currentPosition.x, currentPosition.y,
-                currentPosition.z + PhysicsConstants::STEP_HEIGHT,
-                PhysicsConstants::STEP_DOWN_HEIGHT + PhysicsConstants::STEP_HEIGHT);
-            if (VMAP::IsValidHeight(terrZ) && terrZ > currentPosition.z) {
-                currentPosition.z = terrZ;
-                result.finalPosition = currentPosition;
-            }
-        }
+        // Terrain-following after collision REMOVED — CollisionStepWoW handles Z.
 
         // Stop when remaining motion becomes very small
         if (remaining <= MIN_MOVE_DISTANCE) {

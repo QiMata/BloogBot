@@ -1429,30 +1429,39 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     float endY = startY + dirN.y * sweepDist;
 
     // Step 4: Build AABB at end position with WoW.exe bounds
-    // XY: position ± skin
-    // Z bottom: position.Z (feet)
-    // Z top: position.Z + stepHeight
-    G3D::Vector3 endBoxMin(endX - skin, endY - skin, startZ);
-    G3D::Vector3 endBoxMax(endX + skin, endY + skin, startZ + stepH);
+    // WoW.exe (0x633E06) step height adjustment:
+    //   maxZ = pos.Z + stepHeight + min(2*radius, speed*dt)
+    //   minZ = maxZ - (radius + speed*dt*tan(50°))
+    // This creates a search volume that encompasses terrain on both uphill/downhill.
+    const float stepUp = std::min(2.0f * radius, speedDt);
+    const float adjustedMaxZ = startZ + stepH + stepUp;
+    const float slopeDown = radius + speedDt * tan50;
+    const float adjustedMinZ = adjustedMaxZ - slopeDown - stepH;
+    G3D::Vector3 endBoxMin(endX - skin, endY - skin, adjustedMinZ);
+    G3D::Vector3 endBoxMax(endX + skin, endY + skin, adjustedMaxZ);
 
     // Step 5: Test terrain at end AABB (0x6721B0 TestTerrain)
     std::vector<SceneQuery::AABBContact> contacts;
     SceneQuery::TestTerrainAABB(input.mapId, endBoxMin, endBoxMax, contacts);
 
-    // Find the highest walkable ground contact
+    // Find the best walkable ground contact — highest surface AT or BELOW
+    // the character's step-up range. WoW.exe's heightmap always returns the
+    // highest walkable surface at a given XY.
     float bestGroundZ = PhysicsConstants::INVALID_HEIGHT;
     G3D::Vector3 bestNormal(0, 0, 1);
     bool foundGround = false;
 
     for (const auto& c : contacts) {
         if (!c.walkable) continue;
-        // The contact point Z approximates the ground surface
-        if (c.point.z > bestGroundZ &&
-            c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-            c.point.z <= startZ + stepH) {
-            bestGroundZ = c.point.z;
-            bestNormal = c.normal;
-            foundGround = true;
+        // Accept ground within step-up (above) and step-down (below) range
+        if (c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+            c.point.z <= startZ + stepH + stepUp) {
+            // Pick the highest valid ground (WoW.exe heightmap behavior)
+            if (c.point.z > bestGroundZ) {
+                bestGroundZ = c.point.z;
+                bestNormal = c.normal;
+                foundGround = true;
+            }
         }
     }
 
@@ -1480,16 +1489,10 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         return;
     }
 
-    // Step 6: Step height adjustment (0x633E06)
-    // maxZ += min(2*radius, speed*dt)
-    // minZ = maxZ - (radius + speed*dt*tan(50°))
-    float adjustedMaxZ = bestGroundZ + std::min(2.0f * radius, speedDt);
-    float adjustedMinZ = adjustedMaxZ - (radius + speedDt * tan50);
-    // Clamp actual ground Z to the adjusted range
-    if (bestGroundZ < adjustedMinZ) bestGroundZ = adjustedMinZ;
-    if (bestGroundZ > adjustedMaxZ) bestGroundZ = adjustedMaxZ;
+    // Step height adjustment already built into AABB bounds (step 4).
+    // bestGroundZ is the exact surface Z from barycentric interpolation.
 
-    // Step 7: Check for wall contacts (non-walkable AABB overlaps)
+    // Step 6: Check for wall contacts (non-walkable AABB overlaps)
     bool hitWall = false;
     G3D::Vector3 wallNormal(0, 0, 1);
     for (const auto& c : contacts) {
@@ -3246,46 +3249,8 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.moveFlags = input.moveFlags;
 	if (isSwimming) out.moveFlags |= MOVEFLAG_SWIMMING; else out.moveFlags &= ~MOVEFLAG_SWIMMING;
 
-	// =========================================================================
-	// GROUND CONTACT PERSISTENCE (WoW.exe parity)
-	// =========================================================================
-	// WoW.exe CollisionStep (0x633840) uses an AABB that dynamically sizes to
-	// encompass terrain on both uphill and downhill slopes. Our capsule sweep
-	// can intermittently miss terrain geometry, producing single-frame false-
-	// airborne states. When the character was grounded on the previous frame
-	// (no airborne input flags) and the output position is still near valid
-	// ground, maintain grounded state. This matches WoW.exe behavior where
-	// the character stays grounded unless clearly airborne (walked off a ledge
-	// with no ground within STEP_DOWN_HEIGHT).
-	if (!st.isGrounded && !isSwimming && !inputAirborneFlag && wasGroundedAtStart) {
-		// Quick ray probe at current XY to check if ground exists nearby
-		float persistZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y,
-			st.z + PhysicsConstants::STEP_HEIGHT,
-			PhysicsConstants::STEP_DOWN_HEIGHT + PhysicsConstants::STEP_HEIGHT);
-		// WoW.exe lifts AABB maxZ by min(2*radius, speed*dt) before sweeping.
-		// Our capsule SIDE pass can clip through uphill terrain, leaving st.z
-		// several yards below the surface. Since the character was grounded
-		// last frame and hasn't jumped, any valid ground at this XY is the
-		// correct surface. The character can't have legitimately fallen far
-		// in one frame from a grounded state.
-		if (VMAP::IsValidHeight(persistZ)) {
-			st.z = persistZ;
-			st.isGrounded = true;
-			st.vz = 0.0f;
-			st.fallTime = 0.0f;
-			// Update output position since we snapped Z
-			out.z = st.z;
-			out.vz = 0.0f;
-			PHYS_INFO(PHYS_MOVE, "[GroundPersist] Rescued from false-airborne via ray: z=" + std::to_string(persistZ));
-		} else {
-			std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-			oss << "[GroundPersist] Ray failed: persistZ=" << persistZ
-				<< " st.z=" << st.z << " valid=" << VMAP::IsValidHeight(persistZ)
-				<< " wasGrounded=" << wasGroundedAtStart
-				<< " inputAirborne=" << inputAirborneFlag;
-			PHYS_ERR(PHYS_MOVE, oss.str());
-		}
-	}
+	// Ground contact persistence REMOVED — CollisionStepWoW uses AABB terrain
+	// test with barycentric Z interpolation. No false-airborne rescue needed.
 
 	// =========================================================================
 	// AIRBORNE FLAG MANAGEMENT (WoW.exe parity)

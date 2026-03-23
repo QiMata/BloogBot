@@ -1469,6 +1469,37 @@ int SceneQuery::OverlapBox(const VMAP::StaticMapTree& map,
 }
 
 // =============================================================================
+// Barycentric Z interpolation — compute exact height on a triangle at (px, py)
+// This is how WoW.exe's heightmap works: find which triangle contains the XY
+// point, then interpolate Z using barycentric coordinates.
+// =============================================================================
+static bool BarycentricZ(const G3D::Vector3& v0, const G3D::Vector3& v1, const G3D::Vector3& v2,
+    float px, float py, float& outZ)
+{
+    // 2D barycentric coordinates (project to XY plane)
+    float d00 = (v1.x - v0.x) * (v1.x - v0.x) + (v1.y - v0.y) * (v1.y - v0.y);
+    float d01 = (v1.x - v0.x) * (v2.x - v0.x) + (v1.y - v0.y) * (v2.y - v0.y);
+    float d11 = (v2.x - v0.x) * (v2.x - v0.x) + (v2.y - v0.y) * (v2.y - v0.y);
+    float d20 = (px - v0.x) * (v1.x - v0.x) + (py - v0.y) * (v1.y - v0.y);
+    float d21 = (px - v0.x) * (v2.x - v0.x) + (py - v0.y) * (v2.y - v0.y);
+
+    float denom = d00 * d11 - d01 * d01;
+    if (std::fabs(denom) < 1e-10f) return false; // Degenerate triangle
+
+    float u = (d11 * d20 - d01 * d21) / denom;
+    float v = (d00 * d21 - d01 * d20) / denom;
+    float w = 1.0f - u - v;
+
+    // Point is inside triangle if all barycentric coords are in [0, 1]
+    // Use small epsilon for edge cases
+    const float eps = -0.01f;
+    if (u < eps || v < eps || w < eps) return false;
+
+    outZ = w * v0.z + u * v1.z + v * v2.z;
+    return true;
+}
+
+// =============================================================================
 // AABB-Triangle SAT overlap test (13 axes)
 // Matches WoW.exe CWorldCollision::Collide primitive test
 // =============================================================================
@@ -1577,12 +1608,24 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
 
         if (AABBTriangleOverlap(center, halfExt, va, vb, vc)) {
             G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
-            // Orient normal to face the AABB center (consistent with WoW.exe)
-            G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
-            if (normal.dot(center - triCenter) < 0) normal = -normal;
+            // Orient normal upward for ground surfaces (WoW.exe convention)
+            if (normal.z < 0) normal = -normal;
+
+            // Compute exact ground Z at the AABB center XY using barycentric
+            // interpolation on the triangle. This is how WoW.exe's heightmap
+            // works — not triangle centroids, but exact surface height at the
+            // query point. Falls back to triangle centroid Z if the XY point
+            // is outside the triangle (edge case for large triangles).
+            float exactZ;
+            bool hasExactZ = BarycentricZ(va, vb, vc, center.x, center.y, exactZ);
+            if (!hasExactZ) {
+                // XY point outside triangle — use closest vertex Z
+                G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
+                exactZ = triCenter.z;
+            }
 
             AABBContact contact;
-            contact.point = triCenter; // Approximate contact point
+            contact.point = G3D::Vector3(center.x, center.y, exactZ);
             contact.normal = normal;
             contact.distance = 0;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
