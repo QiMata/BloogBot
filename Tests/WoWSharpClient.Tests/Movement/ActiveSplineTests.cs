@@ -1,6 +1,10 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using WoWSharpClient.Movement;
+using WoWSharpClient.Models;
+using WoWSharpClient.Tests.Handlers;
+using WoWSharpClient.Tests.Util;
 
 namespace WoWSharpClient.Tests.Movement;
 
@@ -204,6 +208,32 @@ public class ActiveSplineStepTests
         active.Step(0);
         Assert.True(active.Finished);
     }
+
+    [Fact]
+    public void Constructor_ServerStartInPast_BeginsMidSpline()
+    {
+        var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+        var spline = new Spline(1, 1, 1000, SplineFlags.None, points, 1000);
+        var active = new ActiveSpline(spline, currentTimeMs: 1500);
+
+        var pos = active.Step(0);
+
+        Assert.Equal(5f, pos.X, 0.01f);
+    }
+
+    [Fact]
+    public void Step_CyclicSpline_AtExactDuration_StaysOnLastPointBeforeWrap()
+    {
+        var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+        var spline = new Spline(1, 1, 0, SplineFlags.Cyclic, points, 1000);
+        var active = new ActiveSpline(spline);
+
+        var atBoundary = active.Step(1000);
+        var afterWrap = active.Step(1);
+
+        Assert.Equal(10f, atBoundary.X, 0.01f);
+        Assert.InRange(afterWrap.X, 0f, 0.02f);
+    }
 }
 
 public class SplineSegmentMsTests
@@ -247,5 +277,99 @@ public class SplineSegmentMsTests
 
         // 5 segments, 5000ms → 1000ms per segment
         Assert.Equal(1000f, spline.SegmentMs);
+    }
+}
+
+[Collection("Sequential ObjectManager tests")]
+public class SplineFacingTests(ObjectManagerFixture fixture) : IClassFixture<ObjectManagerFixture>
+{
+    [Fact]
+    public void ResolveFacing_NormalUsesMovementDirection()
+    {
+        var unit = new WoWUnit(new HighGuid(1))
+        {
+            SplineType = SplineType.Normal,
+            Facing = 0f
+        };
+
+        float facing = SplineController.ResolveFacing(unit, new Position(0, 0, 0), new Position(0, 10, 0));
+
+        Assert.Equal(MathF.PI / 2f, facing, 3);
+    }
+
+    [Fact]
+    public void ResolveFacing_FacingAngleUsesExplicitAngle()
+    {
+        var unit = new WoWUnit(new HighGuid(1))
+        {
+            SplineType = SplineType.FacingAngle,
+            FacingAngle = -0.75f
+        };
+
+        float facing = SplineController.ResolveFacing(unit, new Position(0, 0, 0), new Position(5, 0, 0));
+
+        Assert.Equal(TransportCoordinateHelper.NormalizeFacing(-0.75f), facing, 3);
+    }
+
+    [Fact]
+    public void ResolveFacing_FacingSpotUsesTargetPoint()
+    {
+        var unit = new WoWUnit(new HighGuid(1))
+        {
+            SplineType = SplineType.FacingSpot,
+            FacingSpot = new Position(10f, 10f, 0f),
+            Facing = 0f
+        };
+
+        float facing = SplineController.ResolveFacing(unit, new Position(0f, 0f, 0f), new Position(10f, 0f, 0f));
+
+        Assert.Equal(MathF.PI / 2f, facing, 3);
+    }
+
+    [Fact]
+    public void ResolveFacing_FacingTargetUsesTrackedTargetPosition()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x11;
+        const ulong targetGuid = 0xF130000000000222ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            targetGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            new MovementInfoUpdate
+            {
+                X = 5f,
+                Y = 10f,
+                Z = 0f,
+                Facing = 0f
+            },
+            []));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var target = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(targetGuid));
+        target.Position = new Position(5f, 10f, 0f);
+
+        var unit = new WoWUnit(new HighGuid(2))
+        {
+            SplineType = SplineType.FacingTarget,
+            SplineTargetGuid = targetGuid,
+            Facing = 0f
+        };
+
+        float facing = SplineController.ResolveFacing(unit, new Position(5f, 0f, 0f), new Position(5f, 5f, 0f));
+
+        Assert.Equal(MathF.PI / 2f, facing, 3);
+    }
+
+    private void ResetObjectManager()
+    {
+        WoWSharpObjectManager.Instance.Initialize(
+            fixture._woWClient.Object,
+            fixture._pathfindingClient.Object,
+            NullLogger<WoWSharpObjectManager>.Instance);
     }
 }

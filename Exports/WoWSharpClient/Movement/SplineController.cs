@@ -30,6 +30,19 @@ namespace WoWSharpClient.Movement
         private int _seg;         // current segment index
         private Position? _lastPosition;
 
+        public ActiveSpline(Spline s, uint? currentTimeMs)
+            : this(s)
+        {
+            if (!currentTimeMs.HasValue || s.StartMs == 0 || s.DurationMs == 0 || s.Points.Count == 0
+                || currentTimeMs.Value < s.StartMs)
+                return;
+
+            uint absoluteElapsedMs = currentTimeMs.Value - s.StartMs;
+            _elapsed = NormalizeElapsed(absoluteElapsedMs);
+            RecalculateSegment();
+            _lastPosition = EvaluateCurrentPosition();
+        }
+
         /// <summary>Advance <paramref name="dtMs"/> and return the new position.</summary>
         public Position Step(float dtMs)
         {
@@ -40,27 +53,23 @@ namespace WoWSharpClient.Movement
 
             _elapsed += dtMs;
 
-            while (_seg + 1 < Spline.Points.Count &&
-                   _elapsed >= (_seg + 1) * Spline.SegmentMs)
-                _seg++;
-
             // Cyclic splines (0x100000): wrap back to start instead of finishing.
             // Used for NPC patrol routes that loop continuously.
+            if (Spline.Flags.HasFlag(SplineFlags.Cyclic) && Spline.DurationMs > 0)
+            {
+                _elapsed = NormalizeElapsed(_elapsed);
+            }
+            else if (Spline.DurationMs > 0 && _elapsed > Spline.DurationMs)
+            {
+                _elapsed = Spline.DurationMs;
+            }
+
+            RecalculateSegment();
+
             if (_seg + 1 >= Spline.Points.Count)
             {
-                if (Spline.Flags.HasFlag(SplineFlags.Cyclic) && Spline.Points.Count > 1)
-                {
-                    _elapsed %= Spline.DurationMs;
-                    _seg = 0;
-                    while (_seg + 1 < Spline.Points.Count &&
-                           _elapsed >= (_seg + 1) * Spline.SegmentMs)
-                        _seg++;
-                }
-                else
-                {
-                    _lastPosition = Spline.Points[^1];
-                    return _lastPosition;
-                }
+                _lastPosition = Spline.Points[^1];
+                return _lastPosition;
             }
 
             float u = (_elapsed - _seg * Spline.SegmentMs) / Spline.SegmentMs;
@@ -95,6 +104,58 @@ namespace WoWSharpClient.Movement
         public bool Finished => !Spline.Flags.HasFlag(SplineFlags.Cyclic)
             && _seg + 1 >= Spline.Points.Count;
 
+        private float NormalizeElapsed(float absoluteElapsedMs)
+        {
+            if (Spline.DurationMs == 0)
+                return 0f;
+
+            if (!Spline.Flags.HasFlag(SplineFlags.Cyclic))
+                return MathF.Min(absoluteElapsedMs, Spline.DurationMs);
+
+            if (absoluteElapsedMs <= 0f)
+                return 0f;
+
+            float remainder = absoluteElapsedMs % Spline.DurationMs;
+            return remainder == 0f ? Spline.DurationMs : remainder;
+        }
+
+        private void RecalculateSegment()
+        {
+            _seg = 0;
+            while (_seg + 1 < Spline.Points.Count &&
+                   _elapsed >= (_seg + 1) * Spline.SegmentMs)
+            {
+                _seg++;
+            }
+        }
+
+        private Position EvaluateCurrentPosition()
+        {
+            if (Spline.Points.Count == 0)
+                return new Position(0f, 0f, 0f);
+
+            if (Spline.Points.Count == 1 || _seg + 1 >= Spline.Points.Count)
+                return Spline.Points[^1];
+
+            float u = (_elapsed - _seg * Spline.SegmentMs) / Spline.SegmentMs;
+            if (Spline.Flags.HasFlag(SplineFlags.Flying) && Spline.Points.Count >= 4)
+            {
+                var p0 = Spline.Points[Math.Max(0, _seg - 1)];
+                var p1 = Spline.Points[_seg];
+                var p2 = Spline.Points[_seg + 1];
+                var p3 = Spline.Points[Math.Min(Spline.Points.Count - 1, _seg + 2)];
+                return CatmullRom(p0, p1, p2, p3, u);
+            }
+
+            var a = Spline.Points[_seg];
+            var b = Spline.Points[_seg + 1];
+            return new Position(
+                a.X + (b.X - a.X) * u,
+                a.Y + (b.Y - a.Y) * u,
+                a.Z + (b.Z - a.Z) * u
+            );
+        }
+
         /// <summary>
         /// Catmull-Rom cubic spline interpolation.
         /// P(t) = 0.5 * ((2*P1) + (-P0+P2)*t + (2*P0-5*P1+4*P2-P3)*t² + (-P0+3*P1-3*P2+P3)*t³)
@@ -118,9 +179,11 @@ namespace WoWSharpClient.Movement
         /// <summary>Fired when a spline for the given GUID completes or is removed.</summary>
         public event Action<ulong>? OnSplineCompleted;
 
-        public void AddOrUpdate(Spline s)
+        public void AddOrUpdate(Spline s, uint? currentTimeMs = null)
         {
-            _active[s.OwnerGuid] = new ActiveSpline(s);
+            _active[s.OwnerGuid] = currentTimeMs.HasValue
+                ? new ActiveSpline(s, currentTimeMs)
+                : new ActiveSpline(s);
             Log.Information("[SplineController] Added spline for {Guid:X}: {Points} pts, {Duration}ms, flags=0x{Flags:X}",
                 s.OwnerGuid, s.Points.Count, s.DurationMs, (uint)s.Flags);
         }
@@ -158,10 +221,44 @@ namespace WoWSharpClient.Movement
                     woWUnit = WoWSharpObjectManager.Instance.Objects.OfType<WoWUnit>().FirstOrDefault(x => x.Guid == guid);
 
                 if (woWUnit != null)
-                    woWUnit.Position = active.Step(dtMs);
+                {
+                    var previousPosition = new Position(woWUnit.Position.X, woWUnit.Position.Y, woWUnit.Position.Z);
+                    var nextPosition = active.Step(dtMs);
+                    woWUnit.Position = nextPosition;
+                    woWUnit.Facing = ResolveFacing(woWUnit, previousPosition, nextPosition);
+                }
                 else
                     _active.Remove(guid); // object vanished
             }
+        }
+
+        internal static float ResolveFacing(WoWUnit unit, Position previousPosition, Position nextPosition)
+        {
+            switch (unit.SplineType)
+            {
+                case SplineType.FacingAngle:
+                    return TransportCoordinateHelper.NormalizeFacing(unit.FacingAngle);
+                case SplineType.FacingSpot:
+                    return FaceTowards(nextPosition, unit.FacingSpot, unit.Facing);
+                case SplineType.FacingTarget:
+                    if (WoWSharpObjectManager.Instance.GetObjectByGuid(unit.SplineTargetGuid) is WoWObject target)
+                        return FaceTowards(nextPosition, target.Position, unit.Facing);
+                    return unit.Facing;
+                case SplineType.Stop:
+                    return unit.Facing;
+                default:
+                    return FaceTowards(previousPosition, nextPosition, unit.Facing);
+            }
+        }
+
+        private static float FaceTowards(Position origin, Position target, float fallbackFacing)
+        {
+            float dx = target.X - origin.X;
+            float dy = target.Y - origin.Y;
+            if (MathF.Abs(dx) < 0.0001f && MathF.Abs(dy) < 0.0001f)
+                return fallbackFacing;
+
+            return TransportCoordinateHelper.NormalizeFacing(MathF.Atan2(dy, dx));
         }
     }
 

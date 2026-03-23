@@ -6,24 +6,24 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Add a recorded directional remote-unit packet fixture so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
-2. Expand spline parity coverage once the managed spline audit identifies which WoW.exe interpolation paths are still unmatched.
+1. Add focused coverage for transport mover/path-progress behavior once `P7.5` runtime elevator support lands.
+2. Add a recorded directional remote-unit packet fixture so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
 3. Add movement-opcode sweep tests as new gaps are discovered in the dispatch-table audit.
 
 ## Session Handoff
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added deterministic extrapolation tests for backward speed, strafe basis, and diagonal damping.
-  - Added object-manager coverage proving remote-unit create packets now seed extrapolation base/facing/flags/time immediately.
-  - Added knockback coverage for parse -> ACK -> pending impulse storage and `MovementController` impulse consumption into physics input.
+  - Added monster-move parser coverage proving spline start time is preserved from `SMSG_MONSTER_MOVE`.
+  - Added deterministic spline runtime coverage for mid-spline activation from server time, exact cyclic boundary timing, and `SplineType` facing resolution.
+  - Extended clone regression coverage so `MovementBlockUpdate.Clone()` now protects the new spline start-time field too.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WoWUnitExtrapolationTests|FullyQualifiedName~ObjectManagerWorldSessionTests.RemoteUnitAdd_PrimesExtrapolationStateFromMovementBlock|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_ParseStoresImpulseClearsDirectionAndAcks|FullyQualifiedName~MovementControllerTests.PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity" -v n` -> `6 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1286 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests|FullyQualifiedName~SplineFacingTests|FullyQualifiedName~MovementBlockUpdateCloneBugTests" -v n` -> `33 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1294 passed`, `1 skipped`
 - Files changed:
-  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
-  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementBlockUpdateCloneBugTests.cs`
 - Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/Movement/SplineControllerTests.cs | Select-Object -First 260`
+  - `Get-Content Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs | Select-Object -First 260`

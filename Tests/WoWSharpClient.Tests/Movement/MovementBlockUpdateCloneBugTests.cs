@@ -59,6 +59,18 @@ public class MovementBlockUpdateCloneBugTests
     }
 
     [Fact]
+    public void Clone_MissesSplineStartTime()
+    {
+        // BUG: Clone() doesn't copy monster-move spline start time
+        var original = new MovementBlockUpdate();
+        original.SplineStartTime = 67890u;
+
+        var clone = original.Clone();
+
+        Assert.Equal(67890u, clone.SplineStartTime);
+    }
+
+    [Fact]
     public void Clone_MissesSplinePoints()
     {
         // BUG: Clone() doesn't copy SplinePoints (separate from SplineNodes)

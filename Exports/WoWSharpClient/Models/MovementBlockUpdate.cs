@@ -30,6 +30,7 @@ namespace WoWSharpClient.Models
         public ulong FacingTargetGuid { get; internal set; }
         public float FacingAngle { get; internal set; }
         public Position FacingSpot { get; internal set; } = new Position(0, 0, 0);
+        public uint SplineStartTime { get; internal set; }
         public uint SplineTimestamp { get; internal set; }
         public List<Position> SplinePoints { get; internal set; } = [];
         public uint HighGuid { get; internal set; }
@@ -59,6 +60,7 @@ namespace WoWSharpClient.Models
                 FacingTargetGuid = FacingTargetGuid,
                 FacingAngle = FacingAngle,
                 FacingSpot = FacingSpot,
+                SplineStartTime = SplineStartTime,
                 SplineTimestamp = SplineTimestamp,
                 SplinePoints = [.. SplinePoints],
                 HighGuid = HighGuid,

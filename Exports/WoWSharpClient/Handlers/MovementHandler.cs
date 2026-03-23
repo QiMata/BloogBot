@@ -453,12 +453,16 @@ namespace WoWSharpClient.Handlers
                 X = reader.ReadSingle(),
                 Y = reader.ReadSingle(),
                 Z = reader.ReadSingle(),
+                // SMSG_MONSTER_MOVE header: start position + server spline start time.
+                // Keep it on MovementInfoUpdate.LastUpdated so runtime spline playback can
+                // align to the server's clock instead of local receipt time.
+                LastUpdated = reader.ReadUInt32(),
                 MovementBlockUpdate = new()
                 {
-                    SplineId = reader.ReadUInt32(),
                     SplineType = (SplineType)reader.ReadByte(),
                 },
             };
+            data.MovementBlockUpdate.SplineStartTime = data.LastUpdated;
 
             switch (data.MovementBlockUpdate.SplineType)
             {

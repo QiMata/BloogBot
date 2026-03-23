@@ -631,13 +631,15 @@ namespace WoWSharpClient
             var spline = new Spline(
                 owner: guid,
                 id: block.SplineId ?? 0,
-                t0: (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                t0: block.SplineStartTime != 0
+                    ? block.SplineStartTime
+                    : (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
                 flags: block.SplineFlags ?? SplineFlags.None,
                 pts: points,
                 durationMs: block.SplineTimestamp
             );
 
-            Splines.Instance.AddOrUpdate(spline);
+            Splines.Instance.AddOrUpdate(spline, (uint)_worldTimeTracker.NowMS.TotalMilliseconds);
 
             // For local player: suppress physics while server controls movement
             if (isLocalPlayer)

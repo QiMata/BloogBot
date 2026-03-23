@@ -325,10 +325,35 @@ if (transportGuid != 0) {
   - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
   - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
   - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
-  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+- `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+- `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (knockback/extrapolation validation, spline audit, broader movement opcode completeness, FG hardening)
+- **Session 135 — managed spline runtime parity slice shipped:**
+  - `SMSG_MONSTER_MOVE` parsing now preserves the monster-move server start time on the movement update instead of discarding it into an overloaded local field.
+  - `SplineController` now seeds new splines from server start time so remote movement starts at the correct in-flight point when packets arrive late.
+  - Cyclic splines now stay on the terminal point at the exact duration boundary before wrapping on the next tick, matching client-visible patrol timing.
+  - Runtime spline facing now follows `SplineType` modes instead of leaving movers frozen at stale orientation: normal movement faces travel direction, `FacingAngle` locks to the explicit angle, `FacingSpot` faces the target point, and `FacingTarget` resolves through the object manager.
+- **Test baseline (session 135):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests|FullyQualifiedName~SplineFacingTests|FullyQualifiedName~MovementBlockUpdateCloneBugTests" -v n`
+    - Passed (`33/33`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementBlockUpdate|FullyQualifiedName~MovementInfoUpdate" -v n`
+    - Passed (`27/27`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1294/1295`, `1 skipped`)
+- **Files changed (session 135):**
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/Models/MovementBlockUpdate.cs`
+  - `Exports/WoWSharpClient/Movement/SplineController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementBlockUpdateCloneBugTests.cs`
+- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then continue the movement opcode/FG hardening sweep and any remaining spline modes that need binary-backed evidence
 - **Session 132 — swim collision parity slice shipped:**
   - `PhysicsMovement.cpp` swim movement now resolves against real world geometry instead of free-integrating through submerged terrain
   - Swim collision uses WoW.exe’s `0.5` swim-branch displacement constant (`VA 0x007FFA24`) as two half-step submerged collision substeps
