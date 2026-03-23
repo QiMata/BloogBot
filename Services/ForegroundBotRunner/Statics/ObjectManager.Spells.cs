@@ -571,6 +571,17 @@ namespace ForegroundBotRunner.Statics
             }
         }
 
+        internal IReadOnlyList<uint> GetSpellIdsByName(string spellName)
+        {
+            if (string.IsNullOrWhiteSpace(spellName))
+                return Array.Empty<uint>();
+
+            EnsureSpellNameCache();
+            return _spellNameToIds.TryGetValue(spellName.Trim(), out var ids)
+                ? ids
+                : Array.Empty<uint>();
+        }
+
 
 
         public void RefreshSkills()

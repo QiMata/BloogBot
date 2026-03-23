@@ -26,6 +26,8 @@
 - [x] Restore foreground vendor interaction methods (`InteractWithNpcAsync`, buy/sell/repair) so FG runtime behavior no longer falls back to interface default no-ops for merchant flows.
 - [x] Restore non-null FG `GossipFrame` / `QuestFrame` / `MerchantFrame` surfaces plus task-owned quest/vendor async helpers so BotRunner no longer hits null/default-interface paths on the injected client.
 - [x] Restore FG flight-master discovery/activation and a non-null `TaxiFrame` surface so task-driven taxi discovery no longer falls back to interface defaults.
+- [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
+- [ ] Finish the remaining FG runtime parity surfaces that still inherit defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -38,6 +40,24 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
+  - `ObjectManager` now exposes live foreground `CraftFrame`, `TrainerFrame`, and `TalentFrame` wrappers instead of returning `null`, which restores the remaining legacy craft/train/talent BotRunner frame surfaces on FG.
+  - Added Lua-backed `FgCraftFrame`, `FgTrainerFrame`, and `FgTalentFrame` implementations; the trainer path now enumerates service metadata with zero-based BotRunner indexing, the talent path reconstructs tab/row/column state plus next-rank spell IDs, and the craft path checks reagent counts before `DoCraft(...)`.
+  - Added deterministic FG frame tests covering trainer service enumeration/train indexing, talent-point accounting and spell-ID-driven learning, and craft-slot material checks/zero-based craft indexing.
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"` -> `8 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `88 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgCraftFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTalentFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTrainerFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - Next command:
+  - `rg -n "QuestGreetingFrame => null|TradeFrame => null|DepositExcessItemsAsync|PostAuctionItemsAsync|CraftAvailableRecipesAsync" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Previous delta:
   - `ObjectManager` now exposes a live foreground `TaxiFrame` and implements `DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, so the injected flight-master task path no longer inherits interface defaults.
   - Added a Lua-backed `FgTaxiFrame` wrapper that reads taxi-node metadata from the open taxi map, tracks reachable/current nodes, and drives `TakeTaxiNode(...)` directly for FG activation.
   - Added deterministic FG taxi-frame coverage that proves node metadata, unlocked-state checks, and node selection all route through the expected client-side Lua surface.

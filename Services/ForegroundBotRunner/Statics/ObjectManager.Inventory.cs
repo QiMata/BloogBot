@@ -160,13 +160,13 @@ namespace ForegroundBotRunner.Statics
         IGossipFrame IObjectManager.GossipFrame => _fgGossipFrame;
         ILootFrame IObjectManager.LootFrame => _fgLootFrame;
         IMerchantFrame IObjectManager.MerchantFrame => _fgMerchantFrame;
-        ICraftFrame IObjectManager.CraftFrame => null;
+        ICraftFrame IObjectManager.CraftFrame => _fgCraftFrame;
         IQuestFrame IObjectManager.QuestFrame => _fgQuestFrame;
         IQuestGreetingFrame IObjectManager.QuestGreetingFrame => null;
         ITaxiFrame IObjectManager.TaxiFrame => _fgTaxiFrame;
         ITradeFrame IObjectManager.TradeFrame => null;
-        ITrainerFrame IObjectManager.TrainerFrame => null;
-        ITalentFrame IObjectManager.TalentFrame => null;
+        ITrainerFrame IObjectManager.TrainerFrame => _fgTrainerFrame;
+        ITalentFrame IObjectManager.TalentFrame => _fgTalentFrame;
 
 
 

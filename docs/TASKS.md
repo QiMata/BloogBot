@@ -283,8 +283,28 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 152)
+- **Last updated:** 2026-03-23 (session 153)
 - **Branch:** `main`
+- **Session 153 — FG trainer/talent/craft frame parity slice shipped:**
+  - `ForegroundBotRunner` now exposes live `CraftFrame`, `TrainerFrame`, and `TalentFrame` wrappers instead of returning `null`, which restores the remaining legacy craft/train/talent frame surface still reachable from injected BotRunner actions.
+  - Added Lua-backed `FgCraftFrame`, `FgTrainerFrame`, and `FgTalentFrame` implementations. The trainer wrapper preserves zero-based BotRunner indexing over WoW’s one-based trainer list, the talent wrapper reconstructs tab state and next-rank spell IDs from live Lua data, and the craft wrapper checks reagent counts before issuing `DoCraft(...)`.
+- **Test baseline (session 153):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"`
+    - Passed (`8/8`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`88/88`)
+- **Files changed (session 153):**
+  - `Services/ForegroundBotRunner/Frames/FgCraftFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTalentFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTrainerFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+- **Next priorities:** finish the remaining FG default-interface/task-surface gaps (`QuestGreetingFrame`, `TradeFrame`, then the task-owned bank/AH/craft helpers), then re-sweep the full repo for any code-only parity work still outstanding before the deferred live-validation chunk
 - **Session 152 — FG taxi discovery parity slice shipped:**
   - `ForegroundBotRunner` now exposes a live `TaxiFrame` and implements foreground `DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, so the injected flight-master task path no longer falls back to interface defaults.
   - Added a Lua-backed `FgTaxiFrame` wrapper that reads taxi-node metadata from the visible taxi map, tracks reachable/current nodes, and drives `TakeTaxiNode(...)` directly for FG flight activation.

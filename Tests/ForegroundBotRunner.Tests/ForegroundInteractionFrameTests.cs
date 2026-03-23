@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ForegroundBotRunner.Tests;
 
@@ -154,6 +155,123 @@ public sealed class ForegroundInteractionFrameTests
         frame.SelectNode(2);
 
         Assert.Contains(calls, call => call.Contains("TakeTaxiNode(2)"));
+    }
+
+    [Fact]
+    public void TrainerFrame_EnumeratesServicesAndUsesZeroBasedTrainIndex()
+    {
+        var calls = new List<string>();
+        var frame = new FgTrainerFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("ClassTrainerFrame"))
+                    return ["1"];
+                if (lua.Contains("GetTrainerServiceInfo(1)"))
+                    return ["Heroic Strike", "Rank 2", "available", "100"];
+                if (lua.Contains("GetTrainerServiceInfo(2)"))
+                    return ["Rend", string.Empty, "used", "250"];
+                if (lua.Contains("GetNumTrainerServices()"))
+                    return ["2"];
+
+                return ["0"];
+            });
+
+        Assert.True(frame.IsOpen);
+
+        var spells = frame.Spells.ToArray();
+        Assert.Equal(2, spells.Length);
+        Assert.Equal("Heroic Strike", spells[0].Name);
+        Assert.Equal(2, spells[0].Rank);
+        Assert.Equal(0, spells[0].Index);
+        Assert.True(spells[0].CanLearn);
+        Assert.Equal(100, spells[0].Cost);
+        Assert.False(spells[1].CanLearn);
+
+        frame.TrainSpell(1);
+
+        Assert.Contains(calls, call => call.Contains("BuyTrainerService(2)"));
+    }
+
+    [Fact]
+    public void TalentFrame_ReportsPointsBuildsTabsAndLearnsTalentBySpellId()
+    {
+        var calls = new List<string>();
+        var frame = new FgTalentFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("UnitLevel('player')"))
+                    return ["22"];
+                if (lua.Contains("GetNumTalentTabs()"))
+                    return ["2"];
+                if (lua.Contains("GetTalentTabInfo(1)"))
+                    return ["Arms", string.Empty, "5", string.Empty];
+                if (lua.Contains("GetTalentTabInfo(2)"))
+                    return ["Fury", string.Empty, "3", string.Empty];
+                if (lua.Contains("GetNumTalents(1)"))
+                    return ["2"];
+                if (lua.Contains("GetNumTalents(2)"))
+                    return ["1"];
+                if (lua.Contains("GetTalentInfo(1, 1)"))
+                    return ["Deflection", string.Empty, "1", "2", "2", "5"];
+                if (lua.Contains("GetTalentInfo(1, 2)"))
+                    return ["Improved Rend", string.Empty, "1", "3", "3", "3"];
+                if (lua.Contains("GetTalentInfo(2, 1)"))
+                    return ["Cruelty", string.Empty, "2", "1", "0", "5"];
+                if (lua.Contains("TalentFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            },
+            spellId => spellId == 16464 ? "Deflection" : null,
+            spellName => spellName == "Deflection"
+                ? new uint[] { 16462, 16463, 16464, 16465, 16466 }
+                : []);
+
+        Assert.True(frame.IsOpen);
+        Assert.Equal(8, frame.TalentPointsSpent);
+        Assert.Equal(13, frame.TalentPointsAll);
+        Assert.Equal(5, frame.TalentPointsAvailable);
+
+        var tabs = frame.Tabs.ToArray();
+        Assert.Equal(2, tabs.Length);
+        Assert.Equal("Arms", tabs[0].Name);
+        Assert.Equal("Deflection", tabs[0].Rows[0].Talents[1].Name);
+        Assert.Equal(2, tabs[0].Rows[0].Talents[1].Ranks);
+        Assert.Equal(5, tabs[0].Rows[0].Talents[1].TotalRanksAvailable);
+        Assert.Equal(16464, tabs[0].Rows[0].Talents[1].NextRankSpellId);
+
+        frame.LearnTalent(16464);
+
+        Assert.Contains(calls, call => call.Contains("LearnTalent(1, 1)"));
+    }
+
+    [Fact]
+    public void CraftFrame_ChecksMaterialsAndUsesZeroBasedCraftIndex()
+    {
+        var calls = new List<string>();
+        var frame = new FgCraftFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("GetCraftReagentInfo"))
+                    return ["1"];
+                if (lua.Contains("CraftFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        Assert.True(frame.IsOpen);
+        Assert.True(frame.HasMaterialsNeeded(2));
+
+        frame.Craft(2);
+
+        Assert.Contains(calls, call => call.Contains("DoCraft(3)"));
     }
 
     private sealed class TestItem : IWoWItem

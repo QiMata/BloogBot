@@ -129,9 +129,15 @@ namespace ForegroundBotRunner.Statics
 
         private readonly FgMerchantFrame _fgMerchantFrame;
 
+        private readonly FgCraftFrame _fgCraftFrame;
+
         private readonly FgQuestFrame _fgQuestFrame;
 
         private readonly FgTaxiFrame _fgTaxiFrame;
+
+        private readonly FgTrainerFrame _fgTrainerFrame;
+
+        private readonly FgTalentFrame _fgTalentFrame;
 
 
 
@@ -167,6 +173,9 @@ namespace ForegroundBotRunner.Statics
                 () => GetContainedItems(),
                 slot => GetEquippedItem(slot),
                 () => GetActiveNpcInteractionGuid());
+            _fgCraftFrame = new FgCraftFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
             _fgQuestFrame = new FgQuestFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua),
@@ -174,6 +183,14 @@ namespace ForegroundBotRunner.Statics
             _fgTaxiFrame = new FgTaxiFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua));
+            _fgTrainerFrame = new FgTrainerFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
+            _fgTalentFrame = new FgTalentFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua),
+                spellId => GetSpellNameFromDb(spellId),
+                spellName => GetSpellIdsByName(spellName));
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);
