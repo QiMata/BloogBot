@@ -551,37 +551,33 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     // Merge half-step contacts into main contacts (WoW.exe uses both)
     contacts.insert(contacts.end(), halfContacts.begin(), halfContacts.end());
 
-    // Find the best walkable ground contact — highest surface AT or BELOW
-    // the character's step-up range. WoW.exe's heightmap always returns the
-    // highest walkable surface at a given XY.
-    float bestGroundZ = PhysicsConstants::INVALID_HEIGHT;
+    // Ground Z: use GetGroundZ as PRIMARY source — it uses barycentric
+    // interpolation on the exact ADT/VMAP triangle mesh, matching WoW.exe's
+    // heightmap lookup exactly. AABB contacts are used for wall detection only.
+    // The AABB TestTerrainAABB returns triangle centroids or barycentric Z at
+    // the AABB center, which may differ from the exact point-in-triangle query
+    // that GetGroundZ performs. Using GetGroundZ ensures calibration recordings
+    // (captured from WoW.exe's native heightmap) match our Z values.
+    float bestGroundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+        startZ + stepH + stepUp,
+        stepH + stepUp + PhysicsConstants::STEP_DOWN_HEIGHT);
     G3D::Vector3 bestNormal(0, 0, 1);
-    bool foundGround = false;
+    bool foundGround = VMAP::IsValidHeight(bestGroundZ) &&
+        bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+        bestGroundZ <= startZ + stepH + stepUp;
 
-    for (const auto& c : contacts) {
-        if (!c.walkable) continue;
-        // Accept ground within step-up (above) and step-down (below) range
-        if (c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-            c.point.z <= startZ + stepH + stepUp) {
-            // Pick the highest valid ground (WoW.exe heightmap behavior)
-            if (c.point.z > bestGroundZ) {
-                bestGroundZ = c.point.z;
-                bestNormal = c.normal;
-                foundGround = true;
-            }
-        }
-    }
-
-    // If AABB test found no walkable ground, try GetGroundZ as fallback
-    // (AABB may miss thin terrain; GetGroundZ uses barycentric point-in-tri)
+    // If center GetGroundZ failed, try AABB contacts as fallback
     if (!foundGround) {
-        bestGroundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-            startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
-        if (VMAP::IsValidHeight(bestGroundZ) &&
-            bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-            bestGroundZ <= startZ + stepH) {
-            foundGround = true;
-            bestNormal = G3D::Vector3(0, 0, 1);
+        for (const auto& c : contacts) {
+            if (!c.walkable) continue;
+            if (c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+                c.point.z <= startZ + stepH + stepUp) {
+                if (c.point.z > bestGroundZ || !foundGround) {
+                    bestGroundZ = c.point.z;
+                    bestNormal = c.normal;
+                    foundGround = true;
+                }
+            }
         }
     }
 
@@ -1341,9 +1337,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	}
     else {
 		// Ground movement — WoW.exe-style CollisionStep.
-		PHYS_ERR(PHYS_MOVE, "[MODE] GROUND intendedDist=" + std::to_string(intendedDist) +
-			" grounded=" + std::to_string(st.isGrounded ? 1 : 0) +
-			" flags=0x" + std::to_string(input.moveFlags));
 		if (trustGroundedReplay && intendedDist > 0.0f) {
 			// Replay calibration path: run full ground sweep for step/slope Z behavior,
 			// then re-lock X/Y to the trusted capture displacement.
