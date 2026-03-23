@@ -2,6 +2,7 @@
 #include "PhysicsMovement.h"
 #include "PhysicsShapeHelpers.h"
 #include "PhysicsEngine.h"
+#include "PhysicsCollideSlide.h"
 #include "PhysicsHelpers.h"
 #include "SceneQuery.h"
 #include "VMapDefinitions.h"
@@ -12,6 +13,31 @@
 
 namespace PhysicsMovement
 {
+
+namespace
+{
+    // WoW.exe CollisionStep swim branch (VA 0x633B5E) scales the swim collision
+    // displacement by 0.5 using the float at VA 0x007FFA24.
+    constexpr float SWIM_COLLISION_SUBSTEP_SCALE = 0.5f;
+
+    void ResolveSwimStartOverlap(const PhysicsInput& input, MovementState& st)
+    {
+        CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(
+            st.x, st.y, st.z, input.radius, input.height);
+
+        std::vector<SceneHit> overlaps;
+        G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
+        SceneQuery::SweepCapsule(input.mapId, cap, G3D::Vector3(0, 0, 0), 0.0f, overlaps, playerFwd);
+
+        G3D::Vector3 depen = PhysicsHelpers::ComputePendingDepenetrationFromOverlaps(overlaps);
+        if (depen.magnitude() <= 1e-6f)
+            return;
+
+        st.x += depen.x;
+        st.y += depen.y;
+        st.z += depen.z;
+    }
+}
 
 // Returns the effective terminal velocity based on movement flags.
 // WoW.exe: MOVEFLAG_SAFE_FALL (0x20000000) selects swim/safe-fall terminal vel (7.0)
@@ -164,13 +190,17 @@ void ProcessSwimMovement(
     // Handles swim movement: horizontal and vertical (pitch) control.
     // Total velocity magnitude = swimSpeed regardless of pitch angle.
     // Horizontal speed = swimSpeed * cos(pitch), vertical = swimSpeed * sin(pitch).
+    // WoW.exe routes swim movement through the 0x633B5E collision path instead of
+    // the grounded step solver. We keep the accepted capsule-vs-AABB architectural
+    // difference, but resolve submerged movement against real geometry instead of
+    // free-integrating through underwater terrain and WMOs.
+    ResolveSwimStartOverlap(input, st);
+
+    G3D::Vector3 desiredVelocity(0.0f, 0.0f, 0.0f);
     if (intent.hasInput) {
         float horizScale = std::cos(st.pitch);
-        st.vx = intent.dir.x * speed * horizScale;
-        st.vy = intent.dir.y * speed * horizScale;
-    }
-    else {
-        st.vx = st.vy = 0;
+        desiredVelocity.x = intent.dir.x * speed * horizScale;
+        desiredVelocity.y = intent.dir.y * speed * horizScale;
     }
 
     float desiredVz = 0.0f;
@@ -185,10 +215,54 @@ void ProcessSwimMovement(
             desiredVz = -std::sin(st.pitch) * speed;
     }
 
-    st.vz = desiredVz;
-    st.x += st.vx * dt;
-    st.y += st.vy * dt;
-    st.z += st.vz * dt;
+    desiredVelocity.z = desiredVz;
+
+    if (dt <= 0.0f) {
+        st.vx = desiredVelocity.x;
+        st.vy = desiredVelocity.y;
+        st.vz = desiredVelocity.z;
+        return;
+    }
+
+    const G3D::Vector3 moveStart(st.x, st.y, st.z);
+    const G3D::Vector3 desiredDisplacement = desiredVelocity * dt;
+    const G3D::Vector3 substepDisplacement = desiredDisplacement * SWIM_COLLISION_SUBSTEP_SCALE;
+    const float substepDistance = substepDisplacement.magnitude();
+
+    G3D::Vector3 currentPos = moveStart;
+    if (substepDistance > PhysicsCollideSlide::MIN_MOVE_DISTANCE) {
+        const G3D::Vector3 substepDir = substepDisplacement.directionOrZero();
+        for (int pass = 0; pass < 2; ++pass) {
+            PhysicsCollideSlide::SlideState slideState{};
+            slideState.x = currentPos.x;
+            slideState.y = currentPos.y;
+            slideState.z = currentPos.z;
+            slideState.orientation = st.orientation;
+
+            PhysicsCollideSlide::SlideResult slide = PhysicsCollideSlide::CollideAndSlide(
+                input.mapId,
+                slideState,
+                input.radius,
+                input.height,
+                substepDir,
+                substepDistance,
+                /*horizontalOnly*/ false);
+
+            currentPos = slide.finalPosition;
+        }
+    }
+    else {
+        currentPos += desiredDisplacement;
+    }
+
+    st.x = currentPos.x;
+    st.y = currentPos.y;
+    st.z = currentPos.z;
+
+    const G3D::Vector3 actualVelocity = (currentPos - moveStart) * (1.0f / dt);
+    st.vx = actualVelocity.x;
+    st.vy = actualVelocity.y;
+    st.vz = actualVelocity.z;
 }
 
 } // namespace PhysicsMovement

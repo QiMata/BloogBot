@@ -1582,10 +1582,14 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	}
 
 	SceneQuery::LiquidInfo finalLiq = SceneQuery::EvaluateLiquidAt(input.mapId, st.x, st.y, st.z);
-	if (finalLiq.isSwimming && !isSwimming) {
+	const bool enteredWaterThisFrame = finalLiq.isSwimming && !isSwimming;
+	if (enteredWaterThisFrame) {
 		if (finalLiq.hasLevel) {
 			st.z = std::max(st.z, finalLiq.level - PhysicsConstants::WATER_LEVEL_DELTA);
 		}
+		// WoW.exe applies 0.5x horizontal velocity damping when crossing into a
+		// swimming state. Keep the damped state in the output velocity, not only
+		// in the carried state, so the next frame observes the same transition.
 		st.vx *= PhysicsConstants::WATER_ENTRY_VELOCITY_DAMP;
 		st.vy *= PhysicsConstants::WATER_ENTRY_VELOCITY_DAMP;
 		st.vz = 0.0f;
@@ -1611,6 +1615,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		if (airborne || isSwimming) {
 			// Use simulation velocity for vertical component (avoids average vs end-of-frame error)
 			actualV.z = st.vz;
+		}
+		if (enteredWaterThisFrame) {
+			actualV.x = st.vx;
+			actualV.y = st.vy;
 		}
 	}
     else

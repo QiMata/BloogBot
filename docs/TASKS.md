@@ -280,8 +280,31 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-22 (session 130)
+- **Last updated:** 2026-03-23 (session 132)
 - **Branch:** `main`
+- **Session 132 — swim collision parity slice shipped:**
+  - `PhysicsMovement.cpp` swim movement now resolves against real world geometry instead of free-integrating through submerged terrain
+  - Swim collision uses WoW.exe’s `0.5` swim-branch displacement constant (`VA 0x007FFA24`) as two half-step submerged collision substeps
+  - `PhysicsEngine.cpp` now keeps water-entry horizontal damping visible in output velocity on the entry frame instead of mutating only carried state
+  - Added focused physics regressions for Durotar seabed collision and recorded water-entry damping
+- **Test baseline (session 132):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.DurotarRecording_WaterEntry_DampsHorizontalVelocity|FullyQualifiedName~FrameByFramePhysicsTests.DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" -v n`
+    - Passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n`
+    - Passed (`29/29`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.WestfallCoast_EnterWater_TransitionsToSwimming" -v n`
+    - Passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" -v n`
+    - Passed (aggregate clean-frame thresholds held)
+- **Files changed (session 132):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsMovement.cpp`
+  - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+- **Next priorities:** finish P7.5/P7.9 runtime elevator coverage, then sweep the remaining movement parity gaps (force-speed/opcode completeness, knockback/extrapolation validation, spline audit, FG hardening)
 - **Session 131 — P7 transport/elevator parity shipped:**
   - Added BG transport coordinate helpers and moved transport-local/world transforms into shared managed code
   - Fixed movement packet serialization so world position/facing stay in the base block and transport-local offset/orientation stay in the transport block
@@ -313,7 +336,7 @@ if (transportGuid != 0) {
   - `Tests/WoWSharpClient.Tests/Handlers/MovementPacketHandlerTests.cs`
   - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-- **Next priorities:** finish P7.5/P7.9, then sweep the next WoW.exe parity gap (swim collision path at `0x633B5E`)
+- **Next priorities:** swim collision path at `0x633B5E` closed in session 132; remaining parity work is P7.5/P7.9 plus movement/system sweeps listed above
 - **Session 130 — P6 AABB Collision Rewrite COMPLETE:**
   - Deleted ~2100 lines of custom physics workarounds
   - Implemented WoW.exe CollisionStepWoW (VA 0x633840) with AABB terrain queries

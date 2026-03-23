@@ -217,3 +217,17 @@ Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/SceneQuery.cpp`
 - Next command: `Get-Content Exports/Navigation/PhysicsMovement.cpp | Select-Object -First 260`
+
+## 2026-03-23 Session Note (swim parity)
+- Pass result: `delta shipped`
+- Local delta: the native swim path no longer free-integrates through submerged terrain. `PhysicsMovement.cpp` now resolves swim motion against geometry with two half-step submerged collision substeps keyed off the WoW.exe `0.5f` swim constant (`VA 0x007FFA24`), and `PhysicsEngine.cpp` now carries water-entry damping into the output velocity on the entry frame.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.DurotarRecording_WaterEntry_DampsHorizontalVelocity|FullyQualifiedName~FrameByFramePhysicsTests.DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" -v n` -> `3 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" -v n` -> passed
+- Files changed:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsMovement.cpp`
+- Next command: `Get-Content Exports/WoWSharpClient/OpCodeDispatcher.cs | Select-Object -First 260`

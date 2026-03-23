@@ -129,3 +129,34 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Frame-pattern note:
   - The large post-disembark Undercity spike (`sim Z≈61.656` vs `rec Z≈55.242`) was not missing geometry.
   - `GetGroundZ` already returned the correct floor when queried near foot level; the regression came from a higher pre-refinement surface being persisted after the floor had already been corrected.
+
+## 2026-03-23 Swim Parity Addendum
+
+- Scope note:
+  - This pass targeted the remaining WoW.exe swim-path parity gap at `CMovement::CollisionStep` swim branch `0x633B5E`.
+  - The old native swim path still integrated pitch-based velocity directly and had no submerged terrain/WMO collision.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsMovement.cpp`
+    - swim movement now resolves against geometry using submerged collide-and-slide instead of raw position integration
+    - the WoW.exe swim-branch half-displacement constant (`0.5f`, `VA 0x007FFA24`) is now applied as two half-step swim collision substeps
+    - start-of-frame submerged overlaps now receive a bounded depenetration pass before swim motion
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - water-entry damping now survives into the frame output velocity on the entry frame instead of mutating only the carried state
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.DurotarRecording_WaterEntry_DampsHorizontalVelocity|FullyQualifiedName~FrameByFramePhysicsTests.DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" -v n`
+    - passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n`
+    - passed (`29/29`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.WestfallCoast_EnterWater_TransitionsToSwimming" -v n`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" -v n`
+    - passed (aggregate clean-frame thresholds held)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" --logger "console;verbosity=detailed"`
+    - `avg=0.0029y`, `p99=0.0409y`, `max=0.0764y`
+- Frame-pattern note:
+  - The Durotar descent segment near `(-1016.77, -4970.62)` now bottoms out on the seabed instead of integrating straight through the underwater floor.
+  - The recorded water-entry transition now produces the expected `0.5x` horizontal velocity on the entry frame when seeded with the pre-entry airborne velocity state.

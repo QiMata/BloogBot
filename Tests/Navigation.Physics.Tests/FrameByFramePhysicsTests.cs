@@ -430,6 +430,122 @@ public class FrameByFramePhysicsTests
         }
     }
 
+    /// <summary>
+    /// WoW.exe damps horizontal velocity by 0.5x on the frame where movement
+    /// transitions from grounded/running into swimming.
+    /// </summary>
+    [Fact]
+    public void DurotarRecording_WaterEntry_DampsHorizontalVelocity()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var recording = Navigation.Physics.Tests.Helpers.RecordingTestHelpers.LoadByFilename(
+            Navigation.Physics.Tests.Helpers.Recordings.WaterEntry, _output);
+        int entryFrame = -1;
+        for (int i = 1; i < recording.Frames.Count; i++)
+        {
+            bool wasSwimming = (recording.Frames[i - 1].MovementFlags & Navigation.Physics.Tests.Helpers.MoveFlags.Swimming) != 0;
+            bool isSwimming = (recording.Frames[i].MovementFlags & Navigation.Physics.Tests.Helpers.MoveFlags.Swimming) != 0;
+            if (!wasSwimming && isSwimming)
+            {
+                entryFrame = i;
+                break;
+            }
+        }
+
+        Assert.True(entryFrame > 1, "Recording did not contain enough pre-entry frames to seed water-entry velocity");
+
+        var preSourceFrame = recording.Frames[entryFrame - 2];
+        var sourceFrame = recording.Frames[entryFrame - 1];
+        var targetFrame = recording.Frames[entryFrame];
+        float dt = (targetFrame.FrameTimestamp - sourceFrame.FrameTimestamp) / 1000.0f;
+        Assert.True(dt > 0.0f, $"Invalid frame delta at water entry: dt={dt:F4}s");
+        float dtPrev = (sourceFrame.FrameTimestamp - preSourceFrame.FrameTimestamp) / 1000.0f;
+        Assert.True(dtPrev > 0.0f, $"Invalid pre-entry frame delta: dtPrev={dtPrev:F4}s");
+
+        const float Gravity = PhysicsTestConstants.Gravity;
+        float inputVx = (sourceFrame.Position.X - preSourceFrame.Position.X) / dtPrev;
+        float inputVy = (sourceFrame.Position.Y - preSourceFrame.Position.Y) / dtPrev;
+        float inputVz = (sourceFrame.Position.Z - preSourceFrame.Position.Z) / dtPrev + (0.5f * Gravity * dtPrev);
+
+        var input = new PhysicsInput
+        {
+            MapId = recording.MapId,
+            X = sourceFrame.Position.X,
+            Y = sourceFrame.Position.Y,
+            Z = sourceFrame.Position.Z,
+            Orientation = sourceFrame.Facing,
+            Pitch = sourceFrame.SwimPitch,
+            MoveFlags = sourceFrame.MovementFlags,
+            Vx = inputVx,
+            Vy = inputVy,
+            Vz = inputVz,
+            WalkSpeed = sourceFrame.WalkSpeed,
+            RunSpeed = sourceFrame.RunSpeed,
+            RunBackSpeed = sourceFrame.RunBackSpeed,
+            SwimSpeed = sourceFrame.SwimSpeed,
+            SwimBackSpeed = sourceFrame.SwimBackSpeed,
+            FlightSpeed = 0.0f,
+            TurnSpeed = sourceFrame.TurnRate,
+            FallTime = sourceFrame.FallTime,
+            Height = CharHeight,
+            Radius = CharRadius,
+            PrevGroundZ = sourceFrame.Position.Z,
+            PrevGroundNz = 1.0f,
+            DeltaTime = dt,
+            FrameCounter = (uint)(entryFrame - 1),
+            PhysicsFlags = PHYSICS_FLAG_TRUST_INPUT_VELOCITY,
+        };
+
+        var output = StepPhysicsV2(ref input);
+        float entrySpeed = MathF.Sqrt((output.Vx * output.Vx) + (output.Vy * output.Vy));
+        float preEntrySpeed = MathF.Sqrt((inputVx * inputVx) + (inputVy * inputVy));
+        float expectedSpeed = preEntrySpeed * PhysicsTestConstants.WaterEntryVelocityDamp;
+
+        _output.WriteLine(
+            $"Water entry recording frame {entryFrame}: preEntry={preEntrySpeed:F3}y/s expected={expectedSpeed:F3}y/s " +
+            $"actual={entrySpeed:F3}y/s sourceFlags=0x{sourceFrame.MovementFlags:X8} outputFlags=0x{output.MoveFlags:X8}");
+
+        Assert.True(((MoveFlags)output.MoveFlags).HasFlag(MoveFlags.Swimming),
+            $"Expected water-entry step to end in swimming state, got flags=0x{output.MoveFlags:X8}");
+        Assert.InRange(entrySpeed, expectedSpeed - 0.35f, expectedSpeed + 0.35f);
+    }
+
+    /// <summary>
+    /// Regression from the Durotar swim recording: a near-vertical descent bottoms
+    /// out around z=-6.26 and should slide along the seabed instead of integrating
+    /// through submerged terrain.
+    /// </summary>
+    [Fact]
+    public void DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new WorldPosition(1, -1016.7447f, -4970.5815f, -5.8532376f, 1.4772964f);
+        var input = CreateInput(start, MoveFlags.Forward | MoveFlags.Swimming, runSpeed: 7.0f, orientation: start.Orientation);
+        input.Pitch = -1.553343f;
+        input.Height = CharHeight;
+        input.Radius = CharRadius;
+
+        const float dt = 1.0f / 60.0f;
+        const int framesToSimulate = 12;
+
+        var frames = SimulatePhysics(input, framesToSimulate, dt);
+        WriteFrameTrace("DurotarSwimDescent_SeabedCollision", frames);
+
+        float minZ = frames.Min(f => f.Position.Z);
+        float horizontalDistance = MathF.Sqrt(
+            MathF.Pow(frames[^1].Position.X - start.X, 2) +
+            MathF.Pow(frames[^1].Position.Y - start.Y, 2));
+
+        _output.WriteLine($"Min Z={minZ:F3}, horizontal distance={horizontalDistance:F3}y");
+
+        Assert.True(minZ > -6.50f,
+            $"Swimming descent should stop on the seabed instead of tunneling: minZ={minZ:F3}");
+        Assert.True(horizontalDistance > 0.01f,
+            $"Swimmer should still make forward progress while sliding along the seabed: horizontalDistance={horizontalDistance:F3}");
+    }
+
     // ==========================================================================
     // TEST: INDOOR CEILING
     // ==========================================================================

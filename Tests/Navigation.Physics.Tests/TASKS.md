@@ -153,3 +153,16 @@ BRT-PAR-001 parity loop (2026-02-28) found **no physics/navigation regressions**
   - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
   - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`
 - Next command: `Get-Content Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs | Select-Object -Skip 100 -First 220`
+
+## 2026-03-23 Session Note (swim parity)
+- Pass result: `delta shipped`
+- Local delta: added focused swim-path regressions for Durotar seabed collision and recorded water-entry damping, and the native swim replay now exercises real submerged collision instead of pure velocity integration.
+- Validation:
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.DurotarRecording_WaterEntry_DampsHorizontalVelocity|FullyQualifiedName~FrameByFramePhysicsTests.DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" -v n` -> `3 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.WestfallCoast_EnterWater_TransitionsToSwimming" -v n` -> `1 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" -v n` -> passed
+- Files changed:
+  - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+- Next command: `Get-Content Tests/WoWSharpClient.Tests/Handlers/MovementPacketHandlerTests.cs | Select-Object -First 260`
