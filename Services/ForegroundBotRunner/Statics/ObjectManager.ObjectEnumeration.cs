@@ -235,6 +235,45 @@ namespace ForegroundBotRunner.Statics
             return CallbackInternal(guid, filter);  // Swap back to (guid, filter) for internal use
         }
 
+        internal WoWObject? TryResolveObjectByGuid(ulong guid)
+        {
+            if (guid == 0)
+                return null;
+
+            lock (_objectsLock)
+            {
+                var existing = ObjectsBuffer.FirstOrDefault(o => o.Guid == guid);
+                if (existing != null)
+                    return existing;
+            }
+
+            var pointer = GetObjectPtrFromMemory(guid);
+            return pointer != nint.Zero ? CreateObjectFromPointer(pointer, guid) : null;
+        }
+
+        private WoWObject? CreateObjectFromPointer(nint pointer, ulong guid)
+        {
+            if (pointer == nint.Zero)
+                return null;
+
+            var objectType = (WoWObjectType)MemoryManager.ReadInt(nint.Add(pointer, OBJECT_TYPE_OFFSET));
+
+            byte[] guidParts = BitConverter.GetBytes(guid);
+            HighGuid highGuid = new(guidParts[0..4], guidParts[4..8]);
+
+            return objectType switch
+            {
+                WoWObjectType.Container => new WoWContainer(pointer, highGuid, objectType),
+                WoWObjectType.Item => new WoWItem(pointer, highGuid, objectType),
+                WoWObjectType.Player => guid == PlayerGuid.FullGuid
+                    ? new LocalPlayer(pointer, highGuid, objectType)
+                    : new WoWPlayer(pointer, highGuid, objectType),
+                WoWObjectType.GameObj => new WoWGameObject(pointer, highGuid, objectType),
+                WoWObjectType.Unit => new WoWUnit(pointer, highGuid, objectType),
+                _ => null,
+            };
+        }
+
 
 
         private int CallbackInternal(ulong guid, int filter)
@@ -253,42 +292,17 @@ namespace ForegroundBotRunner.Statics
                     return 1; // Continue enumeration
                 }
 
-                var objectType = (WoWObjectType)MemoryManager.ReadInt(nint.Add(pointer, OBJECT_TYPE_OFFSET));
-
-                byte[] guidParts = BitConverter.GetBytes(guid);
-                // Note: On private servers, low GUIDs like 5 are perfectly valid
-                HighGuid highGuid = new(guidParts[0..4], guidParts[4..8]);  // Fixed: was [0..3], now [0..4] for 4 bytes
-
-                switch (objectType)
+                // Note: On private servers, low GUIDs like 5 are perfectly valid.
+                var resolvedObject = CreateObjectFromPointer(pointer, guid);
+                if (resolvedObject == null)
                 {
-                    case WoWObjectType.Container:
-                        ObjectsBuffer.Add(new WoWContainer(pointer, highGuid, objectType));
-                        break;
-                    case WoWObjectType.Item:
-                        ObjectsBuffer.Add(new WoWItem(pointer, highGuid, objectType));
-                        break;
-                    case WoWObjectType.Player:
-                        // Compare by GUID (more reliable than pointer comparison when GetObjectPtr fails)
-                        var isLocalPlayer = (guid == PlayerGuid.FullGuid);
-                        if (isLocalPlayer)
-                        {
-                            var player = new LocalPlayer(pointer, highGuid, objectType);
-                            Player = player;
-                            ObjectsBuffer.Add(player);
-                        }
-                        else
-                        {
-                            ObjectsBuffer.Add(new WoWPlayer(pointer, highGuid, objectType));
-                        }
-                        break;
-                    case WoWObjectType.GameObj:
-                        ObjectsBuffer.Add(new WoWGameObject(pointer, highGuid, objectType));
-                        break;
-                    case WoWObjectType.Unit:
-                        ObjectsBuffer.Add(new WoWUnit(pointer, highGuid, objectType));
-                        break;
+                    return 1;
                 }
 
+                if (resolvedObject is LocalPlayer player)
+                    Player = player;
+
+                ObjectsBuffer.Add(resolvedObject);
                 return 1;
             }
             catch (Exception e)

@@ -232,7 +232,7 @@ if (transportGuid != 0) {
 | 7.6 | Update `MovementController` to track transport state and switch coordinate frames | **Done** |
 | 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | **Done** |
 | 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | **Done** |
-| 7.9 | Add second Orgrimmar transport recording/parity test | Open — repo only has an older zeppelin capture with no in-flight `NearbyGameObjects`, so full transport replay remains blocked on better recording data |
+| 7.9 | Add second Orgrimmar transport recording/parity test | Open — the FG recorder can now resolve/inject the active MoTransport even when visible-object enumeration misses it, but the repo still needs a fresh Orgrimmar capture that exercises that path |
 | 7.10 | Fix physics replay to exclude transport-transition frames from ground mode scoring | **Done** |
 | 7.11 | Calibration gate: ground avg < 0.08y, transport avg < 0.15y, aggregate p99 < 2.0y | **Done** |
 
@@ -251,7 +251,7 @@ if (transportGuid != 0) {
   - moving transport gameobjects advance their own spline state in the object manager loop,
   - passengers riding those movers stay stable in transport-local coordinates while their world coordinates resync each spline tick.
 - Remaining P7 follow-ups are narrower:
-  - `7.9` additional Orgrimmar transport replay coverage: the repo contains `Dralrahgra_Durotar_2026-02-08_11-06-02` (Orgrimmar zeppelin) but it loses dynamic object snapshots as soon as boarding starts, so only the ground-side transition windows can be replayed today.
+  - `7.9` additional Orgrimmar transport replay coverage: the repo contains `Dralrahgra_Durotar_2026-02-08_11-06-02` (Orgrimmar zeppelin) but it loses dynamic object snapshots as soon as boarding starts, so only the ground-side transition windows can be replayed today. The FG recorder now has the missing GUID-resolution/injection path for future MoTransport captures; what remains is collecting a fresh recording during the final live-validation pass.
 
 ### Key Files
 - `Exports/Navigation/PhysicsEngine.cpp` — `CollisionStepWoW` transport transform
@@ -283,8 +283,25 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 146)
+- **Last updated:** 2026-03-23 (session 147)
 - **Branch:** `main`
+- **Session 147 — FG transport recorder parity slice shipped:**
+  - `ForegroundBotRunner` can now resolve the active transport by GUID even when the mover is missing from visible-object enumeration, using the object-manager linked list as a fallback instead of dropping transport state on the floor.
+  - `MovementRecorder` now serializes transport-local offset from the player’s main position fields, derives relative transport orientation from the resolved transport pose, reconstructs player world position from that transport pose for distance checks, and explicitly injects the ridden transport into `NearbyGameObjects` when the visible-object pass missed it.
+  - Added deterministic `MovementRecorderTransportHelperTests` covering the local→world transform, transport-orientation derivation, zero-guid clearing, and explicit transport snapshot de-duplication.
+- **Test baseline (session 147):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundBotRunner.Tests.MovementRecorderTransportHelperTests" --logger "console;verbosity=minimal"`
+    - Passed (`4/4`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`68/68`)
+- **Files changed (session 147):**
+  - `Services/ForegroundBotRunner/MovementRecorder.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.ObjectEnumeration.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/MovementRecorderTransportHelperTests.cs`
+- **Next priorities:** clear the stale FG coinage skip logic in live-validation tests, sweep for any remaining snapshot/runtime parity stubs, and leave the fresh Orgrimmar transport capture for the final post-implementation validation chunk
 - **Session 146 — FG coinage/local snapshot parity slice shipped:**
   - `ForegroundBotRunner` no longer hardcodes player money to `0`: `WoWPlayer.Coinage` now reads `PLAYER_FIELD_COINAGE` from descriptor memory, which restores FG snapshot parity for vendor/mail/trainer flows that rely on copper totals.
   - `LocalPlayer.Copper`, `InBattleground`, and `HasQuestTargets` now match the BG model’s behavior instead of staying pinned to trivial stub values.

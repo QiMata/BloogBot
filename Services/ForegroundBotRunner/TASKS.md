@@ -19,6 +19,7 @@
 
 2. FG snapshot parity
 - [ ] Keep FG snapshot data complete and comparable with the BG path.
+- [x] Make `MovementRecorder` transport captures self-contained by resolving the active transport outside visible-object enumeration and serializing transport-local offset/orientation from the real mover pose.
 - [x] Restore descriptor-backed `Coinage`/`Copper` plus local state helpers (`InBattleground`, `HasQuestTargets`) so FG snapshots stop hardcoding those fields.
 - [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
 
@@ -33,17 +34,17 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - FG `WoWPlayer.Coinage` now reads `PLAYER_FIELD_COINAGE` directly from descriptor memory instead of returning a hardcoded `0`, so the injected snapshot path can finally report real money totals like the BG model.
-  - `LocalPlayer.Copper`, `InBattleground`, and `HasQuestTargets` now use the same semantics as `WoWSharpClient`: copper is descriptor-backed, battleground detection uses the Vanilla map set, and quest-target state comes from the quest-log slots.
-  - Added deterministic `ForegroundPlayerSnapshotParityTests` that allocate a fake object/descriptor pair in-process and verify the FG object model reads coinage and quest-log state through the same memory path it uses when injected.
+  - `ObjectManager` now has an internal GUID-resolution path that falls back to the object-manager linked list, so FG can still resolve a transport gameobject even when visible-object enumeration drops it mid-ride.
+  - `MovementRecorder` now records transport-local offset from the player’s main position fields, derives relative transport orientation from the resolved mover pose, reconstructs player world position from that mover pose for distance checks, and explicitly injects the ridden transport into `NearbyGameObjects`.
+  - Added deterministic `MovementRecorderTransportHelperTests` that pin the transport local→world transform, relative-facing math, zero-guid clearing, and explicit transport snapshot de-duplication.
 - Validation/tests run:
-  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundPlayerSnapshotParityTests" --logger "console;verbosity=minimal"` -> `10 passed`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `64 passed`
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundBotRunner.Tests.MovementRecorderTransportHelperTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `68 passed`
 - Files changed:
-  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
-  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+  - `Services/ForegroundBotRunner/MovementRecorder.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.ObjectEnumeration.cs`
   - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/ForegroundPlayerSnapshotParityTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/MovementRecorderTransportHelperTests.cs`
 - Next command:
   - `rg -n "WoWPlayer\\.Coinage is a stub|skip coinage assertion" Tests/BotRunner.Tests/LiveValidation`

@@ -275,7 +275,7 @@ For direct memory reading (advanced). All offsets from player object base pointe
 |--------|------|-------|---------------------|-------|
 | +0x9E0 | uint64 | TransportGUID | base + 0x38 | Reads MoTransport GUID when on zeppelin |
 
-When TransportGUID != 0, the Position fields (+0x9B8-0x9C0) auto-switch to transport-local coordinates. MOVEFLAG_ONTRANSPORT (0x200) is **never set** in vanilla 1.12.1.
+When TransportGUID != 0, the Position fields (+0x9B8-0x9C0) auto-switch to transport-local coordinates. FG recordings should derive `transportOffset` from those main position fields and reconstruct player world position from the resolved transport GO; the raw `+0x9D0..+0x9DC` fields are not usable transport offsets/orientation.
 
 ### Jump & Fall
 | Offset | Type | Field | CMovementInfo Offset |

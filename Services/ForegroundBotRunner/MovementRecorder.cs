@@ -58,6 +58,108 @@ namespace ForegroundBotRunner
         /// <summary>Replace NaN/Infinity with 0. Memory reads can return garbage during state transitions.</summary>
         private static float Safe(float v) => float.IsFinite(v) ? v : 0f;
 
+        internal static float NormalizeFacing(float facing)
+        {
+            const float Tau = MathF.PI * 2f;
+            float normalized = facing % Tau;
+            if (normalized < 0f)
+                normalized += Tau;
+            return normalized;
+        }
+
+        internal static GameData.Core.Models.Position TransformTransportLocalToWorld(
+            Position localPosition,
+            GameData.Core.Models.Position transportWorldPosition,
+            float transportFacing)
+        {
+            float cosO = MathF.Cos(transportFacing);
+            float sinO = MathF.Sin(transportFacing);
+
+            return new GameData.Core.Models.Position(
+                localPosition.X * cosO - localPosition.Y * sinO + transportWorldPosition.X,
+                localPosition.X * sinO + localPosition.Y * cosO + transportWorldPosition.Y,
+                localPosition.Z + transportWorldPosition.Z);
+        }
+
+        internal static void ApplyTransportState(
+            MovementData frame,
+            ulong transportGuid,
+            Position localPosition,
+            float worldFacing,
+            float? transportFacing)
+        {
+            frame.TransportGuid = transportGuid;
+
+            if (transportGuid == 0)
+            {
+                frame.TransportOffsetX = 0;
+                frame.TransportOffsetY = 0;
+                frame.TransportOffsetZ = 0;
+                frame.TransportOrientation = 0;
+                return;
+            }
+
+            frame.TransportOffsetX = Safe(localPosition.X);
+            frame.TransportOffsetY = Safe(localPosition.Y);
+            frame.TransportOffsetZ = Safe(localPosition.Z);
+            frame.TransportOrientation = transportFacing.HasValue
+                ? NormalizeFacing(worldFacing - transportFacing.Value)
+                : 0f;
+        }
+
+        internal static GameObjectSnapshot CreateGameObjectSnapshot(
+            ulong guid,
+            uint entry,
+            uint displayId,
+            uint gameObjectType,
+            uint flags,
+            uint goState,
+            GameData.Core.Models.Position worldPosition,
+            float facing,
+            string name,
+            float scale,
+            uint animProgress,
+            GameData.Core.Models.Position playerWorldPosition)
+        {
+            float dx = worldPosition.X - playerWorldPosition.X;
+            float dy = worldPosition.Y - playerWorldPosition.Y;
+            float dz = worldPosition.Z - playerWorldPosition.Z;
+            float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+
+            return new GameObjectSnapshot
+            {
+                Guid = guid,
+                Entry = entry,
+                DisplayId = displayId,
+                GameObjectType = gameObjectType,
+                Flags = flags,
+                GoState = goState,
+                Position = new Position
+                {
+                    X = Safe(worldPosition.X),
+                    Y = Safe(worldPosition.Y),
+                    Z = Safe(worldPosition.Z)
+                },
+                Facing = Safe(facing),
+                Name = name ?? "",
+                DistanceToPlayer = Safe(dist),
+                Scale = Safe(scale),
+                AnimProgress = animProgress
+            };
+        }
+
+        internal static bool EnsureTransportSnapshot(MovementData frame, GameObjectSnapshot? transportSnapshot)
+        {
+            if (transportSnapshot == null)
+                return false;
+
+            if (frame.NearbyGameObjects.Any(go => go.Guid == transportSnapshot.Guid))
+                return false;
+
+            frame.NearbyGameObjects.Add(transportSnapshot);
+            return true;
+        }
+
         /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.
         /// Uses AppContext.BaseDirectory to avoid Process.GetCurrentProcess() calls.</summary>
         private static void CrashTrace(string message)
@@ -451,15 +553,12 @@ namespace ForegroundBotRunner
                     // SystemTick = (uint)Environment.TickCount  // Requires proto regeneration
                 };
 
-                // Transport data — CONFIRMED via zeppelin recording:
-                // When TransportGuid != 0, the Position fields above contain transport-local coords
-                // (not world coords). MOVEFLAG_ONTRANSPORT (0x200) is NEVER set in vanilla 1.12.1.
-                // TransportOffset X/Y/Z read garbage (sin/cos pair) — NOT transport-local position.
-                frame.TransportGuid = unit.TransportGuid;
-                frame.TransportOffsetX = 0;
-                frame.TransportOffsetY = 0;
-                frame.TransportOffsetZ = 0;
-                frame.TransportOrientation = 0;
+                // WoW.exe FillMovementInfo (VA 0x7C6340) writes transport-local offset/orientation
+                // when a transport GUID is present. In FG memory those local coordinates already
+                // live in the main Position fields while the legacy +0x9D0..+0x9DC transport
+                // slots are garbage, so derive packet-equivalent transport data from the mover pose.
+                var resolvedTransport = TryResolveTransportGameObject(objectManager!, unit.TransportGuid);
+                ApplyTransportState(frame, unit.TransportGuid, frame.Position, Safe(unit.Facing), resolvedTransport?.Facing);
 
                 // Spline data - captured when the player has an active MoveSpline (flight paths, charge, knockback splines)
                 // HasMoveSpline reads the MoveSpline pointer at +0xA4C (non-null = active spline).
@@ -490,26 +589,27 @@ namespace ForegroundBotRunner
                 // When on transport, unit.Position is transport-local — compute world pos for distance checks
                 var playerPos = unit.Position;
                 var playerWorldPos = playerPos;
-                if (frame.TransportGuid != 0)
+                GameObjectSnapshot? transportSnapshot = null;
+                if (resolvedTransport != null)
                 {
-                    // Find transport GO to get its world position for coordinate transform
-                    foreach (var go in objectManager!.GameObjects)
-                    {
-                        if (go is LocalWoWGameObject tGo && tGo.Guid == frame.TransportGuid)
-                        {
-                            var tp = tGo.Position;
-                            float cosO = MathF.Cos(tGo.Facing);
-                            float sinO = MathF.Sin(tGo.Facing);
-                            playerWorldPos = new GameData.Core.Models.Position(
-                                playerPos.X * cosO - playerPos.Y * sinO + tp.X,
-                                playerPos.X * sinO + playerPos.Y * cosO + tp.Y,
-                                playerPos.Z + tp.Z);
-                            break;
-                        }
-                    }
+                    var transportWorldPos = resolvedTransport.Position;
+                    playerWorldPos = TransformTransportLocalToWorld(frame.Position, transportWorldPos, resolvedTransport.Facing);
+                    transportSnapshot = CreateGameObjectSnapshot(
+                        resolvedTransport.Guid,
+                        resolvedTransport.Entry,
+                        resolvedTransport.DisplayId,
+                        resolvedTransport.TypeId,
+                        resolvedTransport.Flags,
+                        (uint)resolvedTransport.GoState,
+                        transportWorldPos,
+                        resolvedTransport.Facing,
+                        resolvedTransport.Name ?? "",
+                        resolvedTransport.ScaleX,
+                        resolvedTransport.AnimProgress,
+                        playerWorldPos);
                 }
                 CrashTrace($"CaptureFrame: pre-snapshot contId={objectManager!.ContinentId} pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
-                SnapshotNearbyGameObjects(objectManager!, frame, playerWorldPos, frame.TransportGuid);
+                SnapshotNearbyGameObjects(objectManager!, frame, playerWorldPos, frame.TransportGuid, transportSnapshot);
                 SnapshotNearbyUnits(objectManager!, frame, playerWorldPos, unit.Guid);
 
                 // Periodic player position logging
@@ -534,8 +634,50 @@ namespace ForegroundBotRunner
         /// Captures nearby game objects within range and adds them to the frame.
         /// Only tracks transports and interactive objects (doors, buttons, elevators).
         /// </summary>
+        private LocalWoWGameObject? TryResolveTransportGameObject(ObjectManager objectManager, ulong transportGuid)
+        {
+            if (transportGuid == 0)
+                return null;
+
+            foreach (var go in objectManager.GameObjects)
+            {
+                if (go is LocalWoWGameObject transport && transport.Guid == transportGuid)
+                    return transport;
+            }
+
+            return objectManager.TryResolveObjectByGuid(transportGuid) as LocalWoWGameObject;
+        }
+
+        private void LogGameObjectSnapshotState(GameObjectSnapshot snapshot)
+        {
+            uint currentState = snapshot.GoState;
+            if (_lastGoState.TryGetValue(snapshot.Guid, out uint prevState))
+            {
+                if (currentState != prevState)
+                {
+                    _logger.LogInformation(
+                        "GO_STATE_CHANGE: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
+                        "state {PrevState}->{NewState} pos=({X:F1},{Y:F1},{Z:F1})",
+                        snapshot.Guid, snapshot.Name, snapshot.DisplayId, snapshot.GameObjectType,
+                        prevState, currentState,
+                        snapshot.Position.X, snapshot.Position.Y, snapshot.Position.Z);
+                }
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "GO_FIRST_SEEN: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
+                    "state={State} flags=0x{Flags:X} scale={Scale:F2} pos=({X:F1},{Y:F1},{Z:F1})",
+                    snapshot.Guid, snapshot.Name, snapshot.DisplayId, snapshot.GameObjectType,
+                    currentState, snapshot.Flags, snapshot.Scale,
+                    snapshot.Position.X, snapshot.Position.Y, snapshot.Position.Z);
+            }
+
+            _lastGoState[snapshot.Guid] = currentState;
+        }
+
         private void SnapshotNearbyGameObjects(ObjectManager objectManager, MovementData frame,
-            GameData.Core.Models.Position playerWorldPos, ulong transportGuid)
+            GameData.Core.Models.Position playerWorldPos, ulong transportGuid, GameObjectSnapshot? explicitTransportSnapshot)
         {
             const float MaxSnapshotRange = 100f; // yards
 
@@ -548,6 +690,9 @@ namespace ForegroundBotRunner
 
             try
             {
+                if (EnsureTransportSnapshot(frame, explicitTransportSnapshot))
+                    LogGameObjectSnapshotState(explicitTransportSnapshot!);
+
                 foreach (var go in objectManager.GameObjects)
                 {
                     if (go is not LocalWoWGameObject gameObj)
@@ -571,50 +716,24 @@ namespace ForegroundBotRunner
                     if (!isPlayerTransport && dist > MaxSnapshotRange)
                         continue;
 
-                    var snapshot = new GameObjectSnapshot
-                    {
-                        Guid = gameObj.Guid,
-                        Entry = gameObj.Entry,
-                        DisplayId = gameObj.DisplayId,
-                        GameObjectType = goType,
-                        Flags = gameObj.Flags,
-                        GoState = (uint)gameObj.GoState,
-                        Position = new Position
-                        {
-                            X = Safe(goPos.X),
-                            Y = Safe(goPos.Y),
-                            Z = Safe(goPos.Z)
-                        },
-                        Facing = Safe(gameObj.Facing),
-                        Name = gameObj.Name ?? "",
-                        DistanceToPlayer = Safe(dist),
-                        Scale = Safe(gameObj.ScaleX),
-                        AnimProgress = gameObj.AnimProgress
-                    };
+                    var snapshot = CreateGameObjectSnapshot(
+                        gameObj.Guid,
+                        gameObj.Entry,
+                        gameObj.DisplayId,
+                        goType,
+                        gameObj.Flags,
+                        (uint)gameObj.GoState,
+                        goPos,
+                        gameObj.Facing,
+                        gameObj.Name ?? "",
+                        gameObj.ScaleX,
+                        gameObj.AnimProgress,
+                        playerWorldPos);
 
-                    // Detect GoState transitions (door open/close, elevator state changes)
-                    uint currentState = snapshot.GoState;
-                    if (_lastGoState.TryGetValue(gameObj.Guid, out uint prevState))
-                    {
-                        if (currentState != prevState)
-                        {
-                            _logger.LogInformation(
-                                "GO_STATE_CHANGE: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
-                                "state {PrevState}->{NewState} pos=({X:F1},{Y:F1},{Z:F1})",
-                                gameObj.Guid, snapshot.Name, snapshot.DisplayId, goType,
-                                prevState, currentState, goPos.X, goPos.Y, goPos.Z);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogInformation(
-                            "GO_FIRST_SEEN: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
-                            "state={State} flags=0x{Flags:X} scale={Scale:F2} pos=({X:F1},{Y:F1},{Z:F1})",
-                            gameObj.Guid, snapshot.Name, snapshot.DisplayId, goType,
-                            currentState, snapshot.Flags, snapshot.Scale, goPos.X, goPos.Y, goPos.Z);
-                    }
-                    _lastGoState[gameObj.Guid] = currentState;
+                    if (frame.NearbyGameObjects.Any(existing => existing.Guid == snapshot.Guid))
+                        continue;
 
+                    LogGameObjectSnapshotState(snapshot);
                     frame.NearbyGameObjects.Add(snapshot);
                 }
             }
