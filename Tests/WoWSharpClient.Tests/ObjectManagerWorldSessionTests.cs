@@ -998,9 +998,23 @@ public class ObjectManagerWorldSessionTests
         writer.Write((uint)SplineFlags.Runmode);
         writer.Write(durationMs);
         writer.Write((uint)points.Count);
-        writer.Write(points[0].X);
-        writer.Write(points[0].Y);
-        writer.Write(points[0].Z);
+
+        Position destination = points[^1];
+        writer.Write(destination.X);
+        writer.Write(destination.Y);
+        writer.Write(destination.Z);
+
+        for (int i = 0; i < points.Count - 1; i++)
+            writer.Write(PackMonsterMoveOffset(destination - points[i]));
+    }
+
+    private static uint PackMonsterMoveOffset(Position offset)
+    {
+        uint packed = 0;
+        packed |= (uint)((int)(offset.X / 0.25f) & 0x7FF);
+        packed |= (uint)(((int)(offset.Y / 0.25f) & 0x7FF) << 11);
+        packed |= (uint)(((int)(offset.Z / 0.25f) & 0x3FF) << 22);
+        return packed;
     }
 
     private static void SubscribeForceChange(Opcode opcode, EventHandler<RequiresAcknowledgementArgs> handler)

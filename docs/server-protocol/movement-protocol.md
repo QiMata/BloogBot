@@ -231,8 +231,13 @@ SMSG_MONSTER_MOVE (0xDD):
     // IF moveType == Normal:
         uint32  splineFlags;         // SplineFlags bitmask
         uint32  duration;            // Total movement time (ms)
-        uint32  pointCount;          // Number of spline points
-        [float x, y, z] * pointCount;  // Waypoints
+        // IF splineFlags has Flying (Catmull-Rom / smooth path):
+        uint32  pointCount;          // Number of transmitted spline nodes
+        [float x, y, z] * pointCount;  // Raw spline nodes; cyclic EnterCycle prepends a fake start node
+        // ELSE (linear path):
+        uint32  pointCount;          // Number of spline nodes after the header start position
+        float   destX, destY, destZ; // Final destination
+        uint32  packedOffsets[pointCount - 1]; // Packed XYZ offsets = destination - waypoint (ByteBuffer::appendPackXYZ)
 ```
 
 ## Default Speeds

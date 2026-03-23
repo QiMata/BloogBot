@@ -72,33 +72,8 @@ namespace WoWSharpClient.Movement
                 return _lastPosition;
             }
 
-            float u = (_elapsed - _seg * Spline.SegmentMs) / Spline.SegmentMs;
-
-            Position result;
-            // Flying splines (0x200): use Catmull-Rom for smooth curves.
-            // WoW.exe SplineStep at 0x7C5360 dispatches to 6 interpolation sub-functions;
-            // Flying flag selects the cubic spline evaluator.
-            if (Spline.Flags.HasFlag(SplineFlags.Flying) && Spline.Points.Count >= 4)
-            {
-                var p0 = Spline.Points[Math.Max(0, _seg - 1)];
-                var p1 = Spline.Points[_seg];
-                var p2 = Spline.Points[_seg + 1];
-                var p3 = Spline.Points[Math.Min(Spline.Points.Count - 1, _seg + 2)];
-                result = CatmullRom(p0, p1, p2, p3, u);
-            }
-            else
-            {
-                var a = Spline.Points[_seg];
-                var b = Spline.Points[_seg + 1];
-                result = new Position(
-                    a.X + (b.X - a.X) * u,
-                    a.Y + (b.Y - a.Y) * u,
-                    a.Z + (b.Z - a.Z) * u
-                );
-            }
-
-            _lastPosition = result;
-            return result;
+            _lastPosition = EvaluateSegmentPosition(_elapsed, _seg);
+            return _lastPosition;
         }
 
         public bool Finished => !Spline.Flags.HasFlag(SplineFlags.Cyclic)
@@ -137,24 +112,68 @@ namespace WoWSharpClient.Movement
             if (Spline.Points.Count == 1 || _seg + 1 >= Spline.Points.Count)
                 return Spline.Points[^1];
 
-            float u = (_elapsed - _seg * Spline.SegmentMs) / Spline.SegmentMs;
+            return EvaluateSegmentPosition(_elapsed, _seg);
+        }
+
+        private Position EvaluateSegmentPosition(float elapsedMs, int segmentIndex)
+        {
+            float u = (elapsedMs - segmentIndex * Spline.SegmentMs) / Spline.SegmentMs;
+
+            // Flying splines (0x200): use Catmull-Rom for smooth curves.
+            // WoW.exe SplineStep at 0x7C5360 dispatches to multiple spline evaluators;
+            // Vanilla MONSTER_MOVE reaches the smooth path through the Flying/Catmull-Rom flag.
             if (Spline.Flags.HasFlag(SplineFlags.Flying) && Spline.Points.Count >= 4)
             {
-                var p0 = Spline.Points[Math.Max(0, _seg - 1)];
-                var p1 = Spline.Points[_seg];
-                var p2 = Spline.Points[_seg + 1];
-                var p3 = Spline.Points[Math.Min(Spline.Points.Count - 1, _seg + 2)];
+                var p0 = GetCatmullRomPoint(segmentIndex - 1);
+                var p1 = GetCatmullRomPoint(segmentIndex);
+                var p2 = GetCatmullRomPoint(segmentIndex + 1);
+                var p3 = GetCatmullRomPoint(segmentIndex + 2);
                 return CatmullRom(p0, p1, p2, p3, u);
             }
 
-            var a = Spline.Points[_seg];
-            var b = Spline.Points[_seg + 1];
+            var a = Spline.Points[segmentIndex];
+            var b = Spline.Points[segmentIndex + 1];
             return new Position(
                 a.X + (b.X - a.X) * u,
                 a.Y + (b.Y - a.Y) * u,
                 a.Z + (b.Z - a.Z) * u
             );
         }
+
+        private Position GetCatmullRomPoint(int index)
+        {
+            if (!Spline.Flags.HasFlag(SplineFlags.Cyclic))
+            {
+                int clampedIndex = Math.Clamp(index, 0, Spline.Points.Count - 1);
+                return Spline.Points[clampedIndex];
+            }
+
+            int uniquePointCount = GetUniqueCyclicPointCount();
+            if (uniquePointCount <= 0)
+            {
+                int clampedIndex = Math.Clamp(index, 0, Spline.Points.Count - 1);
+                return Spline.Points[clampedIndex];
+            }
+
+            int wrappedIndex = ((index % uniquePointCount) + uniquePointCount) % uniquePointCount;
+            return Spline.Points[wrappedIndex];
+        }
+
+        private int GetUniqueCyclicPointCount()
+        {
+            if (Spline.Points.Count == 0)
+                return 0;
+
+            if (Spline.Points.Count > 1 && PositionsApproximatelyEqual(Spline.Points[0], Spline.Points[^1]))
+                return Spline.Points.Count - 1;
+
+            return Spline.Points.Count;
+        }
+
+        private static bool PositionsApproximatelyEqual(Position left, Position right) =>
+            MathF.Abs(left.X - right.X) <= 0.01f
+            && MathF.Abs(left.Y - right.Y) <= 0.01f
+            && MathF.Abs(left.Z - right.Z) <= 0.01f;
 
         /// <summary>
         /// Catmull-Rom cubic spline interpolation.

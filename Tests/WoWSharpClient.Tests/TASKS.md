@@ -14,13 +14,16 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added deterministic coverage for the full controller speed-change family so run, run-back, swim, walk, swim-back, and turn-rate ACK/application now all have direct managed proof.
-  - Added deterministic remote-unit coverage for the observer-side player movement broadcast matrix, including hover/feather-fall, run/walk mode, and the missing run-back, walk, swim-back, and turn-rate speed packets.
+  - Added parser coverage for the real Vanilla `SMSG_MONSTER_MOVE` wire shapes, including linear destination-plus-packed-offset payloads and cyclic smooth (`Flying|Cyclic|EnterCycle`) payload normalization.
+  - Added `ActiveSpline` coverage for cyclic Catmull-Rom wrap behavior so the first and closing segments both use wrapped control points instead of endpoint clamping.
+  - Updated the shared object-manager monster-move payload helper so future runtime tests emit the real packet layout instead of the earlier simplified point list.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ForceSpeedChangeOpcodes_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementSpeedOpcodes_UpdateRemoteUnitState" -v n` -> `22 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1336 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnFirstSegment|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnClosingSegment" -v n` -> `5 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1340 passed`, `1 skipped`
 - Files changed:
+  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
 - Next command:
-  - `Get-Content Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs | Select-Object -First 260`
+  - `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs | Select-Object -First 260`

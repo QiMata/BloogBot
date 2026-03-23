@@ -9,6 +9,7 @@ using WoWSharpClient.Utils;
 using System.IO;
 using System.Linq;
 using System;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Handlers
 {
@@ -620,29 +621,99 @@ namespace WoWSharpClient.Handlers
                 data.MovementBlockUpdate.SplineTimestamp = reader.ReadUInt32();
 
                 uint splineCount = reader.ReadUInt32();
-                float firstX = reader.ReadSingle();
-                float firstY = reader.ReadSingle();
-                float firstZ = reader.ReadSingle();
-
-                data.MovementBlockUpdate.SplinePoints.Add(new Position(firstX, firstY, firstZ));
-
-                for (int i = 1; i < splineCount; i++)
-                {
-                    uint packed = reader.ReadUInt32();
-                    int dx = SignExtend(packed & 0x7FF, 11);
-                    int dy = SignExtend((packed >> 11) & 0x7FF, 11);
-                    int dz = SignExtend((packed >> 22) & 0x3FF, 10);
-
-                    float px = firstX + dx / 4.0f;
-                    float py = firstY + dy / 4.0f;
-                    float pz = firstZ + dz / 4.0f;
-
-                    data.MovementBlockUpdate.SplinePoints.Add(new Position(px, py, pz));
-                }
+                var startPosition = new Position(data.X, data.Y, data.Z);
+                data.MovementBlockUpdate.SplinePoints =
+                    ParseMonsterMoveSplinePoints(reader, startPosition, data.MovementBlockUpdate.SplineFlags.Value, splineCount);
             }
 
             return data;
         }
+
+        private static List<Position> ParseMonsterMoveSplinePoints(
+            BinaryReader reader,
+            Position startPosition,
+            SplineFlags flags,
+            uint splineCount)
+        {
+            if (splineCount == 0)
+                return [];
+
+            // Vanilla smooth paths (Flying flag / Catmull-Rom) serialize raw XYZ triplets.
+            // Linear paths serialize the final destination plus packed offsets relative to it
+            // via ByteBuffer::appendPackXYZ in VMaNGOS packet_builder.cpp.
+            return flags.HasFlag(SplineFlags.Flying)
+                ? ParseMonsterMoveCatmullRomPoints(reader, startPosition, flags, splineCount)
+                : ParseMonsterMoveLinearPoints(reader, splineCount);
+        }
+
+        private static List<Position> ParseMonsterMoveCatmullRomPoints(
+            BinaryReader reader,
+            Position startPosition,
+            SplineFlags flags,
+            uint splineCount)
+        {
+            var rawPoints = new List<Position>((int)splineCount);
+            for (int i = 0; i < splineCount; i++)
+                rawPoints.Add(ReadMonsterMoveVector(reader));
+
+            if (!flags.HasFlag(SplineFlags.Cyclic))
+                return rawPoints;
+
+            if (flags.HasFlag(SplineFlags.EnterCycle)
+                && rawPoints.Count > 0
+                && PositionsApproximatelyEqual(rawPoints[0], startPosition))
+            {
+                // Cyclic Catmull-Rom packets prepend a fake start vertex; the client erases it
+                // after the first cycle, so normalize to the managed runtime's simpler
+                // [start, ...nodes..., start] representation up front.
+                rawPoints.RemoveAt(0);
+            }
+
+            if (rawPoints.Count > 0
+                && PositionsApproximatelyEqual(rawPoints[0], startPosition))
+            {
+                Position closingLoopPoint = rawPoints[0];
+                rawPoints.RemoveAt(0);
+                rawPoints.Add(closingLoopPoint);
+            }
+
+            return rawPoints;
+        }
+
+        private static List<Position> ParseMonsterMoveLinearPoints(BinaryReader reader, uint splineCount)
+        {
+            var destination = ReadMonsterMoveVector(reader);
+            var points = new List<Position>((int)splineCount);
+
+            for (int i = 1; i < splineCount; i++)
+            {
+                var offset = ReadMonsterMovePackedOffset(reader.ReadUInt32());
+                points.Add(new Position(
+                    destination.X - offset.X,
+                    destination.Y - offset.Y,
+                    destination.Z - offset.Z));
+            }
+
+            points.Add(destination);
+            return points;
+        }
+
+        private static Position ReadMonsterMoveVector(BinaryReader reader) =>
+            new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+
+        private static Position ReadMonsterMovePackedOffset(uint packed)
+        {
+            int dx = SignExtend(packed & 0x7FF, 11);
+            int dy = SignExtend((packed >> 11) & 0x7FF, 11);
+            int dz = SignExtend((packed >> 22) & 0x3FF, 10);
+
+            return new Position(dx / 4.0f, dy / 4.0f, dz / 4.0f);
+        }
+
+        private static bool PositionsApproximatelyEqual(Position left, Position right) =>
+            MathF.Abs(left.X - right.X) <= 0.01f
+            && MathF.Abs(left.Y - right.Y) <= 0.01f
+            && MathF.Abs(left.Z - right.Z) <= 0.01f;
 
         private static int SignExtend(uint value, int bits)
         {

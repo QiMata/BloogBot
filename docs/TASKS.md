@@ -283,8 +283,32 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 138)
+- **Last updated:** 2026-03-23 (session 139)
 - **Branch:** `main`
+- **Session 139 — reachable spline wire/runtime parity slice shipped:**
+  - BG `SMSG_MONSTER_MOVE` parsing now matches the Vanilla/VMaNGOS wire formats instead of assuming a single simplified point list:
+    - linear paths rebuild their node sequence from the transmitted destination plus packed `appendPackXYZ` offsets,
+    - smooth paths (`Flying`) read raw Catmull-Rom nodes directly.
+  - Cyclic smooth splines now normalize the fake `EnterCycle` start vertex into the managed runtime’s closing-loop representation, and `ActiveSpline` now wraps Catmull-Rom control-point lookup across the first and closing segments instead of clamping at the ends.
+  - The shared test payload helper for direct monster-move runtime tests now emits the real linear packet layout, so future spline/runtime regressions will exercise the same wire shape the client receives.
+  - Reachable managed spline parity is now closed for Vanilla `SMSG_MONSTER_MOVE`: the server/client code still contains other spline evaluators, but the current Vanilla movement wire surface reaches linear and `Flying`/Catmull-Rom only.
+- **Test baseline (session 139):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnFirstSegment|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnClosingSegment" -v n`
+    - Passed (`5/5`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n`
+    - Passed (`1340/1341`, `1 skipped`)
+  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n`
+    - Passed (`117/117`)
+- **Files changed (session 139):**
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/Movement/SplineController.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `docs/server-protocol/movement-protocol.md`
+- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, a recorded directional remote-unit extrapolation fixture, any binary-backed movement/system gaps still left after the now-closed reachable spline + Vanilla opcode sweeps, and the FG hardening audit
 - **Session 138 — observer movement opcode parity slice shipped:**
   - BG now handles the remaining observer-side player movement broadcasts from the Vanilla 1.12.1 movement sender matrix: `MSG_MOVE_SET_RUN_MODE`, `MSG_MOVE_SET_WALK_MODE`, `MSG_MOVE_SET_RUN_BACK_SPEED`, `MSG_MOVE_SET_WALK_SPEED`, `MSG_MOVE_SET_SWIM_BACK_SPEED`, `MSG_MOVE_SET_TURN_RATE`, `MSG_MOVE_FEATHER_FALL`, and `MSG_MOVE_HOVER`.
   - `MovementHandler` now parses those broadcasts through the same remote-unit state path as the existing observer movement packets, so remote units pick up player-owned speed and flag changes instead of silently dropping them.
@@ -309,7 +333,6 @@ if (transportGuid != 0) {
   - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
   - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
-- **Next priorities:** `7.9` Orgrimmar elevator replay coverage, the remaining spline-mode audit, a recorded directional remote-unit extrapolation fixture, any binary-backed movement/system gaps still left after the now-covered Vanilla opcode sweep, and the FG hardening audit
 - **Session 137 — movement opcode completeness slice shipped:**
   - BG now handles the remaining local-player movement flag toggle opcodes end to end for `SMSG_MOVE_WATER_WALK`, `SMSG_MOVE_LAND_WALK`, `SMSG_MOVE_SET_HOVER`, `SMSG_MOVE_UNSET_HOVER`, `SMSG_MOVE_FEATHER_FALL`, and `SMSG_MOVE_NORMAL_FALL`.
   - `WoWSharpObjectManager` mutates the local player state before sending the matching ACK packets, so managed state and on-wire acknowledgements stay aligned with WoW.exe behavior.

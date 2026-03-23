@@ -7,29 +7,26 @@
 
 ## Active Priorities
 1. Finish the movement opcode completeness sweep against the client dispatch table and close any remaining ACK/application gaps; the Vanilla player/controller/observer matrix is now covered, so only binary-backed leftovers should remain.
-2. Continue the spline audit from the new server-time/facing fixes and confirm whether any binary-backed modes beyond those still differ.
-3. Add recorded-motion validation for remote extrapolation and knockback handling.
-4. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
+2. Add recorded-motion validation for remote extrapolation and knockback handling.
+3. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
 
 ## Session Handoff
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
-  - `MovementHandler` now parses the remaining observer-side player movement broadcasts from the Vanilla 1.12.1 sender matrix, including hover/feather-fall, run/walk mode, and the missing run-back, walk, swim-back, and turn-rate speed packets.
-  - `WorldClient` and `OpCodeDispatcher` now bridge the full Vanilla player/controller/observer movement matrix instead of leaving those observer opcodes silently unhandled.
-  - Deterministic tests now cover the complete controller speed family plus the observer-side speed/flag broadcast surface for remote units.
+  - `MovementHandler` now decodes `SMSG_MONSTER_MOVE` using the real Vanilla wire formats: linear paths rebuild their node list from a destination plus packed `appendPackXYZ` offsets, while smooth (`Flying`) paths read raw Catmull-Rom nodes.
+  - Cyclic smooth splines now normalize the fake `EnterCycle` start vertex into the managed runtime’s `[start, ...nodes..., start]` loop shape, and `ActiveSpline` now wraps Catmull-Rom control-point lookup across the closing segment instead of clamping at the ends.
+  - The reachable managed spline audit is closed for Vanilla `SMSG_MONSTER_MOVE`: Bezier/other evaluator paths are still present in server/client code, but the current Vanilla movement wire surface reaches linear and `Flying`/Catmull-Rom only.
 - Validation/tests run:
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet build Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore` -> `succeeded`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.ForceSpeedChangeOpcodes_ParseApplyAndAck|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementFlagOpcodes_UpdateRemoteUnitState|FullyQualifiedName~ObjectManagerWorldSessionTests.ObserverMovementSpeedOpcodes_UpdateRemoteUnitState" -v n` -> `22 passed`
-  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build --filter "FullyQualifiedName~WorldClientTests.BridgeRegistration_MovementOpcodes_Registered" -v n` -> `1 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1336 passed`, `1 skipped`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MonsterMoveParsingTests|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnFirstSegment|FullyQualifiedName~ActiveSplineStepTests.Step_CyclicFlyingSpline_UsesWrappedNeighborOnClosingSegment" -v n` -> `5 passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -v n` -> `1340 passed`, `1 skipped`
   - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-build -v n` -> `117 passed`
 - Files changed:
-  - `Exports/WoWSharpClient/Client/WorldClient.cs`
   - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
-  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Exports/WoWSharpClient/Movement/SplineController.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/MonsterMoveParsingTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/ActiveSplineTests.cs`
   - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-  - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - Next command:
-  - `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`
+  - `Get-Content Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs | Select-Object -First 260`

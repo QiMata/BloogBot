@@ -27,6 +27,29 @@ public class ActiveSplineStepTests
         return new Spline(1, 1, 0, SplineFlags.None, points, 2000);
     }
 
+    private static Spline MakeCyclicFlyingSpline()
+    {
+        var points = new List<Position>
+        {
+            new(0, 0, 0),
+            new(10, 0, 0),
+            new(10, 10, 0),
+            new(0, 0, 0),
+        };
+        return new Spline(1, 1, 0, SplineFlags.Flying | SplineFlags.Cyclic, points, 3000);
+    }
+
+    private static Position CatmullRomExpected(Position p0, Position p1, Position p2, Position p3, float t)
+    {
+        float t2 = t * t;
+        float t3 = t2 * t;
+        return new Position(
+            0.5f * (2 * p1.X + (-p0.X + p2.X) * t + (2 * p0.X - 5 * p1.X + 4 * p2.X - p3.X) * t2 + (-p0.X + 3 * p1.X - 3 * p2.X + p3.X) * t3),
+            0.5f * (2 * p1.Y + (-p0.Y + p2.Y) * t + (2 * p0.Y - 5 * p1.Y + 4 * p2.Y - p3.Y) * t2 + (-p0.Y + 3 * p1.Y - 3 * p2.Y + p3.Y) * t3),
+            0.5f * (2 * p1.Z + (-p0.Z + p2.Z) * t + (2 * p0.Z - 5 * p1.Z + 4 * p2.Z - p3.Z) * t2 + (-p0.Z + 3 * p1.Z - 3 * p2.Z + p3.Z) * t3)
+        );
+    }
+
     [Fact]
     public void Step_AtStart_ReturnsFirstPoint()
     {
@@ -233,6 +256,42 @@ public class ActiveSplineStepTests
 
         Assert.Equal(10f, atBoundary.X, 0.01f);
         Assert.InRange(afterWrap.X, 0f, 0.02f);
+    }
+
+    [Fact]
+    public void Step_CyclicFlyingSpline_UsesWrappedNeighborOnFirstSegment()
+    {
+        var active = new ActiveSpline(MakeCyclicFlyingSpline());
+
+        var pos = active.Step(500);
+        var expected = CatmullRomExpected(
+            new Position(10, 10, 0),
+            new Position(0, 0, 0),
+            new Position(10, 0, 0),
+            new Position(10, 10, 0),
+            0.5f);
+
+        Assert.Equal(expected.X, pos.X, 3);
+        Assert.Equal(expected.Y, pos.Y, 3);
+        Assert.Equal(expected.Z, pos.Z, 3);
+    }
+
+    [Fact]
+    public void Step_CyclicFlyingSpline_UsesWrappedNeighborOnClosingSegment()
+    {
+        var active = new ActiveSpline(MakeCyclicFlyingSpline());
+
+        var pos = active.Step(2500);
+        var expected = CatmullRomExpected(
+            new Position(10, 0, 0),
+            new Position(10, 10, 0),
+            new Position(0, 0, 0),
+            new Position(10, 0, 0),
+            0.5f);
+
+        Assert.Equal(expected.X, pos.X, 3);
+        Assert.Equal(expected.Y, pos.Y, 3);
+        Assert.Equal(expected.Z, pos.Z, 3);
     }
 }
 
