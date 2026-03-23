@@ -62,12 +62,13 @@ namespace GameData.Core.Interfaces
         public void Face(Position pos)
         {
             if (pos == null) return;
-            // Always set facing toward target. WoW.exe sends MSG_MOVE_SET_FACING
-            // every time the player turns. MaNGOS checks facing with ±M_PI_F/2 (90°)
-            // for melee attacks — our old 0.5 rad (28°) IsFacing tolerance was too wide,
-            // causing the bot to skip re-facing when the mob repositioned slightly.
-            // Always send the facing update to maintain parity.
-            SetFacing(Player.GetFacingForPosition(pos));
+            // WoW.exe (0x60E1EA): only sends MSG_MOVE_SET_FACING when the angle
+            // changes by more than 0.1 rad (5.7°). Threshold at VA 0x80C408.
+            var targetFacing = Player.GetFacingForPosition(pos);
+            float delta = MathF.Abs(targetFacing - Player.Facing);
+            if (delta > MathF.PI) delta = 2 * MathF.PI - delta; // wrap around
+            if (delta > 0.1f) // WoW.exe threshold: 0.1 rad
+                SetFacing(targetFacing);
         }
         public void MoveToward(Position pos)
         {
