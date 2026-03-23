@@ -283,8 +283,32 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 150)
+- **Last updated:** 2026-03-23 (session 151)
 - **Branch:** `main`
+- **Session 151 — FG frame/action-surface parity slice shipped:**
+  - `ForegroundBotRunner` now exposes live `GossipFrame`, `QuestFrame`, and `MerchantFrame` objects backed by the injected client UI instead of returning `null`, which restores the remaining legacy FG BotRunner action surface for vendor/quest/gossip flows.
+  - FG now implements the task-owned `QuickVendorVisitAsync`, `AcceptQuestFromNpcAsync`, and `TurnInQuestAsync` paths instead of inheriting interface defaults; quick vendor visits sell coarse junk, repair if possible, and buy requested items while the merchant frame stays open.
+  - NPC interaction now records the active conversation GUID and explicitly targets the NPC before right-clicking, which keeps the new FG frame wrappers tied to the correct live conversation context.
+- **Test baseline (session 151):**
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests|FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"`
+    - Passed (`14/14`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`84/84`)
+- **Files changed (session 151):**
+  - `Services/ForegroundBotRunner/Frames/FgGossipFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgMerchantFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgQuestFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FrameLuaReader.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
+- **Next priorities:** finish the remaining FG task-driven interaction no-op paths (`DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, then any still-null frame surfaces that matter to actionable flows), then continue the last movement/system sweep without starting live integration yet
 - **Session 150 — FG vendor interaction parity slice shipped:**
   - `ForegroundBotRunner` no longer inherits interface default no-ops for merchant flows: the injected object manager now resolves NPC GUIDs to live objects, right-clicks them on the main thread, waits for the merchant frame, and executes buy/sell/repair through the real in-client interaction surface.
   - Sequential-bag sell semantics now match the existing BG/runtime contract: `bagId == 0xFF` is treated as the ordered flattened bag view instead of a literal bag index, which keeps foreground vendor sell calls aligned with the rest of the stack.

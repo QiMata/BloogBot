@@ -123,7 +123,13 @@ namespace ForegroundBotRunner.Statics
 
         private readonly FgCharacterSelectScreen _fgCharacterSelectScreen;
 
+        private readonly FgGossipFrame _fgGossipFrame;
+
         private readonly ILootFrame _fgLootFrame;
+
+        private readonly FgMerchantFrame _fgMerchantFrame;
+
+        private readonly FgQuestFrame _fgQuestFrame;
 
 
 
@@ -145,9 +151,24 @@ namespace ForegroundBotRunner.Statics
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
                 lua => MainThreadLuaCall(lua));
+            _fgGossipFrame = new FgGossipFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua),
+                () => GetActiveNpcInteractionGuid());
             _fgLootFrame = new FgLootFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua));
+            _fgMerchantFrame = new FgMerchantFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua),
+                (bag, slot) => GetContainedItem(bag, slot),
+                () => GetContainedItems(),
+                slot => GetEquippedItem(slot),
+                () => GetActiveNpcInteractionGuid());
+            _fgQuestFrame = new FgQuestFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua),
+                () => GetActiveNpcInteractionGuid());
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);

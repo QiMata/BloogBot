@@ -157,11 +157,11 @@ namespace ForegroundBotRunner.Statics
         ILoginScreen IObjectManager.LoginScreen => _fgLoginScreen;
         IRealmSelectScreen IObjectManager.RealmSelectScreen => _fgRealmSelectScreen;
         ICharacterSelectScreen IObjectManager.CharacterSelectScreen => _fgCharacterSelectScreen;
-        IGossipFrame IObjectManager.GossipFrame => null;
+        IGossipFrame IObjectManager.GossipFrame => _fgGossipFrame;
         ILootFrame IObjectManager.LootFrame => _fgLootFrame;
-        IMerchantFrame IObjectManager.MerchantFrame => null;
+        IMerchantFrame IObjectManager.MerchantFrame => _fgMerchantFrame;
         ICraftFrame IObjectManager.CraftFrame => null;
-        IQuestFrame IObjectManager.QuestFrame => null;
+        IQuestFrame IObjectManager.QuestFrame => _fgQuestFrame;
         IQuestGreetingFrame IObjectManager.QuestGreetingFrame => null;
         ITaxiFrame IObjectManager.TaxiFrame => null;
         ITradeFrame IObjectManager.TradeFrame => null;

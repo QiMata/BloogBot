@@ -24,6 +24,7 @@
 - [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
 - [x] Restore descriptor-backed FG `Race/Class/Gender`, `FactionTemplate`, and power reads so the injected object model matches the BG snapshot surface for combat/movement consumers.
 - [x] Restore foreground vendor interaction methods (`InteractWithNpcAsync`, buy/sell/repair) so FG runtime behavior no longer falls back to interface default no-ops for merchant flows.
+- [x] Restore non-null FG `GossipFrame` / `QuestFrame` / `MerchantFrame` surfaces plus task-owned quest/vendor async helpers so BotRunner no longer hits null/default-interface paths on the injected client.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -36,6 +37,28 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
+  - `ObjectManager` now exposes real foreground `GossipFrame`, `QuestFrame`, and `MerchantFrame` implementations instead of returning `null`, so legacy BotRunner FG action paths can interact with live WoW UI state again.
+  - Added foreground `QuickVendorVisitAsync`, `AcceptQuestFromNpcAsync`, and `TurnInQuestAsync` implementations; vendor visits now sell junk with the same coarse junk heuristic as BG, then repair and buy requested items while the merchant window is open.
+  - NPC interaction now caches the active GUID and explicitly targets the NPC before right-click interaction, which stabilizes follow-on quest/vendor frame actions that need the current conversation target.
+  - Added deterministic FG tests for the new gossip/quest/merchant frame wrappers plus the junk-item heuristic.
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests|FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"` -> `14 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `84 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgGossipFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgMerchantFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgQuestFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FrameLuaReader.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
+  - Next command:
+  - `rg -n "DiscoverTaxiNodesAsync|ActivateFlightAsync|TaxiFrame => null|TrainerFrame => null|TalentFrame => null" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Previous delta:
   - `ObjectManager` now implements the foreground vendor interaction surface instead of inheriting interface default no-ops: NPC interaction is routed through a real right-click on the resolved object, vendor buy/sell/repair wait for the merchant frame on the main thread, and sequential-bag `0xFF` sell semantics now match the BG/runtime expectations.
   - Added focused FG helper tests that pin merchant-slot Lua generation, quantity normalization, and sequential-bag item GUID resolution used by the new sell path.
   - Merchant interactions now close the vendor window after buy/sell/repair operations so injected runs do not leave stale UI state behind between actions.

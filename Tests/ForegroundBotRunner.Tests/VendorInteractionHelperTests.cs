@@ -1,4 +1,5 @@
 using ForegroundBotRunner.Statics;
+using GameData.Core.Enums;
 
 namespace ForegroundBotRunner.Tests;
 
@@ -59,5 +60,16 @@ public sealed class VendorInteractionHelperTests
     {
         Assert.Equal("BuyMerchantItem(7, 1)", VendorInteractionHelper.BuildBuyMerchantItemLua(7, 0));
         Assert.Equal("BuyMerchantItem(7, 4)", VendorInteractionHelper.BuildBuyMerchantItemLua(7, 4));
+    }
+
+    [Theory]
+    [InlineData(6948u, "Hearthstone", ItemQuality.Poor, false)]
+    [InlineData(117u, "Tough Jerky", ItemQuality.Common, false)]
+    [InlineData(118u, "Worn Shortsword", ItemQuality.Common, true)]
+    [InlineData(119u, "Rusty Hatchet", ItemQuality.Poor, true)]
+    [InlineData(120u, "Uncommon Shield", ItemQuality.Uncommon, false)]
+    public void IsLikelyJunk_MatchesVendorHeuristic(uint itemId, string itemName, ItemQuality quality, bool expected)
+    {
+        Assert.Equal(expected, VendorInteractionHelper.IsLikelyJunk(itemId, itemName, quality));
     }
 }

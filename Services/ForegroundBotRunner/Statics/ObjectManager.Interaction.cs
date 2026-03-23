@@ -20,8 +20,24 @@ namespace ForegroundBotRunner.Statics
         private readonly object _fishingBobberInteractLock = new();
         private DateTime _lastFishingBobberInteractAt = DateTime.MinValue;
         private ulong _lastFishingBobberGuid;
+        private ulong _lastNpcInteractionGuid;
 
         public IWoWEventHandler EventHandler { get; }
+
+        private ulong GetActiveNpcInteractionGuid()
+        {
+            if (_lastNpcInteractionGuid != 0)
+                return _lastNpcInteractionGuid;
+
+            try
+            {
+                return Player?.TargetGuid ?? 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
 
         /// <summary>
         /// Wraps Functions.LuaCall in ThreadSynchronizer.RunOnMainThread.
@@ -377,6 +393,59 @@ namespace ForegroundBotRunner.Statics
             return Task.CompletedTask;
         }
 
+        public async Task QuickVendorVisitAsync(ulong vendorGuid, Dictionary<uint, uint>? itemsToBuy = null, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(vendorGuid, ct);
+            if (!await WaitForMerchantWindowAsync(ct))
+            {
+                Log.Warning("[FG-VENDOR] Merchant window did not open for quick vendor visit 0x{Guid:X}.", vendorGuid);
+                return;
+            }
+
+            try
+            {
+                var junkItems = GetContainedItems()
+                    .Where(item => VendorInteractionHelper.IsLikelyJunk(item.ItemId, item.Name, item.Quality))
+                    .ToList();
+
+                foreach (var item in junkItems)
+                {
+                    ThreadSynchronizer.RunOnMainThread(() =>
+                        Functions.SellItemByGuid(
+                            VendorInteractionHelper.NormalizeQuantity(Math.Min(item.Quantity, 255u)),
+                            vendorGuid,
+                            item.Guid));
+                    await Task.Delay(100, ct);
+                }
+
+                if (_fgMerchantFrame.CanRepair && _fgMerchantFrame.TotalRepairCost > 0)
+                {
+                    _fgMerchantFrame.RepairAll();
+                    await Task.Delay(150, ct);
+                }
+
+                if (itemsToBuy != null)
+                {
+                    foreach (var kvp in itemsToBuy)
+                    {
+                        int merchantSlot = ResolveMerchantSlot(kvp.Key);
+                        if (merchantSlot <= 0)
+                        {
+                            Log.Warning("[FG-VENDOR] Item {ItemId} not found during quick vendor visit for vendor 0x{Guid:X}.", kvp.Key, vendorGuid);
+                            continue;
+                        }
+
+                        MainThreadLuaCall(VendorInteractionHelper.BuildBuyMerchantItemLua(merchantSlot, kvp.Value));
+                        await Task.Delay(100, ct);
+                    }
+                }
+            }
+            finally
+            {
+                MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
+            }
+        }
+
 
 
         public void Logout()
@@ -715,6 +784,46 @@ namespace ForegroundBotRunner.Statics
             Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
         }
 
+        public async Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(npcGuid, ct);
+
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                if (!_fgQuestFrame.IsOpen)
+                    continue;
+
+                _fgQuestFrame.AcceptQuest();
+
+                await Task.Delay(150, ct);
+                if (!_fgQuestFrame.IsOpen)
+                    return;
+            }
+
+            Log.Warning("[FG-QUEST] Accept flow did not complete for quest {QuestId} at NPC 0x{Guid:X}.", questId, npcGuid);
+        }
+
+        public async Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(npcGuid, ct);
+
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                if (!_fgQuestFrame.IsOpen)
+                    continue;
+
+                _fgQuestFrame.CompleteQuest((int)rewardIndex);
+
+                await Task.Delay(150, ct);
+                if (!_fgQuestFrame.IsOpen)
+                    return;
+            }
+
+            Log.Warning("[FG-QUEST] Turn-in flow did not complete for quest {QuestId} at NPC 0x{Guid:X}.", questId, npcGuid);
+        }
+
         public async Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default)
         {
             var obj = Objects.FirstOrDefault(o => o.Guid == npcGuid);
@@ -724,7 +833,12 @@ namespace ForegroundBotRunner.Statics
                 return;
             }
 
-            ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
+            _lastNpcInteractionGuid = npcGuid;
+            ThreadSynchronizer.RunOnMainThread(() =>
+            {
+                Functions.SetTarget(npcGuid);
+                wowObj.Interact();
+            });
             await Task.Delay(150, ct);
         }
 
