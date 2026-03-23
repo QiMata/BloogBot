@@ -1,5 +1,6 @@
 #include "PhysicsHelpers.h"
 #include "PhysicsBridge.h" // for MovementFlags bit definitions
+#include "PhysicsEngine.h" // for PhysicsConstants
 #include "VMapLog.h"
 #include <cmath>
 #include <sstream>
@@ -79,6 +80,15 @@ namespace PhysicsHelpers
             const bool backNoForward = moveBack && !moveFwd;
             plan.speed = backNoForward ? runBackSpeed : runSpeed;
         }
+
+        // WoW.exe CollisionResponse (0x7C5A20, VA 0x0081DA54): when moving
+        // forward/backward AND strafing simultaneously, all velocity components
+        // are multiplied by sin(45°) = 0.707107 to maintain constant total speed.
+        // Without this, diagonal movement is 41.4% faster than cardinal movement.
+        const bool hasForwardBack = moveFwd || moveBack;
+        const bool hasStrafe = strafeL || strafeR;
+        if (hasForwardBack && hasStrafe)
+            plan.speed *= PhysicsConstants::SIN_45;
 
         plan.dist = std::max(0.0f, plan.speed * dt);
 
