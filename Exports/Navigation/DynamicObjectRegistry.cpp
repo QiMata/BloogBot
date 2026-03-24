@@ -15,6 +15,18 @@ DynamicObjectRegistry* DynamicObjectRegistry::Instance()
     return s_instance;
 }
 
+uint32_t DynamicObjectRegistry::AllocateRuntimeInstanceId()
+{
+    if (m_nextRuntimeInstanceId < 0x80000001u)
+        m_nextRuntimeInstanceId = 0x80000001u;
+
+    uint32_t instanceId = m_nextRuntimeInstanceId++;
+    if (m_nextRuntimeInstanceId == 0)
+        m_nextRuntimeInstanceId = 0x80000001u;
+
+    return instanceId;
+}
+
 // ==========================================================================
 // DisplayId mapping (from temp_gameobject_models index file)
 // ==========================================================================
@@ -200,10 +212,12 @@ bool DynamicObjectRegistry::EnsureRegistered(
     obj.entry = 0;
     obj.displayId = displayId;
     obj.mapId = mapId;
+    obj.runtimeInstanceId = AllocateRuntimeInstanceId();
     obj.scale = scale;
     obj.model = model;
     obj.isDoorModel = IsDoorModel(mapIt->second.modelName);
 
+    m_instanceIdToGuid[obj.runtimeInstanceId] = guid;
     m_objects[guid] = std::move(obj);
     return true;
 }
@@ -232,10 +246,12 @@ bool DynamicObjectRegistry::RegisterObject(
     obj.entry = entry;
     obj.displayId = displayId;
     obj.mapId = mapId;
+    obj.runtimeInstanceId = AllocateRuntimeInstanceId();
     obj.scale = scale;
     obj.model = model;
     obj.isDoorModel = IsDoorModel(mapIt->second.modelName);
 
+    m_instanceIdToGuid[obj.runtimeInstanceId] = guid;
     m_objects[guid] = std::move(obj);
     return true;
 }
@@ -320,7 +336,12 @@ void DynamicObjectRegistry::DynamicObject::RebuildWorldTriangles()
 void DynamicObjectRegistry::Unregister(uint64_t guid)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_objects.erase(guid);
+    auto it = m_objects.find(guid);
+    if (it != m_objects.end())
+    {
+        m_instanceIdToGuid.erase(it->second.runtimeInstanceId);
+        m_objects.erase(it);
+    }
 }
 
 void DynamicObjectRegistry::ClearMap(uint32_t mapId)
@@ -329,7 +350,10 @@ void DynamicObjectRegistry::ClearMap(uint32_t mapId)
     for (auto it = m_objects.begin(); it != m_objects.end(); )
     {
         if (it->second.mapId == mapId)
+        {
+            m_instanceIdToGuid.erase(it->second.runtimeInstanceId);
             it = m_objects.erase(it);
+        }
         else
             ++it;
     }
@@ -339,6 +363,7 @@ void DynamicObjectRegistry::ClearAll()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_objects.clear();
+    m_instanceIdToGuid.clear();
 }
 
 // ==========================================================================
@@ -347,7 +372,8 @@ void DynamicObjectRegistry::ClearAll()
 
 void DynamicObjectRegistry::QueryTriangles(
     uint32_t mapId, const G3D::AABox& worldAABB,
-    std::vector<CapsuleCollision::Triangle>& outTriangles) const
+    std::vector<CapsuleCollision::Triangle>& outTriangles,
+    std::vector<uint32_t>* outInstanceIds) const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -374,7 +400,36 @@ void DynamicObjectRegistry::QueryTriangles(
 
         outTriangles.insert(outTriangles.end(),
             obj.worldTriangles.begin(), obj.worldTriangles.end());
+        if (outInstanceIds)
+            outInstanceIds->insert(outInstanceIds->end(), obj.worldTriangles.size(), obj.runtimeInstanceId);
     }
+}
+
+bool DynamicObjectRegistry::TryGetLocalPoint(
+    uint32_t instanceId, const G3D::Vector3& worldPoint, G3D::Vector3& outLocalPoint) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto guidIt = m_instanceIdToGuid.find(instanceId);
+    if (guidIt == m_instanceIdToGuid.end())
+        return false;
+
+    auto objIt = m_objects.find(guidIt->second);
+    if (objIt == m_objects.end())
+        return false;
+
+    const auto& obj = objIt->second;
+    const float scale = std::fabs(obj.scale) > 1e-6f ? obj.scale : 1.0f;
+    const float cosO = std::cos(obj.orientation);
+    const float sinO = std::sin(obj.orientation);
+    const float dx = worldPoint.x - obj.posX;
+    const float dy = worldPoint.y - obj.posY;
+    const float dz = worldPoint.z - obj.posZ;
+
+    outLocalPoint.x = (dx * cosO + dy * sinO) / scale;
+    outLocalPoint.y = (-dx * sinO + dy * cosO) / scale;
+    outLocalPoint.z = dz / scale;
+    return true;
 }
 
 int DynamicObjectRegistry::Count() const

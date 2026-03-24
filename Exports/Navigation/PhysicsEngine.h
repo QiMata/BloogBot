@@ -306,6 +306,8 @@ private:
         G3D::Vector3 rampEnd;   // new stepped point
         G3D::Vector3 rampDir;   // horizontal movement direction used to form plane
         float rampLength = 0.0f; // horizontal distance along rampDir between start/end
+        uint32_t supportInstanceId = 0;
+        G3D::Vector3 supportLocalPoint = G3D::Vector3(0, 0, 0);
         // Wall contact state — set by CollisionStepWoW from AABB overlap
         bool wallHit = false;
         G3D::Vector3 wallHitNormal;

@@ -551,7 +551,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     // Merge half-step contacts into main contacts (WoW.exe uses both)
     contacts.insert(contacts.end(), halfContacts.begin(), halfContacts.end());
 
-    auto resolveSupportNormal = [&](float supportZ, G3D::Vector3& outNormal) -> bool {
+    auto resolveSupportContact = [&](float supportZ, G3D::Vector3& outNormal,
+        const SceneQuery::AABBContact*& outSupport) -> bool {
         const float minGroundZ = startZ - PhysicsConstants::STEP_DOWN_HEIGHT;
         const float maxGroundZ = startZ + stepH + stepUp;
         const SceneQuery::AABBContact* bestSupport = nullptr;
@@ -593,6 +594,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         outNormal = bestSupport->normal.directionOrZero();
         if (outNormal.z < 0.0f)
             outNormal = -outNormal;
+        outSupport = bestSupport;
         return true;
     };
 
@@ -607,12 +609,13 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         startZ + stepH + stepUp,
         stepH + stepUp + PhysicsConstants::STEP_DOWN_HEIGHT);
     G3D::Vector3 bestNormal(0, 0, 1);
+    const SceneQuery::AABBContact* bestSupportContact = nullptr;
     bool foundGround = VMAP::IsValidHeight(bestGroundZ) &&
         bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
         bestGroundZ <= startZ + stepH + stepUp;
 
     if (foundGround)
-        (void)resolveSupportNormal(bestGroundZ, bestNormal);
+        (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
 
     // If center GetGroundZ failed, try AABB contacts as fallback
     if (!foundGround) {
@@ -629,7 +632,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         }
 
         if (foundGround)
-            (void)resolveSupportNormal(bestGroundZ, bestNormal);
+            (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
     }
 
     if (!foundGround) {
@@ -674,7 +677,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
                 startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
             if (VMAP::IsValidHeight(clampedZ)) {
                 bestGroundZ = clampedZ;
-                (void)resolveSupportNormal(bestGroundZ, bestNormal);
+                (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
             }
         }
     }
@@ -688,6 +691,17 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     st.vx = dirN.x * moveSpeed;
     st.vy = dirN.y * moveSpeed;
     st.groundNormal = bestNormal;
+    st.supportInstanceId = 0;
+    st.supportLocalPoint = G3D::Vector3(0, 0, 0);
+
+    if (bestSupportContact && bestSupportContact->instanceId != 0) {
+        auto* dynReg = DynamicObjectRegistry::Instance();
+        G3D::Vector3 localSupport;
+        if (dynReg && dynReg->TryGetLocalPoint(bestSupportContact->instanceId, bestSupportContact->point, localSupport)) {
+            st.supportInstanceId = bestSupportContact->instanceId;
+            st.supportLocalPoint = localSupport;
+        }
+    }
 
     if (hitWall) {
         st.wallHit = true;
@@ -2293,10 +2307,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.pendingDepenY = deferredDepen.y;
 	out.pendingDepenZ = deferredDepen.z;
 
-	out.standingOnInstanceId = input.standingOnInstanceId;
-	out.standingOnLocalX = input.standingOnLocalX;
-	out.standingOnLocalY = input.standingOnLocalY;
-	out.standingOnLocalZ = input.standingOnLocalZ;
+	out.standingOnInstanceId = st.supportInstanceId;
+	out.standingOnLocalX = st.supportLocalPoint.x;
+	out.standingOnLocalY = st.supportLocalPoint.y;
+	out.standingOnLocalZ = st.supportLocalPoint.z;
 	// Sync SWIMMING flag with final liquid evaluation
 	if (finalLiq.isSwimming) {
 		const uint32_t incompatibleSwim =

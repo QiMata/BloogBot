@@ -20,7 +20,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~MapTransitionTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class MapTransitionTests
 {
     private readonly LiveBotFixture _bot;
@@ -33,7 +33,7 @@ public class MapTransitionTests
     private const float IfTramZ = 505f;
     private const int EasternKingdomsMap = 0;
 
-    public MapTransitionTests(LiveBotFixture bot, ITestOutputHelper output)
+    public MapTransitionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

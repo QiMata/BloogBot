@@ -238,6 +238,7 @@ class SceneQuery
             G3D::Vector3 normal;    // Triangle face normal
             float distance;         // Distance along sweep direction to contact
             bool walkable;          // normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
+            uint32_t instanceId = 0; // Static instance ID or dynamic runtime instance ID
         };
 
         static int SweepAABB(uint32_t mapId,

@@ -60,13 +60,21 @@ namespace WoWStateManager
 
             // Launch BackgroundBotRunner as a separate process so each bot owns its own
             // WoWSharpObjectManager/EventEmitter singletons (no cross-contamination).
-            var botExePath = Path.Combine(AppContext.BaseDirectory, "BackgroundBotRunner.dll");
+            var baseDir = AppContext.BaseDirectory;
+            var botExePath = Path.Combine(baseDir, "BackgroundBotRunner", "BackgroundBotRunner.exe");
+            var botDllPath = Path.Combine(baseDir, "BackgroundBotRunner", "BackgroundBotRunner.dll");
+            if (!File.Exists(botExePath) && !File.Exists(botDllPath))
+            {
+                botExePath = Path.Combine(baseDir, "BackgroundBotRunner.exe");
+                botDllPath = Path.Combine(baseDir, "BackgroundBotRunner.dll");
+            }
+
             var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
             var psi = new ProcessStartInfo
             {
-                FileName = "dotnet",
-                Arguments = $"\"{botExePath}\"",
-                WorkingDirectory = AppContext.BaseDirectory,
+                FileName = File.Exists(botExePath) ? botExePath : "dotnet",
+                Arguments = File.Exists(botExePath) ? string.Empty : $"\"{botDllPath}\"",
+                WorkingDirectory = File.Exists(botExePath) ? Path.GetDirectoryName(botExePath)! : Path.GetDirectoryName(botDllPath)!,
                 UseShellExecute = false,
                 // When WWOW_SHOW_WINDOWS=1, don't redirect stdout/stderr so Serilog's Console
                 // sink writes to the visible console window. Log file sink (WWoWLogs/bg_{account}.log)
@@ -77,6 +85,11 @@ namespace WoWStateManager
             };
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
+            psi.Environment["PathfindingService__IpAddress"] = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+            psi.Environment["PathfindingService__Port"] = _configuration["PathfindingService:Port"] ?? "5001";
+            psi.Environment["CharacterStateListener__IpAddress"] = _configuration["CharacterStateClient:IpAddress"] ?? "127.0.0.1";
+            psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "5002";
+            psi.Environment["RealmEndpoint__IpAddress"] = _configuration["RealmEndpoint:IpAddress"] ?? "127.0.0.1";
             if (!string.IsNullOrEmpty(characterClass))
                 psi.Environment["WWOW_CHARACTER_CLASS"] = characterClass;
             if (!string.IsNullOrEmpty(characterRace))

@@ -1,0 +1,68 @@
+services:
+  vmangos-server:
+    image: mcr.microsoft.com/windows/servercore:ltsc2022
+    platform: windows/amd64
+    working_dir: C:\Mangos\server
+    entrypoint:
+      - powershell
+      - -ExecutionPolicy
+      - Bypass
+      - -File
+      - C:\wwow-docker\start-vmangos-stack.ps1
+    volumes:
+      - type: bind
+        source: ${WWOW_MANGOS_SERVER_DIR:-C:/Mangos/server}
+        target: C:\Mangos\server
+      - type: bind
+        source: ${WWOW_MANGOS_MYSQL_DIR:-C:/Mangos/mysql}
+        target: C:\Mangos\mysql
+      - type: bind
+        source: ${WWOW_MANGOS_DATA_DIR:-C:/Mangos/data}
+        target: C:\Mangos\data
+      - type: bind
+        source: ./docker/windows/vmangos
+        target: C:\wwow-docker
+        read_only: true
+    ports:
+      - "3306:3306"
+      - "3724:3724"
+      - "7878:7878"
+      - "8085:8085"
+
+  pathfinding-service:
+    build:
+      context: .
+      dockerfile: Services/PathfindingService/Dockerfile
+    platform: windows/amd64
+    environment:
+      DOTNET_ENVIRONMENT: Docker
+      WWOW_DATA_DIR: C:\wwow-data
+    volumes:
+      - type: bind
+        source: ${WWOW_MANGOS_DATA_DIR:-C:/Mangos/data}
+        target: C:\wwow-data
+        read_only: true
+    ports:
+      - "5001:5001"
+    depends_on:
+      - vmangos-server
+
+  background-bot-runner:
+    build:
+      context: .
+      dockerfile: Services/BackgroundBotRunner/Dockerfile
+    platform: windows/amd64
+    profiles:
+      - bgbot
+    environment:
+      DOTNET_ENVIRONMENT: Docker
+      WWOW_ACCOUNT_NAME: ${WWOW_BG_ACCOUNT_NAME:-TESTBOT2}
+      WWOW_ACCOUNT_PASSWORD: ${WWOW_BG_ACCOUNT_PASSWORD:-PASSWORD}
+      RealmEndpoint__IpAddress: vmangos-server
+      PathfindingService__IpAddress: pathfinding-service
+      PathfindingService__Port: "5001"
+      CharacterStateListener__IpAddress: ${WWOW_STATE_MANAGER_HOST:-host.docker.internal}
+      CharacterStateListener__Port: ${WWOW_STATE_MANAGER_PORT:-5002}
+    depends_on:
+      - vmangos-server
+      - pathfinding-service

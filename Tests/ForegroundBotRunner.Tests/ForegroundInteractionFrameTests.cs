@@ -87,6 +87,33 @@ public sealed class ForegroundInteractionFrameTests
     }
 
     [Fact]
+    public void QuestGreetingFrame_EnumeratesVisibleQuestButtonsAndClicksRequestedQuest()
+    {
+        var calls = new List<string>();
+        var frame = new FgQuestGreetingFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("QuestGreetingFrame:IsVisible()"))
+                    return ["1"];
+                if (lua.Contains("local count = 0"))
+                    return ["2"];
+
+                return ["0"];
+            });
+
+        Assert.True(frame.IsOpen);
+        Assert.Equal(2, frame.Quests.Count);
+
+        frame.AcceptQuest(1);
+        frame.CompleteQuest(0);
+
+        Assert.Contains(calls, call => call.Contains("QuestTitleButton2"));
+        Assert.Contains(calls, call => call.Contains("QuestTitleButton1"));
+    }
+
+    [Fact]
     public void MerchantFrame_UsesLuaVisibilityAndRepairState()
     {
         var calls = new List<string>();
@@ -155,6 +182,41 @@ public sealed class ForegroundInteractionFrameTests
         frame.SelectNode(2);
 
         Assert.Contains(calls, call => call.Contains("TakeTaxiNode(2)"));
+    }
+
+    [Fact]
+    public void TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua()
+    {
+        var calls = new List<string>();
+        var frame = new FgTradeFrame(
+            lua => calls.Add(lua),
+            lua =>
+            {
+                calls.Add(lua);
+                if (lua.Contains("TradeFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        Assert.True(frame.IsOpen);
+        Assert.Empty(frame.OfferedItems);
+        Assert.Empty(frame.OtherPlayerItems);
+
+        frame.OfferMoney(12345);
+        frame.OfferItem(0, 2, 3, 1);
+        frame.AcceptTrade();
+        frame.DeclineTrade();
+        frame.OfferEnchant(7411);
+        frame.OfferLockpick();
+
+        Assert.Contains(calls, call => call.Contains("MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, 12345)"));
+        Assert.Contains(calls, call => call.Contains("SplitContainerItem(0, 3, 3)"));
+        Assert.Contains(calls, call => call.Contains("ClickTradeButton(2)"));
+        Assert.Contains(calls, call => call.Contains("AcceptTrade()"));
+        Assert.Contains(calls, call => call.Contains("CloseTrade()"));
+        Assert.Contains(calls, call => call.Contains("GetSpellInfo(7411)"));
+        Assert.Contains(calls, call => call.Contains("TradeSkill()"));
     }
 
     [Fact]

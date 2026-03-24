@@ -58,6 +58,7 @@ public class GatheringRouteTask(
     private Position? _activeNodePosition;
     private bool _gatherLikelySucceeded;
     private int _successfulGathers;
+    private bool _combatPaused;
 
     public void Update()
     {
@@ -70,10 +71,12 @@ public class GatheringRouteTask(
 
         if (player.IsInCombat)
         {
-            ObjectManager.StopAllMovement();
-            PopTask("combat");
+            PauseForCombat();
             return;
         }
+
+        if (_combatPaused)
+            ResumeAfterCombat();
 
         switch (_state)
         {
@@ -305,6 +308,7 @@ public class GatheringRouteTask(
         _activeNodeGuid = 0;
         _activeNodePosition = null;
         _gatherLikelySucceeded = false;
+        _combatPaused = false;
 
         if (_routeIndex >= _orderedRoute.Count)
         {
@@ -334,11 +338,56 @@ public class GatheringRouteTask(
         SetState(GatheringState.MoveToCandidate);
     }
 
+    private void PauseForCombat()
+    {
+        ObjectManager.StopAllMovement();
+        ClearNavigation();
+
+        if (!_combatPaused)
+        {
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] GatheringRouteTask pause reason=combat state={_state} candidate={_routeIndex}/{_orderedRoute.Count}");
+            PushCombatTaskIfNeeded();
+            _combatPaused = true;
+        }
+
+        ResetStateTimer();
+    }
+
+    private void ResumeAfterCombat()
+    {
+        _combatPaused = false;
+        ClearNavigation();
+        ResetStateTimer();
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] GatheringRouteTask resume state={_state} candidate={_routeIndex}/{_orderedRoute.Count}");
+    }
+
     private int ElapsedMs => (int)(DateTime.UtcNow - _stateEnteredAt).TotalMilliseconds;
 
     private void SetState(GatheringState state)
     {
         _state = state;
-        _stateEnteredAt = DateTime.UtcNow;
+        ResetStateTimer();
     }
+
+    private void PushCombatTaskIfNeeded()
+    {
+        if (BotTasks.Count > 0 && BotTasks.Peek() != this)
+            return;
+
+        var classContainer = Container.ClassContainer;
+        var combatFactory = classContainer?.CreatePvERotationTask;
+        if (combatFactory == null)
+            return;
+
+        var combatTask = combatFactory(BotContext);
+        if (combatTask == null)
+            return;
+
+        BotTasks.Push(combatTask);
+        BotContext.AddDiagnosticMessage("[TASK] GatheringRouteTask combat_task_pushed");
+    }
+
+    private void ResetStateTimer() => _stateEnteredAt = DateTime.UtcNow;
 }

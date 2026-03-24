@@ -6,11 +6,11 @@ namespace WoWStateManager.Repository
 {
     public class ReamldRepository
     {
-        private static readonly string ConnectionString = "server=localhost;user=root;database=realmd;port=3306;password=root";
+        private const string DefaultConnectionString = "server=localhost;user=root;database=realmd;port=3306;password=root";
 
         public static bool CheckIfAccountExists(string accountName)
         {
-            using MySqlConnection connection = new(ConnectionString);
+            using MySqlConnection connection = new(GetConnectionString());
             try
             {
                 connection.Open();
@@ -36,7 +36,7 @@ namespace WoWStateManager.Repository
         /// </summary>
         public static bool SetGMLevel(string accountName, int gmLevel)
         {
-            using MySqlConnection connection = new(ConnectionString);
+            using MySqlConnection connection = new(GetConnectionString());
             try
             {
                 connection.Open();
@@ -56,6 +56,13 @@ namespace WoWStateManager.Repository
                 Log.Error($"[MANGOS REPO] SetGMLevel failed: {ex.Message}");
                 return false;
             }
+        }
+
+        private static string GetConnectionString()
+        {
+            return Environment.GetEnvironmentVariable("WWOW_REALMD_CONNECTION_STRING")
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__Realmd")
+                ?? DefaultConnectionString;
         }
     }
 }

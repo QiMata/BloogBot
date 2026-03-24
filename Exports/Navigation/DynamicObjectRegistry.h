@@ -58,7 +58,13 @@ public:
     /// Query world-space triangles overlapping a world-space AABB on a given map.
     /// Appends matching triangles to outTriangles.
     void QueryTriangles(uint32_t mapId, const G3D::AABox& worldAABB,
-                        std::vector<CapsuleCollision::Triangle>& outTriangles) const;
+                        std::vector<CapsuleCollision::Triangle>& outTriangles,
+                        std::vector<uint32_t>* outInstanceIds = nullptr) const;
+
+    /// Resolve a world-space contact point into local object space for a dynamic object.
+    /// Returns false when the instance ID is unknown or no longer active.
+    bool TryGetLocalPoint(uint32_t instanceId, const G3D::Vector3& worldPoint,
+                          G3D::Vector3& outLocalPoint) const;
 
     /// Returns number of registered objects.
     int Count() const;
@@ -94,6 +100,7 @@ private:
         uint32_t entry = 0;
         uint32_t displayId = 0;
         uint32_t mapId = 0;
+        uint32_t runtimeInstanceId = 0;
         float scale = 1.0f;
         uint32_t goState = 0;    // 0=closed/default, 1=open/active
         bool isDoorModel = false; // true if model name contains "door" (case-insensitive)
@@ -131,9 +138,13 @@ private:
 
     // guid → placed object instance
     std::unordered_map<uint64_t, DynamicObject> m_objects;
+    std::unordered_map<uint32_t, uint64_t> m_instanceIdToGuid;
+    uint32_t m_nextRuntimeInstanceId = 0x80000001u;
 
     /// Load and cache a model by its .vmo filename. Returns nullptr on failure.
     std::shared_ptr<CachedModel> LoadModel(const std::string& modelName);
+
+    uint32_t AllocateRuntimeInstanceId();
 
     static DynamicObjectRegistry* s_instance;
 };

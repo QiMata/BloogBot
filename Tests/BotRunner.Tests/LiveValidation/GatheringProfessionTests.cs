@@ -24,7 +24,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GatheringProfessionTests" --configuration Release -v n
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class GatheringProfessionTests
 {
     private readonly LiveBotFixture _bot;
@@ -49,7 +49,7 @@ public class GatheringProfessionTests
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
-    public GatheringProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
+    public GatheringProfessionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

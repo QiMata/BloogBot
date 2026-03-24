@@ -69,6 +69,34 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void CurrentWaypoints_ReturnsRemainingCorridorAfterWaypointAdvance()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(2f, 0f, 0f),
+                new Position(8f, 0f, 0f),
+                new Position(14f, 0f, 0f)
+            ],
+            isInLineOfSight: (_, from, to) => MathF.Abs(to.X - from.X) <= 6.5f);
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(1.9f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(8f, waypoint!.X);
+
+        var remaining = navPath.CurrentWaypoints;
+        Assert.Equal(2, remaining.Length);
+        Assert.Equal(8f, remaining[0].X);
+        Assert.Equal(14f, remaining[1].X);
+    }
+
+    [Fact]
     public void GetNextWaypoint_DoesNotSkipCornerWaypoint_WhenNextSegmentNotInLineOfSight()
     {
         // L-shaped path with 90° corner. LOS blocked through wall at corner.
@@ -701,6 +729,96 @@ public class NavigationPathTests
         Assert.Equal(15f, waypoint!.X);
     }
 
+    [Fact]
+    public void StringPull_PreservesCorner_WhenClearLosShortcutLeavesWalkableCorridor()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            [
+                start,
+                new Position(10, 0, 0),
+                new Position(10, 10, 0)
+            ],
+            isInLineOfSight: (_, _, _) => true,
+            isPointOnNavmesh: (_, position, _) =>
+            {
+                if (position.X > 2f && position.X < 8f && MathF.Abs(position.X - position.Y) < 0.25f)
+                    return (false, position);
+
+                return (true, position);
+            },
+            findNearestWalkablePoint: (_, position, _) => (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0, 0, 0),
+            new Position(10, 20, 0),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.InRange(waypoint!.X, 8f, 11f);
+        Assert.True(waypoint.Y < 2f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_DoesNotOffsetCornerOutsideWalkableCorridor()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            [
+                start,
+                new Position(10, 0, 0),
+                new Position(10, 10, 0)
+            ],
+            isInLineOfSight: (_, from, to) => !(from.Y < 1f && to.Y > 1f),
+            findNearestWalkablePoint: (_, position, _) =>
+                position.Y < -0.5f ? (0u, position) : (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0, 0, 0),
+            new Position(10, 20, 0),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.InRange(waypoint!.X, 9.5f, 10.5f);
+        Assert.InRange(waypoint.Y, -0.25f, 0.25f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_DoesNotLosSkipAcrossOffCorridorShortcut()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(6, 0, 0),
+                new Position(20, 0, 0),
+                new Position(20, 20, 0)
+            ],
+            isInLineOfSight: (_, _, _) => true,
+            isPointOnNavmesh: (_, position, _) =>
+            {
+                if (position.X > 10f && position.X < 18f && position.Y > 4f && position.Y < 18f)
+                    return (false, position);
+
+                return (true, position);
+            },
+            findNearestWalkablePoint: (_, position, _) => (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(6.5f, 0f, 0f),
+            new Position(20f, 20f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.InRange(waypoint!.X, 18f, 21f);
+        Assert.True(waypoint.Y < 2f);
+    }
+
     // ===================== Cliff/edge detection =====================
 
     [Fact]
@@ -770,6 +888,30 @@ public class NavigationPathTests
 
         var navPath = new NavigationPath(pathfinding, () => 0);
         Assert.True(navPath.IsLethalCliffAhead(new Position(0, 0, 10), new Position(10, 0, 10), mapId: 1));
+    }
+
+    [Fact]
+    public void RerouteAroundCliff_RejectsOffsetOutsideWalkableCorridor()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [new Position(10, 0, 10)],
+            getGroundZ: (_, position, _) => (position.Z, true),
+            findNearestWalkablePoint: (_, position, _) =>
+                position.Y < -1f ? (0u, position) : (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var reroute = navPath.RerouteAroundCliff(
+            1,
+            new Position(0, 0, 10),
+            new Position(10, 0, 10),
+            new NavigationPath.CliffProbeResult(
+                Forward: 0f,
+                ForwardLeft: 0f,
+                ForwardRight: 0f,
+                Left: float.MaxValue,
+                Right: 0f));
+
+        Assert.Null(reroute);
     }
 
     // ===================== Fall damage estimation =====================
@@ -1056,13 +1198,19 @@ public class NavigationPathTests
         Func<uint, Position, Position, bool, Position[]> getPath,
         Func<uint, Position, Position, bool>? isInLineOfSight = null,
         Func<uint, Position, float, (float, bool)>? getGroundZ = null,
-        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null) : PathfindingClient
+        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null,
+        Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)>? isPointOnNavmesh = null,
+        Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null) : PathfindingClient
     {
         private readonly Func<uint, Position, Position, bool, Position[]> _getPath = getPath;
         private readonly Func<uint, Position, Position, bool> _isInLineOfSight =
             isInLineOfSight ?? ((_, _, _) => true);
         private readonly Func<uint, Position, float, (float, bool)>? _getGroundZ = getGroundZ;
         private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? _getPathWithNearbyObjects = getPathWithNearbyObjects;
+        private readonly Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)> _isPointOnNavmesh =
+            isPointOnNavmesh ?? ((_, position, _) => (true, position));
+        private readonly Func<uint, Position, float, (uint areaType, Position nearestPoint)> _findNearestWalkablePoint =
+            findNearestWalkablePoint ?? ((_, position, _) => (1u, position));
 
         public int LegacyGetPathCalls { get; private set; }
         public int OverlayGetPathCalls { get; private set; }
@@ -1087,5 +1235,11 @@ public class NavigationPathTests
 
         public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
             => _getGroundZ?.Invoke(mapId, position, maxSearchDist) ?? (position.Z, true);
+
+        public override (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
+            => _isPointOnNavmesh(mapId, position, searchRadius);
+
+        public override (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
+            => _findNearestWalkablePoint(mapId, position, searchRadius);
     }
 }

@@ -20,7 +20,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// FG parity is intentionally excluded here. Foreground crafting still depends on Lua spell-name
 /// resolution and is not the behavior surface we are overhauling first.
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class CraftingProfessionTests
 {
     private readonly LiveBotFixture _bot;
@@ -32,7 +32,7 @@ public class CraftingProfessionTests
     private const uint LinenBandageItem = 1251;
     private const int CraftTimeoutMs = 8000;
 
-    public CraftingProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
+    public CraftingProfessionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

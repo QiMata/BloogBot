@@ -1,9 +1,10 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
+## Archived Snapshot (2026-03-23) - Services/ForegroundBotRunner/TASKS.md
+
+- [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
 
 ## Archived Snapshot (2026-02-24 19:43:32) - Services/ForegroundBotRunner/TASKS.md
 
@@ -12,5 +13,3 @@ Completed items moved from TASKS.md.
 - [x] Reduce remaining Lua-only FG life-state paths (`LocalPlayer.InGhostForm`, reclaim-delay fallbacks) now that descriptor fields are available.
 - [x] Implement descriptor-backed FG `WoWPlayer.QuestLog` reads so quest log slots flow into snapshots.
 - [x] Guarantee non-null `PathfindingClient` injection into FG `ClassContainer`.
-
->>>>>>> cpp_physics_system

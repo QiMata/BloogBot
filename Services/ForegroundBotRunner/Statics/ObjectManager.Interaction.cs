@@ -784,6 +784,126 @@ namespace ForegroundBotRunner.Statics
             Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
         }
 
+        public async Task DepositExcessItemsAsync(ulong bankerGuid, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(bankerGuid, ct);
+            if (!await WaitForLuaFrameAsync("if BankFrame and BankFrame:IsVisible() then {0} = 1 else {0} = 0 end", ct))
+            {
+                Log.Warning("[FG-BANK] Bank window did not open for banker 0x{Guid:X}.", bankerGuid);
+                return;
+            }
+
+            int deposited = 0;
+            foreach (var item in GetContainedItems().Take(32))
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var info = item.Info;
+                if (info != null && (info.ItemClass == GameData.Core.Enums.ItemClass.Consumable
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Quest
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Reagent
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Key
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Lockpick
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Arrow
+                    || info.ItemClass == GameData.Core.Enums.ItemClass.Bullet))
+                {
+                    continue;
+                }
+
+                int bagId = (int)GetBagId(item.Guid);
+                int slotId = (int)GetSlotId(item.Guid);
+                if (slotId <= 0)
+                    continue;
+
+                MainThreadLuaCall(
+                    $"if BankFrame and BankFrame:IsVisible() then UseContainerItem({bagId}, {slotId}) end");
+                deposited++;
+                await Task.Delay(150, ct);
+
+                if (deposited >= 10)
+                    break;
+            }
+
+            MainThreadLuaCall("if BankFrame and BankFrame:IsVisible() and CloseBankFrame then CloseBankFrame() end");
+            Log.Information("[FG-BANK] Deposited up to {Count} non-essential items at banker 0x{Guid:X}.", deposited, bankerGuid);
+        }
+
+        public async Task PostAuctionItemsAsync(ulong auctioneerGuid, CancellationToken ct = default)
+        {
+            await InteractWithNpcAsync(auctioneerGuid, ct);
+            if (!await WaitForLuaFrameAsync("if AuctionFrame and AuctionFrame:IsVisible() then {0} = 1 else {0} = 0 end", ct))
+            {
+                Log.Warning("[FG-AH] Auction window did not open for auctioneer 0x{Guid:X}.", auctioneerGuid);
+                return;
+            }
+
+            int posted = 0;
+            foreach (var item in GetContainedItems()
+                .Where(candidate => candidate.Quality >= GameData.Core.Enums.ItemQuality.Uncommon)
+                .Take(5))
+            {
+                ct.ThrowIfCancellationRequested();
+
+                int bagId = (int)GetBagId(item.Guid);
+                int slotId = (int)GetSlotId(item.Guid);
+                if (slotId <= 0)
+                    continue;
+
+                uint basePrice = item.Quality switch
+                {
+                    GameData.Core.Enums.ItemQuality.Uncommon => 5_000u,
+                    GameData.Core.Enums.ItemQuality.Rare => 50_000u,
+                    GameData.Core.Enums.ItemQuality.Epic => 500_000u,
+                    _ => 5_000u,
+                };
+
+                uint startBid = basePrice;
+                uint buyout = (uint)(basePrice * 1.5f);
+
+                MainThreadLuaCall(
+                    "if AuctionFrame and AuctionFrame:IsVisible() then " +
+                    $"PickupContainerItem({bagId}, {slotId}); " +
+                    "ClickAuctionSellItemButton(); " +
+                    $"StartAuction({startBid}, {buyout}, 2) " +
+                    "end");
+
+                posted++;
+                await Task.Delay(250, ct);
+            }
+
+            MainThreadLuaCall("if AuctionFrame and AuctionFrame:IsVisible() and CloseAuctionFrame then CloseAuctionFrame() end");
+            Log.Information("[FG-AH] Attempted to post {Count} auction items at auctioneer 0x{Guid:X}.", posted, auctioneerGuid);
+        }
+
+        public async Task CraftAvailableRecipesAsync(CancellationToken ct = default)
+        {
+            if (!_fgCraftFrame.IsOpen)
+            {
+                Log.Warning("[FG-CRAFT] Craft frame is not open; skipping craft-all helper.");
+                return;
+            }
+
+            var craftCountResult = MainThreadLuaCallWithResult(
+                "if CraftFrame and CraftFrame:IsVisible() then {0} = GetNumCrafts() or 0 else {0} = 0 end");
+            int craftCount = craftCountResult.Length > 0 && int.TryParse(craftCountResult[0], out var parsedCount)
+                ? parsedCount
+                : 0;
+
+            int crafted = 0;
+            for (int slot = 0; slot < craftCount; slot++)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!_fgCraftFrame.HasMaterialsNeeded(slot))
+                    continue;
+
+                _fgCraftFrame.Craft(slot);
+                crafted++;
+                await Task.Delay(250, ct);
+            }
+
+            Log.Information("[FG-CRAFT] Attempted to craft {Count} available recipes from the open craft frame.", crafted);
+        }
+
         public async Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default)
         {
             await InteractWithNpcAsync(npcGuid, ct);
@@ -977,6 +1097,19 @@ namespace ForegroundBotRunner.Statics
             {
                 await Task.Delay(150, ct);
                 if (_fgTaxiFrame.IsOpen)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static async Task<bool> WaitForLuaFrameAsync(string probeLua, CancellationToken ct)
+        {
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var result = MainThreadLuaCallWithResult(probeLua);
+                if (result.Length > 0 && result[0] == "1")
                     return true;
             }
 

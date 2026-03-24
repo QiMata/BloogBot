@@ -103,11 +103,13 @@ namespace WoWStateManager
             // Build configuration using the executable base directory so the appsettings.json
             // that is copied to the output folder is actually found.
             var baseDir = AppContext.BaseDirectory;
+            var environmentName = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? Environments.Production;
             try
             {
                 _configuration = new ConfigurationBuilder()
                     .SetBasePath(baseDir)
                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                    .AddJsonFile($"appsettings.{environmentName}.json", optional: true, reloadOnChange: true)
                     .AddEnvironmentVariables()
                     .Build();
             }
@@ -116,6 +118,9 @@ namespace WoWStateManager
                 Console.WriteLine($"FATAL: appsettings.json not found in '{baseDir}'. Ensure it is marked Copy to Output Directory = PreserveNewest. Exception: {ex.Message}");
                 return;
             }
+
+            TrySetEnvironmentVariableFromConfig("WWOW_REALMD_CONNECTION_STRING", _configuration.GetConnectionString("Realmd"));
+            TrySetEnvironmentVariableFromConfig("WWOW_MANGOS_WORLD_CONNECTION_STRING", _configuration.GetConnectionString("MangosWorld"));
 
             // Check if PathfindingService is already running
             if (IsPathfindingServiceRunning())
@@ -426,6 +431,7 @@ namespace WoWStateManager
                     // Ensure the base path is the executable directory for consistency
                     builder.SetBasePath(AppContext.BaseDirectory);
                     builder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                    builder.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: true);
                     builder.AddEnvironmentVariables();
 
                     if (args != null)
@@ -457,5 +463,16 @@ namespace WoWStateManager
 
                     services.AddTransient<ForegroundBotWorker>(); // temporarily disabled for isolation
                 });
+
+        private static void TrySetEnvironmentVariableFromConfig(string name, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)))
+                return;
+
+            Environment.SetEnvironmentVariable(name, value);
+        }
     }
 }

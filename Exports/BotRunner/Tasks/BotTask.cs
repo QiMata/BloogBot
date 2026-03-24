@@ -87,21 +87,26 @@ public abstract class BotTask(IBotContext botContext)
             return false;
         }
 
+        var wallNormal = ObjectManager.PhysicsWallNormal2D;
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
             destination,
             player.MapId,
-            allowDirectFallback: allowDirectFallback);
+            allowDirectFallback: allowDirectFallback,
+            physicsHitWall: ObjectManager.PhysicsHitWall,
+            wallNormalX: wallNormal.X,
+            wallNormalY: wallNormal.Y,
+            blockedFraction: ObjectManager.PhysicsBlockedFraction);
 
         if (waypoint != null)
         {
             // MoveToward first — sets facing + starts movement + calls SetTargetWaypoint
             ObjectManager.MoveToward(waypoint);
 
-            // Then pass the full path to the MovementController for dead-reckoning.
+            // Then pass the remaining active corridor to the MovementController.
             // This MUST come after MoveToward because MoveToward calls SetTargetWaypoint
             // which overwrites _currentPath with a single-waypoint path. We need the full
-            // path for XY dead-reckoning in dungeons without vmtile collision data.
+            // remaining corridor for XY dead-reckoning in dungeons without vmtile collision data.
             var currentWaypoints = _navPath.CurrentWaypoints;
             if (currentWaypoints.Length > 0)
                 ObjectManager.SetNavigationPath(currentWaypoints);

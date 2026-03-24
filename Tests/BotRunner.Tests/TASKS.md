@@ -35,19 +35,17 @@
 
 ## Session Handoff
 - Last updated: `2026-03-24`
-- Pass result: `combat parity tightened again; live mining advanced from candidate 7 to candidate 3 before stalling in a later combat loop`
+- Pass result: `remaining-corridor execution export shipped; deterministic movement slice passes`
 - Last delta:
-  - Expanded `CombatRotationTaskTests` again for the next shared BG melee-parity slice: in-range melee now primes a grounded face tick before `StartMeleeAttack()`, airborne melee waits until after landing plus a grounded face tick, and out-of-range aggressors no longer trigger the old blind chase-timeout auto-swing.
-  - Updated the shared BotRunner combat/task path accordingly in `CombatRotationTask`: melee engage timing now matches the older sequence path more closely, and the old aggressor chase-timeout fallback has been removed because it was pinning outdoor gather fights in stationary combat instead of allowing chase/path recovery.
-  - Re-ran the BG-only mining slice twice against the current code. The failure moved materially from candidate `7/15` to candidate `4/15`, then to candidate `3/15`. The old cliff/facing error signature mostly collapsed (`BADFACING=1`, `NOTINRANGE=0`, `NullWaypoint=4`, `AirborneBlocked=321` on the latest run); the remaining blocker is a later stationary melee/combat loop around `(-443.9,-4829.0,36.5)`.
+  - Added `CurrentWaypoints_ReturnsRemainingCorridorAfterWaypointAdvance` so `NavigationPath` now proves it only exports the active remaining corridor once the bot has consumed an earlier waypoint.
+  - This closes the immediate execution-side handoff bug where `MovementController` could be reset onto stale historical corners even after BotRunner had advanced the path index.
+  - Kept the deterministic `GatheringRouteTaskTests` slice green; live mining has not been re-run yet.
 - Validation:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (89/89)`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (90/90)` after adding the blind-chase regression
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m` -> `failed after 5m16s` with the blocker shifted to candidate `4/15` (`BADFACING=1`, `NullWaypoint=10`, `AirborneBlocked=412`, `HeroicStrike=95`)
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m` -> `failed after 5m15s` with the blocker shifted to candidate `3/15` (`BADFACING=1`, `NullWaypoint=4`, `AirborneBlocked=321`, `HeroicStrike=79`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests"` -> `passed (58/58)`
 - Files changed:
-  - `Exports/BotRunner/Tasks/CombatRotationTask.cs`
-  - `Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
 - Next command:
-  - `rg -n -C 2 "candidate=3/15|pause reason=combat state=MoveToCandidate candidate=3/15|MSG_MOVE_HEARTBEAT Pos=\(-443\.9,-4829\.0,36\.5\)|spell=78 targetUnit=0xF130000C350032B1" TestResults/LiveLogs/GatheringProfessionTests.log`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m`

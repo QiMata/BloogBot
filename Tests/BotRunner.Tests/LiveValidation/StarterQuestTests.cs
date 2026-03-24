@@ -31,7 +31,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~StarterQuestTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class StarterQuestTests
 {
     private readonly LiveBotFixture _bot;
@@ -50,7 +50,7 @@ public class StarterQuestTests
 
     private const int MapId = 1; // Kalimdor
 
-    public StarterQuestTests(LiveBotFixture bot, ITestOutputHelper output)
+    public StarterQuestTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

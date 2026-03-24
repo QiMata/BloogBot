@@ -25,7 +25,9 @@ namespace WoWSharpClient.Movement
         // PhysicsInput.fall_time in the proto is a float, but we track ms locally to avoid unit drift.
         private uint _fallTimeMs = 0;
 
-        // StepV2 continuity state (must be round-tripped each tick)
+        // StepV2 continuity state (must be round-tripped each tick).
+        // Binary parity note: static ground is re-derived from collision every frame;
+        // the standingOn token is only meaningful for moving-base continuity.
         // Initialize prevGroundZ to player's current Z — NegativeInfinity fails the C++ hasPrevGround check
         private float _prevGroundZ = player.Position.Z;
         private Vector3 _prevGroundNormal = new Vector3(0, 0, 1);

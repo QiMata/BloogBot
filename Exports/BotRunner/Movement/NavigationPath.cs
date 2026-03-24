@@ -29,7 +29,7 @@ public sealed class NavigationMetrics
     /// <summary>Waypoints whose Z was corrected by Phase 3a collision ground queries.</summary>
     public int ZCorrections { get; private set; }
 
-    /// <summary>String-pull segments rejected by Phase 5a width check.</summary>
+    /// <summary>Shortcut smoothing candidates rejected by corridor-preservation checks.</summary>
     public int WidthChecksFailed { get; private set; }
 
     /// <summary>Multi-directional cliff probe activations.</summary>
@@ -379,10 +379,17 @@ public class NavigationPath(
     private float[] _waypointAcceptanceRadii = [];
 
     /// <summary>
-    /// Exposes the current waypoint array for passing to MovementController's dead-reckoning.
-    /// Returns empty array if no path has been calculated.
+    /// Exposes the remaining active waypoint corridor for movement execution.
+    /// Already-cleared waypoints are omitted so MovementController cannot be pulled
+    /// back toward stale corners after NavigationPath has advanced past them.
     /// </summary>
-    public Position[] CurrentWaypoints => _waypoints;
+    public Position[] CurrentWaypoints =>
+        _currentIndex switch
+        {
+            <= 0 => _waypoints,
+            _ when _currentIndex >= _waypoints.Length => [],
+            _ => _waypoints[_currentIndex..]
+        };
     private int _currentIndex;
     private Position? _destination;
     private long _lastCalculationTick;
@@ -416,6 +423,11 @@ public class NavigationPath(
     private const int MAX_STRINGPULL_LOOKAHEAD = 8;
     private const int MAX_RUNTIME_LOS_LOOKAHEAD = 6;
     private const long LOS_SKIP_CACHE_TTL_MS = 500;
+    private const float WALKABLE_CORRIDOR_SAMPLE_SPACING = 2.0f;
+    private const int MAX_WALKABLE_CORRIDOR_SAMPLES = 6;
+    private const float WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING = 0.35f;
+    private const float WALKABLE_CORRIDOR_MAX_SAMPLE_OFFSET = 0.9f;
+    private const float WALKABLE_CORRIDOR_MAX_SNAP_Z_DELTA = 3.0f;
     private int _losSkipCacheIndex = -1;
     private int _losSkipCacheFarthest = -1;
     private long _losSkipCacheTick;
@@ -1156,6 +1168,71 @@ public class NavigationPath(
         }
     }
 
+    private bool PreservesWalkableCorridor(Position from, Position to, uint mapId)
+    {
+        if (_pathfinding == null)
+            return true;
+
+        return IsSegmentWideEnoughForCharacter(from, to, mapId)
+            && HasWalkableNavmeshSamples(from, to, mapId);
+    }
+
+    private bool HasWalkableNavmeshSamples(Position from, Position to, uint mapId)
+    {
+        if (_pathfinding == null)
+            return true;
+
+        var segmentDistance2D = from.DistanceTo2D(to);
+        if (segmentDistance2D <= PATH_POINT_DEDUP_EPSILON)
+            return true;
+
+        var sampleCount = Math.Clamp(
+            (int)MathF.Ceiling(segmentDistance2D / WALKABLE_CORRIDOR_SAMPLE_SPACING),
+            1,
+            MAX_WALKABLE_CORRIDOR_SAMPLES);
+        var searchRadius = _capsuleRadius + WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING;
+
+        for (var sampleIndex = 1; sampleIndex <= sampleCount; sampleIndex++)
+        {
+            var t = sampleIndex / (sampleCount + 1f);
+            var sample = LerpPosition(from, to, t);
+            var (onNavmesh, nearestPoint) = _pathfinding.IsPointOnNavmesh(mapId, sample, searchRadius);
+            if (!onNavmesh)
+                return false;
+
+            if (sample.DistanceTo2D(nearestPoint) > WALKABLE_CORRIDOR_MAX_SAMPLE_OFFSET)
+                return false;
+        }
+
+        return true;
+    }
+
+    private Position? TrySnapToWalkablePoint(uint mapId, Position desired, float searchRadius, float referenceZ)
+    {
+        if (_pathfinding == null)
+            return desired;
+
+        var (areaType, nearestPoint) = _pathfinding.FindNearestWalkablePoint(mapId, desired, searchRadius);
+        if (areaType == 0)
+            return null;
+
+        if (desired.DistanceTo2D(nearestPoint) > searchRadius)
+            return null;
+
+        if (MathF.Abs(nearestPoint.Z - referenceZ) > WALKABLE_CORRIDOR_MAX_SNAP_Z_DELTA)
+            return null;
+
+        return nearestPoint;
+    }
+
+    private static Position LerpPosition(Position from, Position to, float t)
+    {
+        return new Position(
+            from.X + (to.X - from.X) * t,
+            from.Y + (to.Y - from.Y) * t,
+            from.Z + (to.Z - from.Z) * t);
+    }
+
     private static bool IsFinitePosition(Position position)
         => float.IsFinite(position.X) && float.IsFinite(position.Y) && float.IsFinite(position.Z);
 
@@ -1245,19 +1322,13 @@ public class NavigationPath(
                 if (!TryGetLineOfSight(anchor, path[candidate], mapId, out var los) || !los)
                     break; // Geometry coherence: stop on first LOS failure.
 
-                farthestVisible = candidate;
-            }
+                if (!PreservesWalkableCorridor(anchor, path[candidate], mapId))
+                {
+                    Metrics.IncrementWidthChecksFailed();
+                    break;
+                }
 
-            // Phase 5a: When string-pulling would skip corners (farthestVisible > next),
-            // verify the direct shortcut segment has sufficient lateral clearance for the
-            // character's capsule. If the shortcut is too narrow (e.g., cutting across a
-            // narrow bridge or ledge), fall back to the immediate next waypoint so the
-            // original corners — which route around the narrow passage — are preserved.
-            if (farthestVisible > anchorIndex + 1
-                && !IsSegmentWideEnoughForCharacter(anchor, path[farthestVisible], mapId))
-            {
-                Metrics.IncrementWidthChecksFailed();
-                farthestVisible = anchorIndex + 1;
+                farthestVisible = candidate;
             }
 
             // Always preserve the waypoint we advance to (it's either the farthest
@@ -1352,6 +1423,12 @@ public class NavigationPath(
         {
             if (!TryGetLineOfSight(currentPosition, _waypoints[candidate], mapId, out var los) || !los)
                 break;
+
+            if (!PreservesWalkableCorridor(currentPosition, _waypoints[candidate], mapId))
+            {
+                Metrics.IncrementWidthChecksFailed();
+                break;
+            }
 
             farthestVisible = candidate;
         }
@@ -1639,7 +1716,7 @@ public class NavigationPath(
             _waypointAcceptanceRadii = [];
             if (_enableProbeHeuristics)
             {
-                OffsetCornerWaypoints(start);
+                OffsetCornerWaypoints(mapId, start);
                 ComputeWaypointAcceptanceRadii(start);
             }
 
@@ -1695,7 +1772,7 @@ public class NavigationPath(
     /// We negate the bisector so the waypoint shifts toward the outer gap, giving the capsule
     /// clearance to arc smoothly through the corner without pressing into the inner wall.
     /// </summary>
-    private void OffsetCornerWaypoints(Position start)
+    private void OffsetCornerWaypoints(uint mapId, Position start)
     {
         const float cornerAngleThreshold = 60f;
         float offsetDistance = _capsuleRadius * 3.0f; // 3× radius gives safe wall clearance at full speed
@@ -1730,10 +1807,26 @@ public class NavigationPath(
             var bisLen = MathF.Sqrt(bisX * bisX + bisY * bisY);
             if (bisLen < 0.01f) continue;
 
-            _waypoints[i] = new Position(
+            var offsetCandidate = new Position(
                 curr.X - (bisX / bisLen) * offsetDistance,  // negated: push away from inner wall
                 curr.Y - (bisY / bisLen) * offsetDistance,
                 curr.Z);
+            var snappedCandidate = TrySnapToWalkablePoint(
+                mapId,
+                offsetCandidate,
+                MathF.Max(offsetDistance, _capsuleRadius + WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING),
+                curr.Z);
+            if (snappedCandidate == null)
+                continue;
+
+            if (!PreservesWalkableCorridor(prev, snappedCandidate, mapId)
+                || !PreservesWalkableCorridor(snappedCandidate, next, mapId))
+            {
+                Metrics.IncrementWidthChecksFailed();
+                continue;
+            }
+
+            _waypoints[i] = snappedCandidate;
         }
     }
 
@@ -1927,18 +2020,18 @@ public class NavigationPath(
         if (cliffLeft && !cliffRight)
         {
             // Cliff on left — offset right (away from cliff)
-            return TryOffsetWaypoint(mapId, midX, midY, midZ, rightAngle, offsetDistance);
+            return TryOffsetWaypoint(mapId, from, to, midX, midY, midZ, rightAngle, offsetDistance);
         }
 
         if (cliffRight && !cliffLeft)
         {
             // Cliff on right — offset left (away from cliff)
-            return TryOffsetWaypoint(mapId, midX, midY, midZ, leftAngle, offsetDistance);
+            return TryOffsetWaypoint(mapId, from, to, midX, midY, midZ, leftAngle, offsetDistance);
         }
 
         // Cliff ahead (or on both sides) — try both directions, pick whichever has ground
-        var leftCandidate = TryOffsetWaypoint(mapId, midX, midY, midZ, leftAngle, offsetDistance);
-        var rightCandidate = TryOffsetWaypoint(mapId, midX, midY, midZ, rightAngle, offsetDistance);
+        var leftCandidate = TryOffsetWaypoint(mapId, from, to, midX, midY, midZ, leftAngle, offsetDistance);
+        var rightCandidate = TryOffsetWaypoint(mapId, from, to, midX, midY, midZ, rightAngle, offsetDistance);
 
         if (leftCandidate != null && rightCandidate != null)
         {
@@ -1957,14 +2050,22 @@ public class NavigationPath(
     /// Returns the offset position with valid ground Z, or null if ground is not found
     /// or the ground Z differs too much from the reference Z (potential cliff at the offset).
     /// </summary>
-    private Position? TryOffsetWaypoint(uint mapId, float midX, float midY, float midZ, float angle, float distance)
+    private Position? TryOffsetWaypoint(uint mapId, Position from, Position to, float midX, float midY, float midZ, float angle, float distance)
     {
         var offsetX = midX + MathF.Cos(angle) * distance;
         var offsetY = midY + MathF.Sin(angle) * distance;
 
         try
         {
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(offsetX, offsetY, midZ));
+            var snappedPoint = TrySnapToWalkablePoint(
+                mapId,
+                new Position(offsetX, offsetY, midZ),
+                MathF.Max(distance, _capsuleRadius + WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING),
+                midZ);
+            if (snappedPoint == null)
+                return null;
+
+            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, snappedPoint);
             if (!found)
                 return null;
 
@@ -1972,7 +2073,15 @@ public class NavigationPath(
             if (midZ - groundZ > CLIFF_DROP_THRESHOLD)
                 return null;
 
-            return new Position(offsetX, offsetY, groundZ);
+            var candidate = new Position(snappedPoint.X, snappedPoint.Y, groundZ);
+            if (!PreservesWalkableCorridor(from, candidate, mapId)
+                || !PreservesWalkableCorridor(candidate, to, mapId))
+            {
+                Metrics.IncrementWidthChecksFailed();
+                return null;
+            }
+
+            return candidate;
         }
         catch
         {
@@ -2364,11 +2473,6 @@ public class NavigationPath(
 
         const float LATERAL_Z_THRESHOLD = 2.0f;
 
-        // Compute the midpoint of the segment.
-        float midX = (from.X + to.X) * 0.5f;
-        float midY = (from.Y + to.Y) * 0.5f;
-        float midZ = (from.Z + to.Z) * 0.5f;
-
         // Compute the segment direction in 2D (XY plane).
         float dx = to.X - from.X;
         float dy = to.Y - from.Y;
@@ -2382,26 +2486,35 @@ public class NavigationPath(
         float perpX = -dy / len2D;
         float perpY = dx / len2D;
 
-        // Probe at +capsuleRadius and -capsuleRadius from the midpoint.
-        var probeLeft = new Position(
-            midX + perpX * _capsuleRadius,
-            midY + perpY * _capsuleRadius,
-            midZ);
-
-        var probeRight = new Position(
-            midX - perpX * _capsuleRadius,
-            midY - perpY * _capsuleRadius,
-            midZ);
+        var sampleCount = Math.Clamp(
+            (int)MathF.Ceiling(len2D / WALKABLE_CORRIDOR_SAMPLE_SPACING),
+            1,
+            MAX_WALKABLE_CORRIDOR_SAMPLES);
 
         try
         {
-            var (leftZ, leftFound) = _pathfinding.GetGroundZ(mapId, probeLeft);
-            if (!leftFound || MathF.Abs(leftZ - midZ) > LATERAL_Z_THRESHOLD)
-                return false;
+            for (var sampleIndex = 1; sampleIndex <= sampleCount; sampleIndex++)
+            {
+                var t = sampleIndex / (sampleCount + 1f);
+                var sample = LerpPosition(from, to, t);
 
-            var (rightZ, rightFound) = _pathfinding.GetGroundZ(mapId, probeRight);
-            if (!rightFound || MathF.Abs(rightZ - midZ) > LATERAL_Z_THRESHOLD)
-                return false;
+                var probeLeft = new Position(
+                    sample.X + perpX * _capsuleRadius,
+                    sample.Y + perpY * _capsuleRadius,
+                    sample.Z);
+                var probeRight = new Position(
+                    sample.X - perpX * _capsuleRadius,
+                    sample.Y - perpY * _capsuleRadius,
+                    sample.Z);
+
+                var (leftZ, leftFound) = _pathfinding.GetGroundZ(mapId, probeLeft);
+                if (!leftFound || MathF.Abs(leftZ - sample.Z) > LATERAL_Z_THRESHOLD)
+                    return false;
+
+                var (rightZ, rightFound) = _pathfinding.GetGroundZ(mapId, probeRight);
+                if (!rightFound || MathF.Abs(rightZ - sample.Z) > LATERAL_Z_THRESHOLD)
+                    return false;
+            }
         }
         catch
         {

@@ -181,6 +181,9 @@ namespace GameData.Core.Interfaces
         void SetFacing(float facing);
         void StartMovement(ControlBits bits);
         void StopMovement(ControlBits bits);
+        bool PhysicsHitWall => false;
+        (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
+        float PhysicsBlockedFraction => 1.0f;
         bool IsSpellReady(string spellName);
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);

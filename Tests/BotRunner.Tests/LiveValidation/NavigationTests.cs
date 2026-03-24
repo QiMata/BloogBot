@@ -23,7 +23,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~NavigationTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class NavigationTests
 {
     private readonly LiveBotFixture _bot;
@@ -44,7 +44,7 @@ public class NavigationTests
     private const float VotLongStartX = -284f, VotLongStartY = -4383f, VotLongStartZ = 57f;
     private const float VotLongEndX = -350f, VotLongEndY = -4450f, VotLongEndZ = 50f;
 
-    public NavigationTests(LiveBotFixture bot, ITestOutputHelper output)
+    public NavigationTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

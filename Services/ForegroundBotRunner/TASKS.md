@@ -17,7 +17,7 @@
 - [x] Extend the offset audit beyond packet/network globals to the remaining gameplay-critical struct offsets used by snapshots (`0x9B8/0x9BC/0x9C0/0x9E8`, quest log, corpse position, etc.).
 - [x] Re-check `ConnectionStateMachine` and inferred packet fallbacks after the hook/offset audit is complete.
 
-2. FG snapshot parity
+2. FG snapshot/runtime parity
 - [ ] Keep FG snapshot data complete and comparable with the BG path.
 - [x] Make `MovementRecorder` transport captures self-contained by resolving the active transport outside visible-object enumeration and serializing transport-local offset/orientation from the real mover pose.
 - [x] Restore descriptor-backed `Coinage`/`Copper` plus local state helpers (`InBattleground`, `HasQuestTargets`) so FG snapshots stop hardcoding those fields.
@@ -27,7 +27,7 @@
 - [x] Restore non-null FG `GossipFrame` / `QuestFrame` / `MerchantFrame` surfaces plus task-owned quest/vendor async helpers so BotRunner no longer hits null/default-interface paths on the injected client.
 - [x] Restore FG flight-master discovery/activation and a non-null `TaxiFrame` surface so task-driven taxi discovery no longer falls back to interface defaults.
 - [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
-- [ ] Finish the remaining FG runtime parity surfaces that still inherit defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
+- [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -40,6 +40,23 @@
 - Last updated: `2026-03-23`
 - Pass result: `delta shipped`
 - Last delta:
+  - `ObjectManager` now exposes live foreground `QuestGreetingFrame` and `TradeFrame` wrappers instead of returning interface defaults, which closes the last remaining FG interaction-frame gaps tracked in this file.
+  - Added foreground implementations for `DepositExcessItemsAsync`, `PostAuctionItemsAsync`, and `CraftAvailableRecipesAsync`; those flows now drive the injected client through coarse Lua/UI automation instead of inherited no-op defaults.
+  - Added deterministic FG interaction-frame coverage for quest-greeting enumeration/selection and trade-window offer/accept flows, and fixed the quest-greeting Lua probe so the count/read paths stay distinct.
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"` -> `10 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `90 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgQuestGreetingFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTradeFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - Next command:
+  - `rg -n "=> 0;|=> false;|return null;|NotImplementedException" Services/ForegroundBotRunner Exports/BotRunner -g '!**/bin/**' -g '!**/obj/**'`
+- Previous delta:
   - `ObjectManager` now exposes live foreground `CraftFrame`, `TrainerFrame`, and `TalentFrame` wrappers instead of returning `null`, which restores the remaining legacy craft/train/talent BotRunner frame surfaces on FG.
   - Added Lua-backed `FgCraftFrame`, `FgTrainerFrame`, and `FgTalentFrame` implementations; the trainer path now enumerates service metadata with zero-based BotRunner indexing, the talent path reconstructs tab/row/column state plus next-rank spell IDs, and the craft path checks reagent counts before `DoCraft(...)`.
   - Added deterministic FG frame tests covering trainer service enumeration/train indexing, talent-point accounting and spell-ID-driven learning, and craft-slot material checks/zero-based craft indexing.
@@ -57,71 +74,3 @@
   - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
   - Next command:
   - `rg -n "QuestGreetingFrame => null|TradeFrame => null|DepositExcessItemsAsync|PostAuctionItemsAsync|CraftAvailableRecipesAsync" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
-  - Previous delta:
-  - `ObjectManager` now exposes a live foreground `TaxiFrame` and implements `DiscoverTaxiNodesAsync` / `ActivateFlightAsync`, so the injected flight-master task path no longer inherits interface defaults.
-  - Added a Lua-backed `FgTaxiFrame` wrapper that reads taxi-node metadata from the open taxi map, tracks reachable/current nodes, and drives `TakeTaxiNode(...)` directly for FG activation.
-  - Added deterministic FG taxi-frame coverage that proves node metadata, unlocked-state checks, and node selection all route through the expected client-side Lua surface.
-  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"` -> `5 passed`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `85 passed`
-  - Files changed:
-  - `Services/ForegroundBotRunner/Frames/FgTaxiFrame.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
-  - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
-  - Next command:
-  - `rg -n "DepositExcessItemsAsync|PostAuctionItemsAsync|CraftAvailableRecipesAsync|TrainerFrame => null|TalentFrame => null|CraftFrame => null" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
-  - Previous delta:
-  - `ObjectManager` now exposes real foreground `GossipFrame`, `QuestFrame`, and `MerchantFrame` implementations instead of returning `null`, so legacy BotRunner FG action paths can interact with live WoW UI state again.
-  - Added foreground `QuickVendorVisitAsync`, `AcceptQuestFromNpcAsync`, and `TurnInQuestAsync` implementations; vendor visits now sell junk with the same coarse junk heuristic as BG, then repair and buy requested items while the merchant window is open.
-  - NPC interaction now caches the active GUID and explicitly targets the NPC before right-click interaction, which stabilizes follow-on quest/vendor frame actions that need the current conversation target.
-  - Added deterministic FG tests for the new gossip/quest/merchant frame wrappers plus the junk-item heuristic.
-  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundInteractionFrameTests|FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"` -> `14 passed`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `84 passed`
-  - Files changed:
-  - `Services/ForegroundBotRunner/Frames/FgGossipFrame.cs`
-  - `Services/ForegroundBotRunner/Frames/FgMerchantFrame.cs`
-  - `Services/ForegroundBotRunner/Frames/FgQuestFrame.cs`
-  - `Services/ForegroundBotRunner/Frames/FrameLuaReader.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
-  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
-  - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
-  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
-  - Next command:
-  - `rg -n "DiscoverTaxiNodesAsync|ActivateFlightAsync|TaxiFrame => null|TrainerFrame => null|TalentFrame => null" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
-  - Previous delta:
-  - `ObjectManager` now implements the foreground vendor interaction surface instead of inheriting interface default no-ops: NPC interaction is routed through a real right-click on the resolved object, vendor buy/sell/repair wait for the merchant frame on the main thread, and sequential-bag `0xFF` sell semantics now match the BG/runtime expectations.
-  - Added focused FG helper tests that pin merchant-slot Lua generation, quantity normalization, and sequential-bag item GUID resolution used by the new sell path.
-  - Merchant interactions now close the vendor window after buy/sell/repair operations so injected runs do not leave stale UI state behind between actions.
-  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~VendorInteractionHelperTests" --logger "console;verbosity=minimal"` -> `5 passed`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `75 passed`
-  - Files changed:
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
-  - `Services/ForegroundBotRunner/Statics/VendorInteractionHelper.cs`
-  - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/VendorInteractionHelperTests.cs`
-  - Next command:
-  - `rg -n "MerchantFrame => null|CompleteQuest|TurnInQuest|AcceptQuestFromNpcAsync|SellItemToVendorAsync|RepairAllItemsAsync" Services/ForegroundBotRunner Exports/BotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
-  - Previous delta:
-  - `WoWUnit` now reads descriptor-backed `FactionTemplate`, `Powers`, and `MaxPowers` instead of returning hardcoded placeholders, so FG snapshots expose the same unit-power and faction-template fields the BG path already uses.
-  - `WoWPlayer` now derives `Race`, `Class`, and `Gender` from `UNIT_FIELD_BYTES_0`, and `LocalPlayer` now uses that same descriptor-backed path instead of mixing in Lua/global-class fallbacks.
-  - Added memory-backed FG tests that pin the `IWoWPlayer` interface path for local-player `Race/Class/Gender` plus descriptor-backed faction-template and mana/rage/energy reads.
-- Validation/tests run:
-  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ForegroundBotRunner.Tests.ForegroundPlayerSnapshotParityTests" --logger "console;verbosity=minimal"` -> `12 passed`
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"` -> `68 passed`
-- Files changed:
-  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
-  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
-  - `Services/ForegroundBotRunner/Objects/WoWUnit.cs`
-  - `Services/ForegroundBotRunner/TASKS.md`
-  - `Tests/ForegroundBotRunner.Tests/ForegroundPlayerSnapshotParityTests.cs`
-- Next command:
-  - `rg -n "MerchantFrame => null|BuyItemFromVendorAsync|SellItemToVendorAsync|RepairAllItemsAsync" Services/ForegroundBotRunner Exports/BotRunner Tests/BotRunner.Tests -g '!**/bin/**' -g '!**/obj/**'`

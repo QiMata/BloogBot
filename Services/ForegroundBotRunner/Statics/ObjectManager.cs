@@ -133,7 +133,11 @@ namespace ForegroundBotRunner.Statics
 
         private readonly FgQuestFrame _fgQuestFrame;
 
+        private readonly FgQuestGreetingFrame _fgQuestGreetingFrame;
+
         private readonly FgTaxiFrame _fgTaxiFrame;
+
+        private readonly FgTradeFrame _fgTradeFrame;
 
         private readonly FgTrainerFrame _fgTrainerFrame;
 
@@ -180,7 +184,13 @@ namespace ForegroundBotRunner.Statics
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua),
                 () => GetActiveNpcInteractionGuid());
+            _fgQuestGreetingFrame = new FgQuestGreetingFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
             _fgTaxiFrame = new FgTaxiFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
+            _fgTradeFrame = new FgTradeFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua));
             _fgTrainerFrame = new FgTrainerFrame(

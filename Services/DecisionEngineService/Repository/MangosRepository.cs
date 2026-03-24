@@ -11,7 +11,8 @@ namespace DecisionEngineService.Repository
 {
     public partial class MangosRepository
     {
-        private static readonly string ConnectionString = "server=localhost;user=app;database=mangos;port=3306;password=app";
+        private const string DefaultConnectionString = "server=localhost;user=app;database=mangos;port=3306;password=app";
+        private static string ConnectionString => GetConnectionString();
 
         public static int GetRowCountForTable(string tableName)
         {
@@ -23,7 +24,7 @@ namespace DecisionEngineService.Repository
                 throw new ArgumentException("Table name cannot be null or empty.");
             }
 
-            using (MySqlConnection connection = new(ConnectionString))
+            using (MySqlConnection connection = new(GetConnectionString()))
             {
                 try
                 {
@@ -42,6 +43,13 @@ namespace DecisionEngineService.Repository
             }
 
             return count;
+        }
+
+        private static string GetConnectionString()
+        {
+            return Environment.GetEnvironmentVariable("WWOW_MANGOS_WORLD_CONNECTION_STRING")
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__MangosWorld")
+                ?? DefaultConnectionString;
         }
 
         private static Timestamp GetTimestampSafe(MySqlDataReader reader, string columnName)

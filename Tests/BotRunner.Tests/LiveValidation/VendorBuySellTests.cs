@@ -21,7 +21,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// FG parity is intentionally excluded. The foreground merchant-frame path is still legacy Lua/UI logic,
 /// while the live overhaul is prioritizing the packet-driven BG implementation first.
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class VendorBuySellTests
 {
     private readonly LiveBotFixture _bot;
@@ -38,7 +38,7 @@ public class VendorBuySellTests
     private const uint SellTestItemId = LiveBotFixture.TestItems.LinenCloth;
     private const uint BuySetupCopper = 1000;
 
-    public VendorBuySellTests(LiveBotFixture bot, ITestOutputHelper output)
+    public VendorBuySellTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;

@@ -1172,3 +1172,48 @@ if (transportGuid != 0) {
   2. Fix BG bot movement speed — barely moves during walk tests
   3. Investigate gathering interaction protocol (CMSG_GAMEOBJ_USE → channel → loot)
   4. Run remaining tests that didn't execute (Navigation, NPC, Spell, Quest, Vendor)
+
+- **Session 141 — walkable-triangle-preserving smoothing guardrails shipped:**
+  - Re-prioritized the deferred corridor-smoothing note into the active BotRunner work and shipped the first managed fix in `NavigationPath`.
+  - Bot-side smoothing now refuses to bypass the raw route unless the shortcut or offset stays inside the walkable corridor. String-pull shortcuts, runtime LOS skip-ahead, corner offsets, and cliff-reroute offsets now require multi-sample navmesh proximity plus lateral support checks instead of trusting LOS alone.
+  - Added deterministic regressions for the reproduced failure class: clear-LOS but off-corridor shortcuts, corner offsets that cannot snap back onto walkable space, and cliff reroutes that would otherwise inject an off-corridor detour.
+  - `PathfindingService` was not changed or redeployed in this pass. The stale host-side `PathfindingService.exe` PID `41884` was stopped only to release locked BotRunner outputs during the test rebuild, and no repo-scoped `PathfindingService`, `WoWStateManager`, `BackgroundBotRunner`, or `WoW.exe` processes were left running afterward.
+- **Test baseline (session 141):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests"`
+    - Passed (`52/52`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests"`
+    - Passed (`57/57`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests"`
+    - Passed (`57/57`)
+  - `Get-Process PathfindingService,WoWStateManager,BackgroundBotRunner,WoW -ErrorAction SilentlyContinue | Select-Object ProcessName,Id,Path`
+    - Returned no matching repo-scoped runtime processes
+  - `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -ListRepoScopedProcesses`
+    - Failed because the helper tried a full `dotnet` solution build and hit the known VCXProj toolchain mismatch; not used for final process evidence
+- **Files changed (session 141):**
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep walkable-triangle-preserving smoothing as the top movement priority and inspect `WoWSharpObjectManager` / `MovementController` next so execution cannot still curve off the validated corridor after `NavigationPath` has been clamped
+
+- **Session 164 — remaining-corridor execution handoff fixed:**
+  - Closed the immediate execution-side follow-up from session 141: [NavigationPath.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Movement/NavigationPath.cs) now exports only the remaining active corridor through `CurrentWaypoints`, instead of replaying the full historical path back into movement execution.
+  - This prevents [BotTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/BotTask.cs) from resetting `MovementController` onto stale already-cleared corners after BotRunner has advanced `_currentIndex`.
+  - Added a deterministic regression in [NavigationPathTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/Movement/NavigationPathTests.cs) to pin that contract: once a waypoint is consumed, `CurrentWaypoints` must start at the next live waypoint.
+  - `PathfindingService` and native navigation binaries were not changed or redeployed in this pass.
+- **Test baseline (session 164):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests"`
+    - Passed (`58/58`)
+  - `Get-Process PathfindingService,WoWStateManager,BackgroundBotRunner,WoW -ErrorAction SilentlyContinue | Select-Object ProcessName,Id,Path`
+    - Returned no matching repo-scoped runtime processes
+- **Files changed (session 164):**
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** re-run the reproduced mining route and compare planned-vs-executed waypoints now that both the smoothing layer and the movement handoff no longer point at stale corners
