@@ -1,153 +1,48 @@
-<<<<<<< HEAD
-﻿# BackgroundBotRunner Tasks
-
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
-
-## Scope
-Headless runner integration and behavior alignment with shared BotRunner tasks.
-
-## Rules
-- Execute without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep command/action handling deterministic and observable.
-
-## Active Priorities
-1. Runner action execution parity
-- [ ] Ensure forwarded actions are executed in order and reflected in snapshots quickly.
-- [ ] Keep long-running actions from being interrupted by unrelated movement/coordinator behavior.
-- [ ] Investigate follow-loop `Goto` behavior where BG can remain `MOVEFLAG_FORWARD` (`flags=0x1`) with zero displacement after teleport/release transitions.
-
-2. Command-response observability
-- [ ] Keep logs sufficient to map dispatched commands to server responses during tests.
-
-## Session Handoff
-- Last parity issue closed:
-  - None in `Services/BackgroundBotRunner` code this session; parity evidence gathered through live `DeathCorpseRunTests` logs.
-- Validation/tests run:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~DeathCorpseRunTests" --logger "console;verbosity=normal"`
-  - Result set this session: one skipped rerun, one pass (~2m10s), one fail (FG corpse-run intermittent stall), then one pass (~2m10s).
-  - BG evidence now includes explicit `Goto` no-route warnings (`[GOTO] No route ...`) after pathfinding-driven `Goto` rollout; this reduces hidden stuck-forward loops but needs retry/log tuning.
-- Files changed:
-  - none in `Services/BackgroundBotRunner/*` (work landed in `Exports/WoWSharpClient/*` and shared BotRunner flow).
-- Next task:
-  - Add targeted BG follow-loop diagnostics linking dispatched `Goto` actions to path query results and movement-controller displacement (`step > 0`) expectations.
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `Services/BackgroundBotRunner/TASKS_ARCHIVE.md`.
-
-
-=======
 # BackgroundBotRunner Tasks
 
 ## Scope
 - Directory: `Services/BackgroundBotRunner`
-- Master tracker: `MASTER-SUB-013`
 - Project: `BackgroundBotRunner.csproj`
-- Focus: BG command execution, movement lifecycle, and parity with FG during corpse/combat/gathering flows.
-- Canonical corpse-run flow: `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
-- Keep only unresolved work here; move completed items to `Services/BackgroundBotRunner/TASKS_ARCHIVE.md` in the same session.
+- Master tracker: `docs/TASKS.md`
+- Focus: headless runner lifecycle, docker packaging, and FG/BG behavior parity through the shared BotRunner stack.
 
 ## Execution Rules
-1. Execute task IDs in order unless blocked.
-2. Use source-scoped scans for `Services/BackgroundBotRunner` and directly related call sites only.
-3. Every validation cycle must compare FG and BG in the same scenario run.
-4. Enforce 10-minute max runtime for corpse-run validations with deterministic teardown evidence.
-5. Never blanket-kill `dotnet`; cleanup must be repo-scoped and include only owned lingering processes.
-6. If two consecutive passes produce no file delta, record blocker + exact next command in `Session Handoff` before switching files.
-7. Every pass must write a one-line `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
+1. Keep changes scoped to the worker plus directly related startup/config call sites.
+2. Every parity or lifecycle slice must leave a concrete validation command in `Session Handoff`.
+3. Never blanket-kill repo processes; use repo-scoped cleanup or explicit PIDs only.
+4. Archive completed items to `Services/BackgroundBotRunner/TASKS_ARCHIVE.md` when they no longer need follow-up.
+5. Every pass must record one-line `Pass result` and exactly one executable `Next command`.
 
-## Evidence Snapshot (2026-02-25)
-- Background service lifecycle currently starts bot runner but has no explicit stop hook in this worker:
-  - `_botRunner.Start()` in [BackgroundBotWorker.cs](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/BackgroundBotWorker.cs:77).
-  - No `StopAsync` override present in `BackgroundBotWorker.cs`; teardown is currently centered on `ResetAgentFactory()` in [BackgroundBotWorker.cs](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/BackgroundBotWorker.cs:264).
-- Worker loop relies on `Task.Delay(100, stoppingToken)` and broad exception handling in [BackgroundBotWorker.cs](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/BackgroundBotWorker.cs:83) and [BackgroundBotWorker.cs](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/BackgroundBotWorker.cs:86).
-- Corpse runback task already disables probe heuristics and direct fallback:
-  - `enableProbeHeuristics: false`, `enableDynamicProbeSkipping: false`, `strictPathValidation: true` in [RetrieveCorpseTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/RetrieveCorpseTask.cs:24).
-  - Waypoint retrieval uses `allowDirectFallback: false` in [RetrieveCorpseTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/RetrieveCorpseTask.cs:374).
-- Corpse flow setup uses Orgrimmar teleport in live tests:
-  - Step comment and teleport call in [DeathCorpseRunTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs:270) and [DeathCorpseRunTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs:272).
-- Current retrieve-corpse internal timeout is `12` minutes in [RetrieveCorpseTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/RetrieveCorpseTask.cs:52), so external test timeout/cleanup policy remains mandatory.
-- Action ingestion logs action type only (no explicit correlation ID field) in [BotRunnerService.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/BotRunnerService.cs:210).
+## Active Priorities
+1. `BBR-PAR-001` FG/BG action and movement parity
+- [ ] Continue tracing the remaining follow-loop and interaction timing divergences against the now-complete FG interaction surface.
 
-## Environment Checklist
-- [ ] PathfindingService is reachable and returning valid routes.
-- [ ] No repo-owned stale BG process chain (`WoW.exe`, `WoWStateManager`, scoped `dotnet/testhost`) remains before launch.
-- [ ] BG and FG test characters are available for the same scenario seed.
+2. `BBR-PAR-002` Live gathering/NPC timing
+- [ ] Re-run the existing gathering and NPC interaction parity work once the dockerized vmangos stack is online so visibility timing is measured against the new environment.
 
-## P0 Active Tasks (Ordered)
-
-### BBR-MISS-001 Harden action dispatch ordering and observability
-- [x] **Done (batch 15).** Added `_currentActionCorrelationId` and `_actionSequenceNumber` fields to `BotRunnerService.cs`. Correlation token `[act-N]` is generated at action receive, included in behavior tree build log, and logged on behavior tree completion/failure. Thread-safe via `Interlocked.Increment`.
-- [x] Acceptance: each dispatched action has a correlated start/end log token for replay analysis.
-
-### BBR-MISS-002 Eliminate stuck-forward zero-displacement loops
-- [x] **Code-complete.** Stall detection already implemented in `RetrieveCorpseTask.cs` via `ShouldRecoverRunbackStall` (displacement tracking) and `RecoverRunbackStall` (max 8 recovery attempts). Remaining acceptance requires live server validation.
-- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
-
-### BBR-MISS-003 Enforce deterministic lifecycle teardown on timeout/failure
-- [x] **Done (2026-02-27).** Added `StopAsync` override to `BackgroundBotWorker.cs` that calls `_botRunner.Stop()` and `ResetAgentFactory()` on host shutdown. Added `OperationCanceledException` handler for clean cancellation.
-
-### BBR-MISS-004 Validate path consumption for corpse runback
-- [x] **Code-complete.** RetrieveCorpseTask uses `enableProbeHeuristics: false`, `enableDynamicProbeSkipping: false`, `strictPathValidation: true`, `allowDirectFallback: false`. Path consumption configuration is correct.
-- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
-
-### BBR-MISS-005 Add parity regression checks for corpse/combat/gathering cycles
-- [x] **Code-complete.** Parity infrastructure exists in `DeathCorpseRunTests.cs` (FG/BG dual-client test harness). Full parity regression requires extending assertions with movement cadence, ability usage, and packet timing comparisons.
-- [ ] Live validation deferred — needs FG+BG dual-client test runs with live MaNGOS server.
-
-### BBR-PAR-001 Improved: World object visibility — gathering node detection timing (linked: BRT-PAR-002)
-- [x] **Diagnostics shipped (2026-02-28).** Research confirmed the 40y snapshot filter (BotRunnerService.Snapshot.cs:233-234) is NOT the root cause — player teleports to spawn location, so distance is ~0y. Real issue is server-side visibility timing after `.respawn` command.
-- Fix: Increased respawn delay (1500→3000ms), detection loop timeout (10→15s), added first-scan diagnostic dump (NearbyObjects count + first 10 GOs with entry/guid/displayId/position).
-- [ ] Live validation needed: run `dotnet test --filter "GatheringProfessionTests"` with live MaNGOS to confirm improved timing resolves herb/mining node detection.
-- Files: `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
-
-### BBR-PAR-002 Research: NPC interaction timing — FlightMaster discovery (linked: BRT-PAR-002)
-- [ ] **Research.** `FlightMaster_DiscoverNodes` failed in parity loop — NPC interaction timing issue where the BG client does not detect or interact with the FlightMaster NPC reliably.
-- Next step: trace `SMSG_UPDATE_OBJECT` NPC creation packets in FG vs BG to compare NPC visibility timing and interaction readiness.
-- Owner: `Services/BackgroundBotRunner` (BG NPC interaction)
-
-## Simple Command Set
-1. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-3. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathingAndOverlapTests|FullyQualifiedName~Orgrimmar" --logger "console;verbosity=minimal"`
-4. `Get-CimInstance Win32_Process | Where-Object { ($_.Name -in @('WoW.exe','WoWStateManager.exe','dotnet.exe','testhost.exe','testhost.net9.0.exe')) -and $_.CommandLine -like '*Westworld of Warcraft*' } | Select-Object Name,ProcessId,CommandLine`
+3. `BBR-DOCKER-001` Containerized worker validation
+- [ ] Validate the standalone BG container profile and the `WoWStateManager`-spawned BG worker path against the same endpoint contract.
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: BBR-PAR-001 diagnostics shipped; BBR-PAR-002 still open.
-- Last delta: BBR-PAR-001 timing/diagnostics improvements to GatheringProfessionTests (respawn delay 1500→3000ms, detection loop 10→15s, first-scan diagnostic dump). Root cause confirmed as server tick timing, not 40y filter.
-- Pass result: `delta shipped`
+- Last updated: 2026-03-24
+- Active task: `BBR-PAR-002`
+- Last delta:
+  - Updated `CombatRotationTask.Update()` again so melee engage now behaves like the older sequence path: a grounded face/settle tick happens before `ATTACKSWING`, and airborne melee engage attempts stay suppressed until the bot has landed and re-faced the target.
+  - Removed the old shared-task aggressor chase-timeout fallback that blindly forced `StartMeleeAttack()` after ~3s of chase. In the current outdoor mining repro that fallback was firing on ledge fights and pinning the bot in stationary combat instead of letting chase/path recovery continue.
+  - Expanded `CombatRotationTaskTests` to cover the new melee engage timing and to lock out the old blind-chase regression: in-range melee now primes once before attacking, airborne melee waits for a grounded face tick, and out-of-range aggressors no longer auto-swing just because a chase timeout elapsed.
+  - Re-ran the BG-only mining slice twice. The remaining live blocker moved materially: first from candidate `7/15` to candidate `4/15`, then to candidate `3/15`. `BADFACING` dropped to `1`, `NOTINRANGE` to `0`, `NullWaypoint` to `4`, and `AirborneBlocked` to `321`; the current failure is a later stationary melee/combat loop around `(-443.9,-4829.0,36.5)` while `GatheringRouteTask` is paused on candidate `3/15`.
+  - Left `PathfindingService` untouched and undeployed in this pass per the current deployment rule; the live improvement came entirely from shared BotRunner combat logic.
+- Pass result: `melee engage timing improved; live mining progressed from candidate 7 to candidate 3 before stalling in a later stationary combat loop`
 - Validation/tests run:
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release` — 0 errors (63 warnings)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (89/89)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (90/90)` after removing the blind aggressor chase-timeout swing and adding its regression test
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m` -> `failed after 5m16s` with the blocker shifted to candidate `4/15` (`BADFACING=1`, `NullWaypoint=10`, `AirborneBlocked=412`, `HeroicStrike=95`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m` -> `failed after 5m15s` with the blocker shifted again to candidate `3/15` (`BADFACING=1`, `NullWaypoint=4`, `AirborneBlocked=321`, `HeroicStrike=79`)
+  - `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ($targets -contains $_.ExecutablePath) }` -> `no leftover WoWStateManager/BackgroundBotRunner/PathfindingService/WoW.exe processes`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs` — timing + diagnostic improvements
+  - `Exports/BotRunner/Tasks/CombatRotationTask.cs`
+  - `Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
   - `Services/BackgroundBotRunner/TASKS.md`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m` (live validation)
-- Blockers: BBR-MISS-002/004/005 live validation requires running MaNGOS server
->>>>>>> cpp_physics_system
+- Next command: `rg -n -C 2 "candidate=3/15|pause reason=combat state=MoveToCandidate candidate=3/15|MSG_MOVE_HEARTBEAT Pos=\(-443\.9,-4829\.0,36\.5\)|spell=78 targetUnit=0xF130000C350032B1" TestResults/LiveLogs/GatheringProfessionTests.log`
+- Blockers: the remaining mining failure is no longer the old candidate-7 cliff/facing issue. The bot now advances to candidate `3/15` before stalling in a later stationary combat loop while being hit at `(-443.9,-4829.0,36.5)`; the next fix should target that later melee/chase ownership window, while the walkable-triangle-preserving smoothing follow-up remains intentionally deferred until the current higher-priority BG combat/movement recovery work is cleared.

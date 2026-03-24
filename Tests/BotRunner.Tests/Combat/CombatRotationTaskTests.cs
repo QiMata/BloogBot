@@ -1,9 +1,12 @@
 using BotRunner.Constants;
+using BotRunner.Clients;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
+using Pathfinding;
 
 namespace BotRunner.Tests.Combat;
 
@@ -49,6 +52,7 @@ public class CombatRotationTaskTests : IDisposable
     private readonly Mock<IObjectManager> _om;
     private readonly Mock<IWoWLocalPlayer> _player;
     private readonly Mock<IWoWEventHandler> _eventHandler;
+    private readonly Mock<PathfindingClient> _pathfinding;
     private readonly TestCombatRotation _sut;
 
     public CombatRotationTaskTests()
@@ -57,15 +61,46 @@ public class CombatRotationTaskTests : IDisposable
         _om = new Mock<IObjectManager>();
         _player = new Mock<IWoWLocalPlayer>();
         _eventHandler = new Mock<IWoWEventHandler>();
+        var container = new Mock<IDependencyContainer>();
+        _pathfinding = new Mock<PathfindingClient>();
+
+        _pathfinding
+            .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+            .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+            [
+                new Position(start.X, start.Y, start.Z),
+                new Position(end.X, end.Y, end.Z)
+            ]);
+        _pathfinding
+            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+            .Returns(true);
+        _pathfinding
+            .Setup(p => p.GetPath(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath, Race race, Gender gender) =>
+                _pathfinding.Object.GetPath(mapId, start, end, smoothPath));
 
         _ctx.Setup(c => c.ObjectManager).Returns(_om.Object);
         _ctx.Setup(c => c.Config).Returns(new BotBehaviorConfig());
         _ctx.Setup(c => c.EventHandler).Returns(_eventHandler.Object);
         _ctx.Setup(c => c.BotTasks).Returns(new Stack<IBotTask>());
+        _ctx.Setup(c => c.Container).Returns(container.Object);
+        container.Setup(c => c.PathfindingClient).Returns(_pathfinding.Object);
+        container.Setup(c => c.ClassContainer).Returns(Mock.Of<IClassContainer>());
+        container.Setup(c => c.QuestRepository).Returns((IQuestRepository?)null);
 
         _om.Setup(o => o.Player).Returns(_player.Object);
         _player.Setup(p => p.Position).Returns(new Position(0, 0, 0));
         _player.Setup(p => p.Guid).Returns(100UL);
+        _player.Setup(p => p.MapId).Returns(0);
+        _player.Setup(p => p.IsAutoAttacking).Returns(false);
+        _player.Setup(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_NONE);
 
         _sut = new TestCombatRotation(_ctx.Object);
     }
@@ -104,7 +139,66 @@ public class CombatRotationTaskTests : IDisposable
         var target = CreateTargetAt(3, 0, 0);
         _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
 
-        Assert.False(_sut.CallUpdate(5f));
+        Assert.True(_sut.CallUpdate(4f));
+    }
+
+    [Fact]
+    public void Update_TargetInRange_PrimesFacingBeforeStartingMelee()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+
+        Assert.True(_sut.CallUpdate(4f));
+        _om.Verify(o => o.StopAllMovement(), Times.Once);
+        _om.Verify(o => o.Face(It.Is<Position>(p => p.X == 3 && p.Y == 0 && p.Z == 0)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+    }
+
+    [Fact]
+    public void Update_TargetInRange_StartsMeleeOnSecondGroundedTick()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+
+        Assert.True(_sut.CallUpdate(4f));
+        Assert.False(_sut.CallUpdate(4f));
+
+        _om.Verify(o => o.Face(It.Is<Position>(p => p.X == 3 && p.Y == 0 && p.Z == 0)), Times.Exactly(2));
+        _om.Verify(o => o.StartMeleeAttack(), Times.Once);
+    }
+
+    [Fact]
+    public void Update_MeleeTargetOnSmallVerticalStep_Uses2dRangeAndStartsMelee()
+    {
+        var target = CreateTargetAt(3, 0, 4);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+
+        Assert.True(_sut.CallUpdate(4f));
+        Assert.False(_sut.CallUpdate(4f));
+        _om.Verify(o => o.StartMeleeAttack(), Times.Once);
+        _om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_MeleeTargetInRangeWhileAirborne_DelaysAttackUntilGroundedFacingTick()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        var movementFlags = MovementFlags.MOVEFLAG_FALLINGFAR;
+        _player.Setup(p => p.MovementFlags).Returns(() => movementFlags);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+
+        Assert.True(_sut.CallUpdate(4f));
+        _om.Verify(o => o.Face(It.IsAny<Position>()), Times.Never);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+
+        movementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        Assert.True(_sut.CallUpdate(4f));
+        _om.Verify(o => o.Face(It.Is<Position>(p => p.X == 3 && p.Y == 0 && p.Z == 0)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+
+        Assert.False(_sut.CallUpdate(4f));
+        _om.Verify(o => o.StartMeleeAttack(), Times.Once);
     }
 
     [Fact]
@@ -117,12 +211,52 @@ public class CombatRotationTaskTests : IDisposable
     }
 
     [Fact]
-    public void Update_TargetExactlyAtDistance_ReturnsFalse()
+    public void Update_AggressorOutOfRange_DoesNotForceBlindMeleeAfterChaseTimeout()
     {
-        var target = CreateTargetAt(5, 0, 0);
+        var target = CreateTargetAt(10, 0, 0);
+        target.Setup(t => t.IsInCombat).Returns(true);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.Aggressors).Returns([target.Object]);
+
+        for (int i = 0; i < 35; i++)
+            Assert.True(_sut.CallUpdate(4f));
+
+        _om.Verify(o => o.MoveToward(It.Is<Position>(p => p.X == 10 && p.Y == 0 && p.Z == 0)), Times.AtLeast(1));
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+    }
+
+    [Fact]
+    public void Update_MeleeChase_NoRoute_UsesDirectFallbackTowardTarget()
+    {
+        _pathfinding
+            .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+            .Returns(Array.Empty<Position>());
+        _pathfinding
+            .Setup(p => p.GetPath(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns(Array.Empty<Position>());
+
+        var target = CreateTargetAt(10, 0, 0);
         _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
 
-        Assert.False(_sut.CallUpdate(5f));
+        Assert.True(_sut.CallUpdate(4f));
+        _om.Verify(o => o.MoveToward(It.Is<Position>(p => p.X == 10 && p.Y == 0 && p.Z == 0)), Times.Once);
+        _om.Verify(o => o.StopAllMovement(), Times.Never);
+    }
+
+    [Fact]
+    public void Update_TargetExactlyAtDistance_ReturnsFalse()
+    {
+        var target = CreateTargetAt(4, 0, 0);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+
+        Assert.True(_sut.CallUpdate(4f));
     }
 
     // ─── TryCastSpell (condition-only) ──────────────────────
@@ -276,6 +410,60 @@ public class CombatRotationTaskTests : IDisposable
     }
 
     [Fact]
+    public void TryUseAbility_SelfBuff_CastsOnSelf()
+    {
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(30u);
+        _om.Setup(o => o.IsSpellReady("Battle Shout")).Returns(true);
+
+        Assert.True(_sut.CallTryUseAbility("Battle Shout", 10));
+        _om.Verify(o => o.CastSpell("Battle Shout", -1, true), Times.Once);
+    }
+
+    [Fact]
+    public void TryUseAbility_OnNextSwingAbility_AutoAttackInactive_DoesNotCast()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(30u);
+        _player.Setup(p => p.IsAutoAttacking).Returns(false);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.IsSpellReady("Heroic Strike")).Returns(true);
+
+        Assert.False(_sut.CallTryUseAbility("Heroic Strike", 15));
+        _om.Verify(o => o.CastSpell("Heroic Strike", -1, false), Times.Never);
+    }
+
+    [Fact]
+    public void TryUseAbility_OnNextSwingAbility_OutOfRange_DoesNotCast()
+    {
+        var target = CreateTargetAt(20, 0, 0);
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(30u);
+        _player.Setup(p => p.IsAutoAttacking).Returns(true);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.IsSpellReady("Heroic Strike")).Returns(true);
+
+        Assert.False(_sut.CallTryUseAbility("Heroic Strike", 15));
+        _om.Verify(o => o.CastSpell("Heroic Strike", -1, false), Times.Never);
+    }
+
+    [Fact]
+    public void TryUseAbility_OnNextSwingAbility_ImmediateRetry_IsThrottled()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(60u);
+        _player.Setup(p => p.IsAutoAttacking).Returns(true);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.IsSpellReady("Heroic Strike")).Returns(true);
+
+        Assert.True(_sut.CallTryUseAbility("Heroic Strike", 15));
+        Assert.False(_sut.CallTryUseAbility("Heroic Strike", 15));
+        _om.Verify(o => o.CastSpell("Heroic Strike", -1, false), Times.Once);
+    }
+
+    [Fact]
     public void TryUseAbility_SpellNotReady_ReturnsFalse()
     {
         _player.Setup(p => p.Energy).Returns(100u);
@@ -316,6 +504,17 @@ public class CombatRotationTaskTests : IDisposable
     public void TryUseAbilityById_ConditionFalse_ReturnsFalse()
     {
         Assert.False(_sut.CallTryUseAbilityById("Execute", 5308, 15, condition: false));
+    }
+
+    [Fact]
+    public void TryUseAbilityById_SelfBuff_CastsOnSelf()
+    {
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(30u);
+        _om.Setup(o => o.IsSpellReady("Blood Fury")).Returns(true);
+
+        Assert.True(_sut.CallTryUseAbilityById("Blood Fury", 20572));
+        _om.Verify(o => o.CastSpell("Blood Fury", -1, true), Times.Once);
     }
 
     [Fact]
@@ -805,5 +1004,41 @@ public class CombatRotationTaskTests : IDisposable
 
         Assert.True(result);
         _om.Verify(o => o.SetTarget(It.IsAny<ulong>()), Times.Once);
+    }
+
+    [Fact]
+    public void EnsureTarget_SelfTarget_SwitchesToAggressor()
+    {
+        var selfTarget = CreateTargetAt(0, 0, 0, 100UL);
+        selfTarget.Setup(t => t.HealthPercent).Returns(100u);
+
+        var aggressor = CreateTargetAt(5, 0, 0, 300UL);
+        aggressor.Setup(t => t.HealthPercent).Returns(50u);
+
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(selfTarget.Object);
+        _om.Setup(o => o.Aggressors).Returns(new[] { aggressor.Object });
+
+        bool result = _sut.CallEnsureTarget();
+
+        Assert.True(result);
+        _om.Verify(o => o.SetTarget(300UL), Times.Once);
+    }
+
+    [Fact]
+    public void EnsureTarget_NonAggressorTarget_SwitchesToAggressor()
+    {
+        var neutralTarget = CreateTargetAt(5, 0, 0, 250UL);
+        neutralTarget.Setup(t => t.HealthPercent).Returns(100u);
+
+        var aggressor = CreateTargetAt(7, 0, 0, 300UL);
+        aggressor.Setup(t => t.HealthPercent).Returns(50u);
+
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(neutralTarget.Object);
+        _om.Setup(o => o.Aggressors).Returns(new[] { aggressor.Object });
+
+        bool result = _sut.CallEnsureTarget();
+
+        Assert.True(result);
+        _om.Verify(o => o.SetTarget(300UL), Times.Once);
     }
 }

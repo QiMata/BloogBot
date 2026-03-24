@@ -3,7 +3,9 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using static BotRunner.Constants.Spellbook;
 
 namespace BotRunner.Tasks;
 
@@ -12,6 +14,40 @@ namespace BotRunner.Tasks;
 /// </summary>
 public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botContext)
 {
+    // Pragmatic allowlist for abilities that should not inherit the current enemy target.
+    // BG profiles still route many self-buffs and self-centered warrior shouts through
+    // TryUseAbility/TryUseAbilityById, so force them to self-cast until richer spell
+    // target metadata is available.
+    private static readonly HashSet<string> SelfCastAbilityNames = new(StringComparer.Ordinal)
+    {
+        BattleShout,
+        BerserkerRage,
+        Berserking,
+        BloodFury,
+        Bloodrage,
+        DeathWish,
+        DemoralizingShout,
+        IntimidatingShout,
+        LastStand,
+        Retaliation,
+        SweepingStrikes,
+        ThunderClap,
+        Whirlwind,
+    };
+
+    // On-next-swing melee abilities should not be spammed every bot tick. Doing so
+    // can starve normal melee progression and flood the server with duplicate queue
+    // requests while the player is stationary in combat.
+    private static readonly HashSet<string> OnNextSwingAbilityNames = new(StringComparer.Ordinal)
+    {
+        Cleave,
+        HeroicStrike,
+        Maul,
+        RaptorStrike,
+    };
+    private readonly Dictionary<string, long> _lastQueuedOnNextSwingAttemptMs = new(StringComparer.Ordinal);
+    private const int OnNextSwingQueueThrottleMs = 1700;
+
     // Potion cooldown tracking (potions share a cooldown via Config.PotionCooldownMs)
     private static DateTime _lastPotionUsed = DateTime.MinValue;
 
@@ -20,11 +56,10 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     private int _kiteStartTime;
     private int _kiteDurationMs;
 
-    // Chase timeout: when dead-reckoning diverges from server position, local
-    // distance calculations become unreliable. If we've been chasing an aggressor
-    // for too long, force auto-attack — the mob is hitting us so we're in range.
-    private int _chaseTickCount;
-    private const int CHASE_FORCE_ATTACK_TICKS = 30; // ~3s at 100ms tick
+    // Melee engage parity: shared rotation tasks should mirror the older sequence path
+    // by giving facing one grounded tick to settle before issuing ATTACKSWING.
+    private ulong _pendingMeleeEngageTargetGuid;
+    private bool _meleeFacingPrimed;
 
     /// <summary>
     /// Perform the combat rotation logic.
@@ -43,38 +78,78 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         TryUseHealthPotion();
         TryUseManaPotion();
 
+        var player = ObjectManager.Player;
         var target = ObjectManager.GetTarget(ObjectManager.Player);
-        if (target == null) return false;
+        if (target == null)
+        {
+            ResetPendingMeleeEngage();
+            return false;
+        }
 
-        var distance = ObjectManager.Player.Position.DistanceTo(target.Position);
+        var meleeRange = GetMeleeRange(target);
+        var useMeleeChaseHeuristics = attackDistance <= meleeRange + 0.5f;
+        var distance = useMeleeChaseHeuristics
+            ? player.Position.DistanceTo2D(target.Position)
+            : player.Position.DistanceTo(target.Position);
         if (distance > attackDistance)
         {
-            _chaseTickCount++;
-
-            // Dead-reckoning fallback: when no physics collision data exists
-            // (dungeon maps without vmtile files), the bot's local position
-            // diverges from the server's position. The local distance calculation
-            // becomes unreliable. If the target is actively attacking us (it's an
-            // aggressor), the server considers us in melee range. Force auto-attack
-            // after a chase timeout to avoid perpetual chase with no attacks.
-            bool targetIsAggressor = target.IsInCombat && ObjectManager.Aggressors.Any(a => a.Guid == target.Guid);
-            if (targetIsAggressor && _chaseTickCount >= CHASE_FORCE_ATTACK_TICKS)
-            {
-                ObjectManager.Face(target.Position);
-                ObjectManager.StartMeleeAttack();
-                return false;
-            }
+            ResetPendingMeleeEngage();
 
             // Chase: face and navigate toward the target
             ObjectManager.Face(target.Position);
-            NavigateToward(target.Position);
+            TryNavigateToward(target.Position, allowDirectFallback: useMeleeChaseHeuristics);
             return true;
         }
 
-        _chaseTickCount = 0;
-        // In range — ensure auto-attack is active
+        if (useMeleeChaseHeuristics && ShouldDelayMeleeEngage(player, target))
+        {
+            ObjectManager.StopAllMovement();
+            if (!IsPlayerAirborne(player))
+                ObjectManager.Face(target.Position);
+            return true;
+        }
+
+        ResetPendingMeleeEngage();
+        // In range — keep facing synced before melee packets are sent. The shared
+        // profile path previously skipped this, which let BG combat drift into
+        // repeated BADFACING errors while the bot appeared stationary in melee.
+        ObjectManager.Face(target.Position);
         ObjectManager.StartMeleeAttack();
         return false;
+    }
+
+    private static bool IsPlayerAirborne(IWoWLocalPlayer player)
+        => (player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+
+    private bool ShouldDelayMeleeEngage(IWoWLocalPlayer player, IWoWUnit target)
+    {
+        if (player.IsAutoAttacking)
+        {
+            ResetPendingMeleeEngage();
+            return false;
+        }
+
+        if (IsPlayerAirborne(player))
+        {
+            _pendingMeleeEngageTargetGuid = target.Guid;
+            _meleeFacingPrimed = false;
+            return true;
+        }
+
+        if (_pendingMeleeEngageTargetGuid != target.Guid || !_meleeFacingPrimed)
+        {
+            _pendingMeleeEngageTargetGuid = target.Guid;
+            _meleeFacingPrimed = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ResetPendingMeleeEngage()
+    {
+        _pendingMeleeEngageTargetGuid = 0;
+        _meleeFacingPrimed = false;
     }
 
     /// <summary>
@@ -179,8 +254,9 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             return false;
 
         if (!ObjectManager.IsSpellReady(abilityName)) return false;
+        if (!CanQueueOnNextSwingAbility(abilityName)) return false;
 
-        ObjectManager.CastSpell(abilityName);
+        ObjectManager.CastSpell(abilityName, castOnSelf: SelfCastAbilityNames.Contains(abilityName));
         return true;
     }
 
@@ -207,8 +283,9 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             return false;
 
         if (!ObjectManager.IsSpellReady(abilityName)) return false;
+        if (!CanQueueOnNextSwingAbility(abilityName)) return false;
 
-        ObjectManager.CastSpell(abilityName);
+        ObjectManager.CastSpell(abilityName, castOnSelf: SelfCastAbilityNames.Contains(abilityName));
         return true;
     }
 
@@ -235,14 +312,20 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     /// <returns>True if we have a valid target to fight, false if combat should end.</returns>
     protected bool EnsureTarget()
     {
-        if (!ObjectManager.Aggressors.Any())
+        var aggressors = ObjectManager.Aggressors.ToList();
+        if (!aggressors.Any())
         {
             BotTasks.Pop();
             return false;
         }
 
+        var player = ObjectManager.Player;
         var target = ObjectManager.GetTarget(ObjectManager.Player);
-        if (target == null || target.HealthPercent <= 0)
+        bool targetIsValidAggressor = target != null
+            && target.Guid != player.Guid
+            && target.HealthPercent > 0
+            && aggressors.Any(a => a.Guid == target.Guid);
+        if (!targetIsValidAggressor)
             AssignDPSTarget();
 
         return true;
@@ -598,5 +681,33 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             || name == "minor mana potion" || name == "lesser mana potion"
             || name == "mana potion" || name == "greater mana potion"
             || name == "superior mana potion" || name == "major mana potion";
+    }
+
+    private bool CanQueueOnNextSwingAbility(string abilityName)
+    {
+        if (!OnNextSwingAbilityNames.Contains(abilityName))
+            return true;
+
+        var target = ObjectManager.GetTarget(ObjectManager.Player);
+        if (target == null || target.Guid == ObjectManager.Player.Guid || target.HealthPercent <= 0)
+            return false;
+
+        if (!ObjectManager.Player.IsAutoAttacking)
+            return false;
+
+        var distance = ObjectManager.Player.Position.DistanceTo(target.Position);
+        if (distance > GetMeleeRange(target) + 0.5f)
+            return false;
+
+        string key = $"{abilityName}:{target.Guid:X}";
+        long nowMs = Environment.TickCount64;
+        if (_lastQueuedOnNextSwingAttemptMs.TryGetValue(key, out var lastQueuedAt)
+            && nowMs - lastQueuedAt < OnNextSwingQueueThrottleMs)
+        {
+            return false;
+        }
+
+        _lastQueuedOnNextSwingAttemptMs[key] = nowMs;
+        return true;
     }
 }

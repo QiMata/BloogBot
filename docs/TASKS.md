@@ -283,8 +283,257 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-23 (session 153)
+- **Last updated:** 2026-03-24 (session 162)
 - **Branch:** `main`
+- **Session 162 — melee engage timing improved again; live mining advanced to a later combat stall:**
+  - Updated [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs) so shared melee engage now matches the older sequence path more closely: one grounded face/settle tick before `StartMeleeAttack()`, plus airborne suppression until the bot has landed and re-faced the target.
+  - Removed the old shared-task aggressor chase-timeout fallback from [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs). In the current outdoor mining repro that blind auto-swing was firing on ledge fights and pinning the bot in stationary combat instead of letting chase/path recovery continue.
+  - Expanded [CombatRotationTaskTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs) to cover the new engage timing and the removed blind-chase regression: in-range melee primes before attacking, airborne melee waits for a grounded face tick, and out-of-range aggressors no longer auto-swing just because a chase timeout elapsed.
+  - Re-ran the BG-only mining slice twice. The live blocker moved materially from candidate `7/15` to `4/15`, then to `3/15`. The old cliff/facing signature mostly collapsed: latest counts were `BADFACING=1`, `NOTINRANGE=0`, `NullWaypoint=4`, `AirborneBlocked=321`, `HeroicStrike=79`. The current failure is a later stationary combat loop around `(-443.9,-4829.0,36.5)` while `GatheringRouteTask` is paused on candidate `3/15`.
+  - Explicit PID inspection again confirmed there were no leftover host `WoWStateManager.exe`, `BackgroundBotRunner.exe`, `PathfindingService.exe`, or `WoW.exe` processes after the reruns. `PathfindingService` code was not changed or redeployed in this pass.
+- **Test baseline (session 162):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"`
+    - Passed (`89/89`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"`
+    - Passed (`90/90`) after adding the blind-chase regression
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m`
+    - Failed after `5m16s` with the blocker shifted to candidate `4/15` (`BADFACING=1`, `NullWaypoint=10`, `AirborneBlocked=412`, `HeroicStrike=95`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m`
+    - Failed after `5m15s` with the blocker shifted again to candidate `3/15` (`BADFACING=1`, `NullWaypoint=4`, `AirborneBlocked=321`, `HeroicStrike=79`)
+  - `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ($targets -contains $_.ExecutablePath) }`
+    - Returned no matching host bot/runtime processes
+- **Files changed (session 162):**
+  - `Exports/BotRunner/Tasks/CombatRotationTask.cs`
+  - `Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep `BBR-PAR-002` focused on the later candidate-3 stationary combat loop rather than the old candidate-7 cliff/facing issue; the next high-signal check is the target/chase ownership window around `(-443.9,-4829.0,36.5)`. Keep the walkable-triangle-preserving smoothing follow-up deferred behind these higher-priority combat/movement fixes, and continue leaving `PathfindingService` undeployed unless its code changes.
+- **Session 161 — task-level melee chase parity tightened; live mining narrowed to a cliff recovery window:**
+  - Added default physics-contact accessors to [IObjectManager.cs](/E:/repos/Westworld of Warcraft/Exports/GameData.Core/Interfaces/IObjectManager.cs) so BotRunner task code can consume BG wall-hit / blocked-fraction telemetry without adding a new direct dependency on `WoWSharpClient`.
+  - Updated [BotTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/BotTask.cs) to pass that wall-contact data into `NavigationPath`, and updated [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs) so melee chase uses 2D close-range checks plus `allowDirectFallback: true`, matching the more resilient sequence-based melee chase behavior.
+  - Added focused coverage in [CombatRotationTaskTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs) for the two live regressions this exposed: small vertical-step melee range and no-route melee direct fallback.
+  - Re-ran the BG-only mining slice. The earlier close-range no-route stall improved, but the test still times out on candidate `7/15` during a steep vertical/cliff combat recovery window: repeated `MoveToward blocked by IsPlayerAirborne`, `GetNextWaypoint returned null` at `(-744.6,-4743.0,22.1)` versus target `(-748.0,-4748.5,31.1)`, followed by `SMSG_ATTACKSWING_BADFACING` / `SMSG_ATTACKSWING_NOTINRANGE`.
+  - Explicit PID inspection confirmed there were no leftover host `WoWStateManager.exe`, `BackgroundBotRunner.exe`, `PathfindingService.exe`, or `WoW.exe` processes after the rerun. `PathfindingService` code was not changed or redeployed in this pass.
+- **Test baseline (session 161):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"`
+    - Passed (`87/87`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m`
+    - Failed after `5m16s` (`NullWaypoint=65`, `AirborneBlocked=768`, `BADFACING=16`, `NOTINRANGE=7`, `HeroicStrike=36`)
+  - `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ($targets -contains $_.ExecutablePath) }`
+    - Returned no matching host bot/runtime processes
+- **Files changed (session 161):**
+  - `Exports/GameData.Core/Interfaces/IObjectManager.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Exports/BotRunner/Tasks/CombatRotationTask.cs`
+  - `Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep `BBR-PAR-002` on the candidate-7 cliff/vertical combat recovery window, likely by tightening melee chase/facing behavior during airborne-to-ground transitions and reducing the null-waypoint recovery delay; keep the walkable-triangle-preserving smoothing follow-up deferred behind those higher-priority combat/movement fixes, and continue leaving `PathfindingService` undeployed unless its code changes
+- **Session 160 — BG-only live fixture split for BG-authoritative suites:**
+  - Added `BgOnly.settings.json`, `BgOnlyBotFixture`, and `BgOnlyValidationCollection` under `Tests/BotRunner.Tests/LiveValidation/` so BG-authoritative live suites can run against a one-bot StateManager config instead of always launching an FG client.
+  - Moved the explicitly BG-only or BG-first suites onto that collection: `CraftingProfessionTests`, `VendorBuySellTests`, `StarterQuestTests`, `MapTransitionTests`, `NavigationTests`, and the BG-authoritative `GatheringProfessionTests`.
+  - Added deterministic coverage in `BgOnlyBotFixtureConfigurationTests` to verify the BG-only settings seed only the background role; `PathfindingService` code/container state was not changed or redeployed in this pass.
+- **Test baseline (session 160):**
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded (existing warnings; existing `dumpbin` applocal warning still present)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~BgOnlyBotFixtureConfigurationTests|FullyQualifiedName~LiveBotFixtureDiagnosticsTests" --logger "console;verbosity=minimal"`
+    - Passed (`2/2`)
+- **Files changed (session 160):**
+  - `Tests/BotRunner.Tests/LiveValidation/BgOnlyBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BgOnlyValidationCollection.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BgOnlyBotFixtureConfigurationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Settings/BgOnly.settings.json`
+  - `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/VendorBuySellTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** use the BG-only gathering fixture to re-run `BBR-PAR-002` mining/herbalism slices, then continue the BG movement/controller parity work without touching `PathfindingService` deployment unless its code changes
+- **Session 159 — gathering route combat ownership tightened; deferred walkable-tile smoothing note added:**
+  - Updated [GatheringRouteTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/GatheringRouteTask.cs) so incidental combat pauses the active gather-route task, clears navigation, resets the task-local timeout window, and resumes the current candidate instead of dropping the task off the stack.
+  - Added focused coverage in [GatheringRouteTaskTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/Combat/GatheringRouteTaskTests.cs) for the near-timeout combat pause/resume case.
+  - Re-ran the live mining slice against the Docker-hosted vmangos stack; the test still hangs, but the next precision bug is now explicit in the logs: waypoint following/smoothing is curving off the walkable corridor and redirecting across unwalkable terrain before the child `PathfindingService` connection is lost.
+  - Recorded that walkable-triangle-preserving smoothing follow-up in [Services/PathfindingService/TASKS.md](/E:/repos/Westworld of Warcraft/Services/PathfindingService/TASKS.md) as deferred until after the current priorities, and cleaned the repo-scoped leftover `WoW.exe` from the aborted live run.
+- **Test baseline (session 159):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringRouteTaskTests"`
+    - Passed (`4/4`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m`
+    - Aborted after hang (`GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases`; latest `GatheringProfessionTests.log` shows route drift off walkable terrain and later `PathfindingService process exited (code -1)`)
+  - `Get-Process | Where-Object { $_.ProcessName -in @('WoW','WoWStateManager','BackgroundBotRunner','PathfindingService') }`
+    - Confirmed clean after explicit orphan cleanup
+- **Files changed (session 159):**
+  - `Exports/BotRunner/Tasks/GatheringRouteTask.cs`
+  - `Tests/BotRunner.Tests/Combat/GatheringRouteTaskTests.cs`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep pushing `BBR-PAR-002` first, leave `PathfindingService` undeployed unless its code changes, and keep the walkable-tile-preserving smoothing fix queued behind the existing higher-priority work
+- **Session 158 — removed the duplicate vmangos DB container and switched the stack to the host MySQL install:**
+  - Updated [docker-compose.vmangos-linux.yml](/E:/repos/Westworld of Warcraft/docker-compose.vmangos-linux.yml) to remove the compose-managed `vmangos-database` service and repoint `vmangos-realmd` / `vmangos-mangosd` at `host.docker.internal:3306`.
+  - Updated [start-realmd.sh](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/start-realmd.sh) and [start-mangosd.sh](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/start-mangosd.sh) so the Linux server containers default to the host DB path, with an explicit host-gateway mapping.
+  - Extended [Sync-MigrationMarkers.ps1](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/Sync-MigrationMarkers.ps1) to support host MySQL mode, then applied the missing world migrations to the existing `D:\MaNGOS\mysql5` database (`mangos.migrations` `988 -> 1006`) before restarting the vmangos containers.
+  - Removed the duplicate `westworldofwarcraft-vmangos-database-1` container and refreshed [docs/DOCKER_STACK.md](/E:/repos/Westworld of Warcraft/docs/DOCKER_STACK.md) to document the single-DB topology.
+- **Test baseline (session 158):**
+  - `docker rm -f westworldofwarcraft-vmangos-database-1`
+    - Succeeded
+  - `Start-Process D:\MaNGOS\mysql5\bin\mysqld.exe --console --max_allowed_packet=128M`
+    - Succeeded (`PID 29236`)
+  - `D:\MaNGOS\mysql5\bin\mysql.exe -h 127.0.0.1 -uroot -proot -e "SHOW DATABASES; SELECT COUNT(*) AS allowed_clients FROM realmd.allowed_clients; SELECT COUNT(*) AS mangos_migrations FROM mangos.migrations;"`
+    - Succeeded (`allowed_clients=60`, `mangos.migrations=988` before sync)
+  - `powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMarkers.ps1 -FetchOrigin`
+    - Succeeded (`mangos.migrations=1006`)
+  - `docker compose -f .\docker-compose.vmangos-linux.yml config`
+    - Succeeded
+  - `docker compose -f .\docker-compose.vmangos-linux.yml up -d vmangos-realmd vmangos-mangosd`
+    - Succeeded
+  - `docker ps --filter name=westworldofwarcraft-vmangos- --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"`
+    - `vmangos-realmd` and `vmangos-mangosd` healthy; no `vmangos-database` container remains
+  - `docker logs --tail 120 westworldofwarcraft-vmangos-realmd-1`
+    - Succeeded (`Database: host.docker.internal;3306;root;*;realmd`, `Added realm "Lightbringer"`)
+  - `docker logs --tail 160 westworldofwarcraft-vmangos-mangosd-1`
+    - Succeeded (`World initialized.`, SOAP bound)
+  - `Test-NetConnection -ComputerName 127.0.0.1 -Port 3306,3724,7878,8085`
+    - All four ports reachable from the host
+- **Files changed (session 158):**
+  - `docker-compose.vmangos-linux.yml`
+  - `docker/linux/vmangos/Sync-MigrationMarkers.ps1`
+  - `docker/linux/vmangos/start-mangosd.sh`
+  - `docker/linux/vmangos/start-realmd.sh`
+  - `docs/DOCKER_STACK.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the single host DB topology, leave the duplicate DB container removed, and continue the split deployment work with host-side `WoWStateManager` plus containerized vmangos/pathfinding as needed
+- **Session 157 — removed the `WoWStateManager` container path and made host-side orchestration explicit:**
+  - Updated [docker-compose.windows.yml](/E:/repos/Westworld of Warcraft/docker-compose.windows.yml) to remove the `wow-state-manager` service entirely; `WoWStateManager` must remain host-side so it can launch local `WoW.exe` clients.
+  - Repointed the optional `background-bot-runner` container at the host-side `WoWStateManager` listener via `WWOW_STATE_MANAGER_HOST` / `WWOW_STATE_MANAGER_PORT` (default `host.docker.internal:5002`) instead of depending on a `wow-state-manager` container.
+  - Refreshed [docs/DOCKER_STACK.md](/E:/repos/Westworld of Warcraft/docs/DOCKER_STACK.md), [Services/WoWStateManager/TASKS.md](/E:/repos/Westworld of Warcraft/Services/WoWStateManager/TASKS.md), and [Services/BackgroundBotRunner/TASKS.md](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/TASKS.md) to document the corrected architecture: containerize server-side pieces, keep `WoWStateManager` on the host.
+- **Test baseline (session 157):**
+  - `docker compose -f .\docker-compose.windows.yml config`
+    - Succeeded
+  - `docker compose -f .\docker-compose.windows.yml --profile bgbot config`
+    - Succeeded (`CharacterStateListener__IpAddress=host.docker.internal`)
+  - `docker ps -a --filter name=westworldofwarcraft-wow-state-manager --format "table {{.Names}}\t{{.Status}}"`
+    - Returned no containers to remove
+  - `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq 27628 }`
+    - Confirmed the live `WoWStateManager.exe` host process remains the active orchestration path
+- **Files changed (session 157):**
+  - `docker-compose.windows.yml`
+  - `docs/DOCKER_STACK.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep `WoWStateManager` host-side, leave vmangos/pathfinding containerized where possible, and continue the next BG parity slice against that split deployment
+- **Session 156 — host-side PathfindingService + idle WoWStateManager brought up against the live Docker vmangos stack:**
+  - Started the published host-side [PathfindingService.exe](/E:/repos/Westworld of Warcraft/Bot/Release/net8.0/PathfindingService.exe) because the current Docker engine is Linux-only and the service still depends on the Windows-native `Navigation.dll`.
+  - Added [StateManagerSettings.Idle.json](/E:/repos/Westworld of Warcraft/Services/WoWStateManager/Settings/StateManagerSettings.Idle.json) and launched [WoWStateManager.exe](/E:/repos/Westworld of Warcraft/Bot/Release/net8.0/WoWStateManager.exe) with `WWOW_SETTINGS_OVERRIDE` pointing at that empty settings file plus `MangosServer__AutoLaunch=false`, so it stays idle while still binding its listener ports.
+  - Updated [docs/DOCKER_STACK.md](/E:/repos/Westworld of Warcraft/docs/DOCKER_STACK.md) with the host-side fallback commands required while service containerization remains blocked on Windows-only runtime dependencies.
+- **Test baseline (session 156):**
+  - `Start-Process Bot\Release\net8.0\PathfindingService.exe`
+    - Succeeded (`PID 33144`)
+  - `Get-NetTCPConnection -LocalPort 5001 -State Listen`
+    - Succeeded (`PID 33144` listening on `127.0.0.1:5001`)
+  - `Get-Content Bot\Release\net8.0\pathfinding_status.json`
+    - Succeeded (`IsReady=true`, `LoadedMaps={0,1,389}`, `ProcessId=33144`)
+  - `Get-Content logs\service-host\pathfindingservice.stdout.log -Tail 80`
+    - Succeeded (`Navigation.dll` loaded, native preload completed)
+  - `Start-Process Bot\Release\net8.0\WoWStateManager.exe` with `MangosServer__AutoLaunch=false` and `WWOW_SETTINGS_OVERRIDE=Services\WoWStateManager\Settings\StateManagerSettings.Idle.json`
+    - Succeeded (`PID 27628`)
+  - `Get-NetTCPConnection -LocalPort 5002,8088 -State Listen`
+    - Succeeded (`PID 27628` listening on both ports)
+  - `Get-Content logs\service-host\wowstatemanager.stdout.log -Tail 120`
+    - Succeeded (`CharacterSettings count: 0`, `MaNGOS auto-launch disabled.`, `PathfindingService is READY`)
+  - `Get-CimInstance Win32_Process ... BackgroundBotRunner.exe|ForegroundBotRunner.exe|WoW.exe`
+    - Succeeded (no bot runner or `WoW.exe` children launched by idle `WoWStateManager`)
+- **Files changed (session 156):**
+  - `Services/WoWStateManager/Settings/StateManagerSettings.Idle.json`
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `docs/DOCKER_STACK.md`
+  - `docs/TASKS.md`
+- **Next priorities:** use the now-running host-side `PathfindingService` and idle `WoWStateManager` with the live Docker vmangos stack for the next BG parity slice, then come back to true service containerization once Docker is back in Windows-container mode
+- **Session 155 — Linux vmangos auth/world/db stack deployed on the local Docker engine:**
+  - Repointed [docker-compose.vmangos-linux.yml](/E:/repos/Westworld of Warcraft/docker-compose.vmangos-linux.yml) away from the unrelated `gameserver-mariadb` container and added a compose-managed `vmangos-database` service backed by the existing `westworldofwarcraft_vmangos-database` volume.
+  - Updated the Linux vmangos startup scripts in [docker/linux/vmangos/start-realmd.sh](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/start-realmd.sh) and [docker/linux/vmangos/start-mangosd.sh](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/start-mangosd.sh) so `realmd` / `mangosd` default to the local `vmangos-database` service instead of the legacy external MariaDB path.
+  - Confirmed the persisted DB volume already contains the correct modern vmangos schema (`realmd.allowed_clients` present, March 2026 world migrations present), kept the stable `root/root` credentials expected by the local server config, and let the DB image complete its own update pass.
+  - Refreshed [docs/DOCKER_STACK.md](/E:/repos/Westworld of Warcraft/docs/DOCKER_STACK.md) and [docker/linux/vmangos/Sync-MigrationMarkers.ps1](/E:/repos/Westworld of Warcraft/docker/linux/vmangos/Sync-MigrationMarkers.ps1) so the Linux stack documentation and migration helper point at the compose-managed vmangos DB container by default.
+- **Test baseline (session 155):**
+  - `docker compose -f .\docker-compose.vmangos-linux.yml config`
+    - Succeeded
+  - `docker compose -f .\docker-compose.vmangos-linux.yml down`
+    - Succeeded
+  - `docker compose -f .\docker-compose.vmangos-linux.yml up -d vmangos-database`
+    - Succeeded
+  - `docker exec westworldofwarcraft-vmangos-database-1 mariadb -uroot -proot -e "SHOW DATABASES; SELECT COUNT(*) AS allowed_clients FROM realmd.allowed_clients; SELECT COUNT(*) AS mangos_migrations FROM mangos.migrations;"`
+    - Succeeded (`allowed_clients=60`, `mangos.migrations=1006`)
+  - `docker compose -f .\docker-compose.vmangos-linux.yml up -d vmangos-realmd vmangos-mangosd`
+    - Succeeded
+  - `docker ps --filter name=westworldofwarcraft-vmangos- --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"`
+    - `vmangos-database`, `vmangos-realmd`, and `vmangos-mangosd` all `Up` and `healthy`
+  - `docker logs --tail 160 westworldofwarcraft-vmangos-realmd-1`
+    - Succeeded (`Added realm "VMaNGOS"`)
+  - `docker logs --tail 200 westworldofwarcraft-vmangos-mangosd-1`
+    - Succeeded (`World initialized.`, `MaNGOSsoap: Bound to http://0.0.0.0:7878/`)
+  - `Test-NetConnection -ComputerName 127.0.0.1 -Port 3306,3724,7878,8085`
+    - All four ports reachable from the host
+- **Files changed (session 155):**
+  - `docker-compose.vmangos-linux.yml`
+  - `docker/linux/vmangos/Sync-MigrationMarkers.ps1`
+  - `docker/linux/vmangos/start-mangosd.sh`
+  - `docker/linux/vmangos/start-realmd.sh`
+  - `docs/DOCKER_STACK.md`
+- **Next priorities:** run the next BG live parity slice against the now-live Docker vmangos stack, starting with the gathering / NPC-interaction timing failures that were previously blocked on server deployment
+- **Session 154 — dockerized service stack + FG interaction parity slice shipped:**
+  - Added a Windows-container compose stack in [docker-compose.windows.yml](/E:/repos/Westworld of Warcraft/docker-compose.windows.yml) for `vmangos-server`, `pathfinding-service`, `wow-state-manager`, and an optional `background-bot-runner` profile, with [docs/DOCKER_STACK.md](/E:/repos/Westworld of Warcraft/docs/DOCKER_STACK.md) documenting the required Windows-container mode and local MaNGOS bind mounts.
+  - `WoWStateManager` now loads `appsettings.Docker.json`, exports config-backed realmd/world connection strings, prefers a published child BG worker under `BackgroundBotRunner\BackgroundBotRunner.exe`, and forwards docker-safe endpoint overrides when it spawns `BackgroundBotRunner`.
+  - `PathfindingService`, `WoWStateManager`, and `BackgroundBotRunner` all now have Windows Dockerfiles; `PathfindingService` also ships a docker-specific bind address config, and the vmangos stack is launched through [docker/windows/vmangos/start-vmangos-stack.ps1](/E:/repos/Westworld of Warcraft/docker/windows/vmangos/start-vmangos-stack.ps1).
+  - `ForegroundBotRunner` now exposes real `QuestGreetingFrame` and `TradeFrame` wrappers and implements the remaining task-owned bank/AH/craft helper methods instead of inheriting interface defaults.
+- **Test baseline (session 154):**
+  - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release -p:Platform=x86 -m:1 -p:UseSharedCompilation=false`
+    - Succeeded (`0 errors`, warnings only)
+  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"`
+    - Passed (`10/10`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
+    - Passed (`90/90`)
+  - `docker compose -f .\docker-compose.windows.yml config`
+    - Succeeded
+- **Files changed (session 154):**
+  - `Services/BackgroundBotRunner/Dockerfile`
+  - `Services/DecisionEngineService/Repository/MangosRepository.cs`
+  - `Services/ForegroundBotRunner/Frames/FgQuestGreetingFrame.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTradeFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Services/ForegroundBotRunner/TASKS_ARCHIVE.md`
+  - `Services/PathfindingService/Dockerfile`
+  - `Services/PathfindingService/PathfindingService.csproj`
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/PathfindingService/appsettings.PathfindingService.Docker.json`
+  - `Services/WoWStateManager/Dockerfile`
+  - `Services/WoWStateManager/Program.cs`
+  - `Services/WoWStateManager/Repository/ReamldRepository.cs`
+  - `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Services/WoWStateManager/TASKS_ARCHIVE.md`
+  - `Services/WoWStateManager/WoWStateManager.csproj`
+  - `Services/WoWStateManager/appsettings.Docker.json`
+  - `Services/WoWStateManager/appsettings.json`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - `docker-compose.windows.yml`
+  - `docker/windows/vmangos/start-vmangos-stack.ps1`
+  - `docs/DOCKER_STACK.md`
+- **Next priorities:** bring up the Windows Docker stack end-to-end, capture first-run lifecycle evidence for `WoWStateManager` spawning BG inside the containerized environment, then resume BG live parity work against the now-complete FG interaction surface
 - **Session 153 — FG trainer/talent/craft frame parity slice shipped:**
   - `ForegroundBotRunner` now exposes live `CraftFrame`, `TrainerFrame`, and `TalentFrame` wrappers instead of returning `null`, which restores the remaining legacy craft/train/talent frame surface still reachable from injected BotRunner actions.
   - Added Lua-backed `FgCraftFrame`, `FgTrainerFrame`, and `FgTalentFrame` implementations. The trainer wrapper preserves zero-based BotRunner indexing over WoW’s one-based trainer list, the talent wrapper reconstructs tab state and next-rank spell IDs from live Lua data, and the craft wrapper checks reagent counts before issuing `DoCraft(...)`.
