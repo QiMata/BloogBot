@@ -992,6 +992,25 @@ if (transportGuid != 0) {
   - Swim collision uses WoW.exe’s `0.5` swim-branch displacement constant (`VA 0x007FFA24`) as two half-step submerged collision substeps
   - `PhysicsEngine.cpp` now keeps water-entry horizontal damping visible in output velocity on the entry frame instead of mutating only carried state
   - Added focused physics regressions for Durotar seabed collision and recorded water-entry damping
+- **Session 133 — grounded support-normal parity slice shipped:**
+  - `CollisionStepWoW` now resolves the grounded support normal from the closest walkable AABB terrain contact to the chosen `groundZ` instead of leaving a synthetic flat `(0,0,1)` normal on steep grounded frames
+  - Added `ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport` so the steep Valley of Trials route now proves we keep a real slope support normal while descending
+  - Detailed steep-descent replay now reports `No-ground frames: 0` instead of `528`, while preserving the same `0.20y` max hover gap above true ground
+- **Test baseline (session 133):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ValleyOfTrialsSlopeTests.SlopeRoute_StepPhysics_ZDoesNotOscillate"`
+    - Passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground"`
+    - Passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName=Navigation.Physics.Tests.ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic" --logger "console;verbosity=detailed"`
+    - Passed; steep-descent `groundNz` now ranged `0.745..0.999`, and `No-ground frames` dropped `528 -> 0`
+- **Files changed (session 133):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/ValleyOfTrialsSlopeTests.cs`
+- **Next priorities:** full touched-surface persistence (`standingOnInstanceId` / local-point tracking) is still open if we want exact “standing on this triangle/object” parity; after the current bot-behavior priorities, return to waypoint smoothing/corridor clamping so path smoothing never exits walkable triangles
 - **Test baseline (session 132):**
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
     - Succeeded

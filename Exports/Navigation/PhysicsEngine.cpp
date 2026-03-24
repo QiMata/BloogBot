@@ -551,6 +551,51 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     // Merge half-step contacts into main contacts (WoW.exe uses both)
     contacts.insert(contacts.end(), halfContacts.begin(), halfContacts.end());
 
+    auto resolveSupportNormal = [&](float supportZ, G3D::Vector3& outNormal) -> bool {
+        const float minGroundZ = startZ - PhysicsConstants::STEP_DOWN_HEIGHT;
+        const float maxGroundZ = startZ + stepH + stepUp;
+        const SceneQuery::AABBContact* bestSupport = nullptr;
+        float bestZError = FLT_MAX;
+        float bestNormalZ = -FLT_MAX;
+
+        for (const auto& c : contacts) {
+            if (!c.walkable)
+                continue;
+            if (c.point.z < minGroundZ || c.point.z > maxGroundZ)
+                continue;
+
+            const float zError = std::fabs(c.point.z - supportZ);
+            const float normalZ = std::fabs(c.normal.z);
+            bool better = false;
+            if (!bestSupport) {
+                better = true;
+            }
+            else if (zError < bestZError - 1e-4f) {
+                better = true;
+            }
+            else if (std::fabs(zError - bestZError) <= 1e-4f) {
+                if (normalZ > bestNormalZ + 1e-4f)
+                    better = true;
+                else if (std::fabs(normalZ - bestNormalZ) <= 1e-4f && c.point.z > bestSupport->point.z)
+                    better = true;
+            }
+
+            if (better) {
+                bestSupport = &c;
+                bestZError = zError;
+                bestNormalZ = normalZ;
+            }
+        }
+
+        if (!bestSupport)
+            return false;
+
+        outNormal = bestSupport->normal.directionOrZero();
+        if (outNormal.z < 0.0f)
+            outNormal = -outNormal;
+        return true;
+    };
+
     // Ground Z: use GetGroundZ as PRIMARY source — it uses barycentric
     // interpolation on the exact ADT/VMAP triangle mesh, matching WoW.exe's
     // heightmap lookup exactly. AABB contacts are used for wall detection only.
@@ -566,6 +611,9 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
         bestGroundZ <= startZ + stepH + stepUp;
 
+    if (foundGround)
+        (void)resolveSupportNormal(bestGroundZ, bestNormal);
+
     // If center GetGroundZ failed, try AABB contacts as fallback
     if (!foundGround) {
         for (const auto& c : contacts) {
@@ -579,6 +627,9 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
                 }
             }
         }
+
+        if (foundGround)
+            (void)resolveSupportNormal(bestGroundZ, bestNormal);
     }
 
     if (!foundGround) {
@@ -621,7 +672,10 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
             // Re-query ground at clamped position
             float clampedZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
                 startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
-            if (VMAP::IsValidHeight(clampedZ)) bestGroundZ = clampedZ;
+            if (VMAP::IsValidHeight(clampedZ)) {
+                bestGroundZ = clampedZ;
+                (void)resolveSupportNormal(bestGroundZ, bestNormal);
+            }
         }
     }
 

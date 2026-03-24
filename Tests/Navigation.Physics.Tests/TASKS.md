@@ -20,26 +20,30 @@
 4. Full local sweep: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: `2026-03-23`
+- Last updated: `2026-03-24`
 - Pass result: `delta shipped`
 - Last delta:
-  - Added Orgrimmar transport replay coverage using the only in-repo transport capture for that area, `Dralrahgra_Durotar_2026-02-08_11-06-02` (the Orgrimmar-to-Undercity zeppelin).
-  - The new tests prove two things deterministically: the replay harness cleanly matches the ground-side boarding/disembark windows that still have world geometry, and it explicitly skips the in-flight frames because the recording drops `NearbyGameObjects` to zero immediately after boarding.
-  - `7.9` is therefore still blocked on better recording data rather than a discovered physics regression.
+  - `CollisionStepWoW` now resolves grounded support normals from the closest walkable AABB terrain contact to the chosen `groundZ` instead of leaving the default flat normal whenever `GetGroundZ` succeeds.
+  - Added `ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport` to pin the exact steep-descent support-normal regression.
+  - The existing steep-descent diagnostic now reports `No-ground frames: 0` instead of `528`, while keeping the same `0.20y` max hover gap over true ground.
 - Validation:
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~OrgrimmarZeppelinRide_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~OrgrimmarZeppelinReplay_SkipsInFlightFrames_WithoutDynamicObjectData" -v n` -> `2 passed`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ValleyOfTrialsSlopeTests.SlopeRoute_StepPhysics_ZDoesNotOscillate"` -> `3 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground"` -> `1 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName=Navigation.Physics.Tests.ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic" --logger "console;verbosity=detailed"` -> passed; `No-ground frames 528 -> 0`, `groundNz` now varies across the slope
 - Files changed:
-  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
-  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
-  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/ValleyOfTrialsSlopeTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
 - Blockers:
-  - The current Orgrimmar zeppelin recording does not retain in-flight dynamic transport snapshots, so full transport-on-transport replay parity for `7.9` still needs a newer capture or a separate reconstruction source.
-  - Recorded directional remote-unit extrapolation coverage still needs a better packet fixture outside this project.
-  - `docs/TASKS.md` still has the open second Orgrimmar transport replay item (`7.9`).
+  - `standingOnInstanceId` / local support-point state is still just pass-through; this pass fixed support normal resolution for the grounded AABB path, not full touched-surface persistence.
+  - `Exports/Navigation/TASKS.md` has pre-existing merge markers in the current worktree, so I left that tracker untouched instead of risking a bad merge-resolution edit during this physics slice.
+  - Walkable-triangle-constrained waypoint smoothing remains deferred behind the current bot-behavior priorities.
 - Next command:
-  - `Get-Content Services/ForegroundBotRunner/Mem/Offsets.cs | Select-Object -First 260`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~ValleyOfTrialsSlopeTests" -v n`
 
 ## Prior Session
 - Last updated: `2026-03-23`

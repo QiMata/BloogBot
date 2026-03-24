@@ -160,3 +160,26 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Frame-pattern note:
   - The Durotar descent segment near `(-1016.77, -4970.62)` now bottoms out on the seabed instead of integrating straight through the underwater floor.
   - The recorded water-entry transition now produces the expected `0.5x` horizontal velocity on the entry frame when seeded with the pre-entry airborne velocity state.
+
+## 2026-03-24 Ground Support Addendum
+
+- Scope note:
+  - This pass targeted grounded support-surface identification on steep terrain rather than replay-drift tails.
+  - The immediate symptom was a deterministic slope diagnostic reporting `groundNz=1.0` for hundreds of grounded frames even though `groundZ` already matched the surface.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `CollisionStepWoW` now resolves its grounded support normal from the closest walkable AABB terrain contact to the chosen `groundZ` instead of leaving the default flat `(0,0,1)` normal whenever `GetGroundZ` succeeds.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ValleyOfTrialsSlopeTests.SlopeRoute_StepPhysics_ZDoesNotOscillate"`
+    - passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName=Navigation.Physics.Tests.ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic" --logger "console;verbosity=detailed"`
+    - passed; steep-descent `No-ground frames` dropped from `528` to `0`, `groundNz` now varied across the route (`0.745..0.999`), and `Max Z above true ground` remained `0.20y`
+- Frame-pattern note:
+  - The steep Valley of Trials descent was not primarily losing floor Z clamp; it was losing support identity.
+  - `groundZ` already tracked the correct surface, but the grounded path kept emitting a synthetic flat normal, so downstream logic had no reliable indication of which walkable triangle the character was actually standing on.

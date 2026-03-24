@@ -454,6 +454,94 @@ public class ValleyOfTrialsSlopeTests
             $"Physics failed to find ground for {noGroundFrames} frames on steep terrain — DOWN pass capsule sweep is missing ground");
     }
 
+    [Fact]
+    public void SteepDescent_50msTicks_GroundNormalTracksSlopeSupport()
+    {
+        Assert.True(_fixture.IsInitialized, "Physics engine not initialized");
+
+        float startX = -224f, startY = -4310f, startZ = 65f;
+        float endX = -310f, endY = -4410f;
+        float dt = 0.05f;
+        float runSpeed = 7.0f;
+        int maxSteps = 240;
+
+        float dx = endX - startX;
+        float dy = endY - startY;
+        float dist = MathF.Sqrt(dx * dx + dy * dy);
+        float facing = MathF.Atan2(dy / dist, dx / dist);
+        float vx = (dx / dist) * runSpeed;
+        float vy = (dy / dist) * runSpeed;
+
+        float posX = startX, posY = startY, posZ = startZ;
+        float prevGroundZ = startZ;
+        int slopedFrames = 0;
+        int nonFlatSupportFrames = 0;
+
+        for (int step = 0; step < maxSteps; step++)
+        {
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = 0x00000001,
+                X = posX,
+                Y = posY,
+                Z = posZ,
+                Orientation = facing,
+                Vx = vx,
+                Vy = vy,
+                Vz = 0f,
+                WalkSpeed = 2.5f,
+                RunSpeed = runSpeed,
+                RunBackSpeed = 4.5f,
+                SwimSpeed = 4.722f,
+                SwimBackSpeed = 2.5f,
+                TurnSpeed = 3.14159f,
+                Height = 2.0313f,
+                Radius = 0.3718f,
+                PrevGroundZ = prevGroundZ,
+                StepUpBaseZ = -200000f,
+                MapId = MapId,
+                DeltaTime = dt
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+
+            if (output.GroundZ > -50000f)
+            {
+                float groundDelta = MathF.Abs(output.GroundZ - prevGroundZ);
+                bool hasSlopeChange = groundDelta > 0.03f;
+                bool hasNonFlatNormal =
+                    output.GroundNz < 0.999f ||
+                    MathF.Abs(output.GroundNx) > 0.01f ||
+                    MathF.Abs(output.GroundNy) > 0.01f;
+
+                if (hasSlopeChange)
+                {
+                    slopedFrames++;
+                    if (hasNonFlatNormal)
+                        nonFlatSupportFrames++;
+                }
+
+                prevGroundZ = output.GroundZ;
+            }
+
+            posX = output.X;
+            posY = output.Y;
+            posZ = output.Z;
+
+            float remainDist = MathF.Sqrt((posX - endX) * (posX - endX) + (posY - endY) * (posY - endY));
+            if (remainDist < 3f)
+                break;
+        }
+
+        _output.WriteLine($"Steep descent sloped frames: {slopedFrames}");
+        _output.WriteLine($"Steep descent non-flat support frames: {nonFlatSupportFrames}");
+
+        Assert.True(slopedFrames >= 20,
+            $"Expected the steep descent route to produce multiple sloped support frames, got {slopedFrames}.");
+        Assert.True(nonFlatSupportFrames >= Math.Min(10, slopedFrames),
+            $"Ground normals stayed flat on the steep descent route: {nonFlatSupportFrames}/{slopedFrames} sloped frames had a non-flat support normal.");
+    }
+
     /// <summary>
     /// Reproduces the BG combat test stuck scenario: physics returns zero XY delta
     /// despite MOVEFLAG_FORWARD at (-283.5, -4382.1, 55.3) facing 0.04 rad.
