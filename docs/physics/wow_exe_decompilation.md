@@ -651,6 +651,16 @@ Strips: `PENDING_STOP (0x80000)`, `PENDING_STRAFE_STOP (0x100000)`,
 - If `transportGuid == 0`: clear bit `0x2000000`
 - Transport offset = position relative to transport origin (from `0x7C4930`)
 
+### Support-State Parity Note (2026-03-24)
+- Fresh disassembly of `CMovement::Update` (`0x618C30`) and `CMovement::CollisionStep` (`0x633840`) continues to show explicit transport-local persistence (`transportGuid`, local offset, local orientation) before collision is run in world space.
+- The collision branch rotates transport-local displacement through the transport matrix, then performs world collision queries.
+- No equivalent persisted “static triangle token” path has been identified for ordinary terrain/WMO support.
+- A second spot-check over `0x618C30..0x618D60` and `0x633840..0x6339C0` still only reinforced that same pattern, so support identity should stay coherent only for moving-base metadata and should use the same dynamic runtime ID across AABB and capsule query families.
+- Current parity interpretation:
+  - Static ground support is recomputed each frame from collision/height queries.
+  - Moving-base continuity is the state that persists across frames.
+  - Engine-side `standingOnInstanceId` / local support-point state should therefore be treated as moving-base support metadata, not a generic terrain cache.
+
 ### Opcodes Requiring Extra Payload (0x6009B0)
 These opcodes append additional data after MovementInfo:
 `0xE3`, `0xE5`, `0xE7`, `0xF6`, `0x2CF`, `0x2D0`, `0x2DB`, `0x2DD`, `0x2DF`

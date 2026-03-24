@@ -283,8 +283,32 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-24 (session 162)
+- **Last updated:** 2026-03-24 (session 163)
 - **Branch:** `main`
+- **Session 163 — moving-base query identity aligned across capsule and AABB collision paths:**
+  - Updated [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so every remaining dynamic-object branch in `SweepCapsule` now forwards stable runtime instance IDs from `DynamicObjectRegistry` instead of synthesizing `0x80000000 | triangleIndex`. That keeps overlap, penetration, and swept capsule hits on elevators and doors aligned with the moving-base support token already emitted by the grounded AABB support path.
+  - Added reusable Undercity elevator support-frame setup plus [ElevatorScenarioTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs) coverage for `UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken`. The new regression proves a real frame (`912`) reports the same moving-base runtime ID through both `StepPhysicsV2` and `SweepCapsule`.
+  - Re-scanned `WoW.exe` disassembly windows `0x618C30..0x618D60` and `0x633840..0x6339C0`. The binary still reinforces transport-local persistence plus world-space collision only; no static terrain-triangle token cache surfaced.
+  - Repo-scoped process inspection after validation returned no lingering repo-scoped `dotnet.exe` or `testhost.exe`.
+- **Test baseline (session 163):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - Succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - Passed (`5/5`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n`
+    - Passed (`29/29`)
+- **Files changed (session 163):**
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep moving-base identity coherent across any new collision or export path, but do not reintroduce static terrain-token caching without new binary evidence. The walkable-triangle-preserving waypoint smoothing note stays deferred behind the higher-priority bot behavior and combat work.
 - **Session 162 — melee engage timing improved again; live mining advanced to a later combat stall:**
   - Updated [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs) so shared melee engage now matches the older sequence path more closely: one grounded face/settle tick before `StartMeleeAttack()`, plus airborne suppression until the bot has landed and re-faced the target.
   - Removed the old shared-task aggressor chase-timeout fallback from [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs). In the current outdoor mining repro that blind auto-swing was firing on ledge fights and pinning the bot in stationary combat instead of letting chase/path recovery continue.
@@ -996,6 +1020,31 @@ if (transportGuid != 0) {
   - `CollisionStepWoW` now resolves the grounded support normal from the closest walkable AABB terrain contact to the chosen `groundZ` instead of leaving a synthetic flat `(0,0,1)` normal on steep grounded frames
   - Added `ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport` so the steep Valley of Trials route now proves we keep a real slope support normal while descending
   - Detailed steep-descent replay now reports `No-ground frames: 0` instead of `528`, while preserving the same `0.20y` max hover gap above true ground
+- **Session 138 — moving-base support parity slice shipped:**
+  - Fresh `WoW.exe` review reinforces that vanilla persists transport-local state across frames, while static terrain support is re-derived from collision each tick
+  - `DynamicObjectRegistry` now assigns stable runtime IDs and resolves world support points back to object-local coordinates
+  - `SceneQuery` AABB contact tests now include dynamic-object triangles, so `CollisionStepWoW` can clamp onto moving bases through the same grounded AABB support-selection path it uses for terrain
+  - `CollisionStepWoW` now emits `standingOnInstanceId` / local support coordinates only when the chosen grounded support is truly dynamic
+  - Added `ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken` to pin a real Undercity elevator frame against that behavior
+- **Test baseline (session 138):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~Navigation.Physics.Tests.ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" -v minimal`
+    - Passed (`3/3`)
+- **Files changed (session 138):**
+  - `Exports/Navigation/DynamicObjectRegistry.h`
+  - `Exports/Navigation/DynamicObjectRegistry.cpp`
+  - `Exports/Navigation/SceneQuery.h`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+  - `docs/physics/wow_exe_decompilation.md`
+- **Next priorities:** keep static walkable support recomputed from collision, not from a synthetic terrain token; if more moving-base parity is needed, extend the dynamic support token path before revisiting waypoint smoothing/corridor clamping after the current bot-behavior priorities
 - **Test baseline (session 133):**
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
     - Succeeded

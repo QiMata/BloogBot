@@ -183,3 +183,50 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Frame-pattern note:
   - The steep Valley of Trials descent was not primarily losing floor Z clamp; it was losing support identity.
   - `groundZ` already tracked the correct surface, but the grounded path kept emitting a synthetic flat normal, so downstream logic had no reliable indication of which walkable triangle the character was actually standing on.
+
+## 2026-03-24 Moving-Base Support Addendum
+
+- Scope note:
+  - This pass targeted parity between the grounded AABB path and the original client’s moving-base handling after reviewing fresh `WoW.exe` disassembly around `CMovement::Update (0x618C30)` and `CMovement::CollisionStep (0x633840)`.
+  - The binary evidence reinforced that vanilla persists transport-local state (`transportGuid` + local offset/orientation), while static terrain support is recomputed from collision each frame rather than carried as a generic triangle token.
+- Behavioral change shipped:
+  - `Exports/Navigation/DynamicObjectRegistry.h/.cpp`
+    - Dynamic objects now get stable runtime instance IDs and can resolve world support points back into object-local coordinates.
+  - `Exports/Navigation/SceneQuery.h/.cpp`
+    - `AABBContact` now carries instance identity, and `TestTerrainAABB` / `SweepAABB` now include dynamic-object triangles instead of treating the AABB ground path as static-only.
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `CollisionStepWoW` now captures moving-base support identity/local point from the chosen grounded AABB support contact and emits it through `standingOnInstanceId` / `standingOnLocal*` only when the support is truly dynamic.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~Navigation.Physics.Tests.ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken" --logger "console;verbosity=normal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" -v minimal`
+    - passed (`3/3`)
+## 2026-03-24 Moving-Base Query Identity Addendum
+
+- Scope note:
+  - This follow-up targeted the remaining mismatch between grounded AABB support tokens and capsule overlap/sweep query identities on moving bases.
+  - A fresh `WoW.exe` spot-check over `CMovement::Update (0x618C30..0x618D60)` and `CMovement::CollisionStep (0x633840..0x6339C0)` still showed transport-local persistence plus world-space collision, but no static terrain token cache.
+- Behavioral change shipped:
+  - `Exports/Navigation/SceneQuery.cpp`
+    - all remaining dynamic-object branches in `SweepCapsule` now forward stable runtime instance IDs from `DynamicObjectRegistry::QueryTriangles(..., outInstanceIds)` instead of synthesizing `0x80000000 | triangleIndex`.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken" --logger "console;verbosity=normal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - passed (`5/5`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n`
+    - passed (`29/29`)
+- Frame-pattern note:
+  - On Undercity frame `912`, `StepPhysicsV2` reported moving-base support `2147483650`.
+  - The matching zero-distance penetrated capsule query on the same world support point now reports the same dynamic runtime ID instead of a per-triangle synthetic value.
+  - Remaining non-zero non-dynamic hits in that sweep are nearby static WMO instance IDs and are expected.
+- Parity note:
+  - The open work is no longer “persist a static triangle token like the client.” The correct remaining target is moving-base continuity where we still need it, plus continued precision on walkable-triangle-constrained smoothing.

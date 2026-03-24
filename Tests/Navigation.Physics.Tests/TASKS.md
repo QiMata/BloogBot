@@ -23,27 +23,28 @@
 - Last updated: `2026-03-24`
 - Pass result: `delta shipped`
 - Last delta:
-  - `CollisionStepWoW` now resolves grounded support normals from the closest walkable AABB terrain contact to the chosen `groundZ` instead of leaving the default flat normal whenever `GetGroundZ` succeeds.
-  - Added `ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport` to pin the exact steep-descent support-normal regression.
-  - The existing steep-descent diagnostic now reports `No-ground frames: 0` instead of `528`, while keeping the same `0.20y` max hover gap over true ground.
+  - `SceneQuery::SweepCapsule` now forwards stable dynamic runtime IDs through all remaining elevator/door overlap and sweep branches instead of synthesizing `0x80000000 | triangleIndex`.
+  - Added `ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken`, which proves a real Undercity elevator frame reports the same moving-base support token through both `StepPhysicsV2` and `SweepCapsule`.
+  - Re-scanned `WoW.exe` at `0x618C30..0x618D60` and `0x633840..0x6339C0`; the binary still shows transport-local persistence plus world-space collision, with no static terrain-token cache.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release` -> `succeeded`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ValleyOfTrialsSlopeTests.SlopeRoute_StepPhysics_ZDoesNotOscillate"` -> `3 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground"` -> `1 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName=Navigation.Physics.Tests.ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundDetectionDiagnostic" --logger "console;verbosity=detailed"` -> passed; `No-ground frames 528 -> 0`, `groundNz` now varies across the slope
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken" --logger "console;verbosity=normal"` -> `1 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"` -> `5 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
 - Files changed:
-  - `Exports/Navigation/PhysicsEngine.cpp`
-  - `Tests/Navigation.Physics.Tests/ValleyOfTrialsSlopeTests.cs`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physics/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
 - Blockers:
-  - `standingOnInstanceId` / local support-point state is still just pass-through; this pass fixed support normal resolution for the grounded AABB path, not full touched-surface persistence.
+  - Static walkable-triangle support still should not be carried as a generic cached token unless new binary evidence says otherwise; the current gap is movement-base continuity depth, not terrain-token persistence.
   - `Exports/Navigation/TASKS.md` has pre-existing merge markers in the current worktree, so I left that tracker untouched instead of risking a bad merge-resolution edit during this physics slice.
   - Walkable-triangle-constrained waypoint smoothing remains deferred behind the current bot-behavior priorities.
 - Next command:
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~ValleyOfTrialsSlopeTests" -v n`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorPhysicsParityTests|FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~ServerMovementValidationTests" -v n`
 
 ## Prior Session
 - Last updated: `2026-03-23`

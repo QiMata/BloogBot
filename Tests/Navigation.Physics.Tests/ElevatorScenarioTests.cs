@@ -4,6 +4,8 @@ using Navigation.Physics.Tests.Helpers;
 using Pathfinding;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
 using Xunit;
 using Xunit.Abstractions;
 using static BotRunner.Movement.TransportData;
@@ -281,6 +283,134 @@ public class ElevatorPhysicsParityTests(PhysicsEngineFixture fixture, ITestOutpu
     private readonly PhysicsEngineFixture _fixture = fixture;
     private readonly ITestOutputHelper _output = output;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SweepSceneHit
+    {
+        [MarshalAs(UnmanagedType.I1)]
+        public bool Hit;
+        public float Distance;
+        public float Time;
+        public float PenetrationDepth;
+        public NavigationInterop.Vector3 Normal;
+        public NavigationInterop.Vector3 Point;
+        public int TriIndex;
+        public NavigationInterop.Vector3 Barycentric;
+        public uint InstanceId;
+        [MarshalAs(UnmanagedType.I1)]
+        public bool StartPenetrating;
+        [MarshalAs(UnmanagedType.I1)]
+        public bool NormalFlipped;
+        public byte FeatureType;
+        public uint PhysMaterialId;
+        public float StaticFriction;
+        public float DynamicFriction;
+        public float Restitution;
+        public byte CapsuleRegion;
+    }
+
+    private sealed class TransportSupportScenario
+    {
+        public required MovementRecording Recording { get; init; }
+        public required RecordedFrame CurrentFrame { get; init; }
+        public required RecordedFrame NextFrame { get; init; }
+        public required RecordedGameObject Transport { get; init; }
+        public required NavigationInterop.DynamicObjectInfo[] DynamicObjects { get; init; }
+        public required int FrameIndex { get; init; }
+        public required float Radius { get; init; }
+        public required float Height { get; init; }
+        public required float WorldX { get; init; }
+        public required float WorldY { get; init; }
+        public required float WorldZ { get; init; }
+        public required float DeltaTime { get; init; }
+    }
+
+    [DllImport("Navigation.dll", EntryPoint = "SweepCapsule", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int SweepCapsuleForDiagnostics(
+        uint mapId,
+        in NavigationInterop.Capsule capsule,
+        in NavigationInterop.Vector3 direction,
+        float distance,
+        [Out] SweepSceneHit[] hits,
+        int maxHits,
+        in NavigationInterop.Vector3 playerForward);
+
+    private static (float x, float y, float z) TransportLocalToWorld(RecordedFrame frame, RecordedGameObject transport)
+    {
+        float cosO = MathF.Cos(transport.Facing);
+        float sinO = MathF.Sin(transport.Facing);
+        float wx = frame.Position.X * cosO - frame.Position.Y * sinO + transport.Position.X;
+        float wy = frame.Position.X * sinO + frame.Position.Y * cosO + transport.Position.Y;
+        float wz = frame.Position.Z + transport.Position.Z;
+        return (wx, wy, wz);
+    }
+
+    private TransportSupportScenario LoadUndercityTransportSupportScenario()
+    {
+        var recording = RecordingTestHelpers.LoadByFilename(Recordings.UndercityElevatorV2, _output);
+        RecordingTestHelpers.TryPreloadMap(recording.MapId, _output);
+
+        int frameIndex = -1;
+        RecordedFrame? currentFrame = null;
+        RecordedFrame? nextFrame = null;
+        RecordedGameObject? nextTransport = null;
+        for (int i = 0; i < recording.Frames.Count - 1; i++)
+        {
+            var current = recording.Frames[i];
+            var next = recording.Frames[i + 1];
+            if (current.TransportGuid == 0 || current.TransportGuid != next.TransportGuid)
+                continue;
+            if ((current.MovementFlags & 0x6000) != 0)
+                continue;
+
+            nextTransport = next.NearbyGameObjects.FirstOrDefault(go => go.Guid == current.TransportGuid);
+            if (nextTransport == null)
+                continue;
+
+            frameIndex = i;
+            currentFrame = current;
+            nextFrame = next;
+            break;
+        }
+
+        Assert.True(frameIndex >= 0 && currentFrame != null && nextFrame != null && nextTransport != null,
+            "Expected a grounded on-transport frame with dynamic GO data in UndercityElevatorV2.");
+
+        var dynamicObjects = nextFrame!.NearbyGameObjects
+            .Where(go => go.DisplayId != 0)
+            .Select(go => new NavigationInterop.DynamicObjectInfo
+            {
+                Guid = go.Guid,
+                DisplayId = go.DisplayId,
+                X = go.Position.X,
+                Y = go.Position.Y,
+                Z = go.Position.Z,
+                Orientation = go.Facing,
+                Scale = go.Scale > 0 ? go.Scale : 1.0f,
+                GoState = go.GoState,
+            })
+            .ToArray();
+
+        var (radius, height) = RecordingTestHelpers.GetCapsuleDimensions(recording, _output);
+        var (worldX, worldY, worldZ) = TransportLocalToWorld(currentFrame!, nextTransport!);
+        float dt = (nextFrame.FrameTimestamp - currentFrame.FrameTimestamp) / 1000.0f;
+
+        return new TransportSupportScenario
+        {
+            Recording = recording,
+            CurrentFrame = currentFrame,
+            NextFrame = nextFrame,
+            Transport = nextTransport,
+            DynamicObjects = dynamicObjects,
+            FrameIndex = frameIndex,
+            Radius = radius,
+            Height = height,
+            WorldX = worldX,
+            WorldY = worldY,
+            WorldZ = worldZ,
+            DeltaTime = dt,
+        };
+    }
+
     [Fact]
     public void UndercityElevatorReplay_TransportAverageStaysWithinParityTarget()
     {
@@ -294,6 +424,164 @@ public class ElevatorPhysicsParityTests(PhysicsEngineFixture fixture, ITestOutpu
         Assert.True(transportStats.count > 0, "Expected on-transport frames in the Undercity elevator replay.");
         Assert.True(transportStats.avg < 0.15f,
             $"Undercity elevator transport avg {transportStats.avg:F4}y exceeds the 0.15y parity target.");
+    }
+
+    [Fact]
+    public void UndercityElevatorTransportFrame_ReportsDynamicSupportToken()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadUndercityTransportSupportScenario();
+        var cleanedMoveFlags = scenario.CurrentFrame.MovementFlags &
+            ~Navigation.Physics.Tests.Helpers.MoveFlags.TeleportToPlane &
+            ~Navigation.Physics.Tests.Helpers.MoveFlags.SplineElevation;
+
+        NavigationInterop.ClearAllDynamicObjects();
+        GCHandle dynHandle = default;
+        try
+        {
+            dynHandle = GCHandle.Alloc(scenario.DynamicObjects, GCHandleType.Pinned);
+
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = cleanedMoveFlags,
+                X = scenario.CurrentFrame.Position.X,
+                Y = scenario.CurrentFrame.Position.Y,
+                Z = scenario.CurrentFrame.Position.Z,
+                Orientation = scenario.CurrentFrame.Facing,
+                Pitch = scenario.CurrentFrame.SwimPitch,
+                Vx = 0,
+                Vy = 0,
+                Vz = 0,
+                WalkSpeed = scenario.CurrentFrame.WalkSpeed,
+                RunSpeed = scenario.CurrentFrame.RunSpeed,
+                RunBackSpeed = scenario.CurrentFrame.RunBackSpeed,
+                SwimSpeed = scenario.CurrentFrame.SwimSpeed,
+                SwimBackSpeed = scenario.CurrentFrame.SwimBackSpeed,
+                FlightSpeed = 0,
+                TurnSpeed = scenario.CurrentFrame.TurnRate,
+                TransportGuid = scenario.CurrentFrame.TransportGuid,
+                FallTime = scenario.CurrentFrame.FallTime,
+                Height = scenario.Height,
+                Radius = scenario.Radius,
+                PrevGroundZ = scenario.WorldZ,
+                PrevGroundNx = 0,
+                PrevGroundNy = 0,
+                PrevGroundNz = 1,
+                NearbyObjects = dynHandle.AddrOfPinnedObject(),
+                NearbyObjectCount = scenario.DynamicObjects.Length,
+                MapId = scenario.Recording.MapId,
+                DeltaTime = scenario.DeltaTime,
+                FrameCounter = (uint)scenario.FrameIndex,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+            _output.WriteLine(
+                $"frame={scenario.FrameIndex} world=({scenario.WorldX:F3},{scenario.WorldY:F3},{scenario.WorldZ:F3}) " +
+                $"support={output.StandingOnInstanceId} local=({output.StandingOnLocalX:F3}," +
+                $"{output.StandingOnLocalY:F3},{output.StandingOnLocalZ:F3}) outZ={output.Z:F3}");
+
+            Assert.NotEqual(0u, output.StandingOnInstanceId);
+            Assert.True(float.IsFinite(output.StandingOnLocalX));
+            Assert.True(float.IsFinite(output.StandingOnLocalY));
+            Assert.True(float.IsFinite(output.StandingOnLocalZ));
+        }
+        finally
+        {
+            if (dynHandle.IsAllocated)
+                dynHandle.Free();
+            NavigationInterop.ClearAllDynamicObjects();
+        }
+    }
+
+    [Fact]
+    public void UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadUndercityTransportSupportScenario();
+        var cleanedMoveFlags = scenario.CurrentFrame.MovementFlags &
+            ~Navigation.Physics.Tests.Helpers.MoveFlags.TeleportToPlane &
+            ~Navigation.Physics.Tests.Helpers.MoveFlags.SplineElevation;
+
+        NavigationInterop.ClearAllDynamicObjects();
+        GCHandle dynHandle = default;
+        try
+        {
+            dynHandle = GCHandle.Alloc(scenario.DynamicObjects, GCHandleType.Pinned);
+
+            var input = new NavigationInterop.PhysicsInput
+            {
+                MoveFlags = cleanedMoveFlags,
+                X = scenario.CurrentFrame.Position.X,
+                Y = scenario.CurrentFrame.Position.Y,
+                Z = scenario.CurrentFrame.Position.Z,
+                Orientation = scenario.CurrentFrame.Facing,
+                Pitch = scenario.CurrentFrame.SwimPitch,
+                WalkSpeed = scenario.CurrentFrame.WalkSpeed,
+                RunSpeed = scenario.CurrentFrame.RunSpeed,
+                RunBackSpeed = scenario.CurrentFrame.RunBackSpeed,
+                SwimSpeed = scenario.CurrentFrame.SwimSpeed,
+                SwimBackSpeed = scenario.CurrentFrame.SwimBackSpeed,
+                TurnSpeed = scenario.CurrentFrame.TurnRate,
+                TransportGuid = scenario.CurrentFrame.TransportGuid,
+                FallTime = scenario.CurrentFrame.FallTime,
+                Height = scenario.Height,
+                Radius = scenario.Radius,
+                PrevGroundZ = scenario.WorldZ,
+                PrevGroundNz = 1,
+                NearbyObjects = dynHandle.AddrOfPinnedObject(),
+                NearbyObjectCount = scenario.DynamicObjects.Length,
+                MapId = scenario.Recording.MapId,
+                DeltaTime = scenario.DeltaTime,
+                FrameCounter = (uint)scenario.FrameIndex,
+            };
+
+            var output = NavigationInterop.StepPhysicsV2(ref input);
+            Assert.NotEqual(0u, output.StandingOnInstanceId);
+
+            var capsule = NavigationInterop.Capsule.FromFeetPosition(
+                scenario.WorldX,
+                scenario.WorldY,
+                scenario.WorldZ - 0.10f,
+                scenario.Radius,
+                scenario.Height);
+            var hits = new SweepSceneHit[32];
+            var direction = new NavigationInterop.Vector3(1, 0, 0);
+            float worldFacing = scenario.CurrentFrame.Facing + scenario.Transport.Facing;
+            var playerForward = new NavigationInterop.Vector3(MathF.Cos(worldFacing), MathF.Sin(worldFacing), 0);
+            int hitCount = SweepCapsuleForDiagnostics(
+                scenario.Recording.MapId,
+                in capsule,
+                in direction,
+                0.0f,
+                hits,
+                hits.Length,
+                in playerForward);
+
+            var dynamicIds = hits
+                .Take(hitCount)
+                .Where(hit => (hit.InstanceId & 0x80000000u) != 0)
+                .Select(hit => hit.InstanceId)
+                .Distinct()
+                .ToArray();
+
+            _output.WriteLine(
+                $"frame={scenario.FrameIndex} support={output.StandingOnInstanceId} " +
+                $"capsuleHits={hitCount} dynamicIds=[{string.Join(", ", dynamicIds)}]");
+
+            Assert.True(hitCount > 0, "Expected overlap hits from SweepCapsule on the elevator support frame.");
+            Assert.Single(dynamicIds);
+            Assert.Equal(output.StandingOnInstanceId, dynamicIds[0]);
+        }
+        finally
+        {
+            if (dynHandle.IsAllocated)
+                dynHandle.Free();
+            NavigationInterop.ClearAllDynamicObjects();
+        }
     }
 
     [Fact]

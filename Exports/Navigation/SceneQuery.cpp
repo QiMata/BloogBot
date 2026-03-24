@@ -1635,6 +1635,48 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             contact.normal = normal;
             contact.distance = 0;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
+            outContacts.push_back(contact);
+        }
+    }
+
+    auto* dynReg = DynamicObjectRegistry::Instance();
+    if (dynReg)
+    {
+        std::vector<CapsuleCollision::Triangle> dynTris;
+        std::vector<uint32_t> dynInstanceIds;
+        dynReg->QueryTriangles(mapId, G3D::AABox(boxMin, boxMax), dynTris, &dynInstanceIds);
+
+        for (size_t i = 0; i < dynTris.size(); ++i) {
+            const auto& t = dynTris[i];
+            G3D::Vector3 va(t.a.x, t.a.y, t.a.z);
+            G3D::Vector3 vb(t.b.x, t.b.y, t.b.z);
+            G3D::Vector3 vc(t.c.x, t.c.y, t.c.z);
+
+            float triMinZ = std::min({ va.z, vb.z, vc.z });
+            float triMaxZ = std::max({ va.z, vb.z, vc.z });
+            if (triMaxZ < boxMin.z || triMinZ > boxMax.z)
+                continue;
+
+            if (!AABBTriangleOverlap(center, halfExt, va, vb, vc))
+                continue;
+
+            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            if (normal.z < 0) normal = -normal;
+
+            float exactZ;
+            bool hasExactZ = BarycentricZ(va, vb, vc, center.x, center.y, exactZ);
+            if (!hasExactZ) {
+                G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
+                exactZ = triCenter.z;
+            }
+
+            AABBContact contact;
+            contact.point = G3D::Vector3(center.x, center.y, exactZ);
+            contact.normal = normal;
+            contact.distance = 0;
+            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
             outContacts.push_back(contact);
         }
     }
@@ -1695,6 +1737,44 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             contact.normal = normal;
             contact.distance = overlapStart ? 0 : dispLen;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
+            outContacts.push_back(contact);
+        }
+    }
+
+    auto* dynReg = DynamicObjectRegistry::Instance();
+    if (dynReg)
+    {
+        G3D::Vector3 queryMin(queryMinX, queryMinY, std::min(boxMin.z, endMin.z));
+        G3D::Vector3 queryMax(queryMaxX, queryMaxY, std::max(boxMax.z, endMax.z));
+        std::vector<CapsuleCollision::Triangle> dynTris;
+        std::vector<uint32_t> dynInstanceIds;
+        dynReg->QueryTriangles(mapId, G3D::AABox(queryMin, queryMax), dynTris, &dynInstanceIds);
+
+        for (size_t i = 0; i < dynTris.size(); ++i) {
+            const auto& t = dynTris[i];
+            G3D::Vector3 va(t.a.x, t.a.y, t.a.z);
+            G3D::Vector3 vb(t.b.x, t.b.y, t.b.z);
+            G3D::Vector3 vc(t.c.x, t.c.y, t.c.z);
+
+            bool overlapStart = AABBTriangleOverlap(center, halfExt, va, vb, vc);
+            G3D::Vector3 endCenter = center + displacement;
+            bool overlapEnd = AABBTriangleOverlap(endCenter, halfExt, va, vb, vc);
+
+            if (!(overlapStart || overlapEnd))
+                continue;
+
+            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
+            G3D::Vector3 testCenter = overlapStart ? center : endCenter;
+            if (normal.dot(testCenter - triCenter) < 0) normal = -normal;
+
+            AABBContact contact;
+            contact.point = triCenter;
+            contact.normal = normal;
+            contact.distance = overlapStart ? 0 : dispLen;
+            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+            contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
             outContacts.push_back(contact);
         }
     }
@@ -1809,7 +1889,8 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                     G3D::Vector3(queryMinX, queryMinY, std::min(wP0.z, wP1.z) - capsuleStart.r),
                     G3D::Vector3(queryMaxX, queryMaxY, std::max(wP0.z, wP1.z) + capsuleStart.r));
                 std::vector<CapsuleCollision::Triangle> dynTris;
-                dynReg->QueryTriangles(mapId, dynAABB, dynTris);
+                std::vector<uint32_t> dynInstanceIds;
+                dynReg->QueryTriangles(mapId, dynAABB, dynTris, &dynInstanceIds);
                 for (size_t di = 0; di < dynTris.size(); ++di)
                 {
                     CapsuleCollision::Hit chD;
@@ -1824,7 +1905,7 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                         bool fl = false; G3D::Vector3 cN = wN; if (cN.z < 0) { cN = -cN; fl = true; }
                         SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f;
                         h.normal = cN; h.point = wPoint; h.triIndex = (int)di;
-                        h.instanceId = 0x80000000u | (uint32_t)di;
+                        h.instanceId = (di < dynInstanceIds.size()) ? dynInstanceIds[di] : 0u;
                         h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = fl;
                         outHits.push_back(h);
                     }
@@ -1907,7 +1988,8 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                     G3D::Vector3(center.x - r, center.y - r, dP0.z - r),
                     G3D::Vector3(center.x + r, center.y + r, dP1.z + r));
                 std::vector<CapsuleCollision::Triangle> dynTris;
-                dynReg->QueryTriangles(mapId, dynAABB, dynTris);
+                std::vector<uint32_t> dynInstanceIds;
+                dynReg->QueryTriangles(mapId, dynAABB, dynTris, &dynInstanceIds);
                 if (!dynTris.empty())
                 {
                     CapsuleCollision::Capsule Cw; Cw.p0 = { dP0.x, dP0.y, dP0.z }; Cw.p1 = { dP1.x, dP1.y, dP1.z }; Cw.r = inflCaps.r;
@@ -1922,7 +2004,7 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                             G3D::Vector3 wC(dynTris[dIdx].c.x, dynTris[dIdx].c.y, dynTris[dIdx].c.z);
                             G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
                             bool flipped = false; G3D::Vector3 chosenN = wN; if (chosenN.z < 0.0f) { chosenN = -chosenN; flipped = true; }
-                            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = 0x80000000u | (uint32_t)dIdx; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
+                            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = (dIdx < dynInstanceIds.size()) ? dynInstanceIds[dIdx] : 0u; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
                             overlaps.push_back(h);
                         }
                     }
@@ -2204,7 +2286,8 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                 G3D::Vector3(wP0.x, wP0.y, wP0.z).min(wP0 + dir * distance) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r),
                 G3D::Vector3(wP1.x, wP1.y, wP1.z).max(wP1 + dir * distance) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r));
             std::vector<CapsuleCollision::Triangle> dynTris;
-            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris);
+            std::vector<uint32_t> dynInstanceIds;
+            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris, &dynInstanceIds);
             if (!dynTris.empty())
             {
                 CapsuleCollision::Capsule Cw; Cw.p0 = { wP0.x, wP0.y, wP0.z }; Cw.p1 = { wP1.x, wP1.y, wP1.z }; Cw.r = capsuleStart.r;
@@ -2222,7 +2305,7 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                         G3D::Vector3 capsuleMidW = (wP0 + wP1) * 0.5f;
                         G3D::Vector3 chosenN = OrientNormalForOverlap(wN, capsuleMidW, wPoint);
                         bool flipped = (chosenN.dot(wN) < 0.0f);
-                        SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = 0x80000000u | (uint32_t)dIdx; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
+                        SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = (dIdx < dynInstanceIds.size()) ? dynInstanceIds[dIdx] : 0u; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
                         outHits.push_back(h);
                     }
                 }
@@ -2429,7 +2512,8 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                 wP0.min(wP0 + dir * distance) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r),
                 wP1.max(wP1 + dir * distance) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r));
             std::vector<CapsuleCollision::Triangle> dynTris;
-            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris);
+            std::vector<uint32_t> dynInstanceIds;
+            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris, &dynInstanceIds);
             if (!dynTris.empty())
             {
                 CapsuleCollision::Capsule Cw; Cw.p0 = { wP0.x, wP0.y, wP0.z }; Cw.p1 = { wP1.x, wP1.y, wP1.z }; Cw.r = capsuleStart.r;
@@ -2449,7 +2533,7 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                         G3D::Vector3 wCenter0 = (wP0 + wP1) * 0.5f;
                         G3D::Vector3 centerAtHit = wCenter0 + dir * (tClamped * distance);
                         CapsuleCollision::Hit chD; CapsuleCollision::intersectCapsuleTriangle({ Cw.p0 + velW * toi, Cw.p1 + velW * toi, Cw.r }, dynTris[dIdx], chD);
-                        HitTmp tmp; tmp.t = toi; tmp.triCacheIdx = (int)dIdx; tmp.triLocalIdx = (int)dIdx; tmp.instId = 0x80000000u | (uint32_t)dIdx; tmp.nWorld = chosenN; tmp.pWorld = wImpact; tmp.penetrationDepth = chD.depth; tmp.centerAtHit = centerAtHit; tmp.region = SceneHit::CapsuleRegion::Unknown; candidates.push_back(tmp);
+                        HitTmp tmp; tmp.t = toi; tmp.triCacheIdx = (int)dIdx; tmp.triLocalIdx = (int)dIdx; tmp.instId = (dIdx < dynInstanceIds.size()) ? dynInstanceIds[dIdx] : 0u; tmp.nWorld = chosenN; tmp.pWorld = wImpact; tmp.penetrationDepth = chD.depth; tmp.centerAtHit = centerAtHit; tmp.region = SceneHit::CapsuleRegion::Unknown; candidates.push_back(tmp);
                     }
                 }
             }
