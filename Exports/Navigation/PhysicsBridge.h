@@ -153,11 +153,11 @@ struct PhysicsInput
     //   Useful for recording replay calibration with frame-derived velocity.
     uint32_t physicsFlags;
 
-    // Step-up height persistence (fed back from last PhysicsOutput).
-    // After a significant grounded Z rise (stair/ledge), holds the height
-    // for a few frames to bridge navmesh polygon gaps at step edges.
-    float stepUpBaseZ;         // Z height to maintain (-200000 = inactive)
-    uint32_t stepUpAge;        // frames since step-up was detected (0 = just happened)
+    // Reserved compatibility fields. Runtime terrain support is recomputed from
+    // current-frame collision each tick; these remain on the wire until the
+    // native/C# bridge contract can be simplified.
+    float stepUpBaseZ;         // reserved; set to INVALID_HEIGHT by runtime physics
+    uint32_t stepUpAge;        // reserved; set to 0 by runtime physics
 };
 
 constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -217,7 +217,7 @@ struct PhysicsOutput
     float wallNormalZ;
     float blockedFraction;   // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
 
-    // Step-up height persistence — carry forward to next frame's input.
-    float stepUpBaseZ;         // Z height to maintain (-200000 = inactive)
-    uint32_t stepUpAge;        // frames since step-up was detected
+    // Reserved compatibility fields; runtime physics leaves them inert.
+    float stepUpBaseZ;
+    uint32_t stepUpAge;
 };

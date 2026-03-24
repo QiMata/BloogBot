@@ -230,3 +230,40 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Remaining non-zero non-dynamic hits in that sweep are nearby static WMO instance IDs and are expected.
 - Parity note:
   - The open work is no longer “persist a static triangle token like the client.” The correct remaining target is moving-base continuity where we still need it, plus continued precision on walkable-triangle-constrained smoothing.
+## 2026-03-24 Static Step-Up Hold Removal Addendum
+
+- Scope note:
+  - This pass targeted one explicit runtime heuristic in `PhysicsEngine.cpp`: the multi-frame `stepUpBaseZ` terrain hold used to bridge polygon gaps after a stair / ledge rise.
+  - Fresh `WoW.exe` notes still support persisted moving-base continuity only; there is still no binary evidence for a synthetic static-terrain Z latch carried across frames.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - removed the runtime step-up height persistence block
+    - `stepUpBaseZ` / `stepUpAge` are now emitted as inert compatibility fields instead of overriding grounded Z for several frames after a rise
+  - `Exports/Navigation/PhysicsBridge.h`
+    - bridge comments now describe those fields as reserved compatibility data rather than active terrain-hold state
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" -v n`
+    - passed (`32/32`)
+- Frame-pattern note:
+  - Removing the synthetic hold did not reintroduce underground drift or the exact stuck-step regression.
+  - The remaining movement gap is still corridor-following precision and later live execution ownership, not missing static-floor persistence in native physics.
+
+## 2026-03-24 Ground Half-Step Sweep Addendum
+
+- Scope note:
+  - This pass targeted the next grounded runtime mismatch after the static step-up hold removal.
+  - A fresh `dumpbin /disasm` spot-check over `CMovement::CollisionStep` (`0x633D1C..0x633DEB`) reconfirmed that vanilla runs a second swept AABB on the half-step branch; our code was still using a static `TestTerrainAABB` overlap there.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `CollisionStepWoW` half-step pass now uses `SceneQuery::SweepAABB(...)` from the start box over `speed*dt*0.5` instead of a static half-step `TestTerrainAABB(...)`
+    - this keeps the second grounded pass aligned with the client’s `0x633DEB` `Collide` call instead of treating the half-step box as a stationary overlap
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit `LNK1104` on `Navigation.dll`; stopped idle MSBuild `dotnet.exe` PIDs `16756` and `26576`; reran and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=normal"`
+    - passed (`32/32`)
+- Frame-pattern note:
+  - The grounded movement slice stayed green after replacing the half-step overlap with the swept branch the binary actually uses.
+  - The persistent live issue is still not broad floor-loss in native physics; it remains higher-level route/follow precision plus the later BG execution stall.

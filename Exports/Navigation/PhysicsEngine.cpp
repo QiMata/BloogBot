@@ -535,14 +535,14 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     }
 
     // Step 5b: SWEEP 2 — half-step with √2-contracted AABB (0x633DEB)
+    // WoW.exe runs a second swept AABB here, not a static overlap at the half-step end.
     float halfDist = speedDt * 0.5f;
-    float halfEndX = startX + dirN.x * halfDist;
-    float halfEndY = startY + dirN.y * halfDist;
     float contracted = skin * sqrt2;
-    G3D::Vector3 halfBoxMin(halfEndX - contracted, halfEndY - contracted, adjustedMinZ);
-    G3D::Vector3 halfBoxMax(halfEndX + contracted, halfEndY + contracted, adjustedMaxZ);
+    G3D::Vector3 halfStartBoxMin(startX - contracted, startY - contracted, adjustedMinZ);
+    G3D::Vector3 halfStartBoxMax(startX + contracted, startY + contracted, adjustedMaxZ);
+    G3D::Vector3 halfDisplacement(dirN.x * halfDist, dirN.y * halfDist, 0.0f);
     std::vector<SceneQuery::AABBContact> halfContacts;
-    SceneQuery::TestTerrainAABB(input.mapId, halfBoxMin, halfBoxMax, halfContacts);
+    SceneQuery::SweepAABB(input.mapId, halfStartBoxMin, halfStartBoxMax, halfDisplacement, halfContacts);
 
     // Step 5c: Test terrain at end AABB (0x6721B0 TestTerrain)
     std::vector<SceneQuery::AABBContact> contacts;
@@ -1704,7 +1704,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// Ground Z refinement safety net: multi-ray probing.
 	// Save pre-safety-net Z for step-up detection below. The safety net may
 	// override the sweep's step-up result; we need the original to detect it.
-	const float preSafetyNetZ = st.z;
 
 	// Primary Z refinement now happens inside ExecuteDownPass and PhysicsGroundSnap functions
 	// via GetGroundZ at exact character XY. This multi-ray probe catches cases where the
@@ -2170,45 +2169,11 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			actualV.z = 0.0f;
 		}
 	}
-	// Step-up height persistence: after a significant grounded Z rise (stair/ledge),
-	// hold the height for a few frames to bridge navmesh polygon gaps at step edges.
-	// Uses preSafetyNetZ to detect step-ups that the safety net might have undone.
-	{
-		constexpr uint32_t MAX_STEP_UP_HOLD = 5;    // ~80-85ms at 60fps
-		constexpr float STEP_UP_RISE_THRESHOLD = 0.25f;
-		constexpr float STEP_UP_DROP_TOLERANCE = 0.15f;
-		float persistedStepUpZ = std::max(st.z, preSafetyNetZ);
-		if (trustGroundedReplayInput) {
-			// Replay trust mode may briefly see an overhead/WMO shelf before the grounded
-			// refinement path clamps back to the floor. If we always persist the highest
-			// pre-refinement Z, transport exits can re-promote that bad surface for several
-			// frames. Only reuse preSafetyNetZ when the refined result still agrees closely.
-			constexpr float MAX_REPLAY_STEP_UP_DISAGREEMENT = 0.5f;
-			if ((persistedStepUpZ - st.z) > MAX_REPLAY_STEP_UP_DISAGREEMENT) {
-				persistedStepUpZ = st.z;
-			}
-		}
-		const float zRise = persistedStepUpZ - input.z;
-		const bool justSteppedUp = st.isGrounded && !isSwimming && !inputAirborneFlag
-			&& zRise > STEP_UP_RISE_THRESHOLD;
-
-		if (justSteppedUp) {
-			st.z = persistedStepUpZ;
-			out.stepUpBaseZ = persistedStepUpZ;
-			out.stepUpAge = 0;
-		} else if (input.stepUpBaseZ > PhysicsConstants::INVALID_HEIGHT
-				&& input.stepUpAge < MAX_STEP_UP_HOLD) {
-			if (st.isGrounded && st.z < input.stepUpBaseZ - STEP_UP_DROP_TOLERANCE) {
-				// Engine dropped below step-up base — hold
-				st.z = input.stepUpBaseZ;
-			}
-			out.stepUpBaseZ = input.stepUpBaseZ;
-			out.stepUpAge = input.stepUpAge + 1;
-		} else {
-			out.stepUpBaseZ = PhysicsConstants::INVALID_HEIGHT;
-			out.stepUpAge = 0;
-		}
-	}
+	// Static terrain / stair support must come from current-frame collision.
+	// Keep these bridge fields inert for wire compatibility; WoW.exe evidence still
+	// only supports persisted moving-base continuity, not a synthetic terrain hold.
+	out.stepUpBaseZ = PhysicsConstants::INVALID_HEIGHT;
+	out.stepUpAge = 0;
 
 	// Output
 	{

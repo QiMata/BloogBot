@@ -1217,3 +1217,36 @@ if (transportGuid != 0) {
   - `Services/PathfindingService/TASKS.md`
   - `docs/TASKS.md`
 - **Next priorities:** re-run the reproduced mining route and compare planned-vs-executed waypoints now that both the smoothing layer and the movement handoff no longer point at stale corners
+
+- **Session 165 — static step-up terrain hold removed from native physics:**
+  - Removed the ad-hoc multi-frame `stepUpBaseZ` / `stepUpAge` grounded-Z hold from [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp); runtime grounded resolution no longer carries a synthetic static-terrain step height forward just to bridge polygon gaps after a rise.
+  - Updated [PhysicsBridge.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsBridge.h) so those fields are documented as inert compatibility outputs instead of live support-persistence state.
+  - This change follows the current WoW.exe parity notes in [physicsengine-calibration.md](/E:/repos/Westworld of Warcraft/docs/physicsengine-calibration.md): moving-base continuity remains valid, but there is still no binary evidence for a generic cached static-terrain hold in the original client.
+- **Test baseline (session 165):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" -v n`
+    - Passed (`32/32`)
+- **Files changed (session 165):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsBridge.h`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep removing unsupported native heuristics one branch at a time, starting with the remaining grounded/clamping code in `PhysicsEngine.cpp`, while holding the movement slice green and keeping walkable-surface adherence as the runtime proof target
+
+- **Session 166 — grounded half-step now uses the client’s swept pass:**
+  - Re-checked the live `WoW.exe` binary with `dumpbin /disasm` over `CMovement::CollisionStep (0x633D1C..0x633DEB)` and confirmed the second grounded pass is another swept AABB, not a static terrain overlap.
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so `CollisionStepWoW` now runs `SceneQuery::SweepAABB(...)` for the half-step branch instead of `TestTerrainAABB(...)` at the half-step endpoint.
+  - This removes the next runtime-specific shortcut after session 165’s static step-up hold removal and keeps the grounded path closer to the original client’s two-sweep collision flow.
+- **Test baseline (session 166):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit `LNK1104` on `Navigation.dll`; stopped idle MSBuild `dotnet.exe` PIDs `16756` and `26576`; reran and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=normal"`
+    - Passed (`32/32`)
+- **Files changed (session 166):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** continue replacing runtime grounded-path shortcuts branch-by-branch from `PhysicsEngine.cpp`, with wall/slide response the next likely binary-backed mismatch after the half-step sweep correction
