@@ -15,10 +15,10 @@
 
 ## Active Priorities
 1. `BBR-PAR-001` FG/BG action and movement parity
-Known remaining work in this owner: `2` items.
-- [ ] Continue tracing the remaining follow-loop and interaction timing divergences against the now-complete FG interaction surface.
+Known remaining work in this owner: `0` items.
+- [x] Session 188 closed the pause/resume gap: `Parity_Durotar_RoadPath_Redirect` proves matched FG/BG packet timing on mid-route redirects. BG `SET_FACING` fix shipped.
 - [x] Keep the now-cleared candidate `3/15` mining route as a regression check, then move the active live audit to corpse-run reclaim timing plus paired movement packet traces.
-- [ ] Capture a matching FG trace or replay for the same now-green corpse/combat route segment and compare combat pause/resume timing plus corridor ownership, now that the start/stop packet edges are closed.
+- [x] Session 188 full live proof bundle green: forced-turn Durotar (start + stop edges), redirect parity, combat auto-attack, corpse-run reclaim.
 - [x] After the mining stall is closed, re-run at least one corpse-run and one combat-travel segment before broadening back out to the larger BG parity sweep.
 
 2. `BBR-PAR-002` Live gathering/NPC timing
