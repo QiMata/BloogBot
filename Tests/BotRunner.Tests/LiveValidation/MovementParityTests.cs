@@ -83,6 +83,17 @@ public class MovementParityTests
     }
 
     [SkippableFact]
+    public async Task Parity_Durotar_RoadPath_TurnStart()
+    {
+        await RunParityTest(
+            name: "Durotar â€” Road Path (turn start)",
+            startX: -500f, startY: -4800f, startZ: 38f,
+            targetX: -460f, targetY: -4760f, targetZ: 38f,
+            maxSeconds: 20,
+            initialFacing: 3.92699f);
+    }
+
+    [SkippableFact]
     public async Task Parity_ValleyOfTrials_LongDiagonal()
     {
         // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity
@@ -183,11 +194,18 @@ public class MovementParityTests
         string name,
         float startX, float startY, float startZ,
         float targetX, float targetY, float targetZ,
-        int maxSeconds)
+        int maxSeconds,
+        float? initialFacing = null)
     {
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;
         var hasFg = await _bot.CheckFgActionableAsync(requireTeleportProbe: false);
+        await _bot.RefreshSnapshotsAsync();
+        global::Tests.Infrastructure.Skip.IfNot(!string.IsNullOrWhiteSpace(bgAccount),
+            "BG client required for parity comparison");
+        Assert.NotNull(_bot.BackgroundBot);
+        Assert.True(LiveBotFixture.IsStrictAlive(_bot.BackgroundBot),
+            "BG client must be strict-alive for parity comparison");
         global::Tests.Infrastructure.Skip.IfNot(hasFg,
             "FG client required — this test compares FG (gold standard) with BG (headless physics)");
 
@@ -225,6 +243,15 @@ public class MovementParityTests
 
         // Allow physics to snap to ground
         await Task.Delay(2000);
+
+        if (initialFacing.HasValue)
+        {
+            await Task.WhenAll(
+                _bot.SendActionAsync(bgAccount!, MakeSetFacing(initialFacing.Value)),
+                _bot.SendActionAsync(fgAccount!, MakeSetFacing(initialFacing.Value)));
+            await Task.Delay(500);
+            _output.WriteLine($"[SETUP] Forced initial facing={initialFacing.Value:F4} rad before recording");
+        }
 
         // --- START RECORDINGS (both bots) ---
         await Task.WhenAll(
@@ -345,6 +372,11 @@ public class MovementParityTests
             if (fgArrived && bgArrived) break;
         }
 
+        if (fgArrived || bgArrived)
+        {
+            await Task.Delay(1000);
+        }
+
         // --- STOP RECORDINGS (both bots) ---
         await Task.WhenAll(
             _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)),
@@ -435,9 +467,20 @@ public class MovementParityTests
         // --- RECORDING ANALYSIS ---
         AnalyzeBgPhysicsRecording(bgAccount!);
         AnalyzeTransformComparison(fgAccount!, bgAccount!);
+        AnalyzePacketComparison(fgAccount!, bgAccount!, initialFacing.HasValue);
 
-        Assert.True(fgSamples.Count >= 3 || bgSamples.Count >= 3,
-            "Neither bot produced enough position samples");
+        float fgTravel = ComputeTravelDistance(fgSamples);
+        float bgTravel = ComputeTravelDistance(bgSamples);
+        float minimumMeaningfulTravel = MathF.Min(routeDist * 0.25f, 10f);
+
+        Assert.True(fgSamples.Count >= 3,
+            $"FG produced too few position samples ({fgSamples.Count})");
+        Assert.True(bgSamples.Count >= 3,
+            $"BG produced too few position samples ({bgSamples.Count})");
+        Assert.True(fgTravel >= minimumMeaningfulTravel,
+            $"FG only moved {fgTravel:F1}y on a {routeDist:F1}y route");
+        Assert.True(bgTravel >= minimumMeaningfulTravel,
+            $"BG only moved {bgTravel:F1}y on a {routeDist:F1}y route");
     }
 
     private void PrintBotSummary(string label, List<TransformSample> samples)
@@ -612,7 +655,27 @@ public class MovementParityTests
         return MathF.Sqrt(dx * dx + dy * dy);
     }
 
+    private static float ComputeTravelDistance(List<TransformSample> samples)
+    {
+        if (samples.Count < 2)
+            return 0f;
+
+        var first = samples.First();
+        var last = samples.Last();
+        return Distance2D(first.X, first.Y, last.X, last.Y);
+    }
+
     private static ActionMessage MakeRecordingAction(ActionType type) => new() { ActionType = type };
+
+    private static ActionMessage MakeSetFacing(float facing)
+        => new()
+        {
+            ActionType = ActionType.SetFacing,
+            Parameters =
+            {
+                new RequestParameter { FloatParam = facing }
+            }
+        };
 
     /// <summary>
     /// Find and analyze the most recent BG physics recording CSV.
@@ -620,9 +683,7 @@ public class MovementParityTests
     /// </summary>
     private void AnalyzeBgPhysicsRecording(string bgAccount)
     {
-        var recordingDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WWoW", "PhysicsRecordings");
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
 
         if (!Directory.Exists(recordingDir))
         {
@@ -630,18 +691,13 @@ public class MovementParityTests
             return;
         }
 
-        // Find the most recent file for this account
-        var files = Directory.GetFiles(recordingDir, $"physics_{bgAccount}_*.csv")
-            .OrderByDescending(f => f)
-            .ToArray();
-
-        if (files.Length == 0)
+        var csvPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "physics", bgAccount, "csv");
+        if (csvPath == null)
         {
             _output.WriteLine("\n--- BG Physics Recording: no CSV found ---");
             return;
         }
 
-        var csvPath = files[0];
         var lines = File.ReadAllLines(csvPath);
         if (lines.Length < 2)
         {
@@ -783,42 +839,47 @@ public class MovementParityTests
         public uint FallTime;
     }
 
+    private sealed class PacketTraceData
+    {
+        public int Index;
+        public long ElapsedMs;
+        public string Direction = "";
+        public ushort Opcode;
+        public string OpcodeName = "";
+        public int Size;
+        public bool IsMovement;
+    }
+
     /// <summary>
     /// Load FG transform CSV and BG physics CSV, time-align frames, and print
     /// side-by-side position comparison with Z divergence analysis.
     /// </summary>
     private void AnalyzeTransformComparison(string fgAccount, string bgAccount)
     {
-        var recordingDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WWoW", "PhysicsRecordings");
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
 
         if (!Directory.Exists(recordingDir)) return;
 
-        // Load FG transform CSV
-        var fgFiles = Directory.GetFiles(recordingDir, $"transform_{fgAccount}_*.csv")
-            .OrderByDescending(f => f).ToArray();
-        // Load BG transform CSV (for position comparison — physics CSV has different format)
-        var bgFiles = Directory.GetFiles(recordingDir, $"transform_{bgAccount}_*.csv")
-            .OrderByDescending(f => f).ToArray();
+        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "transform", fgAccount, "csv");
+        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "transform", bgAccount, "csv");
 
-        if (fgFiles.Length == 0)
+        if (fgPath == null)
         {
             _output.WriteLine("\n--- FG Transform Recording: no CSV found ---");
             return;
         }
-        if (bgFiles.Length == 0)
+        if (bgPath == null)
         {
             _output.WriteLine("\n--- BG Transform Recording: no CSV found ---");
             return;
         }
 
-        var fgFrames = LoadTransformCsv(fgFiles[0]);
-        var bgFrames = LoadTransformCsv(bgFiles[0]);
+        var fgFrames = LoadTransformCsv(fgPath);
+        var bgFrames = LoadTransformCsv(bgPath);
 
         _output.WriteLine($"\n=== TRANSFORM COMPARISON (FG gold standard vs BG physics) ===");
-        _output.WriteLine($"    FG: {fgFrames.Count} frames from {Path.GetFileName(fgFiles[0])}");
-        _output.WriteLine($"    BG: {bgFrames.Count} frames from {Path.GetFileName(bgFiles[0])}");
+        _output.WriteLine($"    FG: {fgFrames.Count} frames from {Path.GetFileName(fgPath)}");
+        _output.WriteLine($"    BG: {bgFrames.Count} frames from {Path.GetFileName(bgPath)}");
 
         if (fgFrames.Count == 0 || bgFrames.Count == 0)
         {
@@ -908,6 +969,76 @@ public class MovementParityTests
         }
     }
 
+    private void AnalyzePacketComparison(string fgAccount, string bgAccount, bool expectTurnStart)
+    {
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+
+        if (!Directory.Exists(recordingDir))
+            return;
+
+        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", fgAccount, "csv");
+        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", bgAccount, "csv");
+
+        if (fgPath == null)
+        {
+            _output.WriteLine("\n--- FG Packet Recording: no CSV found ---");
+            return;
+        }
+
+        if (bgPath == null)
+        {
+            _output.WriteLine("\n--- BG Packet Recording: no CSV found ---");
+            return;
+        }
+
+        var fgPackets = LoadPacketCsv(fgPath);
+        var bgPackets = LoadPacketCsv(bgPath);
+
+        var fgSendMovement = fgPackets
+            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
+            .ToList();
+        var bgSendMovement = bgPackets
+            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
+            .ToList();
+
+        _output.WriteLine("\n=== PACKET COMPARISON ===");
+        _output.WriteLine($"    FG packets: {fgSendMovement.Count} outbound movement packets from {Path.GetFileName(fgPath)}");
+        _output.WriteLine($"    BG packets: {bgSendMovement.Count} outbound movement packets from {Path.GetFileName(bgPath)}");
+        _output.WriteLine("    FG opening packets:");
+        foreach (var packet in fgSendMovement.Take(6))
+            _output.WriteLine($"      {packet.ElapsedMs,5}ms  0x{packet.Opcode:X4}  {packet.OpcodeName}");
+        _output.WriteLine("    BG opening packets:");
+        foreach (var packet in bgSendMovement.Take(6))
+            _output.WriteLine($"      {packet.ElapsedMs,5}ms  0x{packet.Opcode:X4}  {packet.OpcodeName}");
+
+        if (!expectTurnStart)
+            return;
+
+        var fgOpening = fgSendMovement.Take(2).Select(p => p.OpcodeName).ToArray();
+        var bgOpening = bgSendMovement.Take(2).Select(p => p.OpcodeName).ToArray();
+
+        Assert.True(fgOpening.Length >= 2, "FG packet trace did not capture enough outbound opening movement packets");
+        Assert.True(bgOpening.Length >= 2, "BG packet trace did not capture enough outbound opening movement packets");
+        Assert.Equal("MSG_MOVE_SET_FACING", fgOpening[0]);
+        Assert.Equal("MSG_MOVE_START_FORWARD", fgOpening[1]);
+        Assert.Equal(fgOpening, bgOpening);
+
+        Assert.DoesNotContain(fgSendMovement.Skip(2), packet => packet.OpcodeName == "MSG_MOVE_SET_FACING");
+        Assert.DoesNotContain(bgSendMovement.Skip(2), packet => packet.OpcodeName == "MSG_MOVE_SET_FACING");
+
+        var fgStop = fgSendMovement.LastOrDefault(packet => packet.OpcodeName == "MSG_MOVE_STOP");
+        var bgStop = bgSendMovement.LastOrDefault(packet => packet.OpcodeName == "MSG_MOVE_STOP");
+        Assert.NotNull(fgStop);
+        Assert.NotNull(bgStop);
+        Assert.Equal("MSG_MOVE_STOP", fgSendMovement[^1].OpcodeName);
+        Assert.Equal("MSG_MOVE_STOP", bgSendMovement[^1].OpcodeName);
+
+        var stopDeltaMs = Math.Abs(fgStop!.ElapsedMs - bgStop!.ElapsedMs);
+        _output.WriteLine($"    Stop packets: FG={fgStop.ElapsedMs}ms  BG={bgStop.ElapsedMs}ms  delta={stopDeltaMs}ms");
+        Assert.True(stopDeltaMs <= 300,
+            $"Stop edge diverged by {stopDeltaMs}ms (FG={fgStop.ElapsedMs}ms, BG={bgStop.ElapsedMs}ms)");
+    }
+
     private static List<TransformData> LoadTransformCsv(string path)
     {
         var result = new List<TransformData>();
@@ -933,6 +1064,37 @@ public class MovementParityTests
             }
             catch { }
         }
+        return result;
+    }
+
+    private static List<PacketTraceData> LoadPacketCsv(string path)
+    {
+        var result = new List<PacketTraceData>();
+        var lines = File.ReadAllLines(path);
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(',');
+            if (parts.Length < 8)
+                continue;
+
+            try
+            {
+                result.Add(new PacketTraceData
+                {
+                    Index = int.Parse(parts[0], CultureInfo.InvariantCulture),
+                    ElapsedMs = long.Parse(parts[1], CultureInfo.InvariantCulture),
+                    Direction = parts[2],
+                    Opcode = ushort.Parse(parts[3], CultureInfo.InvariantCulture),
+                    OpcodeName = parts[5],
+                    Size = int.Parse(parts[6], CultureInfo.InvariantCulture),
+                    IsMovement = parts[7] == "1",
+                });
+            }
+            catch
+            {
+            }
+        }
+
         return result;
     }
 }

@@ -10,18 +10,80 @@
 2. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
 3. Keep the movement opcode sweep closed by only adding new bridge/application handlers when a binary-backed non-cheat gap is found.
 
+## MovementController Parity Backlog
+Known remaining work in this owner: `2` items.
+
+1. `WSC-PAR-03` Capture a matched FG/BG trace that proves pause/resume timing and corridor-handoff ordering on the same route segment, using the BG `navtrace_<account>.json` sidecar as the ownership half of the proof.
+2. `WSC-PAR-04` Implement and cover any `MovementController` / `WoWSharpObjectManager` ordering fix exposed by `WSC-PAR-03`, including deterministic or replay-backed coverage before the change is relied on in live validation.
+
 ## Session Handoff
-- Last updated: `2026-03-23`
-- Pass result: `delta shipped`
+- Last updated: `2026-03-25 (session 187)`
+- Pass result: `movement stop-edge parity shipped; 2 WoWSharpClient-owned items remain`
 - Last delta:
-  - `WoWUnitExtrapolationTests` now includes replay-backed coverage from real movement recordings instead of only synthetic vector math.
-  - Added a slow-walk Undercity fixture that proves the `<3y/s` WoW.exe jitter guard returns the raw server position even when a nearby unit keeps walking for another half-second.
-  - Added a fast-running Blackrock Spire fixture that stays within `0.02y` horizontal drift against observed motion, proving the positive extrapolation path against a real remote-unit trajectory instead of only hand-authored test data.
+  - Session 187 closed the old live stop-tail mismatch instead of collecting more traces. `WoWSharpObjectManager.StopAllMovement()` now queues a grounded stop whenever BG is airborne, and `MovementController.RequestGroundedStop()` clears forward intent on the first grounded frame so BG sends the final `MSG_MOVE_STOP` at the real stop edge instead of carrying `FORWARD` through the target.
+  - Session 187 also removed the BotRunner-side arrival orbit that was keeping FG open on the same route. `BuildGoToSequence(...)` now uses horizontal arrival checks, and `NavigationPath` uses `DistanceTo2D(...)` consistently when deciding whether an exhausted path still needs recalculation at the destination.
+  - Deterministic coverage was added with `MovementControllerTests.RequestGroundedStop_ClearsForwardIntent_OnFirstGroundedFrame`, and the forced-turn Durotar live parity route now proves both clients end on outbound `MSG_MOVE_STOP` with no late outbound `SET_FACING` after the opening pair.
+  - The remaining WoWSharpClient-owned gap is no longer the stop edge. It is the pause/resume and corridor-handoff slice on the same matched FG/BG route segment, plus any controller-ordering fix that slice exposes.
+  - Session 186 added a dedicated BG movement-start facing send path instead of reusing the stationary heartbeat-facing path. `MovementController.SendMovementStartFacingUpdate(...)` now emits a bare `MSG_MOVE_SET_FACING`, and `WoWSharpObjectManager.MoveToward(position, facing)` uses it only on the horizontal movement start edge.
+  - Session 186 also added a stable BG packet sidecar by exposing `WoWClient.MovementOpcodeSent` and wiring `BackgroundPacketTraceRecorder` through `BackgroundBotWorker`. Live parity runs now write `packets_TESTBOT2.csv` alongside the existing FG `packets_TESTBOT1.csv`.
+  - Deterministic coverage was expanded with `WoWClientTests.SendMovementOpcodeAsync_FiresMovementOpcodeSent`, `MovementControllerTests.SendMovementStartFacingUpdate_SendsSetFacingOnly`, and `ObjectManagerWorldSessionTests.MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent`.
+  - `MovementParityTests` now rejects stationary passes by requiring meaningful travel from both FG and BG, and it has a new forced-turn Durotar route that sets both bots to the same wrong initial facing before `Goto`.
+  - The new live forced-turn Durotar capture closes the old “facing-correction ordering” uncertainty: FG and BG both emit `MSG_MOVE_SET_FACING -> MSG_MOVE_START_FORWARD`. The remaining WoWSharpClient live gap is the route tail from that same capture, where BG emits `MSG_MOVE_STOP` while FG settles later with a different late-facing/heartbeat sequence.
+  - Session 184 turned the BG corpse-run live slice into controller-ownership evidence instead of a plain pass/fail harness check. `BotRunnerService.Diagnostics` now emits stable `navtrace_<account>.json` sidecars, and `DeathCorpseRunTests` verified a live BG corpse-run captured `RecordedTask=RetrieveCorpseTask`, `TaskStack=[RetrieveCorpseTask, IdleTask]`, `PlanVersion=1`, and `LastResolution=waypoint` in `navtrace_TESTBOT2.json`.
+  - That closes the "can BG expose live corridor ownership state?" part of the managed parity loop. Session 187 later closed the stop-edge portion of that live gap, leaving pause/resume timing and corridor ownership as the remaining matched-route evidence still needed.
+  - Session 183 re-ran the previously stale live BG proof slice without changing controller code: `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer` now passes cleanly on the current environment, so corpse-run reclaim timing is no longer the active managed blocker.
+  - Session 183 also re-ran `CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver`, which still passes. That keeps the post-mining controller proof green across both corpse-run reclaim and combat-travel segments.
+  - With the live proof slice green again, the remaining WoWSharpClient parity gap is no longer harness stability. After session 187, it is the missing paired FG/BG packet/trace evidence for pause/resume timing and corridor ownership on matched route segments.
+  - Session 181 fixed the remaining foreground recording blocker instead of masking it with Lua fallback. `ObjectManager.StartMovement(...)` / `StopMovement(...)` now dispatch `SetControlBit(...)` through `ThreadSynchronizer.RunOnMainThread(...)`, which cleared the repeated `SetControlBitSafeFunction(...)` `NullReferenceException` seen in `injection_firstchance.log` during automated captures.
+  - The automated Undercity recording path now completes the lower-route and west-elevator-up scenarios with native control-bit movement, yielding stronger packet-backed fixtures: `Urgzuga_Undercity_2026-03-25_10-00-52` (`14` frames, `98` packets) and `Urgzuga_Undercity_2026-03-25_10-01-09` (`24` frames, `125` packets). These supersede the earlier `03-01-*` pair in the canonical parity corpus.
+  - `RecordingMaintenance capture` now auto-cleans duplicate `Bot/*/Recordings` output trees after each run, and the stale intermediate `Urgzuga_Undercity` capture attempts were pruned from the canonical test corpus so replay calibration stays focused on the final packet-backed fixtures.
+  - Session 176 replaced the stale heartbeat assumption with packet-backed FG evidence instead of more synthetic timing guesses. `MovementController` now uses a ~500ms moving heartbeat cadence, which matches the fresh PacketLogger-backed Durotar and Undercity captures added to the canonical recording corpus.
+  - `MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity` now filters to grounded forward runs with a clean stop frame, creates synthetic preroll when a capture begins mid-run, and executes the stop transition. The harness now selects `Urgzuga_Durotar_2026-03-25_03-07-08` and proves real FG/BG `START_FORWARD` / heartbeat / `STOP` parity instead of deferring for `Packets=0`.
+  - Added fast replay-backed proof in `Navigation.Physics.Tests` for the new compact packet-backed recordings: flat Durotar travel, Undercity lower-route underground seating, and the west elevator up-ride from lower Undercity to the upper deck.
+  - The remaining WoWSharpClient parity work is now live paired FG/BG tracing on corpse-run and combat-travel segments so pause/resume timing and corridor ownership can be compared against the client on identical routes.
 - Validation/tests run:
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "FullyQualifiedName~WoWUnitExtrapolationTests" -v n` -> `8 passed`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -v n` -> `1351 passed`, `1 skipped`
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (61/61)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.RequestGroundedStop_ClearsForwardIntent_OnFirstGroundedFrame|FullyQualifiedName~MovementControllerTests.SendStopPacket_PreservesFallingFlags_WhenClearingForwardIntent|FullyQualifiedName~MovementControllerTests.SendStopPacket_SendsMsgMoveStop_AfterForwardMovementWasSent" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)`; no late outbound `SET_FACING`, both clients terminate on outbound `MSG_MOVE_STOP`, stop-edge delta `50ms`
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWClientTests.SendMovementOpcodeAsync_FiresMovementOpcodeSent|FullyQualifiedName~MovementControllerTests.SendMovementStartFacingUpdate_SendsSetFacingOnly|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent|FullyQualifiedName~MovementControllerRecordedFrameTests.IsRecording_CapturesPhysicsFramesWithPacketMetadata|FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath" --logger "console;verbosity=normal"` -> `passed (1/1)`; confirmed stable `packets_TESTBOT2.csv` output
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)` twice; matched live start edge now shows FG/BG `MSG_MOVE_SET_FACING -> MSG_MOVE_START_FORWARD`, and the second run captured the remaining stop-tail mismatch
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RecordingArtifactHelperTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer" --logger "console;verbosity=normal"` -> `passed (1/1)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver" --logger "console;verbosity=normal"` -> `passed (1/1)`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests|FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=minimal"` -> `45 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysicsTests.Forward_FlatTerrain_PacketTimingAndPositionDeltas|FullyQualifiedName~MovementControllerPhysicsTests.HeartbeatInterval_500ms" --logger "console;verbosity=minimal"` -> `2 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedFlatRun_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck" --logger "console;verbosity=detailed"` -> `3 passed`
 - Files changed:
+  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/WoWSharpClient/Client/WoWClient.cs`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPacketTraceRecorder.cs`
+  - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
+  - `Tests/BotRunner.Tests/Movement/GoToArrivalTests.cs`
+  - `Tests/WoWSharpClient.Tests/Client/WoWClientTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
   - `Exports/WoWSharpClient/TASKS.md`
-  - `Tests/WoWSharpClient.Tests/Models/WoWUnitExtrapolationTests.cs`
+  - `Exports/BotRunner/BotRunnerService.Diagnostics.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/RecordingArtifactHelper.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/RecordingArtifactHelperTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
 - Next command:
-  - `Get-Content docs/TASKS.md | Select-Object -Skip 283 -First 80`
+  - `Get-Content Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs | Select-Object -Skip 320 -First 220`

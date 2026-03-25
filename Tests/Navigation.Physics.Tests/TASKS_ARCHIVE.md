@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## Completed 2026-02-26
 
@@ -39,4 +37,3 @@ Completed items moved from TASKS.md.
   3. Constants in `Tolerances`: `AggregateCleanAvg=0.15`, `AggregateCleanP99=2.0`, `WorstCleanFrame=5.0`
 - **Result:** Both tests pass. Clean artifacts/SPLINE_ELEVATION excluded explicitly.
 - **Files:** `PhysicsReplayTests.cs`, `ErrorPatternDiagnosticTests.cs`, `Helpers/TestConstants.cs`
->>>>>>> cpp_physics_system

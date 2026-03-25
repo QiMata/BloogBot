@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## Completed 2026-02-28
 
@@ -34,4 +32,3 @@ Completed items moved from TASKS.md.
   - `PlayerFieldMappingTests` (7 tests): All player fields from WoWSharpObjectManager.cs:2000-2049 have correct defaults, KnownTitles low/high combination, CombatRating/SpellCritPercentage/DailyQuests indexing, PvP fields, float fields (ModManaRegen, OffhandCritPercentage).
   - `UnitGeometryTests` (3 tests): GetPointBehindUnit geometry calculation, Z preservation, zero-distance identity.
 - File: `Tests/WoWSharpClient.Tests/Handlers/RegressionTests.cs` (new).
->>>>>>> cpp_physics_system

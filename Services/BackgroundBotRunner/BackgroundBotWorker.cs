@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using BackgroundBotRunner.Diagnostics;
 using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Combat;
@@ -30,6 +31,7 @@ namespace BackgroundBotRunner
         private readonly WoWClient _wowClient;
         private readonly BotCombatState _botCombatState;
         private readonly BotRunnerService _botRunner;
+        private readonly BackgroundPacketTraceRecorder _packetTraceRecorder;
 
         private IAgentFactory? _agentFactory;
         private IWorldClient? _activeWorldClient;
@@ -50,6 +52,7 @@ namespace BackgroundBotRunner
             _pathfindingClient = infrastructure.PathfindingClient;
             _characterStateUpdateClient = infrastructure.CharacterStateUpdateClient;
             _wowClient = infrastructure.WowClient;
+            _packetTraceRecorder = new BackgroundPacketTraceRecorder(_wowClient, _loggerFactory);
 
             _agentFactory = infrastructure.AgentFactory;
             _activeWorldClient = infrastructure.InitialWorldClient;
@@ -68,7 +71,8 @@ namespace BackgroundBotRunner
                 accountName,
                 talentService: new DynamicTalentService(agentFactoryAccessor),
                 equipmentService: new EquipmentService(),
-                behaviorConfig: LoadBehaviorConfig(configuration));
+                behaviorConfig: LoadBehaviorConfig(configuration),
+                diagnosticPacketTraceRecorder: _packetTraceRecorder);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -108,6 +112,7 @@ namespace BackgroundBotRunner
             }
 
             ResetAgentFactory();
+            _packetTraceRecorder.Dispose();
 
             _logger.LogInformation("BackgroundBotWorker cleanup complete.");
             await base.StopAsync(cancellationToken);

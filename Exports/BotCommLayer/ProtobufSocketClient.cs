@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -33,51 +34,114 @@ namespace BotCommLayer
             Connect();
         }
 
-        private void Connect()
+        private void Connect(int? reconnectBudgetMs = null)
         {
             _client?.Dispose();
             _client = new TcpClient();
-            ConnectWithRetry(_ipAddress!, _port);
+            ConnectWithRetry(_ipAddress!, _port, reconnectBudgetMs);
             _stream = _client.GetStream();
             _stream.ReadTimeout = 5000;
             _stream.WriteTimeout = 5000;
         }
 
-        private void ConnectWithRetry(string ipAddress, int port)
+        private void ConnectWithRetry(string ipAddress, int port, int? reconnectBudgetMs = null)
         {
-            const int maxRetries = 10;
-            const int baseDelayMs = 500;
-
-            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            if (!reconnectBudgetMs.HasValue)
             {
+                const int maxRetries = 10;
+                const int baseDelayMs = 500;
+
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
+                {
+                    try
+                    {
+                        _logger?.LogInformation($"Attempting to connect to {ipAddress}:{port} (attempt {attempt}/{maxRetries})...");
+                        _client?.Connect(IPAddress.Parse(ipAddress), port);
+                        _logger?.LogInformation($"Successfully connected to {ipAddress}:{port}");
+                        return;
+                    }
+                    catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
+                    {
+                        if (attempt == maxRetries)
+                        {
+                            _logger?.LogError($"Failed to connect to {ipAddress}:{port} after {maxRetries} attempts. Service may not be running.");
+                            throw new InvalidOperationException(
+                                $"Unable to connect to service at {ipAddress}:{port}. " +
+                                $"Please ensure the service is running and accessible. " +
+                                $"Last error: {ex.Message}", ex);
+                        }
+
+                        int delay = baseDelayMs * (int)Math.Pow(2, attempt - 1); // Exponential backoff
+                        _logger?.LogWarning($"Connection attempt {attempt} failed: {ex.Message}. Retrying in {delay}ms...");
+                        Thread.Sleep(delay);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError($"Unexpected error connecting to {ipAddress}:{port}: {ex.Message}");
+                        throw;
+                    }
+                }
+
+                return;
+            }
+
+            const int reconnectBaseDelayMs = 100;
+            const int reconnectMaxDelayMs = 1000;
+            var attemptCount = 0;
+            var stopwatch = Stopwatch.StartNew();
+            Exception? lastConnectionException = null;
+
+            while (true)
+            {
+                attemptCount++;
                 try
                 {
-                    _logger?.LogInformation($"Attempting to connect to {ipAddress}:{port} (attempt {attempt}/{maxRetries})...");
+                    _logger?.LogInformation(
+                        "Attempting reconnect to {IpAddress}:{Port} (attempt {Attempt}, budget {Budget}ms)...",
+                        ipAddress,
+                        port,
+                        attemptCount,
+                        reconnectBudgetMs.Value);
                     _client?.Connect(IPAddress.Parse(ipAddress), port);
                     _logger?.LogInformation($"Successfully connected to {ipAddress}:{port}");
                     return;
                 }
-                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
+                catch (SocketException ex)
                 {
-                    if (attempt == maxRetries)
-                    {
-                        _logger?.LogError($"Failed to connect to {ipAddress}:{port} after {maxRetries} attempts. Service may not be running.");
-                        throw new InvalidOperationException(
-                            $"Unable to connect to service at {ipAddress}:{port}. " +
-                            $"Please ensure the service is running and accessible. " +
-                            $"Last error: {ex.Message}", ex);
-                    }
-
-                    int delay = baseDelayMs * (int)Math.Pow(2, attempt - 1); // Exponential backoff
-                    _logger?.LogWarning($"Connection attempt {attempt} failed: {ex.Message}. Retrying in {delay}ms...");
-                    Thread.Sleep(delay);
+                    lastConnectionException = ex;
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError($"Unexpected error connecting to {ipAddress}:{port}: {ex.Message}");
-                    throw;
+                    lastConnectionException = ex;
                 }
+
+                var remainingBudgetMs = reconnectBudgetMs.Value - (int)stopwatch.ElapsedMilliseconds;
+                if (remainingBudgetMs <= 0)
+                    break;
+
+                var delay = Math.Min(reconnectBaseDelayMs * (1 << Math.Min(attemptCount - 1, 3)), reconnectMaxDelayMs);
+                delay = Math.Min(delay, remainingBudgetMs);
+                _logger?.LogWarning(
+                    "Reconnect attempt {Attempt} to {IpAddress}:{Port} failed: {Message}. Retrying in {Delay}ms (remaining budget {Remaining}ms)...",
+                    attemptCount,
+                    ipAddress,
+                    port,
+                    lastConnectionException?.Message,
+                    delay,
+                    remainingBudgetMs);
+                if (delay > 0)
+                    Thread.Sleep(delay);
             }
+
+            if (lastConnectionException != null)
+            {
+                throw new TimeoutException(
+                    $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attemptCount} attempt(s).",
+                    lastConnectionException);
+            }
+
+            throw new TimeoutException(
+                $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attemptCount} attempt(s).");
         }
 
         public TResponse SendMessage(TRequest request)
@@ -114,7 +178,11 @@ namespace BotCommLayer
                         _logger?.LogWarning($"Connection lost ({ex.GetType().Name}). Attempting reconnect to {_ipAddress}:{_port}...");
                         try
                         {
-                            Connect();
+                            Connect(ComputeReconnectBudgetMs(
+                                readTimeoutOverrideMs,
+                                writeTimeoutOverrideMs,
+                                previousReadTimeout,
+                                previousWriteTimeout));
                             ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
                             _logger?.LogInformation($"Reconnected to {_ipAddress}:{_port}. Retrying message.");
                             return SendMessageInternal(request);
@@ -134,6 +202,32 @@ namespace BotCommLayer
                     RestoreTimeouts(previousReadTimeout, previousWriteTimeout);
                 }
             }
+        }
+
+        private static int ComputeReconnectBudgetMs(
+            int? readTimeoutOverrideMs,
+            int? writeTimeoutOverrideMs,
+            int? previousReadTimeout,
+            int? previousWriteTimeout)
+        {
+            int? budget = null;
+
+            void Consider(int? timeoutMs)
+            {
+                if (!timeoutMs.HasValue || timeoutMs.Value <= 0)
+                    return;
+
+                budget = !budget.HasValue
+                    ? timeoutMs.Value
+                    : Math.Min(budget.Value, timeoutMs.Value);
+            }
+
+            Consider(readTimeoutOverrideMs);
+            Consider(writeTimeoutOverrideMs);
+            Consider(previousReadTimeout);
+            Consider(previousWriteTimeout);
+
+            return budget.GetValueOrDefault(5000);
         }
 
         private void ApplyTimeoutOverrides(int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)

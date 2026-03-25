@@ -72,28 +72,36 @@ namespace BotRunner.Clients
             Race race = 0,
             Gender gender = 0)
         {
-            var request = new PathfindingRequest
+            try
             {
-                Path = new CalculatePathRequest
+                var request = new PathfindingRequest
                 {
-                    MapId = mapId,
-                    Start = ToProto(start),
-                    End = ToProto(end),
-                    Straight = smoothPath,
-                    Race = (uint)race,
-                    Gender = (uint)gender,
-                }
-            };
-            if (nearbyObjects is { Count: > 0 })
-                request.Path.NearbyObjects.Add(nearbyObjects);
+                    Path = new CalculatePathRequest
+                    {
+                        MapId = mapId,
+                        Start = ToProto(start),
+                        End = ToProto(end),
+                        Straight = smoothPath,
+                        Race = (uint)race,
+                        Gender = (uint)gender,
+                    }
+                };
+                if (nearbyObjects is { Count: > 0 })
+                    request.Path.NearbyObjects.Add(nearbyObjects);
 
-            var response = SendRequest(request, _pathRequestTimeoutMs);
-            _consecutiveFailures = 0;
-            if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                throw new Exception(response.Error.Message);
-            return response.Path.Corners
-                .Select(p => new Position(p.X, p.Y, p.Z))
-                .ToArray();
+                var response = SendRequest(request, _pathRequestTimeoutMs);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    throw new Exception(response.Error.Message);
+                return response.Path.Corners
+                    .Select(p => new Position(p.X, p.Y, p.Z))
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                NoteFailure("path request", ex, "returning an empty path until the service recovers.");
+                return [];
+            }
         }
         public virtual float GetPathingDistance(uint mapId, Position start, Position end)
         {
@@ -105,20 +113,28 @@ namespace BotRunner.Clients
         }
         public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
         {
-            var request = new PathfindingRequest
+            try
             {
-                GroundZ = new GetGroundZRequest
+                var request = new PathfindingRequest
                 {
-                    MapId = mapId,
-                    Position = ToProto(position),
-                    MaxSearchDist = maxSearchDist
-                }
-            };
-            var response = SendRequest(request, _queryTimeoutMs);
-            _consecutiveFailures = 0;
-            if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                throw new Exception(response.Error.Message);
-            return (response.GroundZ.GroundZ, response.GroundZ.Found);
+                    GroundZ = new GetGroundZRequest
+                    {
+                        MapId = mapId,
+                        Position = ToProto(position),
+                        MaxSearchDist = maxSearchDist
+                    }
+                };
+                var response = SendRequest(request, _queryTimeoutMs);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    throw new Exception(response.Error.Message);
+                return (response.GroundZ.GroundZ, response.GroundZ.Found);
+            }
+            catch (Exception ex)
+            {
+                NoteFailure("ground query", ex, "treating the ground probe as unavailable until the service recovers.");
+                return (0f, false);
+            }
         }
 
         /// <summary>
@@ -173,20 +189,28 @@ namespace BotRunner.Clients
 
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
         {
-            var request = new PathfindingRequest
+            try
             {
-                Los = new LineOfSightRequest
+                var request = new PathfindingRequest
                 {
-                    MapId = mapId,
-                    From = ToProto(from),
-                    To = ToProto(to)
-                }
-            };
-            var response = SendRequest(request, _queryTimeoutMs);
-            _consecutiveFailures = 0;
-            if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                throw new Exception(response.Error.Message);
-            return response.Los.InLos;
+                    Los = new LineOfSightRequest
+                    {
+                        MapId = mapId,
+                        From = ToProto(from),
+                        To = ToProto(to)
+                    }
+                };
+                var response = SendRequest(request, _queryTimeoutMs);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    throw new Exception(response.Error.Message);
+                return response.Los.InLos;
+            }
+            catch (Exception ex)
+            {
+                NoteFailure("line-of-sight query", ex, "treating LOS as blocked until the service recovers.");
+                return false;
+            }
         }
 
         /// <summary>
@@ -252,6 +276,20 @@ namespace BotRunner.Clients
                 FallTime = 0,
                 GroundZ = -999999f, // Signal: no physics ground data
             };
+        }
+
+        private void NoteFailure(string operation, Exception ex, string terminalFallback)
+        {
+            _consecutiveFailures++;
+            if (_consecutiveFailures <= 3)
+            {
+                _logger?.LogWarning("PathfindingService {Operation} failed ({Count}): {Msg}",
+                    operation, _consecutiveFailures, ex.Message);
+            }
+            else if (_consecutiveFailures == 4)
+            {
+                _logger?.LogError("PathfindingService unreachable — {Fallback}", terminalFallback);
+            }
         }
         /// <summary>
         /// Check whether the segment (from → to) intersects any registered dynamic object

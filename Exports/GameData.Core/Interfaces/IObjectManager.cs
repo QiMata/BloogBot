@@ -184,6 +184,8 @@ namespace GameData.Core.Interfaces
         bool PhysicsHitWall => false;
         (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
         float PhysicsBlockedFraction => 1.0f;
+        bool HadRecentMeleeRangeRejection(ulong targetGuid) => false;
+        bool HadRecentMeleeFacingRejection(ulong targetGuid) => false;
         bool IsSpellReady(string spellName);
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);

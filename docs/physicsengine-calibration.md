@@ -88,6 +88,7 @@ If steps 1-3 are skipped, calibration work will likely repeat failed attempts.
 - Do not let step-up persistence re-promote a pre-refinement overhead surface after replay-ground refinement has already clamped back to the captured floor.
 - Do not run multiple simultaneous hypotheses in one test pass.
 - Do not recalibrate by re-scanning unrelated systems (MovementController/task-wide state) for this stream.
+- Do not reuse the first RFC / Un'Goro "wall" regression coordinates as-is; current map data reports open space there, so they do not exercise grounded wall-slide behavior.
 
 ## Recommended Next Single Hypothesis
 
@@ -267,3 +268,443 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Frame-pattern note:
   - The grounded movement slice stayed green after replacing the half-step overlap with the swept branch the binary actually uses.
   - The persistent live issue is still not broad floor-loss in native physics; it remains higher-level route/follow precision plus the later BG execution stall.
+
+## 2026-03-24 Ground Wall Response Addendum
+
+- Scope note:
+  - This pass targeted the next grounded runtime heuristic after the half-step sweep correction: the manual wall pushback branch inside `CollisionStepWoW`.
+  - Fresh decomp notes still point at the original client's `SlideAlongNormal` contact-plane projection path instead of the old `endX/endY += normal * skin` shove we still had in native physics.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` now resets per-frame wall outputs before collision resolution instead of carrying stale values across calls
+    - non-walkable grounded contacts are now ordered and deduplicated, then the requested XY move is projected across those blocking planes to resolve wall response
+    - `wallBlockedFraction` is now emitted from resolved-vs-requested XY distance, and grounded support is re-queried at the post-slide XY instead of after an ad-hoc normal push
+  - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+    - added `ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits` to pin that a known walkable slope route keeps full progress and does not emit bogus wall hits after the wall-response rewrite
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits" --logger "console;verbosity=normal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=normal"`
+    - passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=normal"`
+    - passed
+- Frame-pattern note:
+  - The Valley of Trials slope route continued moving with `wallFrames=0`, `minBlockedFraction>0.99`, and `totalTravel>10y`, so the new grounded wall branch did not introduce false-positive blocking on known walkable terrain.
+  - Two first-pass wall fixtures that looked promising in notes (`Ragefire Chasm` corridor and an `Un'Goro` crater wall) did not produce any wall hits in current map data and should not be reused until their coordinates are refreshed against a live trace.
+- Recommended next single hypothesis:
+  - Keep this contact-plane projection branch intact and replace only the remaining grounded wall/corner ordering heuristics with the exact multi-plane `SlideAlongNormal` sequence from the client, using a verified real wall trace rather than the stale RFC / Un'Goro coordinates.
+
+## 2026-03-24 Ground Sweep Clamp Removal Addendum
+
+- Scope note:
+  - This pass targeted the last leftover grounded wall-response owner inside `CollisionStepWoW` after the contact-plane projection rewrite.
+  - Runtime review showed the function was still pre-clamping `endX/endY` from full-sweep contacts before the later slide path ran, which left two competing grounded wall-resolution branches in the same frame.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - removed the old full-sweep `wallDist = max(0, distance - skin)` XY clamp branch from grounded `CollisionStepWoW`
+    - the initial sweep now gathers contacts only; all grounded wall response is resolved by the later contact-plane slide path instead of a separate pre-clamp heuristic
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit `LNK1104` on `Navigation.dll`; a repo-scoped process scan showed only the active MSBuild process; reran once the lock cleared and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The Valley of Trials slope route remained clear of false wall hits after removing the redundant sweep clamp, so the remaining gap is still exact `SlideAlongNormal` ordering rather than a need for a second grounded shove/clamp branch.
+  - A Stormwind candidate that looked like a wall-block repro in first-pass notes is currently a ledge/fall route in map data and should not be promoted into a wall-parity fixture.
+- Recommended next single hypothesis:
+  - Keep the single-owner grounded wall path and replace the remaining contact ordering / multi-plane corner behavior with the verified client `SlideAlongNormal` sequence, backed by a refreshed real wall trace on terrain, WMO, or a dynamic object.
+
+## 2026-03-24 Ground Slide Contact-Dedupe Removal Addendum
+
+- Scope note:
+  - This pass targeted the next clearly non-verbatim grounded wall/corner heuristic inside `CollisionStepWoW`: the near-parallel normal dedupe inside the ordered contact-plane slide branch.
+  - The binary-backed goal remains the same single-owner `SlideAlongNormal` flow, but the current code was still discarding later contact planes whenever `existing.dot(normal) > 0.999f`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` no longer removes later non-walkable contacts just because their normals are almost aligned with an earlier plane
+    - ordered non-walkable contacts now all participate in sequential slide projection, which keeps more corner constraints alive while the remaining ordering heuristics are still being reduced
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit `LNK1104` on `Navigation.dll`; `Get-Process` module scan showed repo `PathfindingService.exe` PID `16488` had the DLL loaded; stopped only that PID; reran and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Fixture-search note:
+  - Broad current-data `SweepCapsule` probes around Goldshire Inn/Town, Northshire Abbey, and Stormwind Stockade did not produce real non-walkable hits.
+  - Do not promote those coordinates into wall regressions unless a refreshed live trace proves they now exercise terrain/WMO/dynamic-object blocking.
+- Recommended next single hypothesis:
+  - Keep removing one remaining grounded ordering heuristic at a time, but do not guess at wall coordinates; refresh a real terrain/WMO/dynamic-object wall trace first, then continue replacing the contact-ordering shortcuts toward the client’s full `SlideAlongNormal` sequence.
+
+## 2026-03-24 Ground Slide Contact-Sort Removal + Replay Fixture Addendum
+
+- Scope note:
+  - This pass targeted the next explicit grounded wall/corner heuristic after the near-parallel dedupe removal: the custom non-walkable contact sort inside `CollisionStepWoW`.
+  - A local `WoW.exe` spot-check also closed a stale decomp note: `0x637330` is the vec3-negation helper used after `TestTerrain`, not the unresolved grounded slide helper.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` no longer re-ranks non-walkable contacts by custom distance / depth / horizontal-normal heuristics before sequential plane projection
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+    - added `DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`, which pins a real recorded Durotar wall-slide window and asserts the replay keeps sustained 60°+ deflection with tight spatial error
+  - `docs/physics/wow_exe_decompilation.md`
+    - corrected the `0x637330` note to `Vec3Negate`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.ComplexMixed_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The Durotar replay wall-slide window stayed spatially tight after the sort removal, so that custom re-ranking heuristic was not required to preserve the recorded deflection behavior.
+  - The open gap remained the provenance of the grounded query volume and the unresolved post-`TestTerrain` wall helper, not the old per-contact ranking.
+- Recommended next single hypothesis:
+  - Recheck the local binary around the full-step / half-step branch directly before changing slide behavior again; confirm whether the client is actually accumulating sweep contacts there or only widening the eventual `TestTerrain` volume.
+
+## 2026-03-24 Ground Query-Volume Merge Addendum
+
+- Scope note:
+  - This pass targeted the next grounded mismatch after the contact-sort removal by re-reading `CMovement::CollisionStep (0x633C7B..0x633E76)` in the local vanilla client.
+  - The new binary read closed another stale assumption: `0x6373B0` is an AABB merge helper, not `CWorldCollision::Collide`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` no longer accumulates full-step and half-step `SweepAABB` contacts into the wall/support query path
+    - it now unions the start box, full-step box, and contracted half-step box, then runs `TestTerrainAABB(...)` on that merged volume before custom slide projection
+    - post-slide support now comes only from the final resolved AABB query instead of re-appending earlier half-step contacts
+  - `docs/physics/wow_exe_decompilation.md`
+    - corrected the grounded/falling/swimming notes so `0x6373B0` is tracked as `AABB::Merge`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit `LNK1104` on `Navigation.dll`; reran once the transient lock cleared and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The Durotar replay wall-slide window and the Stormwind blocked-wall fixture both stayed green after replacing synthetic sweep-contact accumulation with the merged query volume, so the old sweep-contact provenance was not required to preserve those known behaviors.
+  - The remaining native gap is now narrower and better defined: the exact grounded post-`TestTerrain` wall/corner resolution sequence is still unresolved, but the query-volume builder preceding it now matches the local disassembly more closely.
+- Recommended next single hypothesis:
+  - Keep `0x6373B0` closed as `AABB::Merge`, then isolate the real post-`TestTerrain` grounded wall helper from the binary before replacing any more of the custom contact-plane projection logic.
+
+## 2026-03-24 Ground Blocker-Axis Merge Addendum
+
+- Scope note:
+  - This pass targeted the next grounded mismatch after the merged query-volume rewrite: `CollisionStepWoW` was still resolving wall response by projecting directly across raw non-walkable triangle normals from `TestTerrainAABB(...)`.
+  - Fresh local disassembly of the grounded helper chain (`0x6367B0` calling `0x636610`) points at a small merged blocker-axis set after `TestTerrain`, not an ordered loop over every raw triangle plane.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` now derives dominant opposing cardinal blocker axes from the merged `TestTerrainAABB(...)` contact set instead of projecting directly across raw triangle normals
+    - blocker axes are merged with the same `1 / 2 / 3+` rules visible in the local `0x636610` helper before the slide tangent is computed
+    - when the merged blocker collapses travel into a near-zero tangent, the stateless fallback now uses the strongest single blocker axis instead of stopping dead on a synthetic diagonal wedge
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Do Not Repeat:
+  - Do not orient blocker axes purely from current movement direction whenever a non-walkable contact has any horizontal component. That version created widespread false wall hits and collapsed `MovementControllerPhysics` speeds to `0.77 y/s` on flat terrain and `3.19 y/s` on the live-speed route.
+  - Do not let one diagonal non-walkable contact emit both cardinal blocker axes by default. That over-constrained oblique walls into synthetic corner wedges and kept `Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` below gate until the dominant-axis filter and strongest-axis fallback were restored.
+- Frame-pattern note:
+  - The replay wall-slide, blocked-wall, slope, and movement-controller slices stayed green after replacing raw triangle-plane projection with merged blocker axes, so the current stateless path is closer to the binary’s post-`TestTerrain` shape without reopening the old false-wall regressions.
+  - The grounded branch is still not verbatim `WoW.exe`: the exact remaining-distance loop in `0x6367B0` plus the `0x635C00` / `0x635D80` helper effects are still unresolved.
+- Recommended next single hypothesis:
+  - Keep the blocker-axis merge, but replace the remaining one-shot wall-resolution bookkeeping with the grounded helper’s actual loop/remaining-distance sequence from `0x6367B0` instead of adding more fallback heuristics.
+## 2026-03-25 Grounded Remaining-Move Retry Attempt
+
+- Scope note:
+  - This pass targeted the open `0x6367B0` bookkeeping gap by retrying grounded wall resolution once with the remaining move vector instead of resolving the frame in a single blocker-axis projection.
+- Behavioral change attempted:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` was changed to run a two-iteration remaining-move loop over the merged blocker-axis resolver
+    - the first blocker normal was kept for reporting, while the second pass attempted to project the already-slid move again to approximate the unresolved post-`TestTerrain` retry sequence
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.UndercityGroundProbe_WMOFloorDetected|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - failed: `MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` dropped to `3.26 y/s` (gate `>= 3.5 y/s`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Do Not Repeat:
+  - Do not add a blind second grounded blocker-axis projection pass over the already-slid move while reusing the same merged `TestTerrainAABB(...)` contact set. That over-constrained the live-speed route and dropped `Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` to `3.26 y/s`, which is materially worse than the pre-change baseline.
+- Recommended next single hypothesis:
+  - Revert this retry loop. If `0x6367B0` bookkeeping is revisited again, it needs new binary evidence for how remaining distance is updated, not another stateless reprojection pass over the same blocker set.
+
+## 2026-03-25 Distinct Secondary Blocker Axes + Verified Wall Fixtures
+
+- Scope note:
+  - This pass reopened grounded blocker-axis heuristics only after replacing the stale wall-coordinate assumptions with replay-backed fixtures on terrain, WMO, and dynamic-object geometry.
+  - The old Stormwind Stockade and RFC coordinate probes remain diagnostics only; they are no longer treated as wall-parity evidence.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `buildMergedBlockerNormal(...)` still keeps the best opposing blocker axis as primary, but it no longer discards later distinct blocker axes with the `candidate.score + 0.1 < bestScore` heuristic
+    - the primary axis is inserted first, then the remaining unique axes stay available to the existing `1 / 2 / 3+` merge rules and strongest-axis fallback
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+    - added `BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls`, which proves repeated zero-step stalls against static Blackrock Spire interior geometry with no nearby blocking GO within parity range
+    - added `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`, which proves the packet-backed Undercity elevator ride still clamps forward travel against the upper door while on the moving transport
+  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
+    - added `Recordings.BlackrockSpire` so the WMO blocker fixture is tracked in the canonical recording set instead of by ad-hoc filename string
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded once the lock cleared
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - Verified replay-backed wall fixtures now exist for all three blocker classes needed by the parity backlog: terrain (`DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`), WMO (`BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls`), and dynamic-object (`PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`).
+  - The `score + 0.1` secondary-axis filter was not required to keep those fixtures, the slope false-wall guard, `MovementControllerPhysics`, or the aggregate replay gate green.
+  - The grounded branch is still not verbatim `WoW.exe`; the remaining unresolved native work is the full post-`TestTerrain` `0x6367B0` loop plus the `0x635C00` / `0x635D80` helper bookkeeping.
+- Recommended next single hypothesis:
+  - Keep the new replay-backed wall fixtures in the focused slice and reduce the remaining one-shot `resolveWallSlide(...)` bookkeeping only when the next change is backed by fresh binary evidence from `0x6367B0`, not by another synthetic remaining-move retry.
+
+## 2026-03-25 Three-Axis Blocker Merge Zeroes Output
+
+- Scope note:
+  - This pass targeted one specific unresolved `0x636610` merge rule inside the grounded `0x6367B0` helper chain after the verified terrain/WMO/dynamic wall fixtures were in place.
+  - Fresh local `WoW.exe` disassembly showed that one jump-table case in `0x636610` explicitly zeroes the merged blocker vector instead of selecting a surviving axis.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `buildMergedBlockerNormal(...)` now returns `(0, 0, 0)` for the three-axis blocker case instead of falling through to the first surviving axis
+    - the existing strongest-axis fallback in `resolveWallSlide(...)` remains responsible for keeping travel from collapsing when the merged blocker vector is zero
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded once the lock cleared
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The packet-backed Undercity door clamp, the Blackrock Spire WMO stalls, the Durotar terrain deflection replay, `MovementControllerPhysics`, and the aggregate drift gate all stayed green with the binary-backed three-axis zero rule in place.
+  - This closes one real `0x636610` mapping detail, but the grounded path is still not verbatim `WoW.exe`; the remaining unresolved native work is the exact `0x6367B0` loop plus the `0x635C00` / `0x635D80` bookkeeping around the merged blocker result.
+- Recommended next single hypothesis:
+  - Isolate the still-open `0x635C00` / `0x635D80` effects from the grounded helper chain before changing any more of `resolveWallSlide(...)`; the next reduction should come from those helpers, not another guessed retry rule.
+
+## 2026-03-25 Three-Axis Minority-Axis Selection + Four-Axis Zero
+
+- Scope note:
+  - This pass corrected the remaining `0x636610` jump-table mapping after re-reading the helper more carefully in the local `WoW.exe`.
+  - The earlier same-day three-axis zero change held the current replay slice, but the disassembly showed it was still incomplete: the zero-output case belongs to four axes, while the three-axis case chooses the lone axis from the minority orientation group.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `buildMergedBlockerNormal(...)` now matches the local `0x636610` jump table more closely:
+      - `1` blocker axis: copy it through
+      - `2` blocker axes: keep the existing merged two-axis path
+      - `3` blocker axes: choose the lone X-axis against two Y-axes, or the lone Y-axis against two X-axes
+      - `4` blocker axes: zero the merged blocker vector
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded once the lock cleared
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The replay-backed Durotar terrain deflection, Blackrock Spire WMO stalls, packet-backed Undercity elevator door block, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate all stayed green with the corrected three-axis / four-axis mapping.
+  - The open native gap is narrower again: the merged blocker selector is closer to the real helper, but the actual post-merge bookkeeping in `0x635C00`, `0x635D80`, and the surrounding `0x6367B0` loop is still not reduced to the binary.
+- Recommended next single hypothesis:
+  - Use the now-correct `0x636610` mapping as fixed input and isolate one concrete `0x635C00` or `0x635D80` effect next, rather than editing blocker-axis selection again.
+
+## 2026-03-25 Horizontal Epsilon Pushout From 0x635D80
+
+- Scope note:
+  - This pass targeted the smallest remaining `0x635D80` effect that could be mapped cleanly into the current stateless slide path after the `0x636610` selector was corrected.
+  - Fresh local disassembly shows `0x635D80` adding the `0.001f` constant at `0x801360` after the horizontal blocker correction is computed, so the resolved move is nudged slightly off the blocker plane.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` now adds a `0.001f` pushout along the horizontal blocker normal immediately after the client-style normal projection, instead of leaving the resolved move exactly on the blocker plane
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded once the lock cleared
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green with the binary-backed `0.001f` horizontal pushout in place.
+  - The remaining native gap is now centered on the vertical/post-merge bookkeeping that `0x635C00` and `0x636100` still apply around the merged blocker result, not on the blocker selector or horizontal epsilon.
+- Recommended next single hypothesis:
+  - Keep the `0x635D80` epsilon pushout and isolate the vertical correction coming out of `0x635C00` next; that is the most obvious remaining client effect the stateless wall slide still lacks.
+
+## 2026-03-25 Selected-Plane Z Correction With Radius Clamp
+
+- Scope note:
+  - This pass targeted the next explicit client effect still missing from the stateless grounded slide path: `0x635C00` emits a Z-only correction from the selected contact plane and clamps that correction against the unit bounding radius by scaling the in-flight distance.
+  - The earlier grounded rewrite was still treating wall resolution as XY-only after the merged blocker selector, which meant the client’s per-plane vertical correction was being thrown away completely.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `buildMergedBlockerNormal(...)` now keeps the actual source normal for the primary opposing blocker contact alongside the merged blocker axis
+    - grounded `resolveWallSlide(...)` now derives a Z-only correction from that selected contact plane, clamps its magnitude to `radius`, and scales the XY move by the same ratio when the correction would exceed the radius cap
+    - the final grounded `GetGroundZ(...)` query now uses the clamped predicted support Z from that correction instead of always querying from the original `startZ`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - first attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded once the lock cleared
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green with the selected-plane vertical correction and radius clamp in place.
+  - This removes one more clear stateless shortcut, but the grounded path is still not verbatim `WoW.exe`: the unresolved work is now concentrated in the `0x636100` branch/retry path and the special `0x635C00` merged-vector substitution when the selected plane is effectively flat.
+- Recommended next single hypothesis:
+  - Keep the selected-plane Z correction and isolate the `0x636100` return-code `2` retry path next; that is the remaining place where the client still mutates distance/flags around `0x635C00` in a way the stateless path does not.
+
+## 2026-03-25 Mutually Exclusive 0x636100 Helper Branch Selection
+
+- Scope note:
+  - This pass targeted the remaining ambiguity around `0x636100`: the local helper chain shows it gating either the `0x635D80` horizontal correction branch or the alternate `0x635C00` selected-plane branch with extra bookkeeping, not stacking both outputs unconditionally.
+  - The stateless grounded slide was still blending those effects by always doing the horizontal blocker projection and then layering a selected-plane Z correction on top whenever the primary contact carried slope.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` now treats the `0x635D80`-style horizontal correction and the `0x635C00` selected-plane projection as mutually exclusive branches
+    - near-vertical selected planes still use the horizontal blocker projection plus the `0.001f` pushout
+    - sloped selected planes now project the requested move directly onto that selected contact plane and keep the existing radius clamp on the resulting Z correction, without also applying the horizontal epsilon branch
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+    - retargeted `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock` to the promoted packet-backed elevator fixture’s real stalled window (`frames 11..19`) instead of the earlier debugging capture’s frame range
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded on the clean rerun after ignoring one earlier build/test overlap that raced `Navigation.dll`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green with the helper choice split in place.
+  - This removes another stacked stateless shortcut, but the grounded path is still not verbatim `WoW.exe`: the remaining native gap is now concentrated in the `0x636100` return-code / distance-pointer bookkeeping and the surrounding `0x6367B0` branch sequencing rather than the blocker merge or the plain helper outputs themselves.
+- Recommended next single hypothesis:
+  - Keep the mutually exclusive helper split and isolate the `0x636100` return-code / movement-fraction mutation next; do not revisit blocker-axis merge rules or the reverted two-pass retry loop without new binary evidence.
+
+## 2026-03-25 Horizontal Branch Gate For Synthetic Uphill Plane Corrections
+
+- Scope note:
+  - This pass targeted the still-open `0x636100` gate by using the Durotar live-speed route as a concrete grounded symptom instead of treating the remaining native mismatch as wall-only.
+  - The current stateless selected-plane branch could still manufacture uphill corrections on a walkable route, which then fed repeated `FALLINGFAR -> FALL_LAND` churn in the live forced-turn Durotar capture.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `resolveWallSlide(...)` now always computes the pure horizontal `0x635D80`-style correction first
+    - when the alternate selected-plane branch would create a positive `Z` correction while also reducing horizontal travel versus that horizontal branch, the resolver now keeps the horizontal result instead of accepting the synthetic uphill plane correction
+  - `Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs`
+    - strengthened `Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` so the exact Durotar route must now stay fully grounded (`FALLINGFAR == 0`) in addition to meeting the speed gate
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed" --logger \"console;verbosity=minimal\"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger \"console;verbosity=minimal\"`
+    - passed (`1/1`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger \"console;verbosity=minimal\"`
+    - passed with a restarted `PathfindingService` so BG loaded the rebuilt `Navigation.dll`
+- Frame-pattern note:
+  - The deterministic Durotar live-speed route now stays grounded through all `400` frames while still running at `6.49 y/s`; the earlier `FALLINGFAR` churn on that exact route is gone in the fast harness.
+  - Fresh live FG/BG evidence improved materially once the rebuilt DLL was actually loaded: BG outbound `MSG_MOVE_FALL_LAND` on the forced-turn Durotar route dropped from `11` to `4`, and BG again emitted a true `MSG_MOVE_STOP` near the route tail.
+  - The remaining native mismatch is now narrower and no longer centered on `HitWall`: the live BG `physics_TESTBOT2.csv` trace still shows upper-surface `GetGroundZ(...)` picks with `HitWall=0` (for example `38.49 -> 40.676` near the route start), which then feed the remaining false landing cycles.
+- Recommended next single hypothesis:
+  - Keep the new `0x636100` gate and target the final grounded support probe next: reduce the `GetGroundZ(...)` start-height/search window in `CollisionStepWoW` so the route stops selecting upper terrain shelves when `HitWall=0`.
+
+## 2026-03-25 Final-Box Support Contact Seed For Ground Query
+
+- Scope note:
+  - This pass targeted the remaining `HitWall=0` shelf snap on the live forced-turn Durotar route by changing only the final grounded `GetGroundZ(...)` seed in `CollisionStepWoW`.
+  - Instead of always querying from `predictedSupportZ + stepH + stepUp`, the grounded path now seeded `GetGroundZ(...)` from the walkable final-box AABB support contact nearest `predictedSupportZ`, plus a tiny epsilon.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` now seeds the final `GetGroundZ(...)` call from the final-box walkable support contact closest to `predictedSupportZ` instead of the old fixed high-only start height
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - passed with a restarted `PathfindingService`
+- Frame-pattern note:
+  - The deterministic Durotar live-speed route stayed green (`Speed: 6.49 y/s`, `FALLINGFAR: 0/400`, `minZ: 32.4`), so the lower seed did not reopen the native replay/controller slice.
+  - The live forced-turn Durotar route still snapped to the same upper shelf on the opening segment: BG `physics_TESTBOT2.csv` moved from `38.490` to `40.626/40.677` at frames `652..653` with `HitWall=0`, then resumed the false `FALLINGFAR -> FALL_LAND` cycle. BG outbound packets remained `MSG_MOVE_SET_FACING`, `MSG_MOVE_START_FORWARD`, `16x MSG_MOVE_HEARTBEAT`, `3x MSG_MOVE_FALL_LAND`, and no `MSG_MOVE_STOP`.
+  - Practical takeaway: the final-box walkable support contact can already be on the wrong shelf, so seeding the final `GetGroundZ(...)` call from that contact does not disambiguate multi-level terrain.
+- Do-not-repeat note:
+  - Do not assume the final grounded AABB support contact is trustworthy enough to seed `GetGroundZ(...)` on multi-level terrain; the live Durotar shelf snap still reproduced with `HitWall=0`.
+- Recommended next single hypothesis:
+  - Keep the live Durotar trace as the proof fixture, but query `GetGroundZ(...)` directly from the predicted support height itself (`predictedSupportZ + epsilon`) instead of any high-only or contact-derived seed.
+
+## 2026-03-25 Direct Predicted-Support Ground Query
+
+- Scope note:
+  - This follow-up targeted the same live Durotar shelf snap, but removed the final-box support-contact seed entirely.
+  - The final grounded `GetGroundZ(...)` call was queried directly from `predictedSupportZ + epsilon` so the support pick stayed anchored to the predicted support height instead of any elevated seed.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` now seeds the final `GetGroundZ(...)` call from `predictedSupportZ + COLLISION_SKIN_EPSILON`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - failed; BG regressed to immediate false descent and packet-order mismatch on a restarted `PathfindingService`
+- Frame-pattern note:
+  - The native replay/controller slice stayed green, so this lower query seed does not immediately trip the deterministic native proof gates.
+  - The live Durotar turn-start route regressed hard: BG dropped from `38.49` to `36.18` on the first moving frame, then continued into repeated false descents (`32.77 -> 21.42 -> 24.46 -> 35.05 ...`) with `HitWall=0`.
+  - Packet evidence regressed at the start edge too: the parity assertion saw `MSG_MOVE_FALL_LAND` where the expected opening packet at that comparison point was `MSG_MOVE_SET_FACING`.
+  - Practical takeaway: a pure `predictedSupportZ + epsilon` seed is too low for this multi-level terrain. The correct support surface sits above the low selected surface but below the old upper shelf.
+- Do-not-repeat note:
+  - Do not seed the final grounded `GetGroundZ(...)` query directly from `predictedSupportZ + epsilon` on this path; it promotes the lower `36.18` surface and drives immediate false descent.
+- Recommended next single hypothesis:
+  - Keep the lower/higher failure pair as the new constraint and seed the final grounded `GetGroundZ(...)` call from the mid-height window: `predictedSupportZ + stepUp + epsilon`, not `+epsilon` and not `+stepH + stepUp`.
+
+## 2026-03-25 Mid-Height Ground Query (`predictedSupportZ + stepUp + epsilon`)
+
+- Scope note:
+  - This pass targeted the same multi-level Durotar shelf snap using the constraint learned from the failed low-query run: the support seed must stay above the low `36.18` surface but below the old high-only shelf promotion path.
+  - The final grounded `GetGroundZ(...)` call was seeded from `predictedSupportZ + stepUp + epsilon`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` now seeds the final `GetGroundZ(...)` call from `predictedSupportZ + stepUp + COLLISION_SKIN_EPSILON`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - passed with a restarted `PathfindingService`
+- Frame-pattern note:
+  - The live route returned to the pre-regression packet pattern: BG outbound packets were `MSG_MOVE_SET_FACING`, `MSG_MOVE_START_FORWARD`, `15x MSG_MOVE_HEARTBEAT`, `3x MSG_MOVE_FALL_LAND`, and `1x MSG_MOVE_STOP`.
+  - The opening multi-level support error still remained. BG `physics_TESTBOT2.csv` climbed from `38.490` to `40.626/40.677` at frames `644..645`, stayed on the upper shelf for `15` frames, then settled back onto the road at frame `659`.
+  - Practical takeaway: tuning only the center-point `GetGroundZ(...)` seed is not enough. The grounded final snap still picks the wrong support surface at this XY even when the query height is constrained into the middle window.
+- Do-not-repeat note:
+  - Do not spend more time on center-point `GetGroundZ(...)` seed-height tuning alone for this Durotar fixture. High-only, contact-seeded, low-only, and mid-height seeds have now all been exercised without removing the opening false shelf.
+- Recommended next single hypothesis:
+  - Replace the final grounded center-point support lookup with `SceneQuery::GetCapsuleSupportZ(...)` so the final grounded snap is chosen from the capsule footprint rather than a single center sample on multi-level terrain.
+
+## 2026-03-25 Capsule-Footprint Final Support Probe
+
+- Scope note:
+  - This pass replaced the final grounded center-point support lookup with the existing capsule-footprint helper in an attempt to eliminate the opening false upper-shelf pick on the live Durotar route.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - grounded `CollisionStepWoW` now called `SceneQuery::GetCapsuleSupportZ(...)` for the final support pick, with center-point `GetGroundZ(...)` as fallback
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed" --logger "console;verbosity=minimal"`
+    - failed `ServerMovementValidationTests.GroundMovement_Position_NotUnderground`
+- Frame-pattern note:
+  - The footprint-based final support probe reopened a native regression immediately: `GroundMovement_Position_NotUnderground` reported `124/24333` grounded frames more than `0.5y` below engine ground Z (`0.51%` underground rate), with the worst new failures on the Durotar recordings.
+  - Because the native underground gate failed, this pass was reverted before any new live BG evidence was accepted.
+- Do-not-repeat note:
+  - Do not replace the final grounded support lookup wholesale with `GetCapsuleSupportZ(...)`; the helper is too aggressive as a global primary support source and reopens the underground regression gate.
+- Recommended next single hypothesis:
+  - Keep the reverted mid-height center query as the stable baseline. The next support fix must be narrower than a full footprint-probe swap, likely a conditional multi-level disambiguation path that only activates when the center query promotes an upper shelf.

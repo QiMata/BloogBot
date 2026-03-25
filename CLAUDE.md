@@ -172,26 +172,6 @@ When working on any phase or task from `docs/TASKS.md`:
 
 ## Session Continuity — Single Session, Auto-Compact
 
-<<<<<<< HEAD
-Before completing ANY session, update the active task files directly:
-
-1. `docs/TASKS.md` (master handoff section)
-2. Each impacted directory-local `TASKS.md`
-3. Relevant `TASKS_ARCHIVE.md` files for completed items
-
-### Required Handoff Fields
-
-Every session handoff update must include:
-1. What was completed
-2. Exact commands run and outcomes
-3. Snapshot/log/command-response evidence when applicable
-4. Files changed
-5. The very next command/task to run
-
-### Completion
-
-When all tracked work is complete, mark completion in `docs/TASKS.md` handoff section rather than creating separate prompt files.
-=======
 **CRITICAL: Use ONE continuous session.** Do not start new sessions to run tests, investigate issues, or continue work. A single session auto-compacts (context compression) as it approaches limits and seamlessly continues. Starting a new session loses all in-flight context, creates confusion, and risks regressions.
 
 **Rules:**
@@ -207,7 +187,6 @@ Update `docs/TASKS.md` Session Handoff section with:
 2. Exact commands run and outcomes
 3. Files changed
 4. The very next command/task to run
->>>>>>> cpp_physics_system
 
 ### Important
 

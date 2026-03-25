@@ -547,27 +547,44 @@ namespace WoWSharpClient.Client
 
         private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
         {
+            ClearRejectedLocalAutoAttack("not in range");
+            WoWSharpObjectManager.Instance.NoteMeleeRangeRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTINRANGE — server says player is out of melee range");
             _attackErrors.OnNext("Attack failed: Not in range.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
         {
+            ClearRejectedLocalAutoAttack("bad facing");
+            WoWSharpObjectManager.Instance.NoteMeleeFacingRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_BADFACING — server says player has wrong facing");
             _attackErrors.OnNext("Attack failed: Bad facing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
         {
+            ClearRejectedLocalAutoAttack("not standing");
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTSTANDING — server says player is not standing");
             _attackErrors.OnNext("Attack failed: Not standing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
         {
+            ClearRejectedLocalAutoAttack("dead target");
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_DEADTARGET — server says target is dead");
             _attackErrors.OnNext("Attack failed: Target is dead.");
             return Task.CompletedTask;
+        }
+
+        private static void ClearRejectedLocalAutoAttack(string reason)
+        {
+            WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart();
+            if (WoWSharpObjectManager.Instance.Player is Models.WoWLocalPlayer localPlayer &&
+                localPlayer.IsAutoAttacking)
+            {
+                localPlayer.IsAutoAttacking = false;
+                Log.Warning("[COMBAT] Cleared local IsAutoAttacking after rejected swing ({Reason})", reason);
+            }
         }
         private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
         {

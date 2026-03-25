@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## UI-MISS-001 (Completed)
 **Remove `NotImplementedException` path from `ConvertBack` and make converter direction explicit.**
@@ -29,4 +27,3 @@ Completed items moved from TASKS.md.
 - Replaced stale commands (`StateManagerUI.csproj`) with correct project name (`WoWStateManagerUI.csproj`).
 - Content: Quick Start (build/run/test commands), Ports table, Project Structure, Converter Binding Contract (all 3 converters with input/output/usage), Dependencies.
 - Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` -> 0 warnings, 0 errors.
->>>>>>> cpp_physics_system

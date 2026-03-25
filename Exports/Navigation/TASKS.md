@@ -1,77 +1,3 @@
-<<<<<<< HEAD
-﻿# Navigation Tasks
-
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Local scope: native movement and physics behavior parity.
-- Current priority: remove frame-by-frame interpolation drift impacting corpse/combat/gathering parity.
-
-## Purpose
-Track native physics/pathfinding tasks for WoW 1.12.1 behavior parity.
-
-## Initial Research Snapshot (2026-02-24)
-1. Corpse-run evidence shows BG no-displacement loops while movement intent is present.
-2. Interpolation drift can appear as repeated micro-steps or plateaus around turn/slope transitions.
-3. Managed dispatch cadence in `Exports/WoWSharpClient/Movement/MovementController.cs` must be tuned with native integration timing.
-
-## Active Priorities
-1. PhysicsEngine frame-by-frame interpolation
-- [ ] Refine interpolation in `Exports/Navigation/PhysicsEngine.cpp` to reduce jitter and zero-delta plateaus.
-- [ ] Validate frame integration across slope changes, near-obstacle turns, and stop-start transitions.
-- [ ] Add instrumentation for pre/post integration position and velocity deltas.
-
-2. MovementController coordination
-- [ ] Align `MovementController.cs` frame dispatch cadence to native interpolation expectations.
-- [ ] Ensure command dispatch timing does not create false stall detection in runback paths.
-- [ ] Validate packet/movement cadence parity against FG traces.
-
-3. Parity scenario support
-- [ ] Re-run corpse-run with Orgrimmar setup and verify no teleport-like movement shortcuts.
-- [ ] Support combat/gathering parity investigations with native movement diagnostics.
-- [ ] Add paired `research + implementation` tasks for every newly found movement divergence.
-
-## Canonical Commands
-1. Native physics calibration:
-- `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
-
-2. Corpse-run live validation:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-
-3. Repo-scoped cleanup:
-- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
-
-## Session Handoff
-- Last physics/parity run:
-- Native files changed:
-- Validation command used:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-
-## Archive
-Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
-=======
 # Navigation Tasks
 
 ## Scope
@@ -102,6 +28,12 @@ Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
 - Physics tests: 76/79 pass (3 pre-existing calibration failures).
 
 ## P0 Active Tasks (Ordered)
+
+### NAV-PAR-001 PhysicsEngine parity with original WoW.exe grounded movement
+- [ ] Replace the remaining grounded wall/corner heuristics in `PhysicsEngine.cpp::CollisionStepWoW` with the exact post-`TestTerrain` grounded wall/corner resolution sequence from the original client; `0x6373B0` is only the merged-AABB helper, and the still-open native work is the `0x6367B0` loop plus its `0x635C00` / `0x635D80` helper bookkeeping.
+- [ ] Audit the last grounded clamping or static-overlap shortcuts against current decomp notes and remove only the branches that still lack binary support.
+- [x] Build verified real wall regressions on terrain, WMO, and dynamic-object geometry. Replay-backed coverage now exists for Durotar terrain wall-slide deflection, Blackrock Spire static-WMO contact stalls, and the packet-backed Undercity elevator upper-door block; do not regress back to the stale RFC / Un'Goro / Stormwind coordinate probes.
+- [ ] Keep `MovementControllerPhysics` and the aggregate replay drift gate green after every native parity slice.
 
 ### NAV-MISS-001 Implement `OverlapCapsule` test export by routing to existing `SceneQuery` implementation
 - [x] Done (batch 12). Implemented `OverlapCapsule` export in `PhysicsTestExports.cpp`:
@@ -184,50 +116,42 @@ Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 72)
-- Active task: `NAV-OBJ-004` continue pushing local detour generation into native output, then feed Ratchet shoreline drift diagnostics back into live repros
-- Last delta: `PathFinder.cpp` now tries grounded lateral detour candidates around blocked segments before falling back to midpoint refinement, which moves more whole-route repair out of the service layer and into native output shaping. `SegmentWalkabilityTests.cs` now pins that behavior with a Ratchet dock fishing-approach route and a known obstructed direct-segment detour, while the full service and native suites still pass.
+- Last updated: 2026-03-25 (session 182)
+- Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
+- Last delta:
+  - Session 182 split the grounded `0x636100` helper choice in `PhysicsEngine.cpp`: `resolveWallSlide(...)` now treats the `0x635D80` horizontal correction and the `0x635C00` selected-plane projection as mutually exclusive branches instead of stacking both on sloped selected planes.
+  - Session 182 also retargeted `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock` to the promoted packet-backed elevator recording’s actual blocked window (`frames 11..19`) so the compact March 25 fixture remains the canonical upper-door regression.
+  - Session 182 held the replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate on the rebuilt native DLL.
+  - Session 180 shipped the missing selected-plane Z correction from the local `0x635C00` helper into `PhysicsEngine.cpp`: grounded wall resolution now carries a radius-clamped vertical correction from the primary blocker contact and uses that corrected support Z for the final `GetGroundZ(...)` query.
+  - Session 180 held the replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate on the rebuilt native DLL after one transient `LNK1104` retry.
+  - Session 179 shipped the smallest cleanly mapped `0x635D80` effect in `PhysicsEngine.cpp`: grounded wall resolution now adds the client’s `0.001f` horizontal pushout after the blocker-plane projection instead of leaving the resolved move exactly on the wall plane.
+  - Session 179 held the replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate on the rebuilt native DLL after one transient `LNK1104` retry.
+  - Session 178 corrected the grounded `0x636610` jump-table mapping in `PhysicsEngine.cpp`: the three-axis case now selects the lone axis from the minority orientation group, while the four-axis case zeroes the merged blocker vector.
+  - Session 178 held the replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate on the rebuilt native DLL after one transient `LNK1104` retry.
+  - Session 177 shipped one more binary-backed `0x636610` merge rule in `PhysicsEngine.cpp`: the grounded three-axis blocker case now zeroes the merged blocker vector instead of selecting the first surviving axis, matching the jump-table behavior seen in the local `WoW.exe` disassembly.
+  - Session 177 held the replay-backed terrain/WMO/dynamic wall fixtures, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate on the rebuilt native DLL, so the three-axis zero rule did not reopen the old false-wall or underground regressions.
+  - Session 176 removed the grounded `score + 0.1` secondary-axis filter from `buildMergedBlockerNormal(...)`. The best opposing blocker axis still stays primary, but later distinct blocker axes now remain available to the existing `1 / 2 / 3+` merge path instead of being dropped by score threshold.
+  - Session 176 also closed the stale wall-fixture blocker for the native parity loop: `PhysicsReplayTests` now has replay-backed terrain (`DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`), WMO (`BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls`), and dynamic-object (`PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`) wall regressions.
+  - Session 175 attempted the next `0x6367B0` hypothesis by retrying grounded wall resolution once with the already-slid move, but that regressed `MovementControllerPhysicsTests.Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` to `3.26 y/s`; the change was reverted and recorded in `docs/physicsengine-calibration.md` as do-not-repeat.
+  - Session 171 removed the remaining custom grounded wall-contact sort, added replay-backed regression `PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`, and corrected the local decomp note that `0x637330` is the vec3-negation helper rather than the grounded slide routine.
+  - Session 172 corrected `0x6373B0` from “Collide” to the merged-AABB helper and updated grounded `CollisionStepWoW` so the wall query now uses the merged start/full/half-step `TestTerrainAABB` volume instead of accumulating synthetic full-step and half-step `SweepAABB` contacts.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `7 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `104 passed, 1 skipped`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `35 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
 - Files changed:
-  - `Exports/Navigation/PathFinder.cpp`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
   - `Exports/Navigation/TASKS.md`
-  - `Services/PathfindingService/TASKS.md`
-  - `Services/PathfindingService/README.md`
-  - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
-- Blockers: the returned route is stronger, but the remaining Ratchet fishing failures can still be route-shape or runtime-execution drift. The next slice needs shoreline-focused request/response logging so live failures can be attributed to bad native output versus movement/collide-slide drift after the path is returned.
->>>>>>> cpp_physics_system
-
-## 2026-03-23 Session Note
-- Pass result: `delta shipped`
-- Local delta: transport replay parity now survives elevator disembark without latching onto the wrong upper WMO surface; replay reset paths also restore `StepUpBaseZ`/`FallStartZ` sentinels on transport and teleport skips.
-- Validation:
-  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed"` -> `2 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=detailed"` -> passed (`avg=0.0124y`, `p99=0.1279y`, `worst=2.2577y`)
-- Files changed:
-  - `Exports/Navigation/PhysicsEngine.cpp`
-  - `Exports/Navigation/SceneQuery.cpp`
-- Next command: `Get-Content Exports/Navigation/PhysicsMovement.cpp | Select-Object -First 260`
-
-## 2026-03-23 Session Note (swim parity)
-- Pass result: `delta shipped`
-- Local delta: the native swim path no longer free-integrates through submerged terrain. `PhysicsMovement.cpp` now resolves swim motion against geometry with two half-step submerged collision substeps keyed off the WoW.exe `0.5f` swim constant (`VA 0x007FFA24`), and `PhysicsEngine.cpp` now carries water-entry damping into the output velocity on the entry frame.
-- Validation:
-  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.DurotarRecording_WaterEntry_DampsHorizontalVelocity|FullyQualifiedName~FrameByFramePhysicsTests.DurotarSwimDescent_SeabedCollisionPreventsTerrainPenetration|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" -v n` -> `3 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~MovementControllerPhysics" -v n` -> `29 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" -v n` -> passed
-- Files changed:
-  - `Exports/Navigation/PhysicsEngine.cpp`
-  - `Exports/Navigation/PhysicsMovement.cpp`
-- Next command: `Get-Content Exports/WoWSharpClient/OpCodeDispatcher.cs | Select-Object -First 260`
+- Next command: `rg -n "0x636100|return-code `2`|04000000|distance pointer|movement fraction|0x6367B0" docs/physicsengine-calibration.md docs/physics/wow_exe_decompilation.md Exports/Navigation/PhysicsEngine.cpp`
+- Blockers:
+  - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current stateless path now uses merged blocker-axis resolution on top of the correct merged query volume, but it still lacks the real `0x6367B0` remaining-distance loop plus the `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
+  - Do not reintroduce the reverted two-pass remaining-move reprojection loop without new binary evidence; it is now a documented regression.
+  - `0x6373B0` is closed as the merged-AABB helper; do not spend more time treating it as the missing collision/slide routine.
+  - Verified replay-backed wall fixtures now exist, so the next native pass should use those fixtures instead of the stale Stormwind / RFC / Un'Goro coordinate probes.
+  - Managed `MovementController` cadence and ownership parity still need a focused audit once the native grounded wall path is reduced to the client’s real post-query sequence.

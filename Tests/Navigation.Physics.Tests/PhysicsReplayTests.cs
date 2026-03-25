@@ -40,6 +40,13 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         AssertPrecision(result, Tolerances.AvgPosition, Tolerances.P99Position);
     }
 
+    [Fact]
+    public void PacketBackedFlatRun_FrameByFrame_PositionMatchesRecording()
+    {
+        var result = ReplayAndAssert(Recordings.PacketBackedDurotarFlatRun);
+        AssertPrecision(result, Tolerances.AvgPosition, Tolerances.P99Position);
+    }
+
     // ==========================================================================
     // JUMPS AND AIRBORNE
     // ==========================================================================
@@ -80,6 +87,80 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         AssertPrecision(result, Tolerances.AvgPosition, Tolerances.P99Position);
     }
 
+    [Fact]
+    public void DurotarWallSlideWindow_ReplayPreservesRecordedDeflection()
+    {
+        var result = _fixture.ReplayCache.GetOrReplay(Recordings.DurotarMixedMovement, _output, _fixture.IsInitialized);
+        if (result.FrameCount == 0) return;
+
+        var recording = LoadByFilename(Recordings.DurotarMixedMovement, _output);
+        const int startFrame = 258;
+        const int endFrame = 272;
+
+        var window = result.FrameDetails
+            .Where(f => f.Frame >= startFrame && f.Frame <= endFrame)
+            .ToList();
+
+        Assert.Equal(endFrame - startFrame + 1, window.Count);
+
+        int recordedDeflectionFrames = 0;
+        int simulatedDeflectionFrames = 0;
+
+        foreach (var detail in window)
+        {
+            var current = recording.Frames[detail.Frame];
+            var next = recording.Frames[detail.Frame + 1];
+
+            float recordedDx = next.Position.X - current.Position.X;
+            float recordedDy = next.Position.Y - current.Position.Y;
+            float recordedAngle = MathF.Atan2(recordedDy, recordedDx);
+            float recordedDeflection = MathF.Abs(NormalizeAngle(recordedAngle - current.Facing)) * 180.0f / MathF.PI;
+
+            float simulatedDx = detail.SimX - current.Position.X;
+            float simulatedDy = detail.SimY - current.Position.Y;
+            float simulatedAngle = MathF.Atan2(simulatedDy, simulatedDx);
+            float simulatedDeflection = MathF.Abs(NormalizeAngle(simulatedAngle - current.Facing)) * 180.0f / MathF.PI;
+
+            if (recordedDeflection > 60.0f)
+                recordedDeflectionFrames++;
+            if (simulatedDeflection > 60.0f)
+                simulatedDeflectionFrames++;
+
+            _output.WriteLine(
+                $"frame={detail.Frame} err={detail.PosError:F3}y recDefl={recordedDeflection:F1}deg simDefl={simulatedDeflection:F1}deg " +
+                $"sim=({detail.SimX:F3},{detail.SimY:F3},{detail.SimZ:F3}) rec=({detail.RecX:F3},{detail.RecY:F3},{detail.RecZ:F3})");
+        }
+
+        float avgError = window.Average(f => f.PosError);
+        float maxError = window.Max(f => f.PosError);
+
+        _output.WriteLine(
+            $"window={startFrame}-{endFrame} avgErr={avgError:F3}y maxErr={maxError:F3}y " +
+            $"recordedDeflectionFrames={recordedDeflectionFrames} simulatedDeflectionFrames={simulatedDeflectionFrames}");
+
+        Assert.True(recordedDeflectionFrames >= 10,
+            $"Expected the recording window to contain sustained wall-slide deflection, got {recordedDeflectionFrames} frames over 60 degrees.");
+        Assert.True(simulatedDeflectionFrames >= 10,
+            $"Replay should preserve the recorded wall-slide deflection, got {simulatedDeflectionFrames} frames over 60 degrees.");
+        Assert.True(avgError < 0.25f,
+            $"Wall-slide replay window avg error {avgError:F3}y exceeds 0.25y.");
+        Assert.True(maxError < 0.60f,
+            $"Wall-slide replay window max error {maxError:F3}y exceeds 0.60y.");
+    }
+
+    [Fact]
+    public void BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls()
+    {
+        AssertReplayPreservesBlockedSteps(
+            Recordings.BlackrockSpire,
+            [247, 278, 311],
+            maxRecordedStep2D: 0.001f,
+            maxSimulatedStep2D: 0.08f,
+            maxPosError: 0.35f,
+            requireTransport: false,
+            label: "blackrock_wmo_stall");
+    }
+
     // UndercityMixed removed: recording from 2026-02-08 has no NearbyGameObjects data.
     // The Undercity floor at Z=55.2 IS the elevator door GO — without GO data, there's no floor.
     // Use ElevatorRide recording (2026-02-12) which captures doors and elevators properly.
@@ -118,6 +199,65 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             $"{result.TransportFrameCount} transport frames skipped");
 
         AssertPrecision(result, Tolerances.TransportAvg, Tolerances.TransportP99);
+    }
+
+    [Fact]
+    public void PacketBackedUndercityLowerRoute_ReplayRemainsUnderground()
+    {
+        var result = ReplayAndAssert(Recordings.PacketBackedUndercityLowerRoute);
+        if (result.FrameCount == 0) return;
+
+        var undergroundFrames = result.CleanFrames
+            .Where(f => f.RecZ < -30.0f)
+            .ToList();
+
+        Assert.NotEmpty(undergroundFrames);
+        Assert.All(undergroundFrames, frame =>
+            Assert.True(frame.SimZ < -30.0f,
+                $"Frame {frame.Frame} surfaced underground route: simZ={frame.SimZ:F3} recZ={frame.RecZ:F3}"));
+        Assert.True(undergroundFrames.Average(f => f.PosError) < 0.50f,
+            $"Underground packet-backed route avg error {undergroundFrames.Average(f => f.PosError):F4}y exceeds 0.50y.");
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck()
+    {
+        var result = ReplayAndAssert(Recordings.PacketBackedUndercityElevatorUp);
+        if (result.FrameCount == 0) return;
+
+        var lowerFrames = result.CleanFrames
+            .Where(f => f.RecZ < -30.0f)
+            .ToList();
+        var upperFrames = result.CleanFrames
+            .Where(f => f.RecZ > 40.0f)
+            .ToList();
+
+        Assert.NotEmpty(lowerFrames);
+        Assert.NotEmpty(upperFrames);
+        Assert.All(lowerFrames, frame =>
+            Assert.True(frame.SimZ < -30.0f,
+                $"Frame {frame.Frame} lost underground seating before elevator ride: simZ={frame.SimZ:F3} recZ={frame.RecZ:F3}"));
+        Assert.All(upperFrames, frame =>
+            Assert.True(frame.SimZ > 40.0f,
+                $"Frame {frame.Frame} failed to reach the upper Undercity deck: simZ={frame.SimZ:F3} recZ={frame.RecZ:F3}"));
+
+        var transportStats = result.OnTransportStats();
+        Assert.True(transportStats.count > 0, "Expected on-transport frames in the packet-backed elevator capture.");
+        Assert.True(transportStats.avg < 0.50f,
+            $"Packet-backed elevator transport avg {transportStats.avg:F4}y exceeds 0.50y.");
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock()
+    {
+        AssertReplayPreservesBlockedSteps(
+            Recordings.PacketBackedUndercityElevatorUp,
+            [11, 12, 13, 14, 15, 16, 17, 18, 19],
+            maxRecordedStep2D: 0.03f,
+            maxSimulatedStep2D: 0.08f,
+            maxPosError: 0.50f,
+            requireTransport: true,
+            label: "undercity_upper_door_block");
     }
 
     [Fact]
@@ -683,6 +823,90 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     // ==========================================================================
     // PRIVATE HELPERS
     // ==========================================================================
+
+    private void AssertReplayPreservesBlockedSteps(
+        string recordingName,
+        IReadOnlyList<int> blockedFrames,
+        float maxRecordedStep2D,
+        float maxSimulatedStep2D,
+        float maxPosError,
+        bool? requireTransport,
+        string label)
+    {
+        var result = _fixture.ReplayCache.GetOrReplay(recordingName, _output, _fixture.IsInitialized);
+        if (result.FrameCount == 0) return;
+
+        var recording = LoadByFilename(recordingName, _output);
+        var detailsByFrame = result.FrameDetails.ToDictionary(detail => detail.Frame);
+        var windowDetails = new List<CalibrationResult.FrameDetail>(blockedFrames.Count);
+
+        foreach (int frame in blockedFrames)
+        {
+            Assert.True(frame >= 0 && frame + 1 < recording.Frames.Count,
+                $"{label}: frame {frame} is outside recording bounds.");
+            Assert.True(detailsByFrame.TryGetValue(frame, out var detail),
+                $"{label}: replay result missing frame {frame}.");
+
+            if (requireTransport.HasValue)
+            {
+                Assert.Equal(requireTransport.Value, detail.IsOnTransport);
+            }
+
+            var currentWorld = ResolveRecordedWorldPosition(recording.Frames[frame]);
+            var nextWorld = ResolveRecordedWorldPosition(recording.Frames[frame + 1]);
+
+            float recordedStep2D = Distance2D(currentWorld.x, currentWorld.y, nextWorld.x, nextWorld.y);
+            float simulatedStep2D = Distance2D(currentWorld.x, currentWorld.y, detail.SimX, detail.SimY);
+
+            _output.WriteLine(
+                $"{label} frame={frame} recStep2D={recordedStep2D:F4}y simStep2D={simulatedStep2D:F4}y " +
+                $"err={detail.PosError:F4}y transport={detail.IsOnTransport}");
+
+            Assert.True(recordedStep2D <= maxRecordedStep2D,
+                $"{label}: recorded step at frame {frame} was {recordedStep2D:F4}y, expected <= {maxRecordedStep2D:F4}y.");
+            Assert.True(simulatedStep2D <= maxSimulatedStep2D,
+                $"{label}: simulated step at frame {frame} was {simulatedStep2D:F4}y, expected <= {maxSimulatedStep2D:F4}y.");
+            Assert.True(detail.PosError <= maxPosError,
+                $"{label}: replay position error at frame {frame} was {detail.PosError:F4}y, expected <= {maxPosError:F4}y.");
+
+            windowDetails.Add(detail);
+        }
+
+        float avgError = windowDetails.Average(detail => detail.PosError);
+        _output.WriteLine($"{label} avgErr={avgError:F4}y over {windowDetails.Count} blocked frames");
+    }
+
+    private static (float x, float y, float z) ResolveRecordedWorldPosition(RecordedFrame frame)
+    {
+        if (frame.TransportGuid == 0)
+        {
+            return (frame.Position.X, frame.Position.Y, frame.Position.Z);
+        }
+
+        var transport = FindTransportGameObject(frame, frame.TransportGuid);
+        Assert.True(transport is not null,
+            $"Recording frame with transportGuid={frame.TransportGuid} is missing its transport game object.");
+
+        float cosO = MathF.Cos(transport!.Facing);
+        float sinO = MathF.Sin(transport.Facing);
+        float localX = frame.Position.X;
+        float localY = frame.Position.Y;
+
+        return (
+            (localX * cosO) - (localY * sinO) + transport.Position.X,
+            (localX * sinO) + (localY * cosO) + transport.Position.Y,
+            frame.Position.Z + transport.Position.Z);
+    }
+
+    private static RecordedGameObject? FindTransportGameObject(RecordedFrame frame, ulong transportGuid) =>
+        frame.NearbyGameObjects?.FirstOrDefault(go => go.Guid == transportGuid);
+
+    private static float Distance2D(float ax, float ay, float bx, float by)
+    {
+        float dx = bx - ax;
+        float dy = by - ay;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
+    }
 
     private CalibrationResult ReplayAndAssert(string recordingName)
     {

@@ -283,7 +283,42 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-24 (session 163)
+- **Last updated:** 2026-03-25 (session 182)
+- **Branch:** `main`
+- **Session 176 — packet-backed controller cadence aligned to FG traces; compact underground/elevator regressions added:**
+  - Captured three fresh PacketLogger-backed FG recordings into the canonical repo corpus with the automated recording path: [Urgzuga_Durotar_2026-03-25_03-07-08.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Durotar_2026-03-25_03-07-08.json), [Urgzuga_Undercity_2026-03-25_10-00-52.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Undercity_2026-03-25_10-00-52.json), and [Urgzuga_Undercity_2026-03-25_10-01-09.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Undercity_2026-03-25_10-01-09.json) plus `.bin` sidecars. These now provide compact packet-backed proof for flat-ground cadence, underground lower-route seating, and the west Undercity elevator up-ride.
+  - Tightened [MovementControllerRecordedFrameTests.cs](/E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs) so packet parity only selects clean grounded forward segments with a real stop frame, adds a synthetic preroll when the capture starts mid-run, and executes the stop transition. The recorded-frame opcode parity harness now selects the straight Durotar packet-backed run and proves `MSG_MOVE_START_FORWARD` / heartbeat / `MSG_MOVE_STOP` distribution against real FG packets instead of deferring for missing data.
+  - Updated [MovementController.cs](/E:/repos/Westworld of Warcraft/Exports/WoWSharpClient/Movement/MovementController.cs) heartbeat cadence from the stale 100ms assumption to the packet-backed FG cadence of ~500ms while moving. Narrow controller and controller-physics timing tests were updated to match the new evidence and stayed green.
+  - Added fast packet-backed replay regressions in [PhysicsReplayTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs) for the new Durotar flat run plus Undercity lower-route and elevator-up captures. The new Undercity checks explicitly assert the replay remains underground on the lower route and reaches the upper deck after the elevator ride.
+- **Test baseline (session 176):**
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests|FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=minimal"`
+    - Passed (`45/45`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysicsTests.Forward_FlatTerrain_PacketTimingAndPositionDeltas|FullyQualifiedName~MovementControllerPhysicsTests.HeartbeatInterval_500ms" --logger "console;verbosity=minimal"`
+    - Passed (`2/2`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedFlatRun_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck" --logger "console;verbosity=detailed"`
+    - Passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysicsTests|FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`30/30`)
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests|FullyQualifiedName~MovementRecorderTransportHelperTests|FullyQualifiedName~PacketLoggerBinaryAuditTests" --logger "console;verbosity=minimal"`
+    - Passed (`23/23`)
+- **Files changed (session 176):**
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Services/ForegroundBotRunner/MovementScenarioRunner.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs`
+  - `Tools/RecordingMaintenance/Program.cs`
+  - `Tests/ForegroundBotRunner.Tests/MovementScenarioRunnerTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/ObjectManagerMovementTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+  - `Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+- **Next priorities:** use the new compact packet-backed corpus as the fast proof set, keep the 500ms controller cadence locked unless new packet traces contradict it, and move back onto the remaining real native blocker: the unresolved grounded post-`TestTerrain` wall/corner helper (`0x6367B0` plus `0x635C00` / `0x635D80`) with verified wall fixtures rather than synthetic heuristics.
+- **Next command:** `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=detailed"`
 - **Branch:** `main`
 - **Session 163 — moving-base query identity aligned across capsule and AABB collision paths:**
   - Updated [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so every remaining dynamic-object branch in `SweepCapsule` now forwards stable runtime instance IDs from `DynamicObjectRegistry` instead of synthesizing `0x80000000 | triangleIndex`. That keeps overlap, penetration, and swept capsule hits on elevators and doors aligned with the moving-base support token already emitted by the grounded AABB support path.
@@ -1250,3 +1285,359 @@ if (transportGuid != 0) {
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
 - **Next priorities:** continue replacing runtime grounded-path shortcuts branch-by-branch from `PhysicsEngine.cpp`, with wall/slide response the next likely binary-backed mismatch after the half-step sweep correction
+
+- **Session 167 — grounded wall response now uses contact-plane projection:**
+  - Replaced the remaining ad-hoc grounded wall shove in [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp): `CollisionStepWoW` no longer resolves non-walkable contacts by blindly pushing `endX/endY` outward by `normal * skin`.
+  - The grounded path now orders non-walkable AABB/sweep contacts, projects the requested XY move across those blocking planes, re-queries support at the resolved XY, and emits `wallBlockedFraction` from actual resolved-vs-requested horizontal travel.
+  - Added [FrameByFramePhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs) regression `ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits` so the wall-response parity rewrite cannot start reporting bogus wall hits on a known walkable slope route.
+- **Test baseline (session 167):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - Succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=normal"`
+    - Passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=normal"`
+    - Passed
+- **Files changed (session 167):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep replacing grounded-path heuristics one branch at a time, with the next wall/corner pass driven by a verified real wall trace rather than the stale RFC / Un'Goro coordinates, and continue matching the client's `SlideAlongNormal` ordering exactly
+
+- **Session 168 — redundant grounded sweep clamp removed:**
+  - Removed the leftover full-sweep XY pre-clamp from [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), so grounded `CollisionStepWoW` no longer has two different wall-response owners in the same frame.
+  - The initial grounded sweep now gathers contacts only; all grounded wall response is resolved by the later contact-plane slide branch, which keeps the native path closer to the original client's single `SlideAlongNormal` flow.
+  - Synced [Exports/Navigation/TASKS.md](/E:/repos/Westworld of Warcraft/Exports/Navigation/TASKS.md) back onto the current parity backlog now that the merge-marker cleanup is complete.
+- **Test baseline (session 168):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit transient `LNK1104` on `Navigation.dll`; reran once the lock cleared and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 168):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the grounded wall path single-owner, replace the remaining corner-plane ordering heuristics with verified `SlideAlongNormal` ordering, and then move the next parity slice into managed `MovementController` cadence/ownership using the candidate `3/15` BG stall evidence
+
+- **Session 169 — BG melee facing recovery now clears the candidate `3/15` mining stall:**
+  - Updated [CombatRotationTask.cs](/E:/repos/Westworld of Warcraft/Exports/BotRunner/Tasks/CombatRotationTask.cs) so a recent `SMSG_ATTACKSWING_BADFACING` window primes exact facing only once per target, then retries melee on the next grounded tick instead of repeatedly resetting the pending engage and re-sending facing every update.
+  - Added [CombatRotationTaskTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs) regression `Update_RecentServerFacingReject_WindowPersists_PrimesOnceThenRetriesMelee` to lock that behavior.
+  - Live BG proof moved materially: the reproduced mining route now pauses at candidate `3/15`, resumes after combat, reaches `node_visible candidate=3/15`, and finishes with `gather_channel_complete` in `TestResults/LiveLogs/GatheringProfessionTests.log`. `CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver` also passed again against the live FG observer. The remaining live blocker is no longer the mining stall; it is the corpse-run harness budget/cleanup timing even though `bg_TESTBOT220260324.log` shows successful reclaim completion.
+- **Test baseline (session 169):**
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"`
+    - Passed (`97/97`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringProfessionTests.Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=normal"`
+    - Passed
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer" --logger "console;verbosity=minimal"`
+    - Returned nonzero, but `Bot\Release\net8.0\WWoWLogs\bg_TESTBOT220260324.log` shows `Sent reclaim request ...` followed by `Player no longer in ghost form; retrieval complete.` and `[TASK-POP] task=RetrieveCorpseTask reason=AliveAfterRetrieve`
+- **Files changed (session 169):**
+  - `Exports/BotRunner/Tasks/CombatRotationTask.cs`
+  - `Tests/BotRunner.Tests/Combat/CombatRotationTaskTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the candidate `3/15` mining route as a live regression proof, then audit the remaining corpse-run harness timing and packet/ownership cadence gaps against paired FG/BG traces instead of re-opening the closed BADFACING loop.
+
+- **Session 170 — grounded wall slide no longer drops near-parallel contact planes:**
+  - Removed the near-parallel normal dedupe from [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) inside the grounded `resolveWallSlide(...)` branch. Ordered non-walkable contacts now all participate in sequential plane projection instead of discarding later corner constraints simply because their normals are almost aligned.
+  - This is the next deliberate step toward verbatim `SlideAlongNormal` behavior: the grounded path still has ordering heuristics, but it no longer pre-filters contact planes through the custom `dot > 0.999f` shortcut.
+  - Broad current-data `SweepCapsule` probes around Goldshire Inn/Town, Northshire Abbey, and Stormwind Stockade did not produce real non-walkable hits, so those coordinates should not be promoted as wall fixtures. The verified terrain/WMO/dynamic-object wall regression is still open work.
+- **Test baseline (session 170):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit `LNK1104` on `Navigation.dll`; identified repo `PathfindingService.exe` PID `16488` as the exact lock holder, stopped only that PID, reran, and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`33/33`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 170):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep removing one grounded wall/corner heuristic per pass, but do not guess at fixture coordinates; refresh a real terrain/WMO/dynamic-object wall trace first, then continue replacing the remaining contact-ordering shortcuts with the client’s `SlideAlongNormal` sequence.
+
+- **Session 171 — grounded wall contact sort removed; replay-backed wall-slide proof added:**
+  - Removed the remaining custom grounded wall-contact sort from [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), so the non-walkable contact-plane slide path now preserves the merged query order instead of re-ranking planes by distance / depth / horizontal-normal magnitude.
+  - Added [PhysicsReplayTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs) regression `DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`, which pins a real recorded Durotar wall-slide window and asserts the replay keeps the same sustained 60°+ deflection profile with tight spatial error.
+  - Corrected [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md): local `WoW.exe` disassembly confirms `0x637330` is the vec3-negation helper used after `TestTerrain`, not the unresolved grounded slide helper.
+- **Test baseline (session 171):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore`
+    - Succeeded (existing warnings only)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.ComplexMixed_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 171):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** stop treating `0x6373B0` as the missing slide helper; verify the surrounding grounded path directly from the binary and replace the synthetic sweep-contact accumulation with the actual merged-AABB query structure before touching the remaining post-query slide logic again.
+
+- **Session 172 — grounded wall query now uses the client’s merged AABB volume:**
+  - Rechecked the local vanilla `WoW.exe` around `CMovement::CollisionStep (0x633C7B..0x633E76)` and confirmed `0x6373B0` is an AABB merge helper, not `CWorldCollision::Collide`.
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so the grounded wall query no longer accumulates full-step and half-step `SweepAABB` contacts. `CollisionStepWoW` now unions the start box, full-step box, and contracted half-step box, then runs `TestTerrainAABB` on that merged volume before the custom slide projection; post-slide support is re-queried from the final resolved box only.
+  - Synced [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the grounded/falling/swimming path notes no longer mislabel `0x6373B0` as a collision sweep routine.
+- **Test baseline (session 172):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit `LNK1104` on `Navigation.dll`; reran once the transient lock cleared and succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 172):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** the open native gap is no longer “find the `Collide` helper.” It is the exact grounded post-`TestTerrain` wall/corner resolution sequence after the merged query volume is built, plus real terrain/WMO/dynamic-object wall fixtures to prove that sequence.
+- **Session 177 — binary-backed three-axis blocker merge rule shipped:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so the grounded `0x636610`-style blocker merge now returns a zero vector for the three-axis case instead of picking the first surviving axis.
+  - The focused terrain/WMO/dynamic replay slice, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green on the rebuilt native DLL, so this binary-backed helper rule did not reopen the prior false-wall or underground regressions.
+- **Test baseline (session 177):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Session 178 — corrected 0x636610 jump-table mapping:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so the grounded blocker merge now follows the full observed `0x636610` jump-table shape more closely: the three-axis case chooses the minority-orientation axis, and the four-axis case zeroes the merged blocker vector.
+  - The focused terrain/WMO/dynamic replay slice, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green again on the rebuilt native DLL after a transient `LNK1104` retry.
+- **Test baseline (session 178):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Session 179 — binary-backed horizontal epsilon pushout shipped:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so grounded wall resolution now adds the `0.001f` horizontal pushout visible in local `0x635D80` after the blocker-plane projection, instead of leaving the resolved move exactly on the wall plane.
+  - The focused terrain/WMO/dynamic replay slice, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green again on the rebuilt native DLL after a transient `LNK1104` retry.
+- **Test baseline (session 179):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Session 180 — selected-plane Z correction shipped:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so grounded wall resolution now carries the selected contact plane’s Z correction with the same radius-based cap visible in local `0x635C00`, and uses that clamped predicted support Z for the final `GetGroundZ(...)` query.
+  - The focused terrain/WMO/dynamic replay slice, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate drift gate all stayed green again on the rebuilt native DLL after a transient `LNK1104` retry.
+- **Test baseline (session 180):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - First attempt hit transient `LNK1104` on `Navigation.dll`; immediate retry succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+
+- **Session 173 — grounded wall slide now merges blocker axes instead of raw triangle planes:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so grounded `resolveWallSlide(...)` no longer projects directly across every raw non-walkable triangle normal from `TestTerrainAABB(...)`.
+  - The grounded branch now extracts dominant opposing cardinal blocker axes from the merged contact set, merges them with the local `0x636610`-style `1 / 2 / 3+` rules, and slides against that merged blocker normal. When that merged blocker would collapse travel into a synthetic wedge, the stateless fallback now uses the strongest single blocker axis instead of stopping dead.
+  - Two failed intermediate mappings were recorded in [physicsengine-calibration.md](/E:/repos/Westworld of Warcraft/docs/physicsengine-calibration.md): move-direction-only blocker axes caused false wall hits across open routes, and emitting both axes from one diagonal blocker contact created synthetic corner wedges on the live-speed route.
+- **Test baseline (session 173):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ValleyOfTrialsSlopeTests.StuckPosition_ExactServiceValues_ShouldMoveForward|FullyQualifiedName~ValleyOfTrialsSlopeTests.SteepDescent_50msTicks_GroundNormalTracksSlopeSupport|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 173):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the blocker-axis merge in place, but the remaining native gap is now the real `0x6367B0` loop bookkeeping: remaining-distance iteration, wall/corner retry sequencing, and the exact `0x635C00` / `0x635D80` helper effects after the merged `TestTerrain` query.
+
+- **Session 174 — recording loader now hydrates protobuf sidecars; controller parity blocker confirmed as fixture quality:**
+  - Updated [RecordingLoader.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/RecordingLoader.cs) so shared movement-recording loads now hydrate optional protobuf `.bin` companions when they exist. This lets replay/controller tests consume packet-backed recordings without needing packet arrays embedded in the JSON file itself.
+  - Updated [MovementControllerRecordedFrameTests.cs](/E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs) so `RecordedFrames_WithPackets_OpcodeSequenceParity` prefers walking segments that actually contain FG movement packets, and widens the packet-comparison window by one frame on each side so future `START_FORWARD` / `STOP` packets at segment boundaries are not missed.
+  - Verified the current corpus blocker directly from the only in-repo protobuf sidecar: `Dralrahgra_Undercity_2026-03-06_11-04-19.bin` parses successfully but contains `0` packet events, so the controller opcode parity test still defers because fixture quality is insufficient, not because the loader/harness was ignoring available packet data.
+- **Test baseline (session 174):**
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity|FullyQualifiedName~WoWUnitExtrapolationTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 174):**
+  - `Tests/Navigation.Physics.Tests/RecordingLoader.cs`
+  - `Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs`
+- **Next priorities:** the managed controller backlog still needs a fresh PacketLogger-backed FG walking trace or paired FG/BG live capture. The harness is now ready for that data, but the current in-repo recording corpus still cannot prove send-cadence parity because its available protobuf sidecar carries `0` packet events.
+
+- **Session 175 — recording corpus canonicalized; Undercity proof slice re-verified; failed native retry recorded and reverted:**
+  - Added [RecordingMaintenance.csproj](/E:/repos/Westworld of Warcraft/Tools/RecordingMaintenance/RecordingMaintenance.csproj) and [Program.cs](/E:/repos/Westworld of Warcraft/Tools/RecordingMaintenance/Program.cs) so the repo now has an explicit maintenance tool for replay fixtures: `summary`, `write-sidecars`, `cleanup-output-copies`, and `compact`.
+  - Updated [RecordingLoader.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/RecordingLoader.cs) and [RecordingTestHelpers.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Helpers/RecordingTestHelpers.cs) so replay/controller tests enumerate logical recordings from the canonical repo corpus, prefer fresh protobuf companions, and can refresh stale `.bin` sidecars directly from JSON.
+  - Updated [Navigation.Physics.Tests.csproj](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj) so recordings are no longer copied into `Bot/*/Recordings`; `compact` refreshed protobuf sidecars for all `23` logical recordings and deleted the duplicate `Bot/Debug/net8.0/Recordings` tree.
+  - Re-ran the Undercity elevator/underground proof slice on the protobuf-first corpus: elevator replay parity, dynamic support-token checks, the underground WMO probe, the no-underground server-movement gate, and the wider `MovementControllerPhysics` slice all stayed green.
+  - Extended the maintenance summary to load each canonical recording and print frame/packet counts. That answered the remaining corpus question directly: all current `23` repo recordings report `Packets=0`, so the managed opcode-parity blocker is now confirmed across the whole corpus rather than just a single sidecar.
+  - Tried the next native `0x6367B0` hypothesis by retrying grounded wall resolution with the already-slid move, but that regressed `Forward_LiveSpeedTestRoute_AchievesMinimumSpeed` to `3.26 y/s`; the change was reverted and the failure was logged in [physicsengine-calibration.md](/E:/repos/Westworld of Warcraft/docs/physicsengine-calibration.md) under Do Not Repeat.
+- **Test baseline (session 175):**
+  - `dotnet build Tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release`
+    - Succeeded
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact`
+    - Succeeded; canonical corpus now has `23` refreshed `.bin` sidecars and no duplicate `Bot/Debug/net8.0/Recordings` tree
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- summary`
+    - Succeeded; all current canonical recordings report `Packets=0`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.UndercityGroundProbe_WMOFloorDetected" --logger "console;verbosity=normal"`
+    - Passed (`6/6`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=detailed"`
+    - Passed, but still deferred on true FG/BG parity; selected `Dralrahgra_Blackrock_Spire_2026-02-08_12-04-53` with `FG movement packets in selected segment: 0`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~FrameByFramePhysicsTests.StormwindCity_WalkIntoWall_Blocked|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysicsTests.UndercityGroundProbe_WMOFloorDetected|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`36/36`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 175):**
+  - `Tests/Navigation.Physics.Tests/RecordingLoader.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/RecordingTestHelpers.cs`
+  - `Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj`
+  - `Tools/RecordingMaintenance/RecordingMaintenance.csproj`
+  - `Tools/RecordingMaintenance/Program.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the canonical protobuf-first corpus as the only recording source, do not retry the reverted two-pass grounded reprojection loop without new binary evidence, and treat fresh PacketLogger-backed FG walking captures plus real `0x6367B0` helper evidence as the next actual blockers.
+
+- **Session 181 — native FG movement capture path repaired; canonical packet-backed Undercity corpus trimmed to the final March 25 fixtures:**
+  - [ObjectManager.Movement.cs](/E:/repos/Westworld of Warcraft/Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs) now dispatches native `SetControlBit(...)` calls through [ThreadSynchronizer.cs](/E:/repos/Westworld of Warcraft/Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs) instead of calling the FastCall thunk directly from the scenario/background thread. That cleared the recurring `SetControlBitSafeFunction(...)` `NullReferenceException` that had been forcing automated movement captures onto the Lua fallback path.
+  - [Memory.cs](/E:/repos/Westworld of Warcraft/Services/ForegroundBotRunner/Mem/Memory.cs) now logs memory-read failures safely, which stopped the logging path from masking foreground metadata reads during capture. The new Undercity FG recordings now carry the expected `Race=Orc` / `Gender=Female` metadata again.
+  - Promoted the final packet-backed Undercity captures in [TestConstants.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs): `PacketBackedUndercityLowerRoute = Urgzuga_Undercity_2026-03-25_10-00-52` and `PacketBackedUndercityElevatorUp = Urgzuga_Undercity_2026-03-25_10-01-09`. The earlier intermediate Urgzuga Undercity attempts were pruned from the canonical recording corpus.
+  - [Program.cs](/E:/repos/Westworld of Warcraft/Tools/RecordingMaintenance/Program.cs) now auto-runs `cleanup-output-copies` at the end of `capture`, so repeated FG capture sessions stop recreating the large duplicate `Bot/Debug/net8.0/Recordings` tree.
+- **Test baseline (session 181):**
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"`
+    - Passed (`13/13`)
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release`
+    - Succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` (`14` frames, `98` packets) and `Urgzuga_Undercity_2026-03-25_10-01-09` (`24` frames, `125` packets)
+- **Files changed (session 181):**
+  - `Services/ForegroundBotRunner/Mem/Memory.cs`
+  - `Services/ForegroundBotRunner/Mem/Functions.cs`
+  - `Services/ForegroundBotRunner/MovementScenarioRunner.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs`
+  - `Tools/RecordingMaintenance/Program.cs`
+  - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
+  - `docs/TASKS.md`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- **Next priorities:** keep the promoted packet-backed Undercity fixtures as the canonical compact proof set, keep duplicate output copies auto-cleaned after captures, and return to the remaining native `0x6367B0` / `0x635C00` grounded wall/corner bookkeeping in `PhysicsEngine.cpp`.
+
+- **Session 182 — grounded `0x636100` helper choice split; promoted elevator block regression retargeted to the canonical fixture:**
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so grounded `resolveWallSlide(...)` no longer stacks the `0x635D80` horizontal-correction path and the `0x635C00` selected-plane path on sloped selected contacts. The current stateless implementation now treats those helper effects as mutually exclusive, which is closer to the local `WoW.exe` `0x636100` gate.
+  - Retargeted [PhysicsReplayTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs) so `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock` uses the promoted `Urgzuga_Undercity_2026-03-25_10-01-09` recording’s actual blocked interval (`frames 11..19`) instead of the older debugging capture’s frame window.
+  - Rebuilt the native DLL cleanly and kept the focused terrain/WMO/dynamic wall replay slice, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay drift gate green with the helper split in place.
+- **Test baseline (session 182):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - Passed (`35/35`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedFlatRun_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`5/5`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Next priorities:** keep the helper-choice split and isolate the remaining `0x636100` return-code / distance-pointer bookkeeping next. The open native gap is now the movement-fraction mutation and branch sequencing inside `0x6367B0`, not the blocker merge or the plain helper outputs themselves.
+
+- **Session 183 — live BG corpse-run and combat-travel proof slice revalidated:**
+  - Re-ran the previously stale corpse-run reclaim slice on the current environment: `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer` now passes cleanly instead of only succeeding in the runtime log after a harness nonzero.
+  - Re-ran `CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver`, which still passes alongside the already-cleared candidate `3/15` mining route.
+  - That retires the old “corpse-run harness timing/cleanup” blocker. The remaining managed/BG parity gap is now paired FG/BG trace evidence for heartbeat-before-stop ordering, facing corrections, waypoint ownership, and pause/resume timing on the same now-green route segments.
+- **Test baseline (session 183):**
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+- **Next priorities:** keep the live proof slice green, but move the active managed audit to actual paired FG/BG movement trace capture on those same corpse/combat route segments. The blocker is no longer harness stability.
+
+- **Session 184 — BG corpse-run now records and asserts corridor ownership:**
+  - `BotRunnerService.Diagnostics` now builds cleanly with the `INavigationTraceProvider` path and records stable `navtrace_<account>.json` sidecars alongside `physics_<account>.csv` / `transform_<account>.csv`.
+  - Added `RecordingArtifactHelper` plus deterministic `RecordingArtifactHelperTests`, and updated `MovementParityTests` to read the stable on-disk recording filenames instead of the old timestamped wildcard assumption. Repeated live runs now reuse the same artifact files rather than accumulating copies.
+  - `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer` now wraps `RetrieveCorpseTask` in start/stop diagnostic recording and asserts the emitted BG sidecar captured `RecordedTask=RetrieveCorpseTask`, `TaskStack=[RetrieveCorpseTask, IdleTask]`, `PlanVersion=1`, `LastResolution=waypoint`, and a non-null `TraceSnapshot` in `navtrace_TESTBOT2.json`.
+  - Re-ran the compact packet-backed Undercity replay slice and `RecordingMaintenance compact`; the canonical corpus remains `26` logical recordings at `411.67 MiB`, all `.bin` sidecars are current, and there are still no duplicate `Bot/*/Recordings` output trees.
+- **Test baseline (session 184):**
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RecordingArtifactHelperTests" --logger "console;verbosity=minimal"`
+    - Passed (`2/2`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"`
+    - Passed (`3/3`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer" --logger "console;verbosity=normal"`
+    - Passed (`1/1`)
+  - `dotnet run --project tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact`
+    - Confirmed `26` logical recordings, `411.67 MiB` canonical size, `0` sidecars refreshed, duplicate output copies missing/clean
+- **Next priorities:** BG now proves corridor ownership on corpse-run, so the managed blocker narrows to paired FG/BG controller ordering evidence: heartbeat-before-stop edges, facing corrections, and pause/resume timing on the same route segment.
+
+- **Session 185 — parity backlog converted to an exact remaining-item checklist:**
+  - Rewrote the master parity section into a counted closeout checklist so the repo now has one explicit answer for "how much is left": `11` known remaining items as of `2026-03-25`.
+  - The checklist is now split into `3` native physics items, `4` managed `MovementController` items, `3` BotRunner/BG proof items, and `1` final closeout item.
+  - Synced the same counts into the owner task files so local trackers no longer describe the parity gap in broader prose than the master tracker.
+  - No code or tests changed in session 185; this was a planning/docs-only update.
+
+- **Session 187 — forced-turn Durotar stop-edge parity shipped:**
+  - Fixed the managed tail mismatch instead of collecting more stop-edge traces. `BuildGoToSequence(...)` now treats arrival as a horizontal-distance question, so the bot no longer orbits a route target when the nav/path target Z differs from the runtime ground height.
+  - `NavigationPath` also now uses the same 2D distance rule when deciding whether an exhausted path needs recalculation, which removes the last path-exhaustion branch that could re-open the route near the destination because of Z-only drift.
+  - On the BG side, `WoWSharpObjectManager.StopAllMovement()` now queues a grounded stop when the player is airborne instead of dropping the stop request. `MovementController` consumes that request on the first grounded frame and emits the final `MSG_MOVE_STOP` at the same stop edge FG now reaches on the forced-turn route.
+  - Added deterministic coverage for the new arrival and grounded-stop rules, then tightened `MovementParityTests` so the forced-turn Durotar live slice now rejects late outbound `SET_FACING`, requires outbound `MSG_MOVE_STOP` from both clients, and enforces a bounded FG/BG stop-edge delta.
+- **Test baseline (session 187):**
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"`
+    - Passed (`61/61`)
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.RequestGroundedStop_ClearsForwardIntent_OnFirstGroundedFrame|FullyQualifiedName~MovementControllerTests.SendStopPacket_PreservesFallingFlags_WhenClearingForwardIntent|FullyQualifiedName~MovementControllerTests.SendStopPacket_SendsMsgMoveStop_AfterForwardMovementWasSent" --logger "console;verbosity=minimal"`
+    - Passed (`3/3`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`); both clients now end on outbound `MSG_MOVE_STOP`, no late outbound `SET_FACING` remains after the opening pair, and the stop-edge delta is bounded to `50ms`
+
+## Physics + BG Movement Full-Parity Checklist (2026-03-25)
+
+Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `9` items.
+
+### Native `PhysicsEngine` parity — `3` items open
+- [ ] `PAR-NATIVE-01` Implement the exact grounded post-`TestTerrain` `WoW.exe` sequence in `CollisionStepWoW`: the still-open binary-backed gap is the `0x6367B0` loop plus the `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` and `0x635D80`.
+- [ ] `PAR-NATIVE-02` Remove the last grounded clamp or static-overlap shortcuts that still lack binary support after `PAR-NATIVE-01` is in place.
+- [ ] `PAR-NATIVE-03` Rebuild and hold the native proof gates after `PAR-NATIVE-01/02`: Durotar wall-slide deflection, Blackrock Spire WMO stalls, packet-backed Undercity upper-door block, `MovementControllerPhysics`, and the aggregate replay drift gate.
+
+### Managed `MovementController` parity — `2` items open
+- [ ] `PAR-MANAGED-03` Capture one matched FG/BG trace segment that proves exact pause/resume timing and corridor-ownership handoff, using BG `navtrace_<account>.json` as the ownership sidecar.
+- [ ] `PAR-MANAGED-04` Implement any controller-ordering or ownership fix exposed by `PAR-MANAGED-03`, then add deterministic or replay-backed coverage for that fix before relying on it in live validation.
+
+### BotRunner / BG proof loop — `3` items open
+- [ ] `PAR-BG-01` Re-run the candidate `3/15` mining route with the paired trace capture and confirm executed corridor ownership remains aligned through combat pause/resume.
+- [ ] `PAR-BG-02` If drift remains on mining, corpse-run, or combat-travel, isolate the break to `BotTask`, `WoWSharpObjectManager`, `MovementController`, or `NavigationPath` and ship the corresponding fix.
+- [ ] `PAR-BG-03` Re-run the final BG proof bundle after all managed/native fixes: candidate `3/15` mining, corpse-run reclaim, and combat-travel all green on the same baseline.
+
+### Closeout — `0` engineering unknowns tolerated, `1` final checklist item open
+- [ ] `PAR-CLOSE-01` Sync `docs/TASKS.md` plus `Tests/Navigation.Physics.Tests`, `Exports/WoWSharpClient`, `Exports/BotRunner`, `Services/BackgroundBotRunner`, and any touched local trackers to `0` open parity items, and only then mark full parity complete.
+
+### Already closed and no longer counted
+- [x] BG cadence is aligned to packet-backed FG evidence at ~500ms while moving.
+- [x] A matched live forced-turn Durotar route now proves the start-edge facing correction ordering: FG and BG both emit `MSG_MOVE_SET_FACING -> MSG_MOVE_START_FORWARD`, and BG writes the same stable `packets_<account>.csv` sidecar format as FG.
+- [x] The same forced-turn Durotar live route now proves the stop edge as well: neither client emits late outbound `SET_FACING` after the opening pair, both end on outbound `MSG_MOVE_STOP`, and the latest FG/BG stop-edge delta is `50ms`.
+- [x] BG corpse-run live diagnostics now prove corridor ownership by recording `navtrace_<account>.json` with `RetrieveCorpseTask` ownership.
+- [x] Compact packet-backed FG recordings exist for Durotar flat run and Undercity lower-route / elevator slices.
+- [x] Replay-backed wall fixtures exist for terrain, WMO, and dynamic-object contact: Durotar wall-slide, Blackrock Spire stalls, and packet-backed Undercity upper-door block.

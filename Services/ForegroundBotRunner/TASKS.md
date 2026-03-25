@@ -37,9 +37,23 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-03-23`
+- Last updated: `2026-03-25 (session 181)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 181 fixed the automated recording movement path instead of letting scenario captures fall back to Lua. `ObjectManager.StartMovement(...)` / `StopMovement(...)` now dispatch `Functions.SetControlBit(...)` through `ThreadSynchronizer.RunOnMainThread(...)`, which cleared the repeated `SetControlBitSafeFunction(...)` `NullReferenceException` seen in `injection_firstchance.log` during the Undercity capture scenarios.
+  - `Memory.cs` now logs memory-read failures without dereferencing a null `InnerException`, which restored correct FG metadata reads during capture (`Race=Orc`, `Gender=Female`) instead of the earlier `Race=None` / `Gender=None` noise caused by the logging path itself.
+  - Fresh packet-backed FG captures now exist for the native lower-route and west-elevator-up Undercity scenarios: `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`. `RecordingMaintenance capture` also now auto-cleans duplicate `Bot/*/Recordings` trees after each run so repeated FG capture passes stop inflating disk usage.
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Mem/Memory.cs`
+  - `Services/ForegroundBotRunner/Mem/Functions.cs`
+  - `Services/ForegroundBotRunner/MovementScenarioRunner.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Tools/RecordingMaintenance/Program.cs`
+  - Next command:
+  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- summary`
   - `ObjectManager` now exposes live foreground `QuestGreetingFrame` and `TradeFrame` wrappers instead of returning interface defaults, which closes the last remaining FG interaction-frame gaps tracked in this file.
   - Added foreground implementations for `DepositExcessItemsAsync`, `PostAuctionItemsAsync`, and `CraftAvailableRecipesAsync`; those flows now drive the injected client through coarse Lua/UI automation instead of inherited no-op defaults.
   - Added deterministic FG interaction-frame coverage for quest-greeting enumeration/selection and trade-window offer/accept flows, and fixed the quest-greeting Lua probe so the count/read paths stay distinct.

@@ -137,8 +137,6 @@ Drive full LiveValidation and BotRunner integration test refactor until FG and B
 Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
 
 
-<<<<<<< HEAD
-=======
 
 
 ## Archived Snapshot (2026-02-24 19:43:32) - Tests/BotRunner.Tests/TASKS.md
@@ -169,4 +167,3 @@ Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
 
->>>>>>> cpp_physics_system

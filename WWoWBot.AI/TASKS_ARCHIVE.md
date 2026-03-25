@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## 2026-02-25
 
@@ -13,4 +11,3 @@ Completed items moved from TASKS.md.
 - [x] `AI-SEM-002` Namespace-aligned `KernelCoordinator` to `BloogBot.AI.Semantic` and synced `WWoWBot.AI/README.md` usage examples.
 - [x] `AI-SEC-001` Upgraded `Microsoft.SemanticKernel.Core` to `1.72.0` and `Microsoft.Extensions.Logging.Abstractions` to `10.0.3`; build now has no `NU1904`.
 - [x] `AI-TST-001` Added `Tests/WWoWBot.AI.Tests` with focused coverage for state-machine trigger transitions, forbidden transition enforcement, and activity-attribute plugin mapping; `dotnet test` now passes (`4` tests).
->>>>>>> cpp_physics_system

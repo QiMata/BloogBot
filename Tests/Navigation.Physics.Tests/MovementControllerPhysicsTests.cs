@@ -1063,6 +1063,8 @@ public class MovementControllerPhysicsTests
 
         _output.WriteLine($"Speed: {actualSpeed:F2} y/s, FALLINGFAR: {fallingFrames}/{frameCount}, minZ: {minZ:F1}");
         Assert.True(minZ > -10f, $"Bot fell through map: minZ={minZ:F1}");
+        Assert.True(fallingFrames == 0,
+            $"Live-speed route should stay grounded, got {fallingFrames} FALLINGFAR frames.");
         Assert.True(actualSpeed >= expectedMinSpeed,
             $"Speed test route too slow: {actualSpeed:F2} y/s (min {expectedMinSpeed})");
     }
@@ -1184,10 +1186,10 @@ public class MovementControllerPhysicsTests
 
         // WoW.exe heartbeat: 100ms interval (0x5E2110). Over 10s → ~100 packets.
         // First packet on flag change, then every ~100ms when position changes.
-        Assert.True(packetCalls.Count >= 50,
-            $"Expected at least 50 packets over 10s (100ms interval), got {packetCalls.Count}.");
-        Assert.True(packetCalls.Count <= 130,
-            $"Expected at most 130 packets over 10s, got {packetCalls.Count}. Too many packets.");
+        Assert.True(packetCalls.Count >= 18,
+            $"Expected at least 18 packets over 10s (~500ms cadence), got {packetCalls.Count}.");
+        Assert.True(packetCalls.Count <= 24,
+            $"Expected at most 24 packets over 10s (~500ms cadence), got {packetCalls.Count}. Too many packets.");
 
         // Check position deltas between consecutive packets
         for (int i = 1; i < packetCalls.Count; i++)
@@ -1458,7 +1460,7 @@ public class MovementControllerPhysicsTests
     /// Heartbeats should be sent at ~100ms intervals while moving.
     /// </summary>
     [SkippableFact]
-    public void HeartbeatInterval_100ms()
+    public void HeartbeatInterval_500ms()
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
@@ -1479,8 +1481,8 @@ public class MovementControllerPhysicsTests
         }
 
         // At 100ms interval over 5s → ~50 heartbeats + 1 start
-        _output.WriteLine($"Packets sent: {packetCount} (expected ~50)");
-        Assert.True(packetCount >= 30 && packetCount <= 70,
-            $"Wrong heartbeat count: {packetCount} (expected ~50 at 100ms over 5s)");
+        _output.WriteLine($"Packets sent: {packetCount} (expected ~10)");
+        Assert.True(packetCount >= 8 && packetCount <= 12,
+            $"Wrong heartbeat count: {packetCount} (expected ~10 at 500ms over 5s)");
     }
 }

@@ -76,34 +76,32 @@ public static class RecordingTestHelpers
     /// </summary>
     public static List<(string name, MovementRecording rec)> LoadAllRecordings(ITestOutputHelper output)
     {
-        string dir;
         try
         {
-            dir = RecordingLoader.GetRecordingsDirectory();
+            var entries = RecordingLoader.GetRecordingFiles();
+            var results = new List<(string name, MovementRecording rec)>();
+            foreach (var entry in entries)
+            {
+                try
+                {
+                    var rec = RecordingLoader.LoadFromFile(entry.PreferredPath);
+                    if (rec.Frames.Count > 0)
+                        results.Add((entry.Name, rec));
+                }
+                catch (Exception ex)
+                {
+                    output.WriteLine($"  Failed to load {entry.Name}: {ex.Message}");
+                }
+            }
+
+            output.WriteLine($"Loaded {results.Count} recordings from {RecordingLoader.GetRecordingsDirectory()}");
+            return results;
         }
         catch (DirectoryNotFoundException)
         {
             output.WriteLine("Recordings directory not found");
             return [];
         }
-
-        var results = new List<(string name, MovementRecording rec)>();
-        foreach (var file in Directory.GetFiles(dir, "*.json"))
-        {
-            try
-            {
-                var rec = RecordingLoader.LoadFromFile(file);
-                if (rec.Frames.Count > 0)
-                    results.Add((Path.GetFileNameWithoutExtension(file), rec));
-            }
-            catch (Exception ex)
-            {
-                output.WriteLine($"  Failed to load {Path.GetFileName(file)}: {ex.Message}");
-            }
-        }
-
-        output.WriteLine($"Loaded {results.Count} recordings from {dir}");
-        return results;
     }
 
     /// <summary>

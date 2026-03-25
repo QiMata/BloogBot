@@ -31,6 +31,14 @@ namespace WoWSharpClient
     public partial class WoWSharpObjectManager
     {
         private ulong _currentTargetGuid;
+        private const long RecentMeleeRejectWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
+        private const long PendingMeleeAttackConfirmWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
+        private long _recentMeleeRangeRejectUntilTicks;
+        private ulong _recentMeleeRangeRejectTargetGuid;
+        private long _recentMeleeFacingRejectUntilTicks;
+        private ulong _recentMeleeFacingRejectTargetGuid;
+        private long _pendingMeleeAttackConfirmUntilTicks;
+        private ulong _pendingMeleeAttackTargetGuid;
 
         // Temporary diagnostic: log all opcodes received after GAMEOBJ_USE
 
@@ -50,8 +58,99 @@ namespace WoWSharpClient
         /// </summary>
         public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellCooldownChecker = checker;
 
+        internal void NoteMeleeRangeRejected()
+        {
+            var targetGuid = _currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0;
+            if (targetGuid == 0)
+                return;
+
+            ClearPendingMeleeAttackStart(targetGuid);
+            _recentMeleeRangeRejectTargetGuid = targetGuid;
+            Interlocked.Exchange(ref _recentMeleeRangeRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
+            Log.Warning("[COMBAT] Marked recent melee range rejection for 0x{Target:X}", targetGuid);
+        }
+
+        internal void NoteMeleeFacingRejected()
+        {
+            var targetGuid = _currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0;
+            if (targetGuid == 0)
+                return;
+
+            ClearPendingMeleeAttackStart(targetGuid);
+            _recentMeleeFacingRejectTargetGuid = targetGuid;
+            Interlocked.Exchange(ref _recentMeleeFacingRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
+            Log.Warning("[COMBAT] Marked recent melee facing rejection for 0x{Target:X}", targetGuid);
+        }
+
+        internal void ClearRecentMeleeRejections(ulong targetGuid = 0)
+        {
+            if (targetGuid == 0 || _recentMeleeRangeRejectTargetGuid == targetGuid)
+            {
+                _recentMeleeRangeRejectTargetGuid = 0;
+                Interlocked.Exchange(ref _recentMeleeRangeRejectUntilTicks, 0);
+            }
+
+            if (targetGuid == 0 || _recentMeleeFacingRejectTargetGuid == targetGuid)
+            {
+                _recentMeleeFacingRejectTargetGuid = 0;
+                Interlocked.Exchange(ref _recentMeleeFacingRejectUntilTicks, 0);
+            }
+        }
+
+        public bool HadRecentMeleeRangeRejection(ulong targetGuid)
+            => targetGuid != 0
+                && _recentMeleeRangeRejectTargetGuid == targetGuid
+                && DateTime.UtcNow.Ticks < Interlocked.Read(ref _recentMeleeRangeRejectUntilTicks);
+
+        public bool HadRecentMeleeFacingRejection(ulong targetGuid)
+            => targetGuid != 0
+                && _recentMeleeFacingRejectTargetGuid == targetGuid
+                && DateTime.UtcNow.Ticks < Interlocked.Read(ref _recentMeleeFacingRejectUntilTicks);
+
         // Optional agent factory accessor — set by BackgroundBotWorker for LootTargetAsync
 
+
+        internal void NotePendingMeleeAttackStart(ulong targetGuid)
+        {
+            if (targetGuid == 0)
+                return;
+
+            _pendingMeleeAttackTargetGuid = targetGuid;
+            Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, DateTime.UtcNow.Ticks + PendingMeleeAttackConfirmWindowTicks);
+        }
+
+        internal bool HasPendingMeleeAttackStart(ulong targetGuid)
+        {
+            if (targetGuid == 0 || _pendingMeleeAttackTargetGuid != targetGuid)
+                return false;
+
+            if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _pendingMeleeAttackConfirmUntilTicks))
+                return true;
+
+            ClearPendingMeleeAttackStart(targetGuid);
+            return false;
+        }
+
+        internal void ClearPendingMeleeAttackStart(ulong targetGuid = 0)
+        {
+            if (targetGuid != 0 && _pendingMeleeAttackTargetGuid != targetGuid)
+                return;
+
+            _pendingMeleeAttackTargetGuid = 0;
+            Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, 0);
+        }
+
+        internal void ConfirmMeleeAttackStarted(ulong targetGuid = 0)
+        {
+            var confirmedTargetGuid = targetGuid != 0
+                ? targetGuid
+                : (_currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0);
+            if (confirmedTargetGuid == 0)
+                return;
+
+            ClearPendingMeleeAttackStart(confirmedTargetGuid);
+            ClearRecentMeleeRejections(confirmedTargetGuid);
+        }
 
         public bool IsSpellReady(string spellName)
         {
@@ -250,6 +349,11 @@ namespace WoWSharpClient
         public void SetTarget(ulong guid)
         {
             if (_woWClient == null) return;
+            if (guid != _currentTargetGuid)
+            {
+                ClearRecentMeleeRejections();
+                ClearPendingMeleeAttackStart();
+            }
             _currentTargetGuid = guid;
             if (Player is Models.WoWLocalPlayer localPlayer)
             {
@@ -275,6 +379,8 @@ namespace WoWSharpClient
             if (_woWClient == null) return;
             if (Player is Models.WoWLocalPlayer lp)
                 lp.IsAutoAttacking = false;
+            ClearRecentMeleeRejections();
+            ClearPendingMeleeAttackStart();
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSTOP, []);
         }
 
@@ -287,6 +393,9 @@ namespace WoWSharpClient
             {
                 if (Player is Models.WoWLocalPlayer localPlayer)
                 {
+                    var previousTargetGuid = localPlayer.TargetGuid;
+                    bool switchingTargets = previousTargetGuid != 0 && previousTargetGuid != _currentTargetGuid;
+
                     localPlayer.TargetGuid = _currentTargetGuid;
                     localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid & 0xFFFFFFFF));
                     localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid >> 32));
@@ -296,11 +405,17 @@ namespace WoWSharpClient
                     // Unit::Attack → AttackStop → AttackStart), preventing any
                     // actual melee swing from completing. SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT
                     // clears IsAutoAttacking, allowing re-engagement on the next call.
-                    if (localPlayer.IsAutoAttacking)
-                        return;
+                    if (localPlayer.IsAutoAttacking && !switchingTargets)
+                    {
+                        if (HasPendingMeleeAttackStart(_currentTargetGuid))
+                            return;
 
-                    Log.Information("[StartMeleeAttack] Sending CMSG_ATTACKSWING on 0x{Target:X} (re-engage={ReEngage})",
-                        _currentTargetGuid, localPlayer.TargetGuid != 0);
+                        Log.Warning("[StartMeleeAttack] Retrying CMSG_ATTACKSWING on 0x{Target:X} after missing server confirmation",
+                            _currentTargetGuid);
+                    }
+
+                    Log.Information("[StartMeleeAttack] Sending CMSG_ATTACKSWING on 0x{Target:X} (re-engage={ReEngage}, switchingTargets={SwitchingTargets})",
+                        _currentTargetGuid, previousTargetGuid != 0, switchingTargets);
 
                     // Send a position heartbeat to sync with the server BEFORE
                     // the attack swing. Without this, the server may have a stale
@@ -316,6 +431,7 @@ namespace WoWSharpClient
                     _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat).GetAwaiter().GetResult();
 
                     localPlayer.IsAutoAttacking = true;
+                    NotePendingMeleeAttackStart(_currentTargetGuid);
                 }
                 else if (Player is Models.WoWUnit unit)
                 {

@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## Completed 2026-02-28
 
@@ -33,4 +31,3 @@ Completed items moved from TASKS.md.
    - 6 new tests: bridge movement opcodes registered, bridge login/object opcodes registered, bridge-handler-throws pipeline continues, multiple-throws never terminates, attack-swing-errors emit to observable, register-opcode-handler returns stream.
    - Discovery: `SMSG_ATTACKSTART`/`SMSG_ATTACKSTOP` reactive handlers are overwritten by bridge handlers — `AttackStateChanged` subject is dead code for those opcodes.
    - Files: `WorldClientTests.cs`.
->>>>>>> cpp_physics_system

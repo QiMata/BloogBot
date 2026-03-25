@@ -237,11 +237,11 @@ namespace WoWSharpClient.Tests.Movement
             _sentPackets.Clear();
 
             // 150ms later — no heartbeat yet (PACKET_INTERVAL_MS = 200)
-            _controller.Update(0.05f, 1050);
+            _controller.Update(0.05f, 1250);
             Assert.Empty(_sentPackets);
 
             // 200ms total — heartbeat fires
-            _controller.Update(0.05f, 1100);
+            _controller.Update(0.05f, 1500);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -275,11 +275,11 @@ namespace WoWSharpClient.Tests.Movement
             _sentPackets.Clear();
 
             // At t=1250 (150ms since last packet) — no heartbeat
-            _controller.Update(0.05f, 1150);
+            _controller.Update(0.05f, 1350);
             Assert.Empty(_sentPackets);
 
             // At t=1300 (200ms since last packet) — heartbeat
-            _controller.Update(0.05f, 1200);
+            _controller.Update(0.05f, 1600);
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
@@ -428,6 +428,160 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void PhysicsStep_NearbyObjects_FiltersToFiniteCollidableSubset()
+        {
+            PhysicsInput? capturedInput = null;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Callback<PhysicsInput>(input => capturedInput = input)
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ,
+                    Orientation = input.Facing,
+                    IsGrounded = true,
+                    GroundZ = input.PosZ,
+                    GroundNz = 1f,
+                    MovementFlags = input.MovementFlags,
+                });
+
+            var includedDoor = new WoWGameObject(new HighGuid(0xF120000000000101ul))
+            {
+                Position = new Position(105f, 200f, 50f),
+                Facing = 0.25f,
+                DisplayId = 111,
+                ScaleX = 1.25f,
+                TypeId = (uint)GameObjectType.Door,
+            };
+
+            var filteredQuestGiver = new WoWGameObject(new HighGuid(0xF120000000000102ul))
+            {
+                Position = new Position(106f, 200f, 50f),
+                Facing = 0.5f,
+                DisplayId = 222,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.QuestGiver,
+            };
+
+            var filteredZeroDisplay = new WoWGameObject(new HighGuid(0xF120000000000103ul))
+            {
+                Position = new Position(107f, 200f, 50f),
+                Facing = 0.75f,
+                DisplayId = 0,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Door,
+            };
+
+            var filteredInvalidPosition = new WoWGameObject(new HighGuid(0xF120000000000104ul))
+            {
+                Position = new Position(float.NaN, 200f, 50f),
+                Facing = 0.9f,
+                DisplayId = 333,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Door,
+            };
+
+            var filteredFarDoor = new WoWGameObject(new HighGuid(0xF120000000000105ul))
+            {
+                Position = new Position(200f, 200f, 50f),
+                Facing = 1.1f,
+                DisplayId = 444,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Door,
+            };
+
+            var snapshot = ReplaceTrackedObjects(
+                includedDoor,
+                filteredQuestGiver,
+                filteredZeroDisplay,
+                filteredInvalidPosition,
+                filteredFarDoor);
+
+            try
+            {
+                _player.Position = new Position(100f, 200f, 50f);
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+                _controller.Update(0.05f, 1000);
+
+                Assert.NotNull(capturedInput);
+                Assert.Single(capturedInput!.NearbyObjects);
+                Assert.Equal(includedDoor.Guid, capturedInput.NearbyObjects[0].Guid);
+                Assert.Equal(includedDoor.DisplayId, capturedInput.NearbyObjects[0].DisplayId);
+                Assert.Equal(includedDoor.ScaleX, capturedInput.NearbyObjects[0].Scale, 3);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void PhysicsStep_NearbyObjects_CapsCountAndRetainsActiveTransport()
+        {
+            PhysicsInput? capturedInput = null;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Callback<PhysicsInput>(input => capturedInput = input)
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = 110f,
+                    NewPosY = 210f,
+                    NewPosZ = 55f,
+                    Orientation = 2.2f,
+                    IsGrounded = true,
+                    GroundZ = 55f,
+                    GroundNz = 1f,
+                    MovementFlags = input.MovementFlags,
+                });
+
+            var transport = new WoWGameObject(new HighGuid(0xF120000000000106ul))
+            {
+                Position = new Position(100f, 200f, 50f),
+                Facing = MathF.PI / 2f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+
+            var crowdedDoors = Enumerable.Range(0, 80)
+                .Select(i => new WoWGameObject(new HighGuid(0xF120000000001000ul + (ulong)i))
+                {
+                    Position = new Position(110f + (i % 8) * 0.2f, 210f + (i / 8) * 0.2f, 55f),
+                    Facing = 0.1f * i,
+                    DisplayId = (uint)(600 + i),
+                    ScaleX = 1f,
+                    TypeId = (uint)GameObjectType.Door,
+                })
+                .Cast<WoWObject>()
+                .ToArray();
+
+            var snapshot = ReplaceTrackedObjects([transport, .. crowdedDoors]);
+
+            try
+            {
+                _player.Transport = transport;
+                _player.TransportGuid = transport.Guid;
+                _player.Position = new Position(110f, 210f, 55f);
+                _player.Facing = 2.2f;
+                _player.TransportOffset = new Position(10f, -10f, 5f);
+                _player.TransportOrientation = _player.Facing - transport.Facing;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
+
+                _controller.Update(0.1f, 3000);
+
+                Assert.NotNull(capturedInput);
+                Assert.Equal(64, capturedInput!.NearbyObjects.Count);
+                Assert.Contains(capturedInput.NearbyObjects, obj => obj.Guid == transport.Guid);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
         public void PhysicsResult_OnTransport_RecomputesLocalOffsetFromWorldOutput()
         {
             var transport = new WoWGameObject(new HighGuid(0xF120000000000002ul))
@@ -537,12 +691,37 @@ namespace WoWSharpClient.Tests.Movement
         // ======== SPECIAL PACKETS ========
 
         [Fact]
-        public void SendFacingUpdate_SendsMsgMoveSetFacing()
+        public void SendMovementStartFacingUpdate_SendsSetFacingOnly()
         {
-            _controller.SendFacingUpdate(5000);
+            _controller.SendMovementStartFacingUpdate(5000);
 
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[0].opcode);
+        }
+
+        [Fact]
+        public void SendFacingUpdate_StandingStillSyncsHeartbeatBeforeSetFacing()
+        {
+            _controller.SendFacingUpdate(5000);
+
+            Assert.Equal(2, _sentPackets.Count);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[1].opcode);
+        }
+
+        [Fact]
+        public void SendFacingUpdate_AfterMovementSyncsHeartbeatBeforeSetFacing()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
+
+            _player.Facing = 2.25f;
+            _controller.SendFacingUpdate(1100);
+
+            Assert.Equal(2, _sentPackets.Count);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[1].opcode);
         }
 
         [Fact]
@@ -571,6 +750,43 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
             Assert.Equal(MovementFlags.MOVEFLAG_FALLINGFAR, _player.MovementFlags);
+        }
+
+        [Fact]
+        public void RequestGroundedStop_ClearsForwardIntent_OnFirstGroundedFrame()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
+
+            _controller.RequestGroundedStop();
+
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ,
+                    Orientation = input.Facing,
+                    Pitch = input.SwimPitch,
+                    NewVelX = 0,
+                    NewVelY = 0,
+                    NewVelZ = 0,
+                    IsGrounded = true,
+                    GroundZ = input.PosZ,
+                    GroundNx = 0,
+                    GroundNy = 0,
+                    GroundNz = 1,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+                    FallTime = 0,
+                });
+
+            _controller.Update(0.05f, 1050);
+
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
+            Assert.Equal(MovementFlags.MOVEFLAG_NONE, _player.MovementFlags);
         }
 
         // ======== STATE MANAGEMENT ========
@@ -985,17 +1201,17 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 0);
             Assert.Single(_sentPackets);
 
-            _controller.Update(0.05f, 50);
+            _controller.Update(0.05f, 250);
             Assert.Single(_sentPackets);
 
-            _controller.Update(0.05f, 100);
+            _controller.Update(0.05f, 500);
             Assert.Equal(2, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
 
-            _controller.Update(0.05f, 150);
+            _controller.Update(0.05f, 750);
             Assert.Equal(2, _sentPackets.Count);
 
-            _controller.Update(0.05f, 200);
+            _controller.Update(0.05f, 1000);
             Assert.Equal(3, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
         }
@@ -1037,6 +1253,44 @@ namespace WoWSharpClient.Tests.Movement
 
             Assert.NotNull(field);
             field!.SetValue(target, value);
+        }
+
+        private static IReadOnlyList<WoWObject> ReplaceTrackedObjects(params WoWObject[] objects)
+        {
+            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Static | BindingFlags.NonPublic);
+            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(objectsField);
+            Assert.NotNull(objectsLockField);
+
+            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(null)!;
+            var syncRoot = objectsLockField!.GetValue(null)!;
+
+            lock (syncRoot)
+            {
+                var snapshot = trackedObjects.ToArray();
+                trackedObjects.Clear();
+                trackedObjects.AddRange(objects);
+                return snapshot;
+            }
+        }
+
+        private static void RestoreTrackedObjects(IReadOnlyList<WoWObject> snapshot)
+        {
+            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Static | BindingFlags.NonPublic);
+            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(objectsField);
+            Assert.NotNull(objectsLockField);
+
+            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(null)!;
+            var syncRoot = objectsLockField!.GetValue(null)!;
+
+            lock (syncRoot)
+            {
+                trackedObjects.Clear();
+                trackedObjects.AddRange(snapshot);
+            }
         }
     }
 }

@@ -29,8 +29,10 @@ public class MovementControllerRecordedFrameTests
 
     // MOVEFLAG constants matching PhysicsBridge.h
     private const uint MOVEFLAG_FORWARD = 0x00000001;
+    private const uint MOVEFLAG_JUMPING = 0x00002000;
     private const uint MOVEFLAG_FALLINGFAR = 0x00000800;
     private const uint MOVEFLAG_SWIMMING = 0x00200000;
+    private const uint MOVEFLAG_ONTRANSPORT = 0x02000000;
 
     public MovementControllerRecordedFrameTests(ITestOutputHelper output)
     {
@@ -99,6 +101,53 @@ public class MovementControllerRecordedFrameTests
         };
     }
 
+    [Fact]
+    public void IsRecording_CapturesPhysicsFramesWithPacketMetadata()
+    {
+        var initialFrame = new RecordedFrame
+        {
+            FrameTimestamp = 0,
+            MovementFlags = 0,
+            Position = new RecordedPosition { X = 10f, Y = 20f, Z = 30f },
+            Facing = 0.25f,
+            WalkSpeed = 2.5f,
+            RunSpeed = 7.0f,
+            RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f,
+            SwimBackSpeed = 2.5f,
+        };
+        var nextFrame = new RecordedFrame
+        {
+            FrameTimestamp = 100,
+            MovementFlags = MOVEFLAG_FORWARD,
+            Position = new RecordedPosition { X = 10.7f, Y = 20.0f, Z = 30.0f },
+            Facing = 0.25f,
+            WalkSpeed = initialFrame.WalkSpeed,
+            RunSpeed = initialFrame.RunSpeed,
+            RunBackSpeed = initialFrame.RunBackSpeed,
+            SwimSpeed = initialFrame.SwimSpeed,
+            SwimBackSpeed = initialFrame.SwimBackSpeed,
+        };
+
+        var (controller, player, physics) = CreateController(initialFrame);
+        controller.IsRecording = true;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        physics
+            .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+            .Returns(BuildPerfectOutput(nextFrame, initialFrame));
+
+        controller.Update(0.1f, 100);
+
+        var frames = controller.GetRecordedFrames();
+        var frame = Assert.Single(frames);
+        Assert.Equal((uint)Opcode.MSG_MOVE_START_FORWARD, frame.PacketOpcode);
+        Assert.Equal((uint)MovementFlags.MOVEFLAG_FORWARD, frame.PacketFlags);
+        Assert.Equal(nextFrame.Position.X, frame.PosX, 3);
+        Assert.Equal(nextFrame.Position.Z, frame.PosZ, 3);
+        Assert.Equal(100u, frame.GameTimeMs);
+    }
+
     /// <summary>
     /// Finds a contiguous segment of "walking forward" frames in a recording — frames where
     /// MOVEFLAG_FORWARD is set, not falling, not swimming, and position changes.
@@ -133,6 +182,231 @@ public class MovementControllerRecordedFrameTests
         }
 
         return null;
+    }
+
+    private static int CountSegmentMovementPackets(MovementRecording recording, int startIdx, int endIdx)
+    {
+        if (recording.Packets.Count == 0)
+            return 0;
+
+        var (segmentStartMs, segmentEndMs) = GetSegmentPacketWindow(recording, startIdx, endIdx);
+        return recording.Packets.Count(packet =>
+            packet.IsOutbound &&
+            IsMovementOpcode(packet.Opcode) &&
+            packet.TimestampMs >= segmentStartMs &&
+            packet.TimestampMs <= segmentEndMs);
+    }
+
+    private static int CountSegmentOpcode(
+        MovementRecording recording,
+        int startIdx,
+        int endIdx,
+        Opcode opcode)
+    {
+        if (recording.Packets.Count == 0)
+            return 0;
+
+        var (segmentStartMs, segmentEndMs) = GetSegmentPacketWindow(recording, startIdx, endIdx);
+        return recording.Packets.Count(packet =>
+            packet.IsOutbound &&
+            packet.Opcode == (ushort)opcode &&
+            packet.TimestampMs >= segmentStartMs &&
+            packet.TimestampMs <= segmentEndMs);
+    }
+
+    private static (ulong startMs, ulong endMs) GetSegmentPacketWindow(
+        MovementRecording recording,
+        int startIdx,
+        int endIdx)
+    {
+        var frames = recording.Frames;
+        long startMs = startIdx > 0
+            ? frames[startIdx - 1].FrameTimestamp
+            : frames[startIdx].FrameTimestamp - EstimateFrameIntervalMs(frames, startIdx);
+        long endMs = endIdx + 1 < frames.Count
+            ? frames[endIdx + 1].FrameTimestamp
+            : frames[endIdx].FrameTimestamp + EstimateFrameIntervalMs(frames, endIdx);
+
+        return ((ulong)Math.Max(0, startMs), (ulong)Math.Max(0, endMs));
+    }
+
+    private static long EstimateFrameIntervalMs(IReadOnlyList<RecordedFrame> frames, int index)
+    {
+        if (frames.Count <= 1)
+            return 500;
+
+        if (index > 0)
+            return Math.Max(1, frames[index].FrameTimestamp - frames[index - 1].FrameTimestamp);
+
+        return Math.Max(1, frames[1].FrameTimestamp - frames[0].FrameTimestamp);
+    }
+
+    private static bool IsSimpleGroundForwardFrame(RecordedFrame frame)
+    {
+        const uint disallowedFlags =
+            MOVEFLAG_FALLINGFAR |
+            MOVEFLAG_JUMPING |
+            MOVEFLAG_SWIMMING |
+            MOVEFLAG_ONTRANSPORT;
+
+        return (frame.MovementFlags & MOVEFLAG_FORWARD) != 0 &&
+            (frame.MovementFlags & disallowedFlags) == 0;
+    }
+
+    private static bool IsSimpleGroundStopFrame(RecordedFrame frame)
+    {
+        const uint disallowedFlags =
+            MOVEFLAG_FALLINGFAR |
+            MOVEFLAG_JUMPING |
+            MOVEFLAG_SWIMMING |
+            MOVEFLAG_ONTRANSPORT;
+
+        return (frame.MovementFlags & MOVEFLAG_FORWARD) == 0 &&
+            (frame.MovementFlags & disallowedFlags) == 0;
+    }
+
+    private static RecordedFrame CreateSegmentInitialFrame(MovementRecording recording, int startIdx)
+    {
+        var source = recording.Frames[startIdx];
+        long syntheticTimestamp = source.FrameTimestamp - EstimateFrameIntervalMs(recording.Frames, startIdx);
+
+        if (startIdx > 0)
+        {
+            var previous = recording.Frames[startIdx - 1];
+            return new RecordedFrame
+            {
+                FrameTimestamp = previous.FrameTimestamp,
+                MovementFlags = previous.MovementFlags,
+                Position = new RecordedPosition
+                {
+                    X = previous.Position.X,
+                    Y = previous.Position.Y,
+                    Z = previous.Position.Z,
+                },
+                Facing = previous.Facing,
+                FallTime = previous.FallTime,
+                WalkSpeed = source.WalkSpeed,
+                RunSpeed = source.RunSpeed,
+                RunBackSpeed = source.RunBackSpeed,
+                SwimSpeed = source.SwimSpeed,
+                SwimBackSpeed = source.SwimBackSpeed,
+                TurnRate = source.TurnRate,
+                JumpVerticalSpeed = source.JumpVerticalSpeed,
+                JumpSinAngle = source.JumpSinAngle,
+                JumpCosAngle = source.JumpCosAngle,
+                JumpHorizontalSpeed = source.JumpHorizontalSpeed,
+                SwimPitch = source.SwimPitch,
+                FallStartHeight = source.FallStartHeight,
+                TransportGuid = previous.TransportGuid,
+                TransportOffsetX = previous.TransportOffsetX,
+                TransportOffsetY = previous.TransportOffsetY,
+                TransportOffsetZ = previous.TransportOffsetZ,
+                TransportOrientation = previous.TransportOrientation,
+                CurrentSpeed = source.CurrentSpeed,
+                FallingSpeed = source.FallingSpeed,
+                SplineFlags = previous.SplineFlags,
+                SplineTimePassed = previous.SplineTimePassed,
+                SplineDuration = previous.SplineDuration,
+                SplineId = previous.SplineId,
+                SplineFinalPoint = previous.SplineFinalPoint,
+                SplineFinalDestination = previous.SplineFinalDestination,
+                SplineNodes = previous.SplineNodes,
+                SystemTick = previous.SystemTick,
+                NearbyGameObjects = previous.NearbyGameObjects,
+                NearbyUnits = previous.NearbyUnits,
+            };
+        }
+
+        return new RecordedFrame
+        {
+            FrameTimestamp = Math.Max(0, syntheticTimestamp),
+            MovementFlags = 0,
+            Position = new RecordedPosition
+            {
+                X = source.Position.X,
+                Y = source.Position.Y,
+                Z = source.Position.Z,
+            },
+            Facing = source.Facing,
+            FallTime = 0,
+            WalkSpeed = source.WalkSpeed,
+            RunSpeed = source.RunSpeed,
+            RunBackSpeed = source.RunBackSpeed,
+            SwimSpeed = source.SwimSpeed,
+            SwimBackSpeed = source.SwimBackSpeed,
+            TurnRate = source.TurnRate,
+            JumpVerticalSpeed = source.JumpVerticalSpeed,
+            JumpSinAngle = source.JumpSinAngle,
+            JumpCosAngle = source.JumpCosAngle,
+            JumpHorizontalSpeed = source.JumpHorizontalSpeed,
+            SwimPitch = source.SwimPitch,
+            FallStartHeight = source.FallStartHeight,
+            TransportGuid = 0,
+            TransportOffsetX = 0,
+            TransportOffsetY = 0,
+            TransportOffsetZ = 0,
+            TransportOrientation = 0,
+            CurrentSpeed = source.CurrentSpeed,
+            FallingSpeed = 0,
+            SplineFlags = 0,
+            SplineTimePassed = 0,
+            SplineDuration = 0,
+            SplineId = 0,
+            SystemTick = source.SystemTick,
+            NearbyGameObjects = source.NearbyGameObjects,
+            NearbyUnits = source.NearbyUnits,
+        };
+    }
+
+    private static (int startIdx, int endIdx, int packetCount)? FindWalkingSegmentWithPackets(
+        MovementRecording recording, int minFrames = 30)
+    {
+        var frames = recording.Frames;
+        int runStart = -1;
+        int bestStart = -1;
+        int bestEnd = -1;
+        int bestPacketCount = 0;
+
+        void ConsiderRun(int startIdx, int endIdx)
+        {
+            if (startIdx < 0 || endIdx < startIdx || endIdx - startIdx + 1 < minFrames)
+                return;
+
+            bool hasCleanStop = endIdx + 1 < frames.Count && IsSimpleGroundStopFrame(frames[endIdx + 1]);
+            if (!hasCleanStop)
+                return;
+
+            int packetCount = CountSegmentMovementPackets(recording, startIdx, endIdx);
+            if (packetCount > bestPacketCount)
+            {
+                bestStart = startIdx;
+                bestEnd = endIdx;
+                bestPacketCount = packetCount;
+            }
+        }
+
+        for (int i = 0; i < frames.Count; i++)
+        {
+            var frame = frames[i];
+            bool isWalking = IsSimpleGroundForwardFrame(frame);
+
+            if (isWalking)
+            {
+                if (runStart < 0)
+                    runStart = i;
+            }
+            else
+            {
+                ConsiderRun(runStart, i - 1);
+                runStart = -1;
+            }
+        }
+
+        ConsiderRun(runStart, frames.Count - 1);
+
+        return bestPacketCount > 0
+            ? (bestStart, bestEnd, bestPacketCount)
+            : null;
     }
 
     [Fact]
@@ -748,20 +1022,57 @@ public class MovementControllerRecordedFrameTests
         MovementRecording? recording = null;
         (int startIdx, int endIdx)? segment = null;
         string? recordingName = null;
+        int segmentPacketCount = 0;
+        const int minPacketBackedFrames = 8;
+        const int minFallbackFrames = 30;
+        int bestFacingPacketCount = int.MaxValue;
+
         foreach (var (name, rec) in recordings)
         {
-            segment = FindWalkingSegment(rec, 30);
-            if (segment != null)
+            var packetSegment = FindWalkingSegmentWithPackets(rec, minPacketBackedFrames);
+            if (packetSegment == null)
+                continue;
+
+            int facingPacketCount = CountSegmentOpcode(
+                rec,
+                packetSegment.Value.startIdx,
+                packetSegment.Value.endIdx,
+                Opcode.MSG_MOVE_SET_FACING);
+
+            bool betterCandidate =
+                recording == null ||
+                facingPacketCount < bestFacingPacketCount ||
+                (facingPacketCount == bestFacingPacketCount &&
+                 packetSegment.Value.packetCount > segmentPacketCount);
+
+            if (betterCandidate)
             {
                 recording = rec;
                 recordingName = name;
-                break;
+                segment = (packetSegment.Value.startIdx, packetSegment.Value.endIdx);
+                segmentPacketCount = packetSegment.Value.packetCount;
+                bestFacingPacketCount = facingPacketCount;
             }
         }
 
         if (recording == null || segment == null)
         {
-            _output.WriteLine("No recording with 30+ walking frames found");
+            foreach (var (name, rec) in recordings)
+            {
+                segment = FindWalkingSegment(rec, minFallbackFrames);
+                if (segment != null)
+                {
+                    recording = rec;
+                    recordingName = name;
+                    segmentPacketCount = CountSegmentMovementPackets(rec, segment.Value.startIdx, segment.Value.endIdx);
+                    break;
+                }
+            }
+        }
+
+        if (recording == null || segment == null)
+        {
+            _output.WriteLine($"No recording with {minFallbackFrames}+ walking frames found");
             return;
         }
 
@@ -769,6 +1080,8 @@ public class MovementControllerRecordedFrameTests
         var frames = recording.Frames;
         _output.WriteLine($"Recording: {recordingName}");
         _output.WriteLine($"Walking segment: frames {start}-{end} ({end - start + 1} frames)");
+        _output.WriteLine($"FG movement packets in selected segment: {segmentPacketCount}");
+        _output.WriteLine($"FG facing packets in selected segment: {CountSegmentOpcode(recording, start, end, Opcode.MSG_MOVE_SET_FACING)}");
 
         // Set up controller with opcode capture
         var bgOpcodes = new List<(ulong timestampMs, Opcode opcode)>();
@@ -783,7 +1096,8 @@ public class MovementControllerRecordedFrameTests
             });
 
         var mockPhysics = new Mock<PathfindingClient>();
-        var (controller, player, _) = CreateController(frames[start]);
+        var initialFrame = CreateSegmentInitialFrame(recording, start);
+        var (_, player, _) = CreateController(initialFrame);
         // Re-wire with our capturing mock client
         var capturingController = new MovementController(mockClient.Object, mockPhysics.Object, player);
 
@@ -793,22 +1107,26 @@ public class MovementControllerRecordedFrameTests
             frames[start].Position.Y + MathF.Sin(facing) * 100f,
             frames[start].Position.Z));
 
+        int executionEnd = Math.Min(frames.Count - 1, end + 1);
         int frameIdx = start;
         mockPhysics
             .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
             .Returns<PhysicsInput>(_ =>
             {
-                int nextIdx = Math.Min(frameIdx + 1, end);
+                int nextIdx = Math.Min(frameIdx + 1, executionEnd);
                 return BuildPerfectOutput(frames[nextIdx], frames[frameIdx]);
             });
 
-        // Run through the walking segment
-        for (int i = start; i < end; i++)
+        // Run through the walking segment plus one post-roll frame so stop transitions
+        // in the recording can produce a matching BG MSG_MOVE_STOP.
+        for (int i = start; i <= executionEnd; i++)
         {
             frameIdx = i;
             var frame = frames[i];
-            var nextFrame = frames[i + 1];
-            float dt = (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f;
+            var nextFrame = i < frames.Count - 1 ? frames[i + 1] : frame;
+            float dt = i < frames.Count - 1
+                ? (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f
+                : EstimateFrameIntervalMs(frames, i) / 1000f;
             if (dt <= 0 || dt > 1.0f) dt = 0.033f;
 
             player.MovementFlags = (MovementFlags)frame.MovementFlags;
@@ -832,8 +1150,7 @@ public class MovementControllerRecordedFrameTests
         if (hasPackets)
         {
             // Filter FG packets to movement-related outbound opcodes in the segment's time range
-            ulong segmentStartMs = (ulong)frames[start].FrameTimestamp;
-            ulong segmentEndMs = (ulong)frames[end].FrameTimestamp;
+            var (segmentStartMs, segmentEndMs) = GetSegmentPacketWindow(recording, start, end);
             var fgMovementPackets = recording.Packets
                 .Where(p => p.IsOutbound
                     && IsMovementOpcode(p.Opcode)

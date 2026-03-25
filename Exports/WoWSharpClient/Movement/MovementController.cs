@@ -95,9 +95,9 @@ namespace WoWSharpClient.Movement
         // When true, sync _lastPacketPosition to current player position on next Update().
         // Needed because Reset() runs before the teleport position is applied to _player.
         private bool _needsPacketPositionSync;
-        // WoW.exe heartbeat timer: 100ms (0x5E2110, mov ecx 0x64).
-        // Only sends when position has actually changed (gated by 0x5E22D0).
-        private const uint PACKET_INTERVAL_MS = 100;
+        // Packet-backed FG traces show the local client emits movement heartbeats on an
+        // approximately 500ms cadence while moving, with state-change packets in between.
+        private const uint PACKET_INTERVAL_MS = 500;
         private uint _latestGameTimeMs;
         private uint _staleForwardSuppressUntilMs;
         private int _staleForwardNoDisplacementTicks;
@@ -206,6 +206,7 @@ namespace WoWSharpClient.Movement
                 && !_needsGroundSnap
                 && !_player.IsAutoAttacking)
             {
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
                 return;
             }
 
@@ -215,6 +216,7 @@ namespace WoWSharpClient.Movement
             // cancelled by physics-generated position updates.
             if (_player.IsChanneling || _player.IsCasting)
             {
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
                 return;
             }
 
@@ -246,6 +248,7 @@ namespace WoWSharpClient.Movement
             if (physicsResult == null)
             {
                 Log.Warning("[MovementController] Physics returned null — skipping frame {Frame}", _frameCounter);
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
                 return;
             }
             ApplyPhysicsResult(physicsResult, deltaSec);
@@ -321,6 +324,8 @@ namespace WoWSharpClient.Movement
             {
                 SendMovementPacket(gameTimeMs);
             }
+
+            CapturePhysicsFrameRecord(physicsResult, deltaSec, gameTimeMs);
         }
 
         // ======== PHYSICS ========
@@ -459,35 +464,77 @@ namespace WoWSharpClient.Movement
             return transport != null;
         }
 
+        private const float PhysicsNearbyObjectRadius = 40f;
+        private const int MaxPhysicsNearbyObjectCount = 64;
+        private static readonly GameObjectType[] PhysicsCollidableObjectTypes =
+        [
+            GameObjectType.Door,
+            GameObjectType.Button,
+            GameObjectType.Chest,
+            GameObjectType.Generic,
+            GameObjectType.Goober,
+            GameObjectType.Transport,
+            GameObjectType.MapObject,
+            GameObjectType.MapObjectTransport,
+            GameObjectType.Mailbox,
+            GameObjectType.AuctionHouse,
+            GameObjectType.SpellCaster,
+            GameObjectType.MeetingStone,
+            GameObjectType.FlagStand,
+            GameObjectType.FlagDrop,
+            GameObjectType.CapturePoint,
+            GameObjectType.DestructibleBuilding,
+            GameObjectType.GuildBank,
+            GameObjectType.TrapDoor
+        ];
+
         private DynamicObjectProto[] BuildPhysicsNearbyObjects(Position referencePosition, WoWGameObject? activeTransport)
         {
-            const float maxRangeSq = 100f * 100f;
-            var nearbyObjects = new List<DynamicObjectProto>();
+            var maxRangeSq = PhysicsNearbyObjectRadius * PhysicsNearbyObjectRadius;
+            var nearbyObjects = new List<(int priority, float distanceSq, DynamicObjectProto proto)>();
             var seenGuids = new HashSet<ulong>();
 
             void AddGameObject(WoWGameObject gameObject, bool forceInclude)
             {
-                if (gameObject.Guid == 0 || gameObject.DisplayId == 0 || !seenGuids.Add(gameObject.Guid))
-                    return;
-
-                float dx = gameObject.Position.X - referencePosition.X;
-                float dy = gameObject.Position.Y - referencePosition.Y;
-                float dz = gameObject.Position.Z - referencePosition.Z;
-                float distSq = dx * dx + dy * dy + dz * dz;
-                if (!forceInclude && distSq > maxRangeSq)
-                    return;
-
-                nearbyObjects.Add(new DynamicObjectProto
+                var position = gameObject.Position;
+                if (gameObject.Guid == 0
+                    || position == null
+                    || !IsFinitePosition(position)
+                    || !float.IsFinite(gameObject.Facing)
+                    || !seenGuids.Add(gameObject.Guid))
                 {
-                    Guid = gameObject.Guid,
-                    DisplayId = gameObject.DisplayId,
-                    X = gameObject.Position.X,
-                    Y = gameObject.Position.Y,
-                    Z = gameObject.Position.Z,
-                    Orientation = gameObject.Facing,
-                    Scale = gameObject.ScaleX > 0f ? gameObject.ScaleX : 1f,
-                    GoState = (uint)gameObject.GoState,
-                });
+                    return;
+                }
+
+                float dx = position.X - referencePosition.X;
+                float dy = position.Y - referencePosition.Y;
+                float dz = position.Z - referencePosition.Z;
+                float distSq = dx * dx + dy * dy + dz * dz;
+
+                if (!forceInclude)
+                {
+                    if (gameObject.DisplayId == 0
+                        || !IsPhysicsCollidableType(gameObject.TypeId)
+                        || distSq > maxRangeSq)
+                    {
+                        return;
+                    }
+                }
+
+                nearbyObjects.Add((
+                    priority: forceInclude ? 0 : 1,
+                    distanceSq: distSq,
+                    proto: new DynamicObjectProto
+                    {
+                        Guid = gameObject.Guid,
+                        DisplayId = gameObject.DisplayId,
+                        X = position.X,
+                        Y = position.Y,
+                        Z = position.Z,
+                        Orientation = gameObject.Facing,
+                        Scale = float.IsFinite(gameObject.ScaleX) && gameObject.ScaleX > 0f ? gameObject.ScaleX : 1f,
+                        GoState = (uint)gameObject.GoState,
+                    }));
             }
 
             if (activeTransport != null)
@@ -496,8 +543,23 @@ namespace WoWSharpClient.Movement
             foreach (var gameObject in WoWSharpObjectManager.Instance.Objects.OfType<WoWGameObject>())
                 AddGameObject(gameObject, forceInclude: gameObject.Guid == _player.TransportGuid);
 
-            return [.. nearbyObjects];
+            return nearbyObjects
+                .OrderBy(candidate => candidate.priority)
+                .ThenBy(candidate => candidate.distanceSq)
+                .ThenBy(candidate => candidate.proto.Guid)
+                .Take(MaxPhysicsNearbyObjectCount)
+                .Select(candidate => candidate.proto)
+                .ToArray();
         }
+
+        private static bool IsPhysicsCollidableType(uint typeId)
+            => Enum.IsDefined(typeof(GameObjectType), (int)typeId)
+                && Array.IndexOf(PhysicsCollidableObjectTypes, (GameObjectType)typeId) >= 0;
+
+        private static bool IsFinitePosition(Position position)
+            => float.IsFinite(position.X)
+                && float.IsFinite(position.Y)
+                && float.IsFinite(position.Z);
 
         private int _deadReckonCount = 0;
         private float _prevOutX, _prevOutY, _prevOutZ;
@@ -525,6 +587,7 @@ namespace WoWSharpClient.Movement
         private uint _frameSentFlags = 0;
         private float _frameSentFacing = 0;
         private bool _frameSentPending = false;
+        private bool _stopWhenGrounded = false;
 
         /// <summary>
         /// Applies physics output to player state. WoW.exe-style: trust the physics
@@ -558,6 +621,7 @@ namespace WoWSharpClient.Movement
             {
                 _prevGroundZ = output.GroundZ;
                 _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
+                _hasPhysicsGroundContact = true;
             }
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
@@ -574,6 +638,12 @@ namespace WoWSharpClient.Movement
             var inputFlags = _player.MovementFlags & ~PhysicsFlags;
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
             _player.MovementFlags = inputFlags | newPhysicsFlags;
+
+            if (_stopWhenGrounded && !isFalling)
+            {
+                _player.MovementFlags = ClearForcedStopIntent(_player.MovementFlags);
+                _stopWhenGrounded = false;
+            }
 
             if (TryGetActiveTransport(out var activeTransport))
             {
@@ -593,6 +663,81 @@ namespace WoWSharpClient.Movement
 
             // Advance waypoint if arrived
             AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);
+        }
+
+        private void CapturePhysicsFrameRecord(PhysicsOutput? output, float deltaSec, uint gameTimeMs)
+        {
+            if (!IsRecording)
+            {
+                ClearFramePacketRecordState();
+                return;
+            }
+
+            if (_recordedFrames.Count >= MAX_RECORDED_FRAMES)
+                _recordedFrames.RemoveAt(0);
+
+            float posZ = _player.Position.Z;
+            float prevPosZ = _recordedFrames.Count > 0 ? _recordedFrames[^1].PosZ : posZ;
+            bool isFalling = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+            float currentWaypointZ = float.NaN;
+            if (_currentPath != null &&
+                _currentWaypointIndex >= 0 &&
+                _currentWaypointIndex < _currentPath.Length)
+            {
+                currentWaypointZ = _currentPath[_currentWaypointIndex].Z;
+            }
+
+            uint packetOpcode = _frameSentPending ? _frameSentOpcode : 0;
+            uint packetFlags = _frameSentPending ? _frameSentFlags : 0;
+            float packetFacing = _frameSentPending ? _frameSentFacing : 0f;
+
+            _recordedFrames.Add(new PhysicsFrameRecord
+            {
+                FrameNumber = _frameCounter,
+                GameTimeMs = gameTimeMs,
+                DeltaSec = deltaSec,
+                PosX = _player.Position.X,
+                PosY = _player.Position.Y,
+                PosZ = posZ,
+                RawPosZ = output?.NewPosZ ?? posZ,
+                PhysicsGroundZ = output?.GroundZ ?? _prevGroundZ,
+                PrevGroundZ = _prevGroundZ,
+                HasPhysicsGroundContact = _hasPhysicsGroundContact,
+                VelX = _velocity.X,
+                VelY = _velocity.Y,
+                VelZ = _velocity.Z,
+                FallTimeMs = _fallTimeMs,
+                IsFalling = isFalling,
+                MovementFlags = (uint)_player.MovementFlags,
+                SlopeGuardRejected = false,
+                PathGroundGuardActive = false,
+                FalseFreefallSuppressed = false,
+                TeleportClampActive = false,
+                UndergroundSnapFired = false,
+                HitWall = LastHitWall,
+                WallNormalX = LastWallNormal.X,
+                WallNormalY = LastWallNormal.Y,
+                BlockedFraction = LastBlockedFraction,
+                PathWaypointZ = currentWaypointZ,
+                PathWaypointIndex = _currentWaypointIndex,
+                ZDeltaFromPrev = posZ - prevPosZ,
+                PrevGroundNx = _prevGroundNormal.X,
+                PrevGroundNy = _prevGroundNormal.Y,
+                PrevGroundNz = _prevGroundNormal.Z,
+                PacketOpcode = packetOpcode,
+                PacketFlags = packetFlags,
+                PacketFacing = packetFacing,
+            });
+
+            ClearFramePacketRecordState();
+        }
+
+        private void ClearFramePacketRecordState()
+        {
+            _frameSentOpcode = 0;
+            _frameSentFlags = 0;
+            _frameSentFacing = 0f;
+            _frameSentPending = false;
         }
 
         // ======== NETWORKING ========
@@ -852,23 +997,41 @@ namespace WoWSharpClient.Movement
         }
 
         // ======== SPECIAL PACKETS ========
+        public void SendMovementStartFacingUpdate(uint gameTimeMs)
+        {
+            var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
+            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer).GetAwaiter().GetResult();
+
+            _frameSentOpcode = (uint)Opcode.MSG_MOVE_SET_FACING;
+            _frameSentFlags = (uint)_player.MovementFlags;
+            _frameSentFacing = _player.Facing;
+            _frameSentPending = true;
+
+            _lastSentFlags = _player.MovementFlags;
+            _lastPacketTime = gameTimeMs;
+            _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+
+            Log.Information("[MovementController] MSG_MOVE_SET_FACING (movement start) Facing={Facing:F2} Pos=({X:F1},{Y:F1},{Z:F1})",
+                _player.Facing, _player.Position.X, _player.Position.Y, _player.Position.Z);
+        }
+
         public void SendFacingUpdate(uint gameTimeMs)
         {
             // WoW.exe sends MSG_MOVE_HEARTBEAT before SET_FACING to sync position.
             // Without this, the server's position for the player may be stale (from
             // the last heartbeat), causing the server to compute facing from a
             // different position than the bot — leading to BADFACING rejections.
-            if (_lastSentFlags != MovementFlags.MOVEFLAG_NONE || _player.MovementFlags != _lastSentFlags)
-            {
-                // Send stop + position sync first
-                var stopBuffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-                _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, stopBuffer);
-                _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-                _lastPacketTime = gameTimeMs;
-            }
+            // The stationary melee case is the one that needs this most: when the
+            // player is already standing still, the regular heartbeat cadence can
+            // stop entirely, but WoW.exe still syncs position before SET_FACING.
+            var heartbeatBuffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
+            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeatBuffer).GetAwaiter().GetResult();
+            _lastSentFlags = _player.MovementFlags;
+            _lastPacketTime = gameTimeMs;
+            _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
 
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer);
+            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer).GetAwaiter().GetResult();
             _lastPacketTime = gameTimeMs;
             Log.Information("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2} Pos=({X:F1},{Y:F1},{Z:F1})",
                 _player.Facing, _player.Position.X, _player.Position.Y, _player.Position.Z);
@@ -891,6 +1054,11 @@ namespace WoWSharpClient.Movement
 
         private static MovementFlags ClearForcedStopIntent(MovementFlags flags)
             => flags & ~FORCED_STOP_CLEAR_MASK;
+
+        internal void RequestGroundedStop()
+        {
+            _stopWhenGrounded = true;
+        }
 
         // ======== PATH FOLLOWING ========
 
@@ -1078,6 +1246,7 @@ namespace WoWSharpClient.Movement
             _currentWaypointIndex = 0;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(_latestGameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RESET_MS);
+            _stopWhenGrounded = false;
 
             if (_forceStopAfterReset)
             {

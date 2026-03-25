@@ -9,6 +9,7 @@ using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
 using Communication;
+using ForegroundBotRunner.Diagnostics;
 using ForegroundBotRunner.Logging;
 using ForegroundBotRunner.Mem.Hooks;
 using ForegroundBotRunner.Statics;
@@ -35,6 +36,7 @@ namespace ForegroundBotRunner
         private ObjectManager? _objectManager;
         private CharacterStateUpdateClient? _stateUpdateClient;
         private MovementRecorder? _movementRecorder;
+        private ForegroundPacketTraceRecorder? _packetTraceRecorder;
         private PathfindingClient? _pathfindingClient;
         private BotRunnerService? _botRunner;
 
@@ -455,6 +457,7 @@ namespace ForegroundBotRunner
             // Create MovementRecorder for physics engine testing
             // Use macro to toggle: /run REC=(REC or 0)+1
             _movementRecorder = new MovementRecorder(() => _objectManager, _loggerFactory);
+            _packetTraceRecorder = new ForegroundPacketTraceRecorder(_loggerFactory);
 
             _logger.LogInformation("ObjectManager initialized - direct memory access enabled");
             _logger.LogInformation("MovementRecorder ready - say 'rec' in chat to toggle recording");
@@ -597,7 +600,8 @@ namespace ForegroundBotRunner
                 container,
                 agentFactoryAccessor: null, // FG has no network agents
                 accountName: _accountName,
-                behaviorConfig: LoadBehaviorConfig(_configuration));
+                behaviorConfig: LoadBehaviorConfig(_configuration),
+                diagnosticPacketTraceRecorder: _packetTraceRecorder);
 
             _botRunner.Start();
             DiagLog("BotRunnerService started");
@@ -665,6 +669,7 @@ namespace ForegroundBotRunner
                 _movementRecorder.StopRecording();
             }
             _movementRecorder?.Dispose();
+            _packetTraceRecorder?.Dispose();
 
             // Dispose the named-pipe logger provider
             _pipeLoggerProvider?.Dispose();

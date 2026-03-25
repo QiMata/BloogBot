@@ -474,6 +474,10 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 {
     if (intendedDist < MIN_MOVE_DISTANCE) return;
 
+    st.wallHit = false;
+    st.wallHitNormal = G3D::Vector3(0, 0, 1);
+    st.wallBlockedFraction = 1.0f;
+
     const G3D::Vector3 dirN = moveDir.directionOrZero();
     const float startX = st.x, startY = st.y, startZ = st.z;
 
@@ -509,47 +513,311 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     G3D::Vector3 endBoxMin(endX - skin, endY - skin, adjustedMinZ);
     G3D::Vector3 endBoxMax(endX + skin, endY + skin, adjustedMaxZ);
 
-    // Step 5a: SWEEP 1 — full displacement (0x633D1C)
-    // WoW.exe sweeps the AABB from start to end, detecting wall collisions.
+    // Step 5a/5b: WoW.exe does not keep explicit sweep-contact lists here.
+    // The 0x6373B0 helper is an AABB merge routine: it unions the start box with
+    // the full-step box, then unions that result with the contracted half-step box
+    // before the final TestTerrain query runs.
     G3D::Vector3 startBoxMin(startX - skin, startY - skin, adjustedMinZ);
     G3D::Vector3 startBoxMax(startX + skin, startY + skin, adjustedMaxZ);
-    G3D::Vector3 displacement(dirN.x * sweepDist, dirN.y * sweepDist, 0);
-    std::vector<SceneQuery::AABBContact> sweepContacts;
-    SceneQuery::SweepAABB(input.mapId, startBoxMin, startBoxMax, displacement, sweepContacts);
-
-    // If swept test found true WALL contacts (not steep ground), reduce end position.
-    // WoW.exe only clamps for contacts with significant horizontal normal (actual walls).
-    for (const auto& sc : sweepContacts) {
-        if (sc.walkable) continue;
-        // Require strong horizontal normal to classify as wall (not steep terrain)
-        float hNormalMag = std::sqrt(sc.normal.x * sc.normal.x + sc.normal.y * sc.normal.y);
-        if (hNormalMag < 0.5f) continue; // Skip steep ground — only walls
-        if (sc.distance > 0 && sc.distance < sweepDist) {
-            float wallDist = std::max(0.0f, sc.distance - skin);
-            endX = startX + dirN.x * wallDist;
-            endY = startY + dirN.y * wallDist;
-            endBoxMin = G3D::Vector3(endX - skin, endY - skin, adjustedMinZ);
-            endBoxMax = G3D::Vector3(endX + skin, endY + skin, adjustedMaxZ);
-            break;
-        }
-    }
-
-    // Step 5b: SWEEP 2 — half-step with √2-contracted AABB (0x633DEB)
-    // WoW.exe runs a second swept AABB here, not a static overlap at the half-step end.
     float halfDist = speedDt * 0.5f;
     float contracted = skin * sqrt2;
-    G3D::Vector3 halfStartBoxMin(startX - contracted, startY - contracted, adjustedMinZ);
-    G3D::Vector3 halfStartBoxMax(startX + contracted, startY + contracted, adjustedMaxZ);
-    G3D::Vector3 halfDisplacement(dirN.x * halfDist, dirN.y * halfDist, 0.0f);
-    std::vector<SceneQuery::AABBContact> halfContacts;
-    SceneQuery::SweepAABB(input.mapId, halfStartBoxMin, halfStartBoxMax, halfDisplacement, halfContacts);
+    const float halfX = startX + dirN.x * halfDist;
+    const float halfY = startY + dirN.y * halfDist;
+    G3D::Vector3 halfBoxMin(halfX - contracted, halfY - contracted, adjustedMinZ);
+    G3D::Vector3 halfBoxMax(halfX + contracted, halfY + contracted, adjustedMaxZ);
 
-    // Step 5c: Test terrain at end AABB (0x6721B0 TestTerrain)
+    auto mergeAabb = [](const G3D::Vector3& minA,
+        const G3D::Vector3& maxA,
+        const G3D::Vector3& minB,
+        const G3D::Vector3& maxB,
+        G3D::Vector3& outMin,
+        G3D::Vector3& outMax) {
+            outMin = G3D::Vector3(
+                std::min(minA.x, minB.x),
+                std::min(minA.y, minB.y),
+                std::min(minA.z, minB.z));
+            outMax = G3D::Vector3(
+                std::max(maxA.x, maxB.x),
+                std::max(maxA.y, maxB.y),
+                std::max(maxA.z, maxB.z));
+        };
+
+    G3D::Vector3 queryBoxMin = startBoxMin;
+    G3D::Vector3 queryBoxMax = startBoxMax;
+    mergeAabb(queryBoxMin, queryBoxMax, endBoxMin, endBoxMax, queryBoxMin, queryBoxMax);
+    mergeAabb(queryBoxMin, queryBoxMax, halfBoxMin, halfBoxMax, queryBoxMin, queryBoxMax);
+
+    // Step 5c: Test terrain on the merged query volume (0x6721B0 TestTerrain)
+    std::vector<SceneQuery::AABBContact> slideContacts;
+    SceneQuery::TestTerrainAABB(input.mapId, queryBoxMin, queryBoxMax, slideContacts);
+
+    auto buildMergedBlockerNormal = [&](const G3D::Vector3& moveDir2D,
+        G3D::Vector3& outNormal,
+        G3D::Vector3& outPrimaryAxis,
+        G3D::Vector3& outPrimaryContactNormal) -> bool {
+        struct BlockerCandidate
+        {
+            G3D::Vector3 axis;
+            G3D::Vector3 sourceNormal;
+            float score;
+        };
+
+        std::vector<BlockerCandidate> candidates;
+        candidates.reserve(slideContacts.size());
+        std::vector<G3D::Vector3> blockerAxes;
+        blockerAxes.reserve(4);
+
+        auto appendAxis = [&](const G3D::Vector3& axis) {
+            for (const auto& existing : blockerAxes) {
+                if ((existing - axis).squaredMagnitude() <= 1e-6f)
+                    return;
+            }
+
+            if (blockerAxes.size() < 4)
+                blockerAxes.push_back(axis);
+        };
+
+        for (const auto& contact : slideContacts) {
+            if (contact.walkable)
+                continue;
+
+            G3D::Vector3 normal = contact.normal.directionOrZero();
+            if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON)
+                continue;
+
+            // The grounded resolver after TestTerrain works from a small set of
+            // AABB blocker axes rather than projecting across every raw triangle
+            // normal. We recover those axes from the current query in movement
+            // direction order, then merge them with the same 1 / 2 / 3+ rules
+            // visible in the local 0x636610 helper.
+            G3D::Vector3 horizontalNormal(normal.x, normal.y, 0.0f);
+            const float horizontalMag = horizontalNormal.magnitude();
+            if (horizontalMag <= PhysicsConstants::VECTOR_EPSILON)
+                continue;
+
+            horizontalNormal = horizontalNormal * (1.0f / horizontalMag);
+            const float opposeScore = -horizontalNormal.dot(moveDir2D);
+            if (opposeScore <= 0.15f)
+                continue;
+
+            if (std::fabs(horizontalNormal.x) >= std::fabs(horizontalNormal.y) &&
+                std::fabs(horizontalNormal.x) > 0.25f) {
+                candidates.push_back(BlockerCandidate{
+                    G3D::Vector3(horizontalNormal.x > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f),
+                    normal,
+                    opposeScore });
+            }
+            else if (std::fabs(horizontalNormal.y) > 0.25f) {
+                candidates.push_back(BlockerCandidate{
+                    G3D::Vector3(0.0f, horizontalNormal.y > 0.0f ? 1.0f : -1.0f, 0.0f),
+                    normal,
+                    opposeScore });
+            }
+        }
+
+        outPrimaryAxis = G3D::Vector3(0, 0, 0);
+        outPrimaryContactNormal = G3D::Vector3(0, 0, 0);
+        if (!candidates.empty()) {
+            float bestScore = 0.0f;
+            size_t bestIndex = 0;
+            for (const auto& candidate : candidates)
+                bestScore = std::max(bestScore, candidate.score);
+            for (size_t i = 0; i < candidates.size(); ++i) {
+                if (candidates[i].score >= bestScore) {
+                    bestIndex = i;
+                    bestScore = candidates[i].score;
+                }
+            }
+
+            outPrimaryAxis = candidates[bestIndex].axis;
+            outPrimaryContactNormal = candidates[bestIndex].sourceNormal;
+            appendAxis(outPrimaryAxis);
+            for (const auto& candidate : candidates) {
+                if ((candidate.axis - outPrimaryAxis).squaredMagnitude() <= 1e-6f)
+                    continue;
+                appendAxis(candidate.axis);
+            }
+        }
+
+        if (blockerAxes.empty())
+            return false;
+
+        if (blockerAxes.size() == 1) {
+            outNormal = blockerAxes[0];
+        }
+        else if (blockerAxes.size() == 2) {
+            G3D::Vector3 merged = blockerAxes[0] + blockerAxes[1];
+            outNormal = merged.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? merged.directionOrZero()
+                : blockerAxes[0];
+        }
+        else if (blockerAxes.size() == 3) {
+            // Local WoW.exe 0x636610 does not zero the three-axis case. It
+            // chooses the lone axis from the minority orientation group:
+            // one X-axis against two Y-axes, or one Y-axis against two X-axes.
+            int xAxisIndices[3] = { 0, 0, 0 };
+            int yAxisIndices[3] = { 0, 0, 0 };
+            int xAxisCount = 0;
+            int yAxisCount = 0;
+
+            for (size_t i = 0; i < blockerAxes.size(); ++i) {
+                const auto& axis = blockerAxes[i];
+                if (std::fabs(axis.y) <= PhysicsConstants::VECTOR_EPSILON) {
+                    xAxisIndices[xAxisCount++] = static_cast<int>(i);
+                }
+                else if (std::fabs(axis.x) <= PhysicsConstants::VECTOR_EPSILON) {
+                    yAxisIndices[yAxisCount++] = static_cast<int>(i);
+                }
+            }
+
+            if (xAxisCount == 1) {
+                outNormal = blockerAxes[xAxisIndices[0]];
+            }
+            else if (yAxisCount > 0) {
+                outNormal = blockerAxes[yAxisIndices[0]];
+            }
+            else {
+                outNormal = blockerAxes[0];
+            }
+        }
+        else {
+            // Local WoW.exe 0x636610 zeroes the merged blocker vector once all
+            // four cardinal blocker axes are present.
+            outNormal = G3D::Vector3(0, 0, 0);
+        }
+
+        return outNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON;
+    };
+
+    auto resolveWallSlide = [&](const G3D::Vector3& requestedMove,
+        G3D::Vector3& outResolvedMove,
+        G3D::Vector3& outWallNormal,
+        float& outBlockedFraction) -> bool {
+        outResolvedMove = requestedMove;
+        outWallNormal = G3D::Vector3(0, 0, 1);
+
+        const float requested2D = std::sqrt((requestedMove.x * requestedMove.x) + (requestedMove.y * requestedMove.y));
+        if (requested2D <= PhysicsConstants::VECTOR_EPSILON) {
+            outBlockedFraction = 1.0f;
+            return false;
+        }
+
+        const G3D::Vector3 moveDir2D = G3D::Vector3(requestedMove.x, requestedMove.y, 0.0f).directionOrZero();
+        G3D::Vector3 primaryAxis(0, 0, 0);
+        G3D::Vector3 primaryContactNormal(0, 0, 0);
+        if (moveDir2D.magnitude() <= PhysicsConstants::VECTOR_EPSILON ||
+            !buildMergedBlockerNormal(moveDir2D, outWallNormal, primaryAxis, primaryContactNormal)) {
+            outBlockedFraction = 1.0f;
+            return false;
+        }
+
+        const float intoSurface = requestedMove.dot(outWallNormal);
+        if (intoSurface >= -PhysicsConstants::VECTOR_EPSILON) {
+            outBlockedFraction = 1.0f;
+            return false;
+        }
+
+        G3D::Vector3 horizontalProjectedMove = requestedMove - (outWallNormal * intoSurface);
+        horizontalProjectedMove.z = 0.0f;
+        G3D::Vector3 horizontalWallNormal(outWallNormal.x, outWallNormal.y, 0.0f);
+        const float horizontalWallMag = horizontalWallNormal.magnitude();
+        if (horizontalWallMag > PhysicsConstants::VECTOR_EPSILON) {
+            // Local WoW.exe 0x635D80 adds a tiny 0.001f horizontal pushout
+            // after the normal correction so the resolved move is not left
+            // exactly on the blocker plane.
+            horizontalWallNormal = horizontalWallNormal * (1.0f / horizontalWallMag);
+            horizontalProjectedMove += horizontalWallNormal * 0.001f;
+        }
+
+        G3D::Vector3 projectedMove = horizontalProjectedMove;
+        float horizontalResolved2D = std::sqrt(
+            (horizontalProjectedMove.x * horizontalProjectedMove.x) +
+            (horizontalProjectedMove.y * horizontalProjectedMove.y));
+
+        if (std::fabs(primaryContactNormal.z) > 0.01f) {
+            // Local WoW.exe 0x636100 appears to choose between the horizontal
+            // 0x635D80 branch and an alternate 0x635C00 path driven by the
+            // selected contact plane. Keep those effects mutually exclusive:
+            // for sloped selected planes, project directly onto that plane and
+            // then apply the existing radius clamp to the resulting Z offset.
+            const float intoPlane = requestedMove.dot(primaryContactNormal);
+            projectedMove = requestedMove - (primaryContactNormal * intoPlane);
+
+            const float verticalLimit = radius;
+            if (std::fabs(projectedMove.z) > verticalLimit &&
+                verticalLimit > PhysicsConstants::VECTOR_EPSILON) {
+                const float scale = verticalLimit / std::fabs(projectedMove.z);
+                projectedMove.x *= scale;
+                projectedMove.y *= scale;
+                projectedMove.z *= scale;
+            }
+
+            const float slopedResolved2D = std::sqrt(
+                (projectedMove.x * projectedMove.x) +
+                (projectedMove.y * projectedMove.y));
+
+            // The unresolved 0x636100 bookkeeping still decides when the
+            // selected-plane branch is actually allowed to replace the plain
+            // horizontal correction. When the plane branch manufactures an
+            // uphill correction while also reducing forward progress, keep the
+            // horizontal 0x635D80 result instead of synthesizing a false wall.
+            if (projectedMove.z > 0.0f &&
+                horizontalResolved2D > slopedResolved2D + 1e-4f) {
+                projectedMove = horizontalProjectedMove;
+            }
+        }
+
+        float resolved2D = std::sqrt((projectedMove.x * projectedMove.x) + (projectedMove.y * projectedMove.y));
+        if (resolved2D < (requested2D * 0.25f) &&
+            primaryAxis.magnitude() > PhysicsConstants::VECTOR_EPSILON &&
+            (primaryAxis - outWallNormal).squaredMagnitude() > 1e-6f) {
+            const float primaryInto = requestedMove.dot(primaryAxis);
+            if (primaryInto < -PhysicsConstants::VECTOR_EPSILON) {
+                G3D::Vector3 primaryProjectedMove = requestedMove - (primaryAxis * primaryInto);
+                primaryProjectedMove.z = 0.0f;
+                const float primaryResolved2D = std::sqrt(
+                    (primaryProjectedMove.x * primaryProjectedMove.x) +
+                    (primaryProjectedMove.y * primaryProjectedMove.y));
+
+                if (primaryResolved2D > resolved2D + 1e-4f) {
+                    projectedMove = primaryProjectedMove;
+                    resolved2D = primaryResolved2D;
+                    outWallNormal = primaryAxis;
+                }
+            }
+        }
+
+        if (resolved2D <= PhysicsConstants::VECTOR_EPSILON ||
+            projectedMove.directionOrZero().dot(moveDir2D) <= PhysicsConstants::VECTOR_EPSILON) {
+            projectedMove = G3D::Vector3(0, 0, 0);
+            resolved2D = 0.0f;
+        }
+        else if (resolved2D > requested2D) {
+            projectedMove = projectedMove * (requested2D / resolved2D);
+            resolved2D = requested2D;
+        }
+
+        outResolvedMove = projectedMove;
+        outBlockedFraction = std::max(0.0f, std::min(1.0f, resolved2D / requested2D));
+        return true;
+    };
+
+    const G3D::Vector3 requestedMove(dirN.x * intendedDist, dirN.y * intendedDist, 0.0f);
+    G3D::Vector3 resolvedMove = requestedMove;
+    G3D::Vector3 wallNormal(0, 0, 1);
+    float blockedFraction = 1.0f;
+    bool hitWall = resolveWallSlide(requestedMove, resolvedMove, wallNormal, blockedFraction);
+    endX = startX + resolvedMove.x;
+    endY = startY + resolvedMove.y;
+    st.wallBlockedFraction = blockedFraction;
+    const float predictedSupportZ = std::max(
+        startZ - PhysicsConstants::STEP_DOWN_HEIGHT,
+        std::min(startZ + stepH + stepUp, startZ + resolvedMove.z));
+
+    G3D::Vector3 finalBoxMin(endX - skin, endY - skin, adjustedMinZ);
+    G3D::Vector3 finalBoxMax(endX + skin, endY + skin, adjustedMaxZ);
     std::vector<SceneQuery::AABBContact> contacts;
-    SceneQuery::TestTerrainAABB(input.mapId, endBoxMin, endBoxMax, contacts);
-
-    // Merge half-step contacts into main contacts (WoW.exe uses both)
-    contacts.insert(contacts.end(), halfContacts.begin(), halfContacts.end());
+    SceneQuery::TestTerrainAABB(input.mapId, finalBoxMin, finalBoxMax, contacts);
 
     auto resolveSupportContact = [&](float supportZ, G3D::Vector3& outNormal,
         const SceneQuery::AABBContact*& outSupport) -> bool {
@@ -600,13 +868,13 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 
     // Ground Z: use GetGroundZ as PRIMARY source — it uses barycentric
     // interpolation on the exact ADT/VMAP triangle mesh, matching WoW.exe's
-    // heightmap lookup exactly. AABB contacts are used for wall detection only.
-    // The AABB TestTerrainAABB returns triangle centroids or barycentric Z at
-    // the AABB center, which may differ from the exact point-in-triangle query
-    // that GetGroundZ performs. Using GetGroundZ ensures calibration recordings
-    // (captured from WoW.exe's native heightmap) match our Z values.
+    // heightmap lookup exactly. Seed the query just above the predicted support
+    // height using the frame step-up allowance, not the full step-height-above
+    // origin, so multi-level terrain can still pick the mid support surface
+    // without promoting the upper shelf.
+    const float supportQueryZ = predictedSupportZ + stepUp + PhysicsConstants::COLLISION_SKIN_EPSILON;
     float bestGroundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-        startZ + stepH + stepUp,
+        supportQueryZ,
         stepH + stepUp + PhysicsConstants::STEP_DOWN_HEIGHT);
     G3D::Vector3 bestNormal(0, 0, 1);
     const SceneQuery::AABBContact* bestSupportContact = nullptr;
@@ -637,8 +905,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 
     if (!foundGround) {
         // No ground at end position — enter freefall
-        st.x = startX + dirN.x * intendedDist;
-        st.y = startY + dirN.y * intendedDist;
+        st.x = endX;
+        st.y = endY;
         st.isGrounded = false;
         st.vz = PhysicsConstants::FALL_START_VELOCITY;
         st.vx = dirN.x * moveSpeed;
@@ -649,20 +917,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     // Step height adjustment already built into AABB bounds (step 4).
     // bestGroundZ is the exact surface Z from barycentric interpolation.
 
-    // Step 6: Check for wall contacts (non-walkable AABB overlaps)
-    bool hitWall = false;
-    G3D::Vector3 wallNormal(0, 0, 1);
-    for (const auto& c : contacts) {
-        if (c.walkable) continue;
-        // Non-walkable contact = wall. Push back along normal.
-        float hMag = std::sqrt(c.normal.x * c.normal.x + c.normal.y * c.normal.y);
-        if (hMag > 0.3f) {
-            hitWall = true;
-            wallNormal = c.normal;
-            endX += c.normal.x * skin;
-            endY += c.normal.y * skin;
-        }
-    }
+    // Step 6: Wall response has already been resolved above using the
+    // client-style contact-plane projection path.
 
     // But limit actual XY displacement to intendedDist (don't overshoot)
     {

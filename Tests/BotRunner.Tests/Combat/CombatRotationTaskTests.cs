@@ -97,6 +97,12 @@ public class CombatRotationTaskTests : IDisposable
 
         _om.Setup(o => o.Player).Returns(_player.Object);
         _player.Setup(p => p.Position).Returns(new Position(0, 0, 0));
+        _player.Setup(p => p.GetFacingForPosition(It.IsAny<Position>()))
+            .Returns((Position pos) =>
+            {
+                var facing = MathF.Atan2(pos.Y, pos.X);
+                return facing < 0f ? facing + (MathF.PI * 2f) : facing;
+            });
         _player.Setup(p => p.Guid).Returns(100UL);
         _player.Setup(p => p.MapId).Returns(0);
         _player.Setup(p => p.IsAutoAttacking).Returns(false);
@@ -211,6 +217,58 @@ public class CombatRotationTaskTests : IDisposable
     }
 
     [Fact]
+    public void Update_RecentServerRangeReject_ReclaimsChaseInsteadOfRestartingMelee()
+    {
+        var target = CreateTargetAt(3, 0, 0);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.HadRecentMeleeRangeRejection(target.Object.Guid)).Returns(true);
+
+        Assert.True(_sut.CallUpdate(4f));
+
+        _om.Verify(o => o.MoveToward(It.Is<Position>(p => p.X == 3 && p.Y == 0 && p.Z == 0)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+    }
+
+    [Fact]
+    public void Update_RecentServerFacingReject_ForcesExactFacingBeforeRetryingMelee()
+    {
+        var target = CreateTargetAt(0, 3, 0);
+        var hadRecentFacingReject = true;
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.HadRecentMeleeFacingRejection(target.Object.Guid)).Returns(() => hadRecentFacingReject);
+
+        Assert.True(_sut.CallUpdate(4f));
+
+        const float expectedFacing = MathF.PI / 2f;
+        _om.Verify(o => o.StopAllMovement(), Times.Once);
+        _om.Verify(o => o.SetFacing(It.Is<float>(f => MathF.Abs(f - expectedFacing) < 0.001f)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Never);
+
+        hadRecentFacingReject = false;
+
+        Assert.False(_sut.CallUpdate(4f));
+
+        _om.Verify(o => o.Face(It.Is<Position>(p => p.X == 0 && p.Y == 3 && p.Z == 0)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Once);
+    }
+
+    [Fact]
+    public void Update_RecentServerFacingReject_WindowPersists_PrimesOnceThenRetriesMelee()
+    {
+        var target = CreateTargetAt(0, 3, 0);
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns(target.Object);
+        _om.Setup(o => o.HadRecentMeleeFacingRejection(target.Object.Guid)).Returns(true);
+
+        Assert.True(_sut.CallUpdate(4f));
+        Assert.False(_sut.CallUpdate(4f));
+
+        const float expectedFacing = MathF.PI / 2f;
+        _om.Verify(o => o.StopAllMovement(), Times.Once);
+        _om.Verify(o => o.SetFacing(It.Is<float>(f => MathF.Abs(f - expectedFacing) < 0.001f)), Times.Once);
+        _om.Verify(o => o.StartMeleeAttack(), Times.Once);
+    }
+
+    [Fact]
     public void Update_AggressorOutOfRange_DoesNotForceBlindMeleeAfterChaseTimeout()
     {
         var target = CreateTargetAt(10, 0, 0);
@@ -303,6 +361,17 @@ public class CombatRotationTaskTests : IDisposable
         _om.Setup(o => o.IsSpellReady("Renew")).Returns(true);
 
         Assert.True(_sut.CallTryCastSpell("Renew", true, castOnSelf: true));
+        _om.Verify(o => o.CastSpell("Renew", -1, true), Times.Once);
+    }
+
+    [Fact]
+    public void TryCastSpell_CastOnSelf_ImmediateRetry_IsThrottled()
+    {
+        _om.Setup(o => o.GetTarget(It.IsAny<IWoWUnit>())).Returns((IWoWUnit?)null);
+        _om.Setup(o => o.IsSpellReady("Renew")).Returns(true);
+
+        Assert.True(_sut.CallTryCastSpell("Renew", true, castOnSelf: true));
+        Assert.False(_sut.CallTryCastSpell("Renew", true, castOnSelf: true));
         _om.Verify(o => o.CastSpell("Renew", -1, true), Times.Once);
     }
 
@@ -417,6 +486,18 @@ public class CombatRotationTaskTests : IDisposable
         _om.Setup(o => o.IsSpellReady("Battle Shout")).Returns(true);
 
         Assert.True(_sut.CallTryUseAbility("Battle Shout", 10));
+        _om.Verify(o => o.CastSpell("Battle Shout", -1, true), Times.Once);
+    }
+
+    [Fact]
+    public void TryUseAbility_SelfBuff_ImmediateRetry_IsThrottled()
+    {
+        _player.Setup(p => p.Energy).Returns(0u);
+        _player.Setup(p => p.Rage).Returns(30u);
+        _om.Setup(o => o.IsSpellReady("Battle Shout")).Returns(true);
+
+        Assert.True(_sut.CallTryUseAbility("Battle Shout", 10));
+        Assert.False(_sut.CallTryUseAbility("Battle Shout", 10));
         _om.Verify(o => o.CastSpell("Battle Shout", -1, true), Times.Once);
     }
 

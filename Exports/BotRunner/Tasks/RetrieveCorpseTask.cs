@@ -221,6 +221,9 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         return new Position(corpsePosition.X, corpsePosition.Y, currentPosition.Z);
     }
 
+    protected override NavigationTraceSnapshot? GetDiagnosticNavigationTraceSnapshot()
+        => _navPath.TraceSnapshot;
+
     private void TrackDrivenWaypoint(Position waypoint)
         => _lastDrivenWaypoint = CopyPosition(waypoint);
 

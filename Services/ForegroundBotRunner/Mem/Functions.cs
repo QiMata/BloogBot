@@ -230,11 +230,43 @@ namespace ForegroundBotRunner.Mem
 
         static public void SetControlBit(int bit, int state, int tickCount)
         {
-            var ptr = MemoryManager.ReadIntPtr(MemoryAddresses.SetControlBitDevicePtr);
+            nint ptr;
+            try
+            {
+                ptr = MemoryManager.ReadIntPtr(MemoryAddresses.SetControlBitDevicePtr);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(
+                    ex,
+                    "[FG] SetControlBit failed while reading device pointer bit={Bit} state={State} tick={TickCount} deviceAddr=0x{DeviceAddr:X}",
+                    bit,
+                    state,
+                    tickCount,
+                    MemoryAddresses.SetControlBitDevicePtr);
+                throw;
+            }
+
             if (ptr == nint.Zero)
                 return; // Device not initialized yet (early world entry)
-            if (SetControlBitSafeFunction(ptr, bit, state, tickCount, MemoryAddresses.SetControlBitFunPtr) == 0)
-                Log.Warning("[FG] SetControlBit SEH exception — skipping");
+
+            try
+            {
+                if (SetControlBitSafeFunction(ptr, bit, state, tickCount, MemoryAddresses.SetControlBitFunPtr) == 0)
+                    Log.Warning("[FG] SetControlBit SEH exception — skipping");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(
+                    ex,
+                    "[FG] SetControlBitSafeFunction threw bit={Bit} state={State} tick={TickCount} devicePtr=0x{DevicePtr:X} funcPtr=0x{FuncPtr:X}",
+                    bit,
+                    state,
+                    tickCount,
+                    ptr,
+                    MemoryAddresses.SetControlBitFunPtr);
+                throw;
+            }
         }
 
         [DllImport("FastCall.dll", EntryPoint = "SetFacingSafe")]

@@ -1,8 +1,6 @@
 # Task Archive
 
 Completed items moved from TASKS.md.
-<<<<<<< HEAD
-=======
 
 ## Completed 2026-02-28
 
@@ -35,4 +33,3 @@ Completed items moved from TASKS.md.
 
 7. [x] `WSIM-TST-007` Remove blocking task operations in tests to satisfy `xUnit1031` and avoid deadlock-prone waits.
    - **Done (2026-02-28).** Converted `EventHistory_TracksAllEvents` and `ClearEventHistory_RemovesAllEvents` from `void` with `.Result` to `async Task` with `await`.
->>>>>>> cpp_physics_system

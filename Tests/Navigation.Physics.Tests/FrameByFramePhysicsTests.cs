@@ -458,6 +458,50 @@ public class FrameByFramePhysicsTests
         }
     }
 
+    /// <summary>
+    /// Regression guard for the grounded AABB wall-response rewrite: a known
+    /// walkable slope route must not start reporting false wall hits or reduced
+    /// blocked-fraction just because the engine now projects directly from
+    /// non-walkable contact planes.
+    /// </summary>
+    [Fact]
+    public void ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new WorldPosition(1, -283.30515f, -4382.9155f, 57.394436f, 0.12090772f);
+        var input = CreateInput(start, MoveFlags.Forward, runSpeed: 7.0f, orientation: start.Orientation);
+        input.Height = 2.0313f;
+        input.Radius = 0.2556f;
+        input.PrevGroundZ = 57.394436f;
+        input.PrevGroundNx = -0.033878695f;
+        input.PrevGroundNy = 0.16411875f;
+        input.PrevGroundNz = 0.9858586f;
+        input.StepUpBaseZ = 57.394436f;
+        input.StepUpAge = 1u;
+
+        const float dt = 0.05f;
+        const int framesToSimulate = 40;
+
+        var frames = SimulatePhysics(input, framesToSimulate, dt);
+        WriteFrameTrace("ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits", frames);
+
+        int wallFrames = frames.Count(f => f.Output.HitWall);
+        float minBlockedFraction = frames.Min(f => f.Output.BlockedFraction);
+        float totalDx = frames[^1].Position.X - start.X;
+        float totalDy = frames[^1].Position.Y - start.Y;
+        float totalTravel = MathF.Sqrt((totalDx * totalDx) + (totalDy * totalDy));
+
+        _output.WriteLine($"wallFrames={wallFrames} minBlockedFraction={minBlockedFraction:F3} totalTravel={totalTravel:F3}");
+
+        Assert.True(wallFrames == 0,
+            $"Walkable slope route should not report wall hits, got {wallFrames} hit frames.");
+        Assert.True(minBlockedFraction > 0.99f,
+            $"Walkable slope route should keep blockedFraction near 1.0, got {minBlockedFraction:F3}.");
+        Assert.True(totalTravel > 10.0f,
+            $"Walkable slope route should keep making forward progress, got totalTravel={totalTravel:F3}.");
+    }
+
     // ==========================================================================
     // TEST: WATER TRANSITION
     // ==========================================================================

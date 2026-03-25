@@ -49,9 +49,12 @@ public static class Recordings
     public const string DurotarLongFlatRun = "Dralrahgra_Durotar_2026-02-08_11-37-56";
     public const string DurotarMixedMovement = "Dralrahgra_Durotar_2026-02-12_20-15-52"; // strafe all directions, backward, jumps on flat
     public const string DurotarDiagonalStrafe = "Dralrahgra_Durotar_2026-02-12_20-15-52"; // same recording covers diagonal strafe
+    public const string PacketBackedDurotarFlatRun = "Urgzuga_Durotar_2026-03-25_03-07-08";
 
     // Undercity - indoor, falling, complex geometry
     public const string UndercityMixed = "Dralrahgra_Undercity_2026-02-08_11-30-52";
+    public const string PacketBackedUndercityLowerRoute = "Urgzuga_Undercity_2026-03-25_10-00-52";
+    public const string PacketBackedUndercityElevatorUp = "Urgzuga_Undercity_2026-03-25_10-01-09";
 
     // Swimming - comprehensive: forward, backward, strafing, turning, 10+ water transitions
     public const string Swimming = "Dralrahgra_Durotar_2026-02-12_20-13-25";
@@ -75,6 +78,9 @@ public static class Recordings
     // Orgrimmar transport - zeppelin departing the Orgrimmar tower toward Undercity.
     // This is the only Orgrimmar transport recording currently present in-repo.
     public const string OrgrimmarZeppelin = "Dralrahgra_Durotar_2026-02-08_11-06-02";
+
+    // Blackrock Spire - interior WMO movement with repeated contact stalls on static geometry.
+    public const string BlackrockSpire = "Dralrahgra_Blackrock_Spire_2026-02-08_12-04-53";
 }
 
 /// <summary>

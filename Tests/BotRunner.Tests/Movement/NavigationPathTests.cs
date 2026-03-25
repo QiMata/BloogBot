@@ -512,6 +512,23 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_AcceptsShortRouteWhenEndpointIsInsideArrivalBubble()
+    {
+        var pathfinding = new DelegatePathfindingClient((_, start, _, _) =>
+            [start, new Position(3.6f, 0f, 2f)]);
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(3.9f, 0f, 2f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(3.6f, waypoint!.X);
+    }
+
+    [Fact]
     public void GetNextWaypoint_RejectsPathWithFirstWaypointTooFarFromStart()
     {
         var pathfinding = new DelegatePathfindingClient((_, _, end, _) =>
@@ -1086,6 +1103,149 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_RetargetsStackedLocalVerticalEndpoint_ToNearbyWalkablePoint()
+    {
+        var requestedEnds = new List<Position>();
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, end, _) =>
+            {
+                requestedEnds.Add(end);
+                if (MathF.Abs(end.Z - 8f) < 0.01f)
+                    return [new Position(0f, 0f, 8f), end];
+
+                return [new Position(3f, 0f, 0f), end];
+            },
+            findNearestWalkablePoint: (_, _, searchRadius) =>
+            {
+                if (searchRadius < 4f)
+                    return (0u, new Position(0f, 0f, 0f));
+
+                return (1u, new Position(6f, 0f, 0f));
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(2f, 0f, 8f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(6f, waypoint!.X);
+        Assert.Equal(0f, waypoint.Y);
+        Assert.Equal(0f, waypoint.Z);
+        Assert.Equal(2, requestedEnds.Count);
+        Assert.Equal(2f, requestedEnds[0].X);
+        Assert.Equal(8f, requestedEnds[0].Z);
+        Assert.Equal(6f, requestedEnds[1].X);
+        Assert.Equal(0f, requestedEnds[1].Z);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_RetargetsStackedEndpoint_UsingReferenceHeightForNearestWalkableLookup()
+    {
+        var nearestWalkableQueries = new List<Position>();
+        var target = new Position(10.4f, 10.2f, 39.6f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, end, _) =>
+            {
+                if (MathF.Abs(end.Z - target.Z) < 0.01f)
+                    return
+                    [
+                        new Position(10.0f, 10.0f, 34.5f),
+                        new Position(10.0f, 10.0f, 39.8f),
+                        end
+                    ];
+
+                return [end];
+            },
+            getGroundZ: (_, position, _) =>
+            {
+                if (position.Z > 39f)
+                    return (35.3f, true);
+
+                return (position.Z, true);
+            },
+            findNearestWalkablePoint: (_, position, _) =>
+            {
+                nearestWalkableQueries.Add(position);
+                if (MathF.Abs(position.Z - 34.5f) < 0.01f)
+                    return (1u, new Position(14f, 10f, 34.7f));
+
+                return (1u, target);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(10f, 10f, 34.5f),
+            target,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(14f, waypoint!.X);
+        Assert.Equal(10f, waypoint.Y);
+        Assert.Equal(34.7f, waypoint.Z);
+        Assert.Contains(nearestWalkableQueries, query => MathF.Abs(query.Z - 34.5f) < 0.01f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_RetargetsStackedEndpoint_UsingGroundSupportWhenStartZIsStale()
+    {
+        var nearestWalkableQueries = new List<Position>();
+        var start = new Position(-477.8f, -4822.2f, 25.6f);
+        var target = new Position(-480.8f, -4822.4f, 37.4f);
+        var retargeted = new Position(-484.0f, -4822.8f, 34.2f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, end, _) =>
+            {
+                if (MathF.Abs(end.Z - target.Z) < 0.01f)
+                    return [start, new Position(start.X, start.Y, 37.6f), end];
+
+                return [retargeted];
+            },
+            getGroundZ: (_, position, _) =>
+            {
+                if (MathF.Abs(position.X - start.X) < 0.01f && MathF.Abs(position.Y - start.Y) < 0.01f)
+                    return (34.2f, true);
+
+                if (position.Z > 37f)
+                    return (34.2f, true);
+
+                return (position.Z, true);
+            },
+            findNearestWalkablePoint: (_, position, _) =>
+            {
+                nearestWalkableQueries.Add(position);
+                if (MathF.Abs(position.Z - 34.2f) < 0.01f)
+                    return (1u, retargeted);
+
+                return (1u, target);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+
+        var waypoint = navPath.GetNextWaypoint(
+            start,
+            target,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(retargeted.X, waypoint!.X);
+        Assert.Equal(retargeted.Y, waypoint.Y);
+        Assert.Equal(retargeted.Z, waypoint.Z);
+        Assert.Contains(nearestWalkableQueries, query => MathF.Abs(query.Z - 34.2f) < 0.01f);
+    }
+
+    [Fact]
     public void GetNextWaypoint_TraceCapturesShortRoutePlanAndExecution()
     {
         long tick = 250;
@@ -1127,6 +1287,63 @@ public class NavigationPathTests
         Assert.False(trace.ExecutionSamples[0].UsedDirectFallback);
         Assert.NotNull(trace.ExecutionSamples[0].ReturnedWaypoint);
         Assert.Equal(5f, trace.ExecutionSamples[0].ReturnedWaypoint!.X);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_ShortRoutePathExhaustedWithinCooldown_RecalculatesImmediately()
+    {
+        long tick = 0;
+        var requestedEnds = new List<Position>();
+        var staleDestination = new Position(8f, 0f, 0f);
+        var movingDestination = new Position(8f, 6f, 0f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, end, _) =>
+            {
+                requestedEnds.Add(end);
+                if (MathF.Abs(end.Y - staleDestination.Y) < 0.01f)
+                    return [new Position(6f, 0f, 0f), staleDestination];
+
+                return [new Position(8f, 3f, 0f), movingDestination];
+            },
+            isInLineOfSight: (_, _, to) => MathF.Abs(to.Y - movingDestination.Y) > 0.01f);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false);
+
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            staleDestination,
+            mapId: 1,
+            allowDirectFallback: true);
+
+        Assert.NotNull(firstWaypoint);
+
+        tick = 500;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            new Position(7.8f, 0f, 0f),
+            movingDestination,
+            mapId: 1,
+            allowDirectFallback: true);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(replannedWaypoint);
+        Assert.Equal(2, requestedEnds.Count);
+        Assert.Equal(staleDestination.Y, requestedEnds[0].Y);
+        Assert.Equal(movingDestination.Y, requestedEnds[1].Y);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.PathExhaustedStillFar, trace.LastReplanReason);
+        Assert.NotNull(trace.RequestedDestination);
+        Assert.Equal(movingDestination.Y, trace.RequestedDestination!.Y);
+        Assert.Equal(2, trace.ServiceWaypoints.Length);
+        Assert.Equal(2, trace.PlannedWaypoints.Length);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.Equal(trace.ActiveWaypoint!.Y, replannedWaypoint!.Y);
+        Assert.Equal("waypoint", trace.LastResolution);
     }
 
     [Fact]

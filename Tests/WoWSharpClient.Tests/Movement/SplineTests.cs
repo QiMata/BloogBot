@@ -1,5 +1,6 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using System.Collections.Concurrent;
 using WoWSharpClient.Movement;
 
 namespace WoWSharpClient.Tests.Movement
@@ -222,6 +223,56 @@ namespace WoWSharpClient.Tests.Movement
 
             Assert.False(controller.HasActiveSpline(1));
             Assert.True(controller.HasActiveSpline(2));
+        }
+
+        [Fact]
+        public async Task Update_ConcurrentMutation_DoesNotThrow()
+        {
+            var controller = new SplineController();
+            var points = new List<Position> { new(0, 0, 0) };
+            var failures = new ConcurrentQueue<Exception>();
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+
+            var updater = Task.Run(() =>
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        controller.Update(16f);
+                    }
+                    catch (Exception ex)
+                    {
+                        failures.Enqueue(ex);
+                        cts.Cancel();
+                    }
+                }
+            });
+
+            var writers = Enumerable.Range(0, 4).Select(worker => Task.Run(() =>
+            {
+                ulong guid = (ulong)(worker + 1);
+                while (!cts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        controller.AddOrUpdate(new Spline(guid, 1, 0, SplineFlags.None, points, 0));
+                        controller.Remove(guid);
+                        guid += 4;
+                        if (guid > 128)
+                            guid = (ulong)(worker + 1);
+                    }
+                    catch (Exception ex)
+                    {
+                        failures.Enqueue(ex);
+                        cts.Cancel();
+                    }
+                }
+            })).ToArray();
+
+            await Task.WhenAll(writers.Append(updater));
+
+            Assert.Empty(failures);
         }
     }
 }

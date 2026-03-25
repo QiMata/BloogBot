@@ -1022,6 +1022,12 @@ public class BotServiceFixture : IAsyncLifetime
     /// </summary>
     private async Task<int> KillPathfindingServiceProcessesAsync(string label)
     {
+        if (ShouldPreserveExistingPathfindingService())
+        {
+            Log("  [Cleanup] Preserving existing PathfindingService per WWOW_TEST_PRESERVE_EXISTING_PATHFINDING=1.");
+            return 0;
+        }
+
         var killed = 0;
         var seenPids = new HashSet<int>();
 
@@ -1067,6 +1073,12 @@ public class BotServiceFixture : IAsyncLifetime
 
         return killed;
     }
+
+    private static bool ShouldPreserveExistingPathfindingService()
+        => string.Equals(
+            Environment.GetEnvironmentVariable("WWOW_TEST_PRESERVE_EXISTING_PATHFINDING"),
+            "1",
+            StringComparison.Ordinal);
 
     /// <summary>
     /// Parses `netstat -ano -p tcp` and returns PIDs listening on the specified local TCP port.

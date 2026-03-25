@@ -428,6 +428,9 @@ public class NavigationPath(
     private const float WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING = 0.35f;
     private const float WALKABLE_CORRIDOR_MAX_SAMPLE_OFFSET = 0.9f;
     private const float WALKABLE_CORRIDOR_MAX_SNAP_Z_DELTA = 3.0f;
+    private const float LOCAL_VERTICAL_ENDPOINT_MAX_2D = 12.0f;
+    private const float LOCAL_VERTICAL_ENDPOINT_MIN_Z_DELTA = 4.0f;
+    private static readonly float[] LocalVerticalEndpointSearchRadii = [4.0f, 8.0f, 12.0f];
     private int _losSkipCacheIndex = -1;
     private int _losSkipCacheFarthest = -1;
     private long _losSkipCacheTick;
@@ -573,7 +576,7 @@ public class NavigationPath(
         if (_currentIndex >= _waypoints.Length)
         {
             // If we're still not near the destination, recalculate path periodically.
-            if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
+            if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
             {
                 CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
             }
@@ -1212,9 +1215,18 @@ public class NavigationPath(
         if (_pathfinding == null)
             return desired;
 
-        var (areaType, nearestPoint) = _pathfinding.FindNearestWalkablePoint(mapId, desired, searchRadius);
+        // Bias the nearest-walkable query toward the caller's current/support layer.
+        // Querying at the destination Z can lock the search onto an unreachable upper
+        // floor and prevent the stacked-endpoint retarget from finding the nearby
+        // walkable point that the original client would continue toward.
+        var queryPosition = new Position(desired.X, desired.Y, referenceZ);
+        var (areaType, nearestPoint) = _pathfinding.FindNearestWalkablePoint(mapId, queryPosition, searchRadius);
         if (areaType == 0)
-            return null;
+        {
+            (areaType, nearestPoint) = _pathfinding.FindNearestWalkablePoint(mapId, desired, searchRadius);
+            if (areaType == 0)
+                return null;
+        }
 
         if (desired.DistanceTo2D(nearestPoint) > searchRadius)
             return null;
@@ -1455,6 +1467,15 @@ public class NavigationPath(
         foreach (var point in path)
             bestDistanceToEnd = MathF.Min(bestDistanceToEnd, point.DistanceTo(end));
 
+        // Preserve short local corridors even when the remaining route is only a
+        // fraction of a yard shorter than the direct distance. The live BG stalls
+        // show Detour returning tiny local routes that already end inside the same
+        // arrival bubble the executor uses; rejecting them as "insufficient progress"
+        // collapses navigation to null and leaves the bot heartbeating in place.
+        if (startToEndDistance <= WAYPOINT_REACH_DISTANCE + MIN_DESTINATION_PROGRESS
+            && bestDistanceToEnd <= WAYPOINT_REACH_DISTANCE)
+            return true;
+
         return bestDistanceToEnd <= startToEndDistance - MIN_DESTINATION_PROGRESS;
     }
 
@@ -1479,6 +1500,62 @@ public class NavigationPath(
         }
 
         return true;
+    }
+
+    private bool TryRetargetLocalVerticalEndpoint(
+        uint mapId,
+        Position start,
+        Position end,
+        IReadOnlyList<Position> path,
+        out Position retargetedEnd)
+    {
+        retargetedEnd = default!;
+
+        if (_pathfinding == null || IsRidingTransport)
+            return false;
+
+        if (start.DistanceTo2D(end) > LOCAL_VERTICAL_ENDPOINT_MAX_2D
+            || MathF.Abs(end.Z - start.Z) < LOCAL_VERTICAL_ENDPOINT_MIN_Z_DELTA)
+        {
+            return false;
+        }
+
+        var snapReferenceZ = start.Z;
+        if (_pathfinding != null)
+        {
+            var (supportZ, foundSupport) = _pathfinding.GetGroundZ(mapId, start, maxSearchDist: 12.0f);
+            if (foundSupport && float.IsFinite(supportZ))
+                snapReferenceZ = MathF.Max(snapReferenceZ, supportZ);
+        }
+
+        if (path.Count > 0)
+        {
+            var augmentedPath = new Position[path.Count + 1];
+            augmentedPath[0] = start;
+            for (var i = 0; i < path.Count; i++)
+                augmentedPath[i + 1] = path[i];
+
+            var affordances = PathAffordanceInfo.Classify(augmentedPath);
+            var hasStackedVerticalTransition = affordances.VerticalCount > 0
+                || Array.IndexOf(affordances.Segments, SegmentAffordance.SteepClimb) >= 0;
+            if (!hasStackedVerticalTransition)
+                return false;
+        }
+
+        foreach (var searchRadius in LocalVerticalEndpointSearchRadii)
+        {
+            var snapped = TrySnapToWalkablePoint(mapId, end, searchRadius, snapReferenceZ);
+            if (snapped == null)
+                continue;
+
+            if (snapped.DistanceTo(end) <= PATH_POINT_DEDUP_EPSILON)
+                continue;
+
+            retargetedEnd = snapped;
+            return true;
+        }
+
+        return false;
     }
 
     private bool HasTraversableSegments(uint mapId, Position start, IReadOnlyList<Position> path)
@@ -1665,8 +1742,17 @@ public class NavigationPath(
     public void CalculatePath(Position start, Position end, uint mapId, bool force = false, string reason = NavigationTraceReason.Manual)
     {
         var nowTick = _tickProvider();
-        if (!force && _hasCalculatedPath && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS)
+        var urgentShortRouteRecalc = !force
+            && start.DistanceTo(end) <= SHORT_ROUTE_TRACE_DISTANCE
+            && (reason == NavigationTraceReason.PathExhaustedStillFar
+                || reason == NavigationTraceReason.PathUnavailable);
+        if (!force
+            && _hasCalculatedPath
+            && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS
+            && !urgentShortRouteRecalc)
+        {
             return;
+        }
 
         if (force)
             Metrics.IncrementRecalculationsTriggered();
@@ -1707,6 +1793,24 @@ public class NavigationPath(
             {
                 selectedPath = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
                 _waypoints = selectedPath.PlannedPath;
+            }
+
+            if (TryRetargetLocalVerticalEndpoint(mapId, start, end, _waypoints, out var retargetedEnd))
+            {
+                Serilog.Log.Information(
+                    "[NavigationPath] Retargeting stacked local endpoint from ({EX:F1},{EY:F1},{EZ:F1}) to ({RX:F1},{RY:F1},{RZ:F1})",
+                    end.X, end.Y, end.Z,
+                    retargetedEnd.X, retargetedEnd.Y, retargetedEnd.Z);
+
+                var retargetedPath = GetValidatedPath(mapId, start, retargetedEnd, smoothPath: preferSmooth);
+                if (retargetedPath.PlannedPath.Length == 0)
+                    retargetedPath = GetValidatedPath(mapId, start, retargetedEnd, smoothPath: !preferSmooth);
+
+                if (retargetedPath.PlannedPath.Length > 0)
+                {
+                    selectedPath = retargetedPath;
+                    _waypoints = selectedPath.PlannedPath;
+                }
             }
 
             // Always begin at index 0. GetNextWaypoint() will safely advance

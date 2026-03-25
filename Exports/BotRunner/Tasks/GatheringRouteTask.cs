@@ -34,6 +34,7 @@ public class GatheringRouteTask(
     internal const float CandidateReachDistance = 12f;
     internal const float VisibleNodeDistance = 80f;
     internal const float GatherRange = 5f;
+    internal const float GatherApproachBuffer = 0.5f;
     internal const int CandidateTimeoutMs = 45000;
     internal const int NodeSearchTimeoutMs = 8000;
     internal const int GatherChannelMs = 5000;
@@ -212,7 +213,8 @@ public class GatheringRouteTask(
         var distance = player.Position.DistanceTo(_activeNodePosition);
         if (distance > GatherRange)
         {
-            if (!TryNavigateToward(_activeNodePosition))
+            var approachPosition = ComputeApproachPosition(player.Position, _activeNodePosition);
+            if (!TryNavigateToward(approachPosition, allowDirectFallback: true))
             {
                 BotContext.AddDiagnosticMessage(
                     $"[TASK] GatheringRouteTask node_no_path guid=0x{_activeNodeGuid:X} distance={distance:F1}");
@@ -301,6 +303,26 @@ public class GatheringRouteTask(
         => _activeNodeGuid == 0
             ? null
             : ObjectManager.GameObjects.FirstOrDefault(go => go.Guid == _activeNodeGuid);
+
+    internal static Position ComputeApproachPosition(Position playerPosition, Position nodePosition)
+    {
+        ArgumentNullException.ThrowIfNull(playerPosition);
+        ArgumentNullException.ThrowIfNull(nodePosition);
+
+        var desiredDistance = MathF.Max(0f, GatherRange - GatherApproachBuffer);
+        var dx = nodePosition.X - playerPosition.X;
+        var dy = nodePosition.Y - playerPosition.Y;
+        var dz = nodePosition.Z - playerPosition.Z;
+        var distance = MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+        if (distance <= desiredDistance || distance < 0.001f)
+            return new Position(nodePosition.X, nodePosition.Y, nodePosition.Z);
+
+        var scale = (distance - desiredDistance) / distance;
+        return new Position(
+            playerPosition.X + (dx * scale),
+            playerPosition.Y + (dy * scale),
+            playerPosition.Z + (dz * scale));
+    }
 
     private void AdvanceToNextCandidate(string reason)
     {

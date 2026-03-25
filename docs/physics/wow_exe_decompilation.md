@@ -453,14 +453,14 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 
 ### Grounded Path (not falling, not swimming)
 1. **Slope limit**: `slopeLimit = max(boundingRadius * tan(50°), collisionSkin + 1/720)`
-2. **Pass 1 — Full sweep**: Sweep AABB by `moveDir * (slopeLimit + speed*dt)`, call `CWorldCollision::Collide` (0x6373B0)
-3. **Pass 2 — Half-step**: Sweep AABB by `moveDir * speed*dt * 0.5`, contract vertically by `collisionSkin * √2`, call `Collide` again
+2. **Pass 1 — Full displacement merge**: build the displaced AABB and union it with the start box via `0x6373B0`
+3. **Pass 2 — Half-step merge**: build the contracted half-step AABB and union it into the same query volume via `0x6373B0`
 4. **Step height adjust**: `bbox.maxZ += min(2*radius, speed*dt)`, then `bbox.minZ = bbox.maxZ - (stepHeight + radius*tan(50°))`
-5. **Terrain test**: `CWorldCollision::TestTerrain` (0x6721B0) — final position validation
+5. **Terrain test**: `CWorldCollision::TestTerrain` (0x6721B0) — query the merged volume
 
 ### Falling Path (MOVEFLAG_FALLING 0x2000)
 1. Compute fall displacement via `ComputeFallDisplacement` (0x7C6140)
-2. Single swept AABB test via `Collide` (0x6373B0)
+2. Merge the displaced fall box into the current query volume via `0x6373B0`
 3. Slope descent clamp: `displacement.Z *= -tan(50°)`
 4. Epsilon expansion sweep: `0x637300`/`0x6372D0`
 5. Terrain test: `TestTerrain` (0x6721B0)
@@ -468,18 +468,18 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 ### Swimming Path (MOVEFLAG_SWIMMING 0x200000)
 1. Half displacement: `displacement *= 0.5`
 2. Build end-position AABB with `collisionSkin * √2` vertical contraction
-3. Single `Collide` sweep
+3. Merge that displaced swim box into the query volume via `0x6373B0`
 4. `TestTerrain` with flag `0x30000`
-5. For each contact: negate penetration, apply slide via `0x637330`
+5. For each contact: negate the contact normal via `0x637330`; the actual slide helper remains unresolved in this slice
 
 ### Key Functions
 | Address | Name | Purpose |
 |---------|------|---------|
 | `0x633840` | `CMovement::CollisionStep` | Main collision orchestrator |
-| `0x6373B0` | `CWorldCollision::Collide` | Swept AABB vs terrain/WMO/M2 |
+| `0x6373B0` | `AABB::Merge` helper | Unions the current query box with another AABB |
 | `0x6721B0` | `CWorldCollision::TestTerrain` | Static position terrain test |
 | `0x637300` | `CWorldCollision::ExpandAndSweep` | Epsilon-expanded sweep |
-| `0x637330` | `CWorldCollision::SlideAlongNormal` | Contact slide response |
+| `0x637330` | `Vec3Negate` helper | Flips the contact normal vector after `TestTerrain` |
 | `0x4549A0` | `Vec3TransformCoord` | 3x3 matrix × vector |
 | `0x617430` | `CMovement::GetBoundingRadius` | Unit bounding radius |
 | `0x7C6140` | `CMovement::ComputeFallZ` | Fall displacement from fallTime |
@@ -534,8 +534,30 @@ CollisionStep (0x633840)
         → M2 doodad collision
       → Filter: normal.Z >= cos(50°)
       → Copy to result array (stride 0x34)
-  → SlideAlongNormal (0x637330)         // Project displacement along contact
+  → Vec3Negate helper (0x637330)        // Flip contact normals from TestTerrain
 ```
+
+### Grounded Post-TestTerrain Helper Notes (2026-03-25)
+
+- `0x6367B0` is still the open grounded wall/corner driver, but the local helper chain is now better mapped:
+  - `0x636610`
+    - `1` contact vector: copy through
+    - `2` contact vectors: merge the pair via the helper’s built-in scale constant
+    - `3` contact vectors: choose the lone axis from the minority orientation group
+    - `4` contact vectors: emit zero vector
+  - `0x635D80`
+    - computes the horizontal correction vector from the selected contact plane
+    - normalizes the plane’s horizontal component, applies the movement-direction dot product and step distance, then adds the `0.001f` epsilon at `0x801360`
+    - returns `XY` only (`Z = 0`)
+  - `0x635C00`
+    - computes the vertical correction from the selected contact plane
+    - returns `Z` only (`X = Y = 0`)
+    - can also mutate the in-flight movement fraction / distance pointer before the correction is returned
+  - `0x636100`
+    - remains partially unresolved, but it gates whether the grounded path takes the `0x635D80` horizontal-correction branch or the alternate `0x635C00` retry branch with `this->flags |= 0x04000000`
+- Practical implication for native parity work:
+  - the remaining stateless mismatch is no longer the merged blocker selector or the horizontal epsilon nudge
+  - the open work is the selected-plane `Z` correction and distance bookkeeping that still happens around `0x635C00` / `0x636100`
 
 ## Remote Unit Extrapolation (VA 0x616DE0)
 

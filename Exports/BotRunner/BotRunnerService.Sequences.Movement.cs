@@ -50,10 +50,9 @@ namespace BotRunner
                     }
 
                     var target = new Position(x, y, z);
-                    var dist = _objectManager.Player.Position.DistanceTo(target);
                     var arrivalDist = tolerance > 0 ? tolerance : 3f;
 
-                    if (dist < arrivalDist)
+                    if (HasReachedGoToTarget(_objectManager.Player.Position, target, arrivalDist))
                     {
                         _objectManager.StopAllMovement();
                         navPath.Clear();
@@ -112,6 +111,14 @@ namespace BotRunner
                 })
             .End()
             .Build();
+        }
+
+        internal static bool HasReachedGoToTarget(Position currentPosition, Position target, float tolerance)
+        {
+            // Goto callers often supply nominal/navmesh target Z values rather than the exact
+            // runtime ground height. Once the bot is horizontally inside tolerance, continuing
+            // to chase a mismatched Z only makes the controller orbit and reverse near the goal.
+            return currentPosition.DistanceTo2D(target) < tolerance;
         }
         /// <summary>
         /// Sequence to interact with a specific target based on its GUID.

@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Globalization;
 
 namespace PathfindingService
 {
@@ -453,7 +454,64 @@ namespace PathfindingService
                 Repository.PhysicsOutput physicsOutput;
                 try
                 {
+                    if (ShouldTracePhysicsCrashWindow(step))
+                    {
+                        logger.LogWarning(
+                            "[PHYS_TRACE_START] frame={Frame} map={Map} pos=({X:F3},{Y:F3},{Z:F3}) flags=0x{Flags:X} vel=({VX:F4},{VY:F4},{VZ:F4}) prevGZ={PrevGZ:F3} prevGN=({PrevNX:F4},{PrevNY:F4},{PrevNZ:F4}) fallTime={FallTime} fallStartZ={FallStartZ:F3} pendingDepen=({PDX:F4},{PDY:F4},{PDZ:F4}) standingOn={StandingOn} local=({LocalX:F4},{LocalY:F4},{LocalZ:F4}) nearbyCount={NearbyCount} nearby=[{Nearby}]",
+                            step.FrameCounter,
+                            step.MapId,
+                            physicsInput.x,
+                            physicsInput.y,
+                            physicsInput.z,
+                            physicsInput.moveFlags,
+                            physicsInput.vx,
+                            physicsInput.vy,
+                            physicsInput.vz,
+                            physicsInput.prevGroundZ,
+                            physicsInput.prevGroundNx,
+                            physicsInput.prevGroundNy,
+                            physicsInput.prevGroundNz,
+                            physicsInput.fallTime,
+                            physicsInput.fallStartZ,
+                            physicsInput.pendingDepenX,
+                            physicsInput.pendingDepenY,
+                            physicsInput.pendingDepenZ,
+                            physicsInput.standingOnInstanceId,
+                            physicsInput.standingOnLocalX,
+                            physicsInput.standingOnLocalY,
+                            physicsInput.standingOnLocalZ,
+                            step.NearbyObjects.Count,
+                            SummarizeNearbyObjects(step.NearbyObjects));
+                    }
+
                     physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+
+                    if (ShouldTracePhysicsCrashWindow(step))
+                    {
+                        logger.LogWarning(
+                            "[PHYS_TRACE_END] frame={Frame} out=({X:F3},{Y:F3},{Z:F3}) flags=0x{Flags:X} vel=({VX:F4},{VY:F4},{VZ:F4}) groundZ={GroundZ:F3} groundN=({GroundNX:F4},{GroundNY:F4},{GroundNZ:F4}) pendingDepen=({PDX:F4},{PDY:F4},{PDZ:F4}) standingOn={StandingOn} local=({LocalX:F4},{LocalY:F4},{LocalZ:F4}) hitWall={HitWall} blockedFraction={BlockedFraction:F4}",
+                            step.FrameCounter,
+                            physicsOutput.x,
+                            physicsOutput.y,
+                            physicsOutput.z,
+                            physicsOutput.moveFlags,
+                            physicsOutput.vx,
+                            physicsOutput.vy,
+                            physicsOutput.vz,
+                            physicsOutput.groundZ,
+                            physicsOutput.groundNx,
+                            physicsOutput.groundNy,
+                            physicsOutput.groundNz,
+                            physicsOutput.pendingDepenX,
+                            physicsOutput.pendingDepenY,
+                            physicsOutput.pendingDepenZ,
+                            physicsOutput.standingOnInstanceId,
+                            physicsOutput.standingOnLocalX,
+                            physicsOutput.standingOnLocalY,
+                            physicsOutput.standingOnLocalZ,
+                            physicsOutput.hitWall,
+                            physicsOutput.blockedFraction);
+                    }
                 }
                 finally
                 {
@@ -705,6 +763,26 @@ namespace PathfindingService
             => float.IsFinite(point.X)
                 && float.IsFinite(point.Y)
                 && float.IsFinite(point.Z);
+
+        private static bool ShouldTracePhysicsCrashWindow(Pathfinding.PhysicsInput step)
+            => string.Equals(Environment.GetEnvironmentVariable("WWOW_PATHFINDING_CRASH_TRACE"), "1", StringComparison.Ordinal)
+                && step.MapId == 1
+                && step.FrameCounter >= 600
+                && step.FrameCounter <= 700;
+
+        private static string SummarizeNearbyObjects(IReadOnlyList<DynamicObjectProto> nearbyObjects)
+        {
+            if (nearbyObjects.Count == 0)
+                return string.Empty;
+
+            return string.Join(
+                ", ",
+                nearbyObjects
+                    .Take(8)
+                    .Select(obj => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"0x{obj.Guid:X}/disp={obj.DisplayId}/state={obj.GoState}/pos=({obj.X:F1},{obj.Y:F1},{obj.Z:F1})")));
+        }
 
         private PathfindingResponse HandleNavmeshPoint(NavmeshPointRequest req)
         {

@@ -13,7 +13,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Base class for bot tasks providing common functionality.
 /// </summary>
-public abstract class BotTask(IBotContext botContext)
+public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 {
     protected readonly IBotContext BotContext = botContext;
 
@@ -143,6 +143,12 @@ public abstract class BotTask(IBotContext botContext)
         Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);
     }
+
+    public NavigationTraceSnapshot? GetNavigationTraceSnapshot()
+        => GetDiagnosticNavigationTraceSnapshot();
+
+    protected virtual NavigationTraceSnapshot? GetDiagnosticNavigationTraceSnapshot()
+        => NavPath?.TraceSnapshot;
 }
 
 /// <summary>

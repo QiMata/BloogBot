@@ -100,6 +100,29 @@ namespace WoWSharpClient
                 _movementController?.ClearPath();
         }
 
+        public void StopAllMovement()
+        {
+            var player = (WoWLocalPlayer)Player;
+            if (player == null) return;
+
+            const ControlBits stopBits =
+                ControlBits.Front |
+                ControlBits.Back |
+                ControlBits.Left |
+                ControlBits.Right |
+                ControlBits.StrafeLeft |
+                ControlBits.StrafeRight;
+
+            if (IsPlayerAirborne(player))
+            {
+                _movementController?.ClearPath();
+                _movementController?.RequestGroundedStop();
+                return;
+            }
+
+            StopMovement(stopBits);
+        }
+
         /// <summary>
         /// Clears directional movement intent and immediately sends the appropriate movement opcode.
         /// Active physics state (for example falling or swimming) is preserved.
@@ -574,17 +597,15 @@ namespace WoWSharpClient
         {
             if (pos == null || Player == null) return;
 
-            // While airborne, don't change facing or directional flags.
-            // The bot keeps its pre-jump trajectory — steering mid-air causes spiraling
-            // and sends illegal movement flag transitions to the server.
             var player = (WoWLocalPlayer)Player;
             if (IsPlayerAirborne(player))
             {
                 _moveTowardAirborneLogCount++;
                 if (_moveTowardAirborneLogCount <= 5 || _moveTowardAirborneLogCount % 50 == 0)
-                    Log.Warning("[NAV-DIAG] MoveToward blocked by IsPlayerAirborne (x{Count}): flags=0x{Flags:X}, pos=({X:F1},{Y:F1},{Z:F1}), map={Map}",
+                    Log.Warning("[NAV-DIAG] MoveToward preserving airborne steering only (x{Count}): flags=0x{Flags:X}, pos=({X:F1},{Y:F1},{Z:F1}), map={Map}",
                         _moveTowardAirborneLogCount, (uint)player.MovementFlags,
                         player.Position.X, player.Position.Y, player.Position.Z, player.MapId);
+                UpdateAirborneSteering(player, pos, Player.GetFacingForPosition(pos));
                 return;
             }
             _moveTowardAirborneLogCount = 0;
@@ -611,10 +632,11 @@ namespace WoWSharpClient
             var player = (WoWLocalPlayer)Player;
             if (player == null) return;
 
-            // While airborne, don't change facing or directional flags.
-            // The bot keeps its pre-jump trajectory — steering mid-air causes spiraling
-            // and sends illegal movement flag transitions to the server.
-            if (IsPlayerAirborne(player)) return;
+            if (IsPlayerAirborne(player))
+            {
+                UpdateAirborneSteering(player, position, facing);
+                return;
+            }
 
             // Set facing and movement flags.
             // The MovementController (running in the game loop every 50ms) handles:
@@ -626,12 +648,24 @@ namespace WoWSharpClient
             // Sub-threshold facing jitter (from waypoint changes each tick) causes the
             // physics engine to oscillate movement direction → visible bouncing/jitter.
             const float facingDampenThreshold = 0.02f; // ~1.1deg (tightened from 0.15 to match FG parity)
+            const MovementFlags horizontalMoveMask =
+                MovementFlags.MOVEFLAG_FORWARD |
+                MovementFlags.MOVEFLAG_BACKWARD |
+                MovementFlags.MOVEFLAG_STRAFE_LEFT |
+                MovementFlags.MOVEFLAG_STRAFE_RIGHT;
             var facingDelta = MathF.Abs(facing - player.Facing);
             // Handle wrap-around (e.g. 6.2 → 0.1 = 0.18 rad, not 6.1 rad)
             if (facingDelta > MathF.PI)
                 facingDelta = 2f * MathF.PI - facingDelta;
+            bool wasHorizontallyMoving = (player.MovementFlags & horizontalMoveMask) != MovementFlags.MOVEFLAG_NONE;
             if (facingDelta > facingDampenThreshold)
+            {
                 player.Facing = facing;
+                if (!wasHorizontallyMoving && _movementController != null && _isInControl && !_isBeingTeleported)
+                {
+                    _movementController.SendMovementStartFacingUpdate((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+                }
+            }
             player.MovementFlags &= ~(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
 
@@ -641,6 +675,15 @@ namespace WoWSharpClient
             {
                 _movementController.SetTargetWaypoint(position);
             }
+        }
+
+        private void UpdateAirborneSteering(WoWLocalPlayer player, Position target, float desiredFacing)
+        {
+            // Route-following movement must not rewrite facing while airborne.
+            // The original client preserves the current airborne trajectory until landing
+            // instead of re-steering every tick from waypoint churn. Explicit facing
+            // updates still go through SetFacing when higher-level code genuinely needs them.
+            _movementController?.SetTargetWaypoint(target);
         }
 
         /// <summary>

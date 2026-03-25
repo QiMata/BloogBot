@@ -46,7 +46,9 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         RaptorStrike,
     };
     private readonly Dictionary<string, long> _lastQueuedOnNextSwingAttemptMs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _lastSelfCastAttemptMs = new(StringComparer.Ordinal);
     private const int OnNextSwingQueueThrottleMs = 1700;
+    private const int SelfCastRetryThrottleMs = 1500;
 
     // Potion cooldown tracking (potions share a cooldown via Config.PotionCooldownMs)
     private static DateTime _lastPotionUsed = DateTime.MinValue;
@@ -91,6 +93,16 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         var distance = useMeleeChaseHeuristics
             ? player.Position.DistanceTo2D(target.Position)
             : player.Position.DistanceTo(target.Position);
+        if (ObjectManager.HadRecentMeleeRangeRejection(target.Guid))
+        {
+            ResetPendingMeleeEngage();
+            ObjectManager.Face(target.Position);
+            TryNavigateToward(target.Position, allowDirectFallback: useMeleeChaseHeuristics);
+            return true;
+        }
+
+        var hadRecentFacingReject = ObjectManager.HadRecentMeleeFacingRejection(target.Guid);
+
         if (distance > attackDistance)
         {
             ResetPendingMeleeEngage();
@@ -99,6 +111,27 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             ObjectManager.Face(target.Position);
             TryNavigateToward(target.Position, allowDirectFallback: useMeleeChaseHeuristics);
             return true;
+        }
+
+        if (hadRecentFacingReject)
+        {
+            if (!IsPlayerAirborne(player))
+            {
+                // BADFACING should only prime one exact facing correction per target.
+                // Re-issuing Stop/SetFacing every bot tick for the whole reject window
+                // leaves the player stationary and never reaches the follow-up swing retry.
+                if (_pendingMeleeEngageTargetGuid != target.Guid || !_meleeFacingPrimed)
+                {
+                    ObjectManager.StopAllMovement();
+
+                    // BADFACING means the server disagrees with our local facing snapshot.
+                    // Bypass the thresholded Face(...) helper and force an exact facing packet.
+                    ObjectManager.SetFacing(player.GetFacingForPosition(target.Position));
+                    _pendingMeleeEngageTargetGuid = target.Guid;
+                    _meleeFacingPrimed = true;
+                    return true;
+                }
+            }
         }
 
         if (useMeleeChaseHeuristics && ShouldDelayMeleeEngage(player, target))
@@ -232,6 +265,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         if (distance < minRange || distance > maxRange) return false;
 
         if (!ObjectManager.IsSpellReady(spellName)) return false;
+        if (!CanAttemptSelfCast(spellName, castOnSelf)) return false;
 
         ObjectManager.CastSpell(spellName, castOnSelf: castOnSelf);
         callback?.Invoke();
@@ -255,6 +289,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
 
         if (!ObjectManager.IsSpellReady(abilityName)) return false;
         if (!CanQueueOnNextSwingAbility(abilityName)) return false;
+        if (!CanAttemptSelfCast(abilityName, SelfCastAbilityNames.Contains(abilityName))) return false;
 
         ObjectManager.CastSpell(abilityName, castOnSelf: SelfCastAbilityNames.Contains(abilityName));
         return true;
@@ -284,6 +319,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
 
         if (!ObjectManager.IsSpellReady(abilityName)) return false;
         if (!CanQueueOnNextSwingAbility(abilityName)) return false;
+        if (!CanAttemptSelfCast(abilityName, SelfCastAbilityNames.Contains(abilityName))) return false;
 
         ObjectManager.CastSpell(abilityName, castOnSelf: SelfCastAbilityNames.Contains(abilityName));
         return true;
@@ -708,6 +744,22 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         }
 
         _lastQueuedOnNextSwingAttemptMs[key] = nowMs;
+        return true;
+    }
+
+    private bool CanAttemptSelfCast(string spellName, bool castOnSelf)
+    {
+        if (!castOnSelf)
+            return true;
+
+        long nowMs = Environment.TickCount64;
+        if (_lastSelfCastAttemptMs.TryGetValue(spellName, out var lastAttemptMs)
+            && nowMs - lastAttemptMs < SelfCastRetryThrottleMs)
+        {
+            return false;
+        }
+
+        _lastSelfCastAttemptMs[spellName] = nowMs;
         return true;
     }
 }

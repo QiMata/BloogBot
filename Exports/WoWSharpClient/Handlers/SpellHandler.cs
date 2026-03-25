@@ -293,6 +293,9 @@ namespace WoWSharpClient.Handlers
                         attackerGuid, targetGuid, totalDamage, hitInfo, spellId, blockedAmount);
                 }
 
+                if (isOurAttack)
+                    WoWSharpObjectManager.Instance.ConfirmMeleeAttackStarted(targetGuid);
+
                 WoWSharpEventEmitter.Instance.FireOnAttackerStateUpdate(
                     hitInfo, attackerGuid, targetGuid, totalDamage, spellId, blockedAmount);
             }
@@ -540,6 +543,9 @@ namespace WoWSharpClient.Handlers
                 {
                     localPlayer.IsAutoAttacking = true;
                     localPlayer.TargetGuid = targetGuid;
+                    WoWSharpObjectManager.Instance.ConfirmMeleeAttackStarted(targetGuid);
+                    Log.Information("[SpellHandler] SMSG_ATTACKSTART: attacker=0x{Attacker:X} target=0x{Target:X} isLocalPlayer=True",
+                        attackerGuid, targetGuid);
                 }
             }
             catch (EndOfStreamException) { }
@@ -564,7 +570,10 @@ namespace WoWSharpClient.Handlers
                     Log.Information("[SpellHandler] SMSG_ATTACKSTOP: attacker=0x{Attacker:X} target=0x{Target:X} isLocalPlayer={IsUs} wasAutoAttacking={WasAuto}",
                         attackerGuid, targetGuid, isUs, localPlayer.IsAutoAttacking);
                     if (isUs)
+                    {
                         localPlayer.IsAutoAttacking = false;
+                        WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart(targetGuid);
+                    }
                 }
             }
             catch (EndOfStreamException) { }
@@ -582,6 +591,7 @@ namespace WoWSharpClient.Handlers
             if (player is Models.WoWLocalPlayer localPlayer)
             {
                 localPlayer.IsAutoAttacking = false;
+                WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart();
                 Log.Warning("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking (possible mob evade)");
             }
         }

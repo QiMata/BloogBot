@@ -26,6 +26,7 @@ namespace BotRunner
         private readonly IDependencyContainer _container;
         private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
         private readonly Constants.BotBehaviorConfig _behaviorConfig;
+        private readonly IDiagnosticPacketTraceRecorder? _diagnosticPacketTraceRecorder;
         private readonly bool _autoReleaseCorpseTaskEnabled;
         private readonly bool _autoRetrieveCorpseTaskEnabled;
 
@@ -80,6 +81,30 @@ namespace BotRunner
         private const uint StandStateMask = 0xFF;
         private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
+        // Binary compatibility shim for already-built service binaries that still bind to the
+        // pre-packet-recorder constructor signature. Keep parameter names distinct so current
+        // source callers continue to bind to the newer overload when using named arguments.
+        public BotRunnerService(IObjectManager objectManager,
+                                 CharacterStateUpdateClient characterStateUpdateClient,
+                                 IDependencyContainer container,
+                                 Func<IAgentFactory?>? legacyAgentFactoryAccessor,
+                                 string? legacyAccountName,
+                                 ITalentService? legacyTalentService,
+                                 IEquipmentService? legacyEquipmentService,
+                                 Constants.BotBehaviorConfig? legacyBehaviorConfig)
+            : this(
+                objectManager,
+                characterStateUpdateClient,
+                container,
+                legacyAgentFactoryAccessor,
+                legacyAccountName,
+                legacyTalentService,
+                legacyEquipmentService,
+                legacyBehaviorConfig,
+                diagnosticPacketTraceRecorder: null)
+        {
+        }
+
         public BotRunnerService(IObjectManager objectManager,
                                  CharacterStateUpdateClient characterStateUpdateClient,
                                  IDependencyContainer container,
@@ -87,7 +112,8 @@ namespace BotRunner
                                  string? accountName = null,
                                  ITalentService? talentService = null,
                                  IEquipmentService? equipmentService = null,
-                                 Constants.BotBehaviorConfig? behaviorConfig = null)
+                                 Constants.BotBehaviorConfig? behaviorConfig = null,
+                                 IDiagnosticPacketTraceRecorder? diagnosticPacketTraceRecorder = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
             _activitySnapshot = new() { AccountName = accountName ?? "?" };
@@ -98,6 +124,7 @@ namespace BotRunner
             _equipmentService = equipmentService;
             _container = container ?? throw new ArgumentNullException(nameof(container));
             _behaviorConfig = behaviorConfig ?? new Constants.BotBehaviorConfig();
+            _diagnosticPacketTraceRecorder = diagnosticPacketTraceRecorder;
             _autoReleaseCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK");
             _autoRetrieveCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK");
 

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using BotRunner.Tasks;
 using Communication;
 using Tests.Infrastructure;
 using Xunit;
@@ -147,14 +150,34 @@ public class DeathCorpseRunTests
         if (!graveyardSettled)
             return await FailAsync($"Ghost never left corpse location (lastDist={graveyardDistanceToCorpse:F0}y, reclaimDelay={initialReclaimDelay}s)", corpsePos);
 
-        _output.WriteLine($"  [{label}] Step 6: Queue RetrieveCorpse task from {graveyardDistanceToCorpse:F0}y away");
-        var retrieveResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
-        if (retrieveResult != ResponseResult.Success)
-            return await FailAsync($"RetrieveCorpse failed: {retrieveResult}", corpsePos);
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, account, "physics", "transform", "navtrace");
 
-        _output.WriteLine($"  [{label}] Step 7: Observe RetrieveCorpseTask runback/cooldown/reclaim");
-        var (alive, bestDistanceToCorpse, bestReclaimDelay, reachedCorpseRange) =
-            await WaitForCorpseRecoveryAsync(account, label, corpsePos, graveyardDistanceToCorpse, initialReclaimDelay);
+        _output.WriteLine($"  [{label}] Step 6: Start diagnostic recording and queue RetrieveCorpse from {graveyardDistanceToCorpse:F0}y away");
+        var startRecordingResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
+        if (startRecordingResult != ResponseResult.Success)
+            return await FailAsync($"StartPhysicsRecording failed: {startRecordingResult}", corpsePos);
+
+        (bool alive, float bestDistanceToCorpse, uint bestReclaimDelay, bool reachedCorpseRange) recoveryResult;
+        try
+        {
+            var retrieveResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
+            if (retrieveResult != ResponseResult.Success)
+                return await FailAsync($"RetrieveCorpse failed: {retrieveResult}", corpsePos);
+
+            _output.WriteLine($"  [{label}] Step 7: Observe RetrieveCorpseTask runback/cooldown/reclaim");
+            recoveryResult = await WaitForCorpseRecoveryAsync(account, label, corpsePos, graveyardDistanceToCorpse, initialReclaimDelay);
+        }
+        finally
+        {
+            var stopRecordingResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
+            _output.WriteLine($"  [{label}] Recording stop result: {stopRecordingResult}");
+            await Task.Delay(500);
+        }
+
+        AssertRetrieveCorpseTraceRecorded(account, label);
+
+        var (alive, bestDistanceToCorpse, bestReclaimDelay, reachedCorpseRange) = recoveryResult;
         if (!alive)
         {
             // Check if failure was due to pathfinding no_route — skip rather than fail.
@@ -195,6 +218,48 @@ public class DeathCorpseRunTests
 
         _output.WriteLine($"  [{label}] PASSED -> release + RetrieveCorpseTask restored strict-alive state");
         return (true, string.Empty);
+    }
+
+    private void AssertRetrieveCorpseTraceRecorded(string account, string label)
+    {
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+        var navTracePath = RecordingArtifactHelper.WaitForRecordingFile(
+            recordingDir,
+            "navtrace",
+            account,
+            "json",
+            TimeSpan.FromSeconds(5));
+
+        Assert.False(string.IsNullOrEmpty(navTracePath), $"[{label}] Expected navtrace recording for {account}.");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(navTracePath!));
+        var root = document.RootElement;
+        var recordedTask = root.TryGetProperty("RecordedTask", out var taskProperty)
+            ? taskProperty.GetString()
+            : null;
+        var recordedAction = root.TryGetProperty("RecordedAction", out var actionProperty)
+            ? actionProperty.GetString()
+            : null;
+        var taskStack = root.TryGetProperty("TaskStack", out var stackProperty) && stackProperty.ValueKind == JsonValueKind.Array
+            ? stackProperty.EnumerateArray().Select(element => element.GetString() ?? string.Empty).Where(name => name.Length > 0).ToArray()
+            : [];
+        var hasTrace = root.TryGetProperty("TraceSnapshot", out var traceProperty)
+            && traceProperty.ValueKind != JsonValueKind.Null
+            && traceProperty.ValueKind != JsonValueKind.Undefined;
+        var planVersion = hasTrace && traceProperty.TryGetProperty("PlanVersion", out var planProperty)
+            ? planProperty.GetInt32()
+            : -1;
+        var lastResolution = hasTrace && traceProperty.TryGetProperty("LastResolution", out var resolutionProperty)
+            ? resolutionProperty.GetString()
+            : null;
+
+        _output.WriteLine(
+            $"  [{label}] Navtrace captured: task={recordedTask ?? "null"} action={recordedAction ?? "null"} " +
+            $"plan={planVersion} resolution={lastResolution ?? "null"} stack=[{string.Join(", ", taskStack)}]");
+
+        Assert.True(hasTrace, $"[{label}] Navtrace sidecar did not contain a trace snapshot.");
+        Assert.Equal(nameof(RetrieveCorpseTask), recordedTask);
+        Assert.Contains(nameof(RetrieveCorpseTask), taskStack);
     }
 
     private async Task<(bool passed, string reason)> BuildFailureResultAsync(

@@ -7,6 +7,9 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.Json;
+using BotRunner.Interfaces;
+using BotRunner.Movement;
 
 namespace BotRunner
 {
@@ -27,6 +30,11 @@ namespace BotRunner
         private readonly List<TransformFrame> _transformFrames = new();
         private readonly Stopwatch _transformStopwatch = new();
         private int _transformFrameNumber;
+        private NavigationTraceSnapshot? _latestRecordedNavigationTrace;
+        private string? _latestRecordedTraceTaskName;
+        private string[] _latestRecordedTraceTaskStack = Array.Empty<string>();
+        private int _latestRecordedTraceTick;
+        private string? _latestRecordedTraceAction;
 
         /// <summary>
         /// Per-frame transform snapshot captured from IObjectManager.Player.
@@ -40,6 +48,15 @@ namespace BotRunner
             uint MoveFlags,
             float RunSpeed,
             uint FallTime
+        );
+
+        private sealed record NavigationTraceRecording(
+            string AccountName,
+            string? RecordedTask,
+            string[] TaskStack,
+            int RecordedTick,
+            string? RecordedAction,
+            NavigationTraceSnapshot? TraceSnapshot
         );
 
         /// <summary>
@@ -69,6 +86,9 @@ namespace BotRunner
 
         private void StartPhysicsRecording()
         {
+            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            _diagnosticPacketTraceRecorder?.StartRecording(accountName);
+
             if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
             {
                 wsOm.ClearPhysicsFrameRecording();
@@ -79,6 +99,9 @@ namespace BotRunner
 
         private void StopPhysicsRecording()
         {
+            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            _diagnosticPacketTraceRecorder?.StopRecording(accountName);
+
             if (_objectManager is not WoWSharpClient.WoWSharpObjectManager wsOm)
                 return;
 
@@ -90,7 +113,6 @@ namespace BotRunner
 
             // Write frames to CSV in well-known location
             Directory.CreateDirectory(PhysicsRecordingDir);
-            var accountName = _activitySnapshot?.AccountName ?? "unknown";
             var filePath = Path.Combine(PhysicsRecordingDir, $"physics_{accountName}.csv");
 
             var sb = new StringBuilder();
@@ -150,6 +172,11 @@ namespace BotRunner
             _transformFrameNumber = 0;
             _transformStopwatch.Restart();
             _isTransformRecording = true;
+            _latestRecordedNavigationTrace = null;
+            _latestRecordedTraceTaskName = null;
+            _latestRecordedTraceTaskStack = Array.Empty<string>();
+            _latestRecordedTraceTick = 0;
+            _latestRecordedTraceAction = null;
             Log.Information("[DIAG] Transform recording STARTED");
         }
 
@@ -183,6 +210,7 @@ namespace BotRunner
 
             File.WriteAllText(filePath, sb.ToString());
             Log.Information("[DIAG] Transform recording written to {Path} ({Count} frames)", filePath, _transformFrames.Count);
+            WriteNavigationTraceRecording();
         }
 
         /// <summary>
@@ -194,6 +222,8 @@ namespace BotRunner
 
             var player = _objectManager?.Player;
             if (player == null) return;
+
+            CaptureNavigationTraceFrame();
 
             var pos = player.Position;
             _transformFrames.Add(new TransformFrame(
@@ -207,6 +237,52 @@ namespace BotRunner
                 RunSpeed: player.RunSpeed,
                 FallTime: player.FallTime
             ));
+        }
+
+        private void CaptureNavigationTraceFrame()
+        {
+            if (_botTasks.Count == 0)
+                return;
+
+            if (_botTasks.Peek() is not INavigationTraceProvider traceProvider)
+                return;
+
+            var trace = traceProvider.GetNavigationTraceSnapshot();
+            if (trace == null)
+                return;
+
+            _latestRecordedNavigationTrace = trace;
+            _latestRecordedTraceTaskName = _botTasks.Peek().GetType().Name;
+            var stackNames = new string[_botTasks.Count];
+            var index = 0;
+            foreach (var task in _botTasks)
+                stackNames[index++] = task.GetType().Name;
+
+            _latestRecordedTraceTaskStack = stackNames;
+            _latestRecordedTraceTick = _tickCount;
+            _latestRecordedTraceAction = _activitySnapshot?.CurrentAction?.ActionType.ToString();
+        }
+
+        private void WriteNavigationTraceRecording()
+        {
+            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            var filePath = Path.Combine(PhysicsRecordingDir, $"navtrace_{accountName}.json");
+            var payload = new NavigationTraceRecording(
+                AccountName: accountName,
+                RecordedTask: _latestRecordedTraceTaskName,
+                TaskStack: _latestRecordedTraceTaskStack,
+                RecordedTick: _latestRecordedTraceTick,
+                RecordedAction: _latestRecordedTraceAction,
+                TraceSnapshot: _latestRecordedNavigationTrace);
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            File.WriteAllText(filePath, json);
+            Log.Information("[DIAG] Navigation trace recording written to {Path} (task={Task})",
+                filePath, _latestRecordedTraceTaskName ?? "none");
         }
     }
 }

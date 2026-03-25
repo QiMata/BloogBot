@@ -1,8 +1,11 @@
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using System;
 using System.IO;
 using WoWSharpClient.Handlers;
+using WoWSharpClient.Models;
+using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Tests.Handlers
 {
@@ -151,6 +154,37 @@ namespace WoWSharpClient.Tests.Handlers
             SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, data);
         }
 
+        [Fact]
+        public void HandleAttackStart_LocalPlayerConfirmsPendingAutoAttack()
+        {
+            const ulong playerGuid = 0x10;
+            const ulong targetGuid = 0x1234;
+            var objectManager = WoWSharpObjectManager.Instance;
+            var localPlayer = new WoWLocalPlayer(new HighGuid(playerGuid))
+            {
+                IsAutoAttacking = true,
+                TargetGuid = targetGuid,
+            };
+
+            objectManager.Player = localPlayer;
+            objectManager.ClearPendingMeleeAttackStart();
+            objectManager.ClearRecentMeleeRejections();
+            objectManager.NotePendingMeleeAttackStart(targetGuid);
+            objectManager.NoteMeleeFacingRejected();
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write(playerGuid);
+            writer.Write(targetGuid);
+
+            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, ms.ToArray());
+
+            Assert.True(localPlayer.IsAutoAttacking);
+            Assert.Equal(targetGuid, localPlayer.TargetGuid);
+            Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
+            Assert.False(objectManager.HadRecentMeleeFacingRejection(targetGuid));
+        }
+
         // --- SMSG_ATTACKSTOP ---
 
         [Fact]
@@ -178,6 +212,67 @@ namespace WoWSharpClient.Tests.Handlers
 
             // Act & Assert — no exception (player guid won't match 0x05)
             SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, data);
+        }
+
+        [Fact]
+        public void HandleAttackStop_LocalPlayerClearsPendingAutoAttack()
+        {
+            const ulong playerGuid = 0x10;
+            const ulong targetGuid = 0x1234;
+            var objectManager = WoWSharpObjectManager.Instance;
+            var localPlayer = new WoWLocalPlayer(new HighGuid(playerGuid))
+            {
+                IsAutoAttacking = true,
+                TargetGuid = targetGuid,
+            };
+
+            objectManager.Player = localPlayer;
+            objectManager.ClearPendingMeleeAttackStart();
+            objectManager.NotePendingMeleeAttackStart(targetGuid);
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            ReaderUtils.WritePackedGuid(writer, playerGuid);
+            ReaderUtils.WritePackedGuid(writer, targetGuid);
+
+            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, ms.ToArray());
+
+            Assert.False(localPlayer.IsAutoAttacking);
+            Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
+        }
+
+        [Fact]
+        public void HandleAttackerStateUpdate_OurSwingConfirmsPendingAutoAttack()
+        {
+            const ulong playerGuid = 0x10;
+            const ulong targetGuid = 0x1234;
+            var objectManager = WoWSharpObjectManager.Instance;
+            var localPlayer = new WoWLocalPlayer(new HighGuid(playerGuid))
+            {
+                IsAutoAttacking = true,
+                TargetGuid = targetGuid,
+            };
+
+            objectManager.Player = localPlayer;
+            objectManager.ClearPendingMeleeAttackStart();
+            objectManager.NotePendingMeleeAttackStart(targetGuid);
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((uint)0x2);
+            ReaderUtils.WritePackedGuid(writer, playerGuid);
+            ReaderUtils.WritePackedGuid(writer, targetGuid);
+            writer.Write((uint)15);
+            writer.Write((byte)0);
+            writer.Write((uint)0);
+            writer.Write((uint)0);
+            writer.Write((uint)0);
+            writer.Write((uint)0);
+
+            SpellHandler.HandleAttackerStateUpdate(Opcode.SMSG_ATTACKERSTATEUPDATE, ms.ToArray());
+
+            Assert.True(localPlayer.IsAutoAttacking);
+            Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
         }
 
         // --- SMSG_INITIAL_SPELLS ---

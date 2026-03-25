@@ -27,6 +27,8 @@ namespace WoWSharpClient.Client
 
         public IWorldClient? WorldClient => _worldClient;
 
+        public event Action<Opcode, int>? MovementOpcodeSent;
+
         public void Dispose()
         {
             if (!_disposed)
@@ -162,6 +164,7 @@ namespace WoWSharpClient.Client
                 throw new InvalidOperationException("Not connected to world server");
                 
             await _worldClient.SendOpcodeAsync(opcode, movementInfo, cancellationToken);
+            MovementOpcodeSent?.Invoke(opcode, movementInfo.Length);
         }
 
         public async Task SendMSGPackedAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default)

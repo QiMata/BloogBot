@@ -194,22 +194,32 @@ namespace WoWSharpClient.Movement
     public sealed class SplineController
     {
         private readonly Dictionary<ulong, ActiveSpline> _active = [];
+        private readonly object _gate = new();
 
         /// <summary>Fired when a spline for the given GUID completes or is removed.</summary>
         public event Action<ulong>? OnSplineCompleted;
 
         public void AddOrUpdate(Spline s, uint? currentTimeMs = null)
         {
-            _active[s.OwnerGuid] = currentTimeMs.HasValue
-                ? new ActiveSpline(s, currentTimeMs)
-                : new ActiveSpline(s);
+            lock (_gate)
+            {
+                _active[s.OwnerGuid] = currentTimeMs.HasValue
+                    ? new ActiveSpline(s, currentTimeMs)
+                    : new ActiveSpline(s);
+            }
             Log.Information("[SplineController] Added spline for {Guid:X}: {Points} pts, {Duration}ms, flags=0x{Flags:X}",
                 s.OwnerGuid, s.Points.Count, s.DurationMs, (uint)s.Flags);
         }
 
         public void Remove(ulong guid)
         {
-            if (_active.Remove(guid))
+            bool removed;
+            lock (_gate)
+            {
+                removed = _active.Remove(guid);
+            }
+
+            if (removed)
             {
                 Log.Information("[SplineController] Removed spline for {Guid:X}", guid);
                 OnSplineCompleted?.Invoke(guid);
@@ -217,17 +227,34 @@ namespace WoWSharpClient.Movement
         }
 
         /// <summary>Returns true if the given GUID has an active (non-finished) spline.</summary>
-        public bool HasActiveSpline(ulong guid) => _active.ContainsKey(guid);
+        public bool HasActiveSpline(ulong guid)
+        {
+            lock (_gate)
+            {
+                return _active.ContainsKey(guid);
+            }
+        }
 
         public void Update(float dtMs)
         {
-            foreach (var (guid, active) in _active.ToArray())
+            KeyValuePair<ulong, ActiveSpline>[] snapshot;
+            lock (_gate)
             {
+                snapshot = _active.ToArray();
+            }
+
+            foreach (var (guid, active) in snapshot)
+            {
+                if (!IsCurrentSnapshotEntry(guid, active))
+                    continue;
+
                 if (active.Finished)
                 {
-                    _active.Remove(guid);
-                    Log.Information("[SplineController] Spline finished for {Guid:X}", guid);
-                    OnSplineCompleted?.Invoke(guid);
+                    if (TryRemoveSnapshotEntry(guid, active))
+                    {
+                        Log.Information("[SplineController] Spline finished for {Guid:X}", guid);
+                        OnSplineCompleted?.Invoke(guid);
+                    }
                     continue;
                 }
 
@@ -272,7 +299,26 @@ namespace WoWSharpClient.Movement
                     WoWSharpObjectManager.Instance.SyncTransportPassengerWorldPositions();
                 }
                 else
-                    _active.Remove(guid); // object vanished
+                    TryRemoveSnapshotEntry(guid, active); // object vanished
+            }
+        }
+
+        private bool IsCurrentSnapshotEntry(ulong guid, ActiveSpline active)
+        {
+            lock (_gate)
+            {
+                return _active.TryGetValue(guid, out var current) && ReferenceEquals(current, active);
+            }
+        }
+
+        private bool TryRemoveSnapshotEntry(ulong guid, ActiveSpline active)
+        {
+            lock (_gate)
+            {
+                if (_active.TryGetValue(guid, out var current) && ReferenceEquals(current, active))
+                    return _active.Remove(guid);
+
+                return false;
             }
         }
 

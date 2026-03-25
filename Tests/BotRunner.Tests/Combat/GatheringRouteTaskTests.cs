@@ -69,6 +69,56 @@ public class GatheringRouteTaskTests
     }
 
     [Fact]
+    public void ComputeApproachPosition_StopsShortOfNodeByGatherBuffer()
+    {
+        var player = new Position(0f, 0f, 0f);
+        var node = new Position(8f, 0f, 0f);
+
+        var approach = GatheringRouteTask.ComputeApproachPosition(player, node);
+
+        Assert.Equal(3.5f, approach.X, 3);
+        Assert.Equal(0f, approach.Y, 3);
+        Assert.Equal(0f, approach.Z, 3);
+        Assert.Equal(GatheringRouteTask.GatherRange - GatheringRouteTask.GatherApproachBuffer, approach.DistanceTo(node), 3);
+    }
+
+    [Fact]
+    public void Update_VisibleNodeOutOfRange_NavigatesTowardApproachPointInsteadOfNodeCenter()
+    {
+        Position? requestedDestination = null;
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                {
+                    requestedDestination = new Position(end.X, end.Y, end.Z);
+                    return
+                    [
+                        new Position(start.X, start.Y, start.Z),
+                        new Position(end.X, end.Y, end.Z)
+                    ];
+                }));
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var node = AtomicTaskTestHelpers.CreateGameObject(0xAAAAUL, 1731u, 3u, new Position(8f, 0f, 0f), "Copper Vein");
+        om.Setup(o => o.GameObjects).Returns([node.Object]);
+
+        var task = new GatheringRouteTask(ctx.Object, [new Position(0f, 0f, 0f)], [1731u], 2575);
+        stack.Push(task);
+
+        task.Update(); // Build route
+        task.Update(); // Candidate reached
+        task.Update(); // Visible node found
+        task.Update(); // Navigate toward node
+
+        Assert.NotNull(requestedDestination);
+        Assert.Equal(3.5f, requestedDestination!.X, 3);
+        Assert.Equal(0f, requestedDestination.Y, 3);
+        Assert.Equal(0f, requestedDestination.Z, 3);
+    }
+
+    [Fact]
     public void Update_CombatPause_KeepsTaskAndResumesWithoutTimingOut()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();

@@ -17,6 +17,17 @@ namespace ForegroundBotRunner.Statics
 {
     public partial class ObjectManager
     {
+        private static readonly ControlBits[] DiscreteControlBits =
+        [
+            ControlBits.Front,
+            ControlBits.Back,
+            ControlBits.Left,
+            ControlBits.Right,
+            ControlBits.StrafeLeft,
+            ControlBits.StrafeRight,
+            ControlBits.Jump,
+            ControlBits.CtmWalk,
+        ];
 
 
         public void MoveToward(Position position, float facing)
@@ -58,7 +69,23 @@ namespace ForegroundBotRunner.Statics
             if (bits == ControlBits.Nothing)
                 return;
 
-            Functions.SetControlBit((int)bits, 1, Environment.TickCount);
+            try
+            {
+                int tickCount = Environment.TickCount;
+                var expandedBits = ExpandControlBits(bits);
+                ThreadSynchronizer.RunOnMainThread(() =>
+                {
+                    foreach (var bit in expandedBits)
+                    {
+                        Functions.SetControlBit((int)bit, 1, tickCount);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"[StartMovement] exception bits={bits}: {ex}");
+                throw;
+            }
         }
 
 
@@ -96,7 +123,49 @@ namespace ForegroundBotRunner.Statics
             if (bits == ControlBits.Nothing)
                 return;
 
-            Functions.SetControlBit((int)bits, 0, Environment.TickCount);
+            try
+            {
+                int tickCount = Environment.TickCount;
+                var expandedBits = ExpandControlBits(bits);
+                ThreadSynchronizer.RunOnMainThread(() =>
+                {
+                    foreach (var bit in expandedBits)
+                    {
+                        Functions.SetControlBit((int)bit, 0, tickCount);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"[StopMovement] exception bits={bits}: {ex}");
+                throw;
+            }
+        }
+
+        internal static IReadOnlyList<ControlBits> ExpandControlBits(ControlBits bits)
+        {
+            if (bits == ControlBits.Nothing)
+                return [];
+
+            var result = new List<ControlBits>();
+            var handled = ControlBits.Nothing;
+
+            foreach (var discreteBit in DiscreteControlBits)
+            {
+                if ((bits & discreteBit) == 0)
+                    continue;
+
+                result.Add(discreteBit);
+                handled |= discreteBit;
+            }
+
+            var remaining = bits & ~handled;
+            if (remaining != ControlBits.Nothing)
+            {
+                result.Add(remaining);
+            }
+
+            return result;
         }
 
 

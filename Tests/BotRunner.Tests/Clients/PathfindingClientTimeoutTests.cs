@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Diagnostics;
 using BotRunner.Clients;
 using GameData.Core.Enums;
 using GameData.Core.Models;
@@ -107,6 +108,177 @@ public sealed class PathfindingClientTimeoutTests
         _ = client.GetPath(1, new Position(0f, 0f, 0f), new Position(10f, 10f, 10f));
 
         Assert.Equal(500, client.LastTimeoutMs);
+    }
+
+    [Fact]
+    public async Task PhysicsStep_ReconnectBudget_StaysWithinPhysicsTimeout()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var firstRequestHandled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverTask = Task.Run(async () =>
+        {
+            using var acceptedClient = await listener.AcceptTcpClientAsync();
+            using var stream = acceptedClient.GetStream();
+
+            await ReadMessageAsync(stream);
+            await WriteMessageAsync(stream, new PathfindingResponse
+            {
+                Step = new PhysicsOutput
+                {
+                    NewPosX = 10f,
+                    NewPosY = 20f,
+                    NewPosZ = 30f,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+                }
+            });
+
+            firstRequestHandled.SetResult();
+        });
+
+        using var client = new PathfindingClient(
+            "127.0.0.1",
+            port,
+            NullLogger<PathfindingClient>.Instance,
+            pathRequestTimeoutMs: 1000,
+            queryTimeoutMs: 1000,
+            physicsTimeoutMs: 500);
+
+        var firstOutput = client.PhysicsStep(new PhysicsInput
+        {
+            PosX = 1f,
+            PosY = 2f,
+            PosZ = 3f,
+            RunSpeed = 7f,
+            RunBackSpeed = 4.5f,
+            DeltaTime = 0.016f,
+            MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+        });
+
+        Assert.Equal(10f, firstOutput.NewPosX);
+        await firstRequestHandled.Task;
+        await serverTask;
+
+        listener.Stop();
+
+        var reconnectStopwatch = Stopwatch.StartNew();
+        var fallbackOutput = client.PhysicsStep(new PhysicsInput
+        {
+            PosX = 11f,
+            PosY = 12f,
+            PosZ = 13f,
+            RunSpeed = 7f,
+            RunBackSpeed = 4.5f,
+            DeltaTime = 0.016f,
+            MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+        });
+        reconnectStopwatch.Stop();
+
+        Assert.InRange(reconnectStopwatch.ElapsedMilliseconds, 0, 3000);
+        Assert.Equal(11f, fallbackOutput.NewPosX);
+        Assert.Equal(12f, fallbackOutput.NewPosY);
+        Assert.Equal(13f, fallbackOutput.NewPosZ);
+        Assert.False(client.IsAvailable);
+    }
+
+    [Fact]
+    public async Task GetPath_ReconnectBudget_StaysWithinPathTimeout_AndReturnsEmptyPathOnFailure()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var firstRequestHandled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverTask = Task.Run(async () =>
+        {
+            using var acceptedClient = await listener.AcceptTcpClientAsync();
+            using var stream = acceptedClient.GetStream();
+
+            await ReadMessageAsync(stream);
+            var response = new PathfindingResponse
+            {
+                Path = new CalculatePathResponse
+                {
+                    Result = "native_path",
+                    RawCornerCount = 1
+                }
+            };
+            response.Path.Corners.Add(new Game.Position { X = 4f, Y = 5f, Z = 6f });
+            await WriteMessageAsync(stream, response);
+            firstRequestHandled.SetResult();
+        });
+
+        using var client = new PathfindingClient(
+            "127.0.0.1",
+            port,
+            NullLogger<PathfindingClient>.Instance,
+            pathRequestTimeoutMs: 500,
+            queryTimeoutMs: 1000,
+            physicsTimeoutMs: 1000);
+
+        var firstPath = client.GetPath(1, new Position(0f, 0f, 0f), new Position(10f, 10f, 10f));
+        Assert.Single(firstPath);
+        await firstRequestHandled.Task;
+        await serverTask;
+
+        listener.Stop();
+
+        var reconnectStopwatch = Stopwatch.StartNew();
+        var fallbackPath = client.GetPath(1, new Position(1f, 2f, 3f), new Position(4f, 5f, 6f));
+        reconnectStopwatch.Stop();
+
+        Assert.InRange(reconnectStopwatch.ElapsedMilliseconds, 0, 3000);
+        Assert.Empty(fallbackPath);
+        Assert.False(client.IsAvailable);
+    }
+
+    [Fact]
+    public async Task IsInLineOfSight_ReconnectBudget_StaysWithinQueryTimeout_AndReturnsFalseOnFailure()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var firstRequestHandled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverTask = Task.Run(async () =>
+        {
+            using var acceptedClient = await listener.AcceptTcpClientAsync();
+            using var stream = acceptedClient.GetStream();
+
+            await ReadMessageAsync(stream);
+            await WriteMessageAsync(stream, new PathfindingResponse
+            {
+                Los = new LineOfSightResponse
+                {
+                    InLos = true
+                }
+            });
+            firstRequestHandled.SetResult();
+        });
+
+        using var client = new PathfindingClient(
+            "127.0.0.1",
+            port,
+            NullLogger<PathfindingClient>.Instance,
+            pathRequestTimeoutMs: 1000,
+            queryTimeoutMs: 500,
+            physicsTimeoutMs: 1000);
+
+        Assert.True(client.IsInLineOfSight(1, new Position(0f, 0f, 0f), new Position(1f, 1f, 1f)));
+        await firstRequestHandled.Task;
+        await serverTask;
+
+        listener.Stop();
+
+        var reconnectStopwatch = Stopwatch.StartNew();
+        var fallbackLos = client.IsInLineOfSight(1, new Position(2f, 2f, 2f), new Position(3f, 3f, 3f));
+        reconnectStopwatch.Stop();
+
+        Assert.InRange(reconnectStopwatch.ElapsedMilliseconds, 0, 3000);
+        Assert.False(fallbackLos);
+        Assert.False(client.IsAvailable);
     }
 
     private static async Task ReadMessageAsync(NetworkStream stream)

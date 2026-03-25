@@ -10,6 +10,11 @@ namespace ForegroundBotRunner.Mem
 {
     public static unsafe class MemoryManager
     {
+        private static void LogReadException(Exception exception, string typeName)
+        {
+            Log.Error(exception, "[MEMORY] Read {TypeName} failed", typeName);
+        }
+
         [DllImport("kernel32.dll")]
         private static extern bool VirtualProtect(nint address, int size, uint newProtect, out uint oldProtect);
 
@@ -68,7 +73,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "Byte");
                 return default;
             }
         }
@@ -93,7 +98,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "Short");
                 return default;
             }
         }
@@ -118,7 +123,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "Int");
                 return default;
             }
         }
@@ -143,7 +148,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "UInt");
                 return default;
             }
         }
@@ -168,7 +173,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "ULong");
                 return default;
             }
         }
@@ -193,7 +198,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "IntPtr");
                 return default;
             }
         }
@@ -218,7 +223,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "Float");
                 return default;
             }
         }
@@ -252,7 +257,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "String");
                 return "";
             }
         }
@@ -286,7 +291,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, "Bytes");
                 return default;
             }
         }
@@ -308,7 +313,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                LogReadException(e, nameof(ItemCacheEntry));
                 return default;
             }
         }

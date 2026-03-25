@@ -880,6 +880,99 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(0.25f, unit.Facing, 5);
     }
 
+    [Fact]
+    public void MoveToward_Airborne_RefreshesWaypointWithoutChangingFlagsOrFacing()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x128;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 0f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
+
+        objectManager.MoveToward(new Position(10f, 35f, 30f));
+
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR, player.MovementFlags);
+        Assert.Equal(0f, player.Facing, 3);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        Assert.NotNull(controller.CurrentWaypoint);
+        Assert.Equal(10f, controller.CurrentWaypoint!.X, 3);
+        Assert.Equal(35f, controller.CurrentWaypoint!.Y, 3);
+        Assert.Equal(30f, controller.CurrentWaypoint!.Z, 3);
+    }
+
+    [Fact]
+    public void MoveTowardWithFacing_Airborne_PreservesFlagsAndCurrentFacing()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x129;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(-5f, -10f, 40f);
+        player.Facing = 0.25f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
+
+        objectManager.MoveToward(new Position(-15f, -20f, 42f), 1.75f);
+
+        Assert.Equal(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_FALLINGFAR, player.MovementFlags);
+        Assert.Equal(0.25f, player.Facing, 3);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        Assert.NotNull(controller.CurrentWaypoint);
+        Assert.Equal(-15f, controller.CurrentWaypoint!.X, 3);
+        Assert.Equal(-20f, controller.CurrentWaypoint!.Y, 3);
+        Assert.Equal(42f, controller.CurrentWaypoint!.Z, 3);
+    }
+
+    [Fact]
+    public void MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent()
+    {
+        _fixture._woWClient.Reset();
+        var sentPackets = new List<(Opcode opcode, byte[] payload)>();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => sentPackets.Add((opcode, payload)))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12A;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.Facing = 0.10f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        objectManager.MoveToward(new Position(15f, 20f, 20f), 1.25f);
+
+        Assert.Single(sentPackets);
+        Assert.Equal(Opcode.MSG_MOVE_SET_FACING, sentPackets[0].opcode);
+        Assert.Equal(1.25f, player.Facing, 3);
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        Assert.NotNull(controller.CurrentWaypoint);
+        Assert.Equal(15f, controller.CurrentWaypoint!.X, 3);
+        Assert.Equal(20f, controller.CurrentWaypoint!.Y, 3);
+        Assert.Equal(20f, controller.CurrentWaypoint!.Z, 3);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(
@@ -1131,6 +1224,21 @@ public class ObjectManagerWorldSessionTests
         }
         Assert.NotNull(field);
         field!.SetValue(target, value);
+    }
+
+    private static T GetPrivateField<T>(object target, string fieldName) where T : class
+    {
+        var type = target.GetType();
+        FieldInfo? field = null;
+        while (type != null && field == null)
+        {
+            field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            type = type.BaseType;
+        }
+
+        Assert.NotNull(field);
+        var value = field!.GetValue(target);
+        return Assert.IsType<T>(value);
     }
 
     private static void WaitForCondition(Func<bool> predicate, int timeoutMs = 1000)
