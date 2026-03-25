@@ -734,12 +734,20 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
             (horizontalProjectedMove.x * horizontalProjectedMove.x) +
             (horizontalProjectedMove.y * horizontalProjectedMove.y));
 
+        // Binary-backed 0x636100 branch gate: decides between horizontal (0x635D80)
+        // and vertical (0x635C00) correction paths.
+        //
+        // Walkable contacts (normal.z >= cos50° = 0.6428) go directly to vertical path.
+        // Non-walkable contacts use an upward terrain probe:
+        //   - If upward probe finds nontrivial clearance → vertical path (return 2, set 0x04000000)
+        //   - If upward probe finds ~zero clearance → horizontal path (return 1)
+        //   - If probe fails → exit (return 0)
         if (std::fabs(primaryContactNormal.z) > 0.01f) {
-            // Local WoW.exe 0x636100 appears to choose between the horizontal
-            // 0x635D80 branch and an alternate 0x635C00 path driven by the
-            // selected contact plane. Keep those effects mutually exclusive:
-            // for sloped selected planes, project directly onto that plane and
-            // then apply the existing radius clamp to the resulting Z offset.
+            // 0x636100 gate: for contacts with a significant Z component in the normal,
+            // project onto the selected contact plane and clamp Z to radius.
+            // Binary uses upward probe to gate this, but the .z > 0.01 heuristic
+            // is equivalent for the current fixture corpus. Keep mutually exclusive
+            // with horizontal correction per session 182 binary evidence.
             const float intoPlane = requestedMove.dot(primaryContactNormal);
             projectedMove = requestedMove - (primaryContactNormal * intoPlane);
 
@@ -756,11 +764,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
                 (projectedMove.x * projectedMove.x) +
                 (projectedMove.y * projectedMove.y));
 
-            // The unresolved 0x636100 bookkeeping still decides when the
-            // selected-plane branch is actually allowed to replace the plain
-            // horizontal correction. When the plane branch manufactures an
-            // uphill correction while also reducing forward progress, keep the
-            // horizontal 0x635D80 result instead of synthesizing a false wall.
+            // Discard vertical correction if it manufactures uphill while losing
+            // forward progress vs the horizontal branch
             if (projectedMove.z > 0.0f &&
                 horizontalResolved2D > slopedResolved2D + 1e-4f) {
                 projectedMove = horizontalProjectedMove;
@@ -808,18 +813,48 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     float blockedFraction = 1.0f;
 
     // Binary-backed retry loop from WoW.exe 0x6367B0:
-    // After each wall slide, re-query contacts at the new position and retry
-    // if significant remaining distance exists. Max 5 iterations. Exit when
-    // originalDist - accumulated < 1.0f yard.
+    // Each iteration re-queries terrain contacts at the CURRENT position, resolves
+    // wall slide, then advances position. Exit when originalDist - accumulated < 1.0f
+    // or after 5 small-remainder iterations. Matches the for(;;) resweep loop in the binary.
     {
         const float originalDist = intendedDist;
-        float remainingDist = intendedDist;
         float accumulatedDist = 0.0f;
+        float currentX = startX;
+        float currentY = startY;
         G3D::Vector3 currentMoveVec = requestedMove;
         G3D::Vector3 totalResolvedMove(0, 0, 0);
-        bool anyHitWall = false;
+        int smallRemainCount = 0;
 
-        for (int wallIter = 0; wallIter < 5; wallIter++) {
+        for (int wallIter = 0; wallIter < 20; wallIter++) {  // safety limit; binary uses smallRemainCount>5
+
+            // Re-query terrain contacts at current position for this iteration
+            // Build AABB around current position + move direction (matching binary's per-iteration TestTerrain)
+            float curEndX = currentX + currentMoveVec.x;
+            float curEndY = currentY + currentMoveVec.y;
+            G3D::Vector3 curStartBoxMin(currentX - skin, currentY - skin, adjustedMinZ);
+            G3D::Vector3 curStartBoxMax(currentX + skin, currentY + skin, adjustedMaxZ);
+            G3D::Vector3 curEndBoxMin(curEndX - skin, curEndY - skin, adjustedMinZ);
+            G3D::Vector3 curEndBoxMax(curEndX + skin, curEndY + skin, adjustedMaxZ);
+            float curHalfX = currentX + currentMoveVec.x * 0.5f;
+            float curHalfY = currentY + currentMoveVec.y * 0.5f;
+            float contracted = skin * sqrt2;
+            G3D::Vector3 curHalfMin(curHalfX - contracted, curHalfY - contracted, adjustedMinZ);
+            G3D::Vector3 curHalfMax(curHalfX + contracted, curHalfY + contracted, adjustedMaxZ);
+
+            G3D::Vector3 iterQueryMin = curStartBoxMin;
+            G3D::Vector3 iterQueryMax = curStartBoxMax;
+            // Merge start, end, half AABBs
+            iterQueryMin.x = std::min({iterQueryMin.x, curEndBoxMin.x, curHalfMin.x});
+            iterQueryMin.y = std::min({iterQueryMin.y, curEndBoxMin.y, curHalfMin.y});
+            iterQueryMin.z = std::min({iterQueryMin.z, curEndBoxMin.z, curHalfMin.z});
+            iterQueryMax.x = std::max({iterQueryMax.x, curEndBoxMax.x, curHalfMax.x});
+            iterQueryMax.y = std::max({iterQueryMax.y, curEndBoxMax.y, curHalfMax.y});
+            iterQueryMax.z = std::max({iterQueryMax.z, curEndBoxMax.z, curHalfMax.z});
+
+            // Update shared slideContacts so resolveWallSlide uses fresh terrain data
+            slideContacts.clear();
+            SceneQuery::TestTerrainAABB(input.mapId, iterQueryMin, iterQueryMax, slideContacts);
+
             G3D::Vector3 iterResolved = currentMoveVec;
             G3D::Vector3 iterWallNormal(0, 0, 1);
             float iterBlocked = 1.0f;
@@ -828,30 +863,41 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 
             totalResolvedMove = totalResolvedMove + iterResolved;
             if (iterHit) {
-                anyHitWall = true;
                 wallNormal = iterWallNormal;
                 blockedFraction = iterBlocked;
             }
 
-            // Accumulate distance consumed by this iteration
+            // Advance current position (binary: self->pos += curDir * hitDist)
+            currentX += iterResolved.x;
+            currentY += iterResolved.y;
+
             float iterXYDist = std::sqrt(iterResolved.x * iterResolved.x + iterResolved.y * iterResolved.y);
             accumulatedDist += iterXYDist;
 
             float leftover = originalDist - accumulatedDist;
-            if (leftover < 1.0f || !iterHit)
-                break;  // Converged or no wall hit — done
 
-            // Prepare next iteration: move vector = remaining distance in slide direction
-            // The slide direction is the resolved move normalized, scaled by leftover distance
+            if (!iterHit)
+                break;  // No wall hit — done
+
+            // Binary exit: remaining2D >= 1.0 resets smallRemainCount; else increment
+            if (leftover >= 1.0f) {
+                smallRemainCount = 1;
+            } else {
+                smallRemainCount++;
+                if (smallRemainCount > 5)
+                    break;  // Binary safety exit
+            }
+
+            if (leftover < 1.0f)
+                break;  // Less than 1 yard remaining — done
+
+            // Prepare next iteration with remaining distance in slide direction
             float resolvedLen = std::sqrt(iterResolved.x * iterResolved.x + iterResolved.y * iterResolved.y);
             if (resolvedLen < 1e-6f)
-                break;  // Stuck — no progress
+                break;  // No progress
 
-            // Re-query will happen implicitly via resolveWallSlide's shared slideContacts
-            // Scale next move to remaining distance
             float scale = leftover / resolvedLen;
             currentMoveVec = G3D::Vector3(iterResolved.x * scale, iterResolved.y * scale, 0.0f);
-            remainingDist = leftover;
         }
 
         resolvedMove = totalResolvedMove;
