@@ -661,7 +661,11 @@ namespace WoWSharpClient
             if (facingDelta > facingDampenThreshold)
             {
                 player.Facing = facing;
-                if (!wasHorizontallyMoving && _movementController != null && _isInControl && !_isBeingTeleported)
+                // Send SET_FACING for any significant facing change, even when already moving.
+                // FG (WoW.exe) sends SET_FACING unconditionally on facing changes during movement;
+                // previously BG only sent it at movement start (!wasHorizontallyMoving), causing
+                // mid-route redirects to silently update facing without a packet.
+                if (_movementController != null && _isInControl && !_isBeingTeleported)
                 {
                     _movementController.SendMovementStartFacingUpdate((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
                 }
