@@ -23,15 +23,15 @@
 
 ---
 
-## P4 - Movement Flags After Teleport (BT-MOVE-001/002)
+## P4 - Movement Flags After Teleport (BT-MOVE-001/002) — CLOSED
 
-ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset() clears flags to MOVEFLAG_NONE. Remaining: formal FG packet capture test to verify no flag divergence.
+ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset() clears flags to MOVEFLAG_NONE. FG packet evidence captured; BG flag reset verified by deterministic test.
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | Capture FG teleport packets (MSG_MOVE_TELEPORT_ACK → first heartbeats) | Open — packet infra ready |
-| 4.2 | Compare BG teleport behavior — identify remaining flag divergence | Blocked on 4.1 |
-| 4.3 | Fix any remaining MovementController flag issues found | Blocked on 4.2 |
+| 4.1 | Capture FG teleport packets (MSG_MOVE_TELEPORT_ACK → first heartbeats) | **Done** (session 188) — FG `packets_TESTBOT1.csv` shows TELEPORT_ACK recv→send at 193→208ms, first heartbeat at 684ms |
+| 4.2 | Compare BG teleport behavior — identify remaining flag divergence | **Done** — `NotifyTeleportIncoming` clears `MovementFlags` to `MOVEFLAG_NONE`; deterministic test added |
+| 4.3 | Fix any remaining MovementController flag issues found | **Done** — no divergence found; BG already matches FG |
 
 ---
 
