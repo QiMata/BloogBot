@@ -1,0 +1,75 @@
+=== WoW.exe 1.12.1: 0x636610 (blocker-axis merge) ===
+
+  0x00636610: push     ebp
+  0x00636611: mov      ebp, esp
+  0x00636613: sub      esp, 0x18
+  0x00636616: push     ebx
+  0x00636617: xor      ebx, ebx
+  0x00636619: cmp      edx, ebx
+  0x0063661B: push     esi
+  0x0063661C: push     edi
+  0x0063661D: je       0x63678e
+  0x00636623: cmp      edx, 4
+  0x00636626: ja       0x63678e
+  0x0063662C: xor      esi, esi
+  0x0063662E: cmp      edx, ebx
+  0x00636630: jbe      0x636658
+  0x00636632: lea      edi, [ecx + 8]
+  0x00636635: fld      dword ptr [edi]
+  0x00636637: fsub     dword ptr [0x80e014]
+  0x0063663D: fabs     
+  0x0063663F: fcomp    dword ptr [0x8026bc]
+  0x00636645: fnstsw   ax
+  0x00636647: test     ah, 5
+  0x0063664A: jp       0x63678e
+  0x00636650: inc      esi
+  0x00636651: add      edi, 0x10
+  0x00636654: cmp      esi, edx
+  0x00636656: jb       0x636635
+  0x00636658: lea      eax, [edx - 1]
+  0x0063665B: cmp      eax, 3
+  0x0063665E: ja       0x636780
+  0x00636664: jmp      dword ptr [eax*4 + 0x63679c]
+  0x0063666B: mov      edx, dword ptr [ecx]
+  0x0063666D: mov      eax, dword ptr [ebp + 8]
+  0x00636670: mov      dword ptr [eax], edx
+  0x00636672: mov      edx, dword ptr [ecx + 4]
+  0x00636675: mov      dword ptr [eax + 4], edx
+  0x00636678: mov      ecx, dword ptr [ecx + 8]
+  0x0063667B: pop      edi
+  0x0063667C: pop      esi
+  0x0063667D: mov      dword ptr [eax + 8], ecx
+  0x00636680: mov      eax, 1
+  0x00636685: pop      ebx
+  0x00636686: mov      esp, ebp
+  0x00636688: pop      ebp
+  0x00636689: ret      4
+  0x0063668C: fld      dword ptr [ecx + 0x10]
+  0x0063668F: mov      edx, dword ptr [ebp + 8]
+  0x00636692: fadd     dword ptr [ecx]
+  0x00636694: pop      edi
+  0x00636695: fld      dword ptr [ecx + 0x14]
+  0x00636698: pop      esi
+  0x00636699: fadd     dword ptr [ecx + 4]
+  0x0063669C: pop      ebx
+  0x0063669D: fld      dword ptr [ecx + 0x18]
+  0x006366A0: fadd     dword ptr [ecx + 8]
+  0x006366A3: fstp     dword ptr [ebp - 4]
+  0x006366A6: fxch     st(1)
+  0x006366A8: fmul     dword ptr [0x80e024]
+  0x006366AE: fstp     dword ptr [ebp - 0x18]
+  0x006366B1: mov      eax, dword ptr [ebp - 0x18]
+  0x006366B4: fmul     dword ptr [0x80e024]
+  0x006366BA: mov      dword ptr [edx], eax
+  0x006366BC: fstp     dword ptr [ebp - 0x14]
+  0x006366BF: fld      dword ptr [ebp - 4]
+  0x006366C2: mov      ecx, dword ptr [ebp - 0x14]
+  0x006366C5: fmul     dword ptr [0x80e024]
+  0x006366CB: mov      dword ptr [edx + 4], ecx
+  0x006366CE: fstp     dword ptr [ebp - 0x10]
+  0x006366D1: mov      eax, dword ptr [ebp - 0x10]
+  0x006366D4: mov      dword ptr [edx + 8], eax
+  0x006366D7: mov      eax, 1
+  0x006366DC: mov      esp, ebp
+  0x006366DE: pop      ebp
+  0x006366DF: ret      4

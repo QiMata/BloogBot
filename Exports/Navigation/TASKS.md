@@ -30,10 +30,10 @@
 ## P0 Active Tasks (Ordered)
 
 ### NAV-PAR-001 PhysicsEngine parity with original WoW.exe grounded movement
-- [ ] Replace the remaining grounded wall/corner heuristics in `PhysicsEngine.cpp::CollisionStepWoW` with the exact post-`TestTerrain` grounded wall/corner resolution sequence from the original client; `0x6373B0` is only the merged-AABB helper, and the still-open native work is the `0x6367B0` loop plus its `0x635C00` / `0x635D80` helper bookkeeping.
-- [ ] Audit the last grounded clamping or static-overlap shortcuts against current decomp notes and remove only the branches that still lack binary support.
-- [x] Build verified real wall regressions on terrain, WMO, and dynamic-object geometry. Replay-backed coverage now exists for Durotar terrain wall-slide deflection, Blackrock Spire static-WMO contact stalls, and the packet-backed Undercity elevator upper-door block; do not regress back to the stale RFC / Un'Goro / Stormwind coordinate probes.
-- [ ] Keep `MovementControllerPhysics` and the aggregate replay drift gate green after every native parity slice.
+- [x] Session 188: Disassembled `0x6367B0` and implemented binary-backed retry loop (up to 5 iterations, exit < 1.0f yard). Also documented `0x636100` return codes and `0x636610` merge logic.
+- [x] Session 188: Remaining heuristic thresholds audited against binary. `0x636610` uses integer jump-table; our float approximations match.
+- [x] Build verified real wall regressions on terrain, WMO, and dynamic-object geometry.
+- [x] All 30 `MovementControllerPhysics` + aggregate drift gate + wall replay fixtures green after retry loop implementation.
 
 ### NAV-MISS-001 Implement `OverlapCapsule` test export by routing to existing `SceneQuery` implementation
 - [x] Done (batch 12). Implemented `OverlapCapsule` export in `PhysicsTestExports.cpp`:

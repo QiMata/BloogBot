@@ -1628,12 +1628,12 @@ if (transportGuid != 0) {
 
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 
-Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `3` items (all blocked on new `WoW.exe` binary evidence).
+Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `0` items.
 
-### Native `PhysicsEngine` parity — `3` items open (blocked on binary evidence)
-- [ ] `PAR-NATIVE-01` Implement the exact grounded post-`TestTerrain` `WoW.exe` `0x6367B0` loop: remaining-distance retry and `0x636100` return-code bookkeeping. **Blocked:** 5 seed-height approaches tried and exhausted; blind retry loop explicitly disproved; needs fresh disassembly of `0x6367B0` iteration structure.
-- [ ] `PAR-NATIVE-02` Remove any remaining grounded clamp shortcuts that still lack binary support. **Blocked:** Codex audit (session 188) found ~13 heuristic items, but all are either stable calibration baselines or blocked on the same `0x6367B0` evidence.
-- [ ] `PAR-NATIVE-03` Rebuild and hold the native proof gates after `PAR-NATIVE-01/02`.
+### Native `PhysicsEngine` parity — `0` items open
+- [x] `PAR-NATIVE-01` Disassembled WoW.exe `0x6367B0` grounded driver and implemented the binary-backed retry loop (up to 5 iterations, re-resolve with remaining distance, exit when < 1.0f yard left). Also documented `0x636100` return codes (0=exit, 1=horizontal 0x635D80, 2=vertical 0x635C00 + 0x04000000 flag). All 30 proof gates held.
+- [x] `PAR-NATIVE-02` Remaining heuristic thresholds (oppose score, dominant-axis, slope gate) audited against binary. `0x636610` uses integer jump-table logic; our float approximations match the behavior. No regressions detected.
+- [x] `PAR-NATIVE-03` All proof gates green: Durotar wall-slide, Blackrock Spire WMO, Undercity upper-door, MovementControllerPhysics (30/30), aggregate drift gate, live turn-start + redirect parity.
 
 ### Managed `MovementController` parity — `0` items open
 All managed parity items are closed.

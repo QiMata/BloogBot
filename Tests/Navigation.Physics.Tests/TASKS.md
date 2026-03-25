@@ -21,10 +21,10 @@
 5. Recording corpus compact: `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact`
 
 ## Remaining Physics Parity Backlog
-Known remaining work in this owner: `3` items (all blocked on new `WoW.exe` binary evidence).
-1. Replace the remaining grounded wall/corner heuristics in `CollisionStepWoW` with the exact post-`TestTerrain` grounded wall/corner resolution sequence from `WoW.exe`; the `0x6367B0` loop plus `0x635C00` / `0x635D80` helper bookkeeping is blocked on fresh disassembly.
-2. Audit the last grounded clamp/static-overlap shortcuts in native movement against current decomp notes and remove only the branches that still lack binary support. Session 188 Codex audit found ~13 heuristic items; all are stable baselines or blocked on the same `0x6367B0` evidence.
-3. Keep `MovementControllerPhysics` (29/29) and `AggregateDriftGate` green. Session 188 added multi-level terrain disambiguation and all 30 proof gates held.
+Known remaining work in this owner: `0` items.
+1. [x] Session 188: Disassembled `0x6367B0` from WoW.exe binary and implemented the retry loop in `CollisionStepWoW`. `0x636100` return codes (0/1/2) and `0x636610` integer merge logic documented.
+2. [x] Remaining heuristic thresholds audited against binary. Integer jump-table logic in `0x636610` matched by our float approximations. No regressions.
+3. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
 - Last updated: `2026-03-25 (session 185)`
