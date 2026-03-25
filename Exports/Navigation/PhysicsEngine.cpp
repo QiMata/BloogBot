@@ -885,6 +885,37 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     if (foundGround)
         (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
 
+    // Multi-level terrain disambiguation: if GetGroundZ promoted an upper shelf
+    // significantly above the predicted support, check if a walkable AABB contact
+    // exists closer to predictedSupportZ. If so, prefer that contact's Z.
+    // This fixes false FALL_LAND on roads with overlapping terrain layers (e.g. Durotar
+    // road with an upper cliff shelf at Z≈40.6 above the road at Z≈38.5).
+    if (foundGround && bestGroundZ > predictedSupportZ + stepUp + 0.5f) {
+        float closestContactZ = -FLT_MAX;
+        float closestError = FLT_MAX;
+        const SceneQuery::AABBContact* closestContact = nullptr;
+        for (const auto& c : contacts) {
+            if (!c.walkable) continue;
+            if (c.point.z < startZ - PhysicsConstants::STEP_DOWN_HEIGHT) continue;
+            if (c.point.z > startZ + stepH + stepUp) continue;
+            float err = std::fabs(c.point.z - predictedSupportZ);
+            if (err < closestError) {
+                closestError = err;
+                closestContactZ = c.point.z;
+                closestContact = &c;
+            }
+        }
+        // Only override if we found a contact meaningfully closer to predicted support
+        // than the GetGroundZ result, and the contact is below the GetGroundZ result.
+        if (closestContact && closestContactZ < bestGroundZ - 0.5f &&
+            closestError < std::fabs(bestGroundZ - predictedSupportZ) - 0.25f) {
+            bestGroundZ = closestContactZ;
+            bestNormal = closestContact->normal.directionOrZero();
+            if (bestNormal.z < 0.0f) bestNormal = -bestNormal;
+            bestSupportContact = closestContact;
+        }
+    }
+
     // If center GetGroundZ failed, try AABB contacts as fallback
     if (!foundGround) {
         for (const auto& c : contacts) {
