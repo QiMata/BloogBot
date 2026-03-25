@@ -1002,10 +1002,45 @@ public class ObjectManagerWorldSessionTests
         // Redirect: new facing differs by > dampen threshold
         objectManager.MoveToward(new Position(25f, 5f, 20f), 2.80f);
 
-        // Should emit SET_FACING even though already moving
+        // Should emit SET_FACING even though already moving (large facing change > 0.10 rad)
         Assert.Single(sentPackets);
         Assert.Equal(Opcode.MSG_MOVE_SET_FACING, sentPackets[0].opcode);
         Assert.Equal(2.80f, player.Facing, 3);
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
+    }
+
+    [Fact]
+    public void MoveTowardWithFacing_AlreadyMovingForward_SmallFacingChange_NoSetFacingPacket()
+    {
+        _fixture._woWClient.Reset();
+        var sentPackets = new List<(Opcode opcode, byte[] payload)>();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => sentPackets.Add((opcode, payload)))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12C;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.Facing = 0.50f;
+        // Already moving forward
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        // Small facing change (0.15 rad) — above dampen threshold (0.02) but below
+        // mid-move threshold (0.20). Should update facing but NOT send SET_FACING packet.
+        objectManager.MoveToward(new Position(15f, 20f, 20f), 0.65f);
+
+        Assert.Empty(sentPackets);
+        Assert.Equal(0.65f, player.Facing, 3);
         Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
     }
 

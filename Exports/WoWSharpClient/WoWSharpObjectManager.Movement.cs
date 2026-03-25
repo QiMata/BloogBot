@@ -661,11 +661,15 @@ namespace WoWSharpClient
             if (facingDelta > facingDampenThreshold)
             {
                 player.Facing = facing;
-                // Send SET_FACING for any significant facing change, even when already moving.
-                // FG (WoW.exe) sends SET_FACING unconditionally on facing changes during movement;
-                // previously BG only sent it at movement start (!wasHorizontallyMoving), causing
-                // mid-route redirects to silently update facing without a packet.
-                if (_movementController != null && _isInControl && !_isBeingTeleported)
+                // Send SET_FACING packet when facing changes significantly.
+                // When idle → moving: send on any facing change above dampen threshold (0.02 rad).
+                // When already moving: only send on larger changes (0.10 rad ≈ 5.7°) to avoid
+                // flooding the server with SET_FACING for minor waypoint angle drift each tick.
+                // FG's WoW client includes facing in heartbeats; it only sends explicit SET_FACING
+                // for deliberate course changes, not per-tick steering updates.
+                const float midMoveFacingThreshold = 0.20f; // ~11.5deg — waypoint-following stays below this
+                bool sendFacingPacket = !wasHorizontallyMoving || facingDelta > midMoveFacingThreshold;
+                if (sendFacingPacket && _movementController != null && _isInControl && !_isBeingTeleported)
                 {
                     _movementController.SendMovementStartFacingUpdate((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
                 }
