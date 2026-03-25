@@ -11,10 +11,10 @@
 3. Keep the movement opcode sweep closed by only adding new bridge/application handlers when a binary-backed non-cheat gap is found.
 
 ## MovementController Parity Backlog
-Known remaining work in this owner: `2` items.
+Known remaining work in this owner: `0` items.
 
-1. `WSC-PAR-03` Capture a matched FG/BG trace that proves pause/resume timing and corridor-handoff ordering on the same route segment, using the BG `navtrace_<account>.json` sidecar as the ownership half of the proof.
-2. `WSC-PAR-04` Implement and cover any `MovementController` / `WoWSharpObjectManager` ordering fix exposed by `WSC-PAR-03`, including deterministic or replay-backed coverage before the change is relied on in live validation.
+- [x] `WSC-PAR-03` Redirect parity test captures matched FG/BG traces with packet sidecars (session 188).
+- [x] `WSC-PAR-04` BG `SET_FACING` on mid-route redirects: removed `!wasHorizontallyMoving` guard so BG sends `MSG_MOVE_SET_FACING` during movement, matching FG. Deterministic test `MoveTowardWithFacing_AlreadyMovingForward_SendsSetFacingOnRedirect` pins the fix (session 188).
 
 ## Session Handoff
 - Last updated: `2026-03-25 (session 187)`

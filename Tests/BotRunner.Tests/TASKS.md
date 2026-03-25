@@ -24,10 +24,10 @@
 - [ ] Use the final run to collect fresh Orgrimmar transport evidence with the updated FG recorder.
 
 3. Movement/controller parity coverage
-Known remaining work in this owner: `1` item.
+Known remaining work in this owner: `0` items.
 - [x] Added deterministic coverage for the persistent `BADFACING` retry window that was holding the candidate `3/15` mining route in stationary combat.
 - [x] Added targeted BG corpse-run coverage for live waypoint ownership: `DeathCorpseRunTests` now asserts the emitted `navtrace_<account>.json` captured `RetrieveCorpseTask` ownership and a non-null `TraceSnapshot`, with deterministic helper tests covering stable recording-file lookup/cleanup.
-- [ ] Keep the targeted live packet/ownership assertions narrow: the forced-turn Durotar route now proves both the shared `SET_FACING -> START_FORWARD` start edge and the bounded `MSG_MOVE_STOP` stop edge, so the remaining BotRunner test gap is pause/resume ownership on the same route segment.
+- [x] Session 188: `Parity_Durotar_RoadPath_Redirect` proves pause/resume packet ordering. BG `SET_FACING` on mid-route redirects now matches FG. Full live proof bundle green.
 
 ## Simple Command Set
 1. Build:

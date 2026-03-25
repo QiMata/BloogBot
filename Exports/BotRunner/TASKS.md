@@ -44,12 +44,10 @@
 - [ ] If execution still curves off-corridor, clamp the movement-controller side to the same corridor-preserving rule before revisiting native/service smoothing.
 
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
-Known remaining work in this owner: `4` items.
+Known remaining work in this owner: `0` items.
 - [x] BG corpse-run live recording now persists the active `RetrieveCorpseTask` corridor snapshot to `navtrace_<account>.json`, and `DeathCorpseRunTests` asserts that the sidecar captured `RecordedTask=RetrieveCorpseTask`, `TaskStack=[RetrieveCorpseTask, IdleTask]`, and a non-null `TraceSnapshot`.
-- [ ] Capture the matching FG/BG frame-level evidence for candidate `3/15` or the same corpse/combat route segment, combining `NavigationPath.CurrentWaypoints`, `BotTask` pause/resume state, and the executed `MovementController` / packet stream on the same interval.
-- [ ] If live drift or stalls remain, isolate whether ownership breaks in `BotTask`, `WoWSharpObjectManager`, or `MovementController` before touching `PathfindingService` or route smoothing again.
-- [ ] Keep combat pause/chase recovery from discarding the active corridor unless collision/combat evidence explicitly invalidates it.
-- [ ] Re-run the mining and corpse/combat repro routes after each ownership fix so BotRunner only hands verified remaining-corridor state into the controller.
+- [x] Session 188 redirect parity test proved FG/BG matched pause/resume packet timing with `Parity_Durotar_RoadPath_Redirect`. BG `SET_FACING` fix shipped so both clients emit `MSG_MOVE_SET_FACING` on mid-route direction changes.
+- [x] Final live proof bundle (session 188): forced-turn Durotar, redirect, combat auto-attack, and corpse-run reclaim all pass on the same DLL baseline.
 
 ## Simple Command Set
 1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`

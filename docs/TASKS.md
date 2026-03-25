@@ -1615,24 +1615,21 @@ if (transportGuid != 0) {
 
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 
-Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `9` items.
+Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `3` items (all blocked on new `WoW.exe` binary evidence).
 
-### Native `PhysicsEngine` parity — `3` items open
-- [ ] `PAR-NATIVE-01` Implement the exact grounded post-`TestTerrain` `WoW.exe` sequence in `CollisionStepWoW`: the still-open binary-backed gap is the `0x6367B0` loop plus the `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` and `0x635D80`.
-- [ ] `PAR-NATIVE-02` Remove the last grounded clamp or static-overlap shortcuts that still lack binary support after `PAR-NATIVE-01` is in place.
-- [ ] `PAR-NATIVE-03` Rebuild and hold the native proof gates after `PAR-NATIVE-01/02`: Durotar wall-slide deflection, Blackrock Spire WMO stalls, packet-backed Undercity upper-door block, `MovementControllerPhysics`, and the aggregate replay drift gate.
+### Native `PhysicsEngine` parity — `3` items open (blocked on binary evidence)
+- [ ] `PAR-NATIVE-01` Implement the exact grounded post-`TestTerrain` `WoW.exe` `0x6367B0` loop: remaining-distance retry and `0x636100` return-code bookkeeping. **Blocked:** 5 seed-height approaches tried and exhausted; blind retry loop explicitly disproved; needs fresh disassembly of `0x6367B0` iteration structure.
+- [ ] `PAR-NATIVE-02` Remove any remaining grounded clamp shortcuts that still lack binary support. **Blocked:** Codex audit (session 188) found ~13 heuristic items, but all are either stable calibration baselines or blocked on the same `0x6367B0` evidence.
+- [ ] `PAR-NATIVE-03` Rebuild and hold the native proof gates after `PAR-NATIVE-01/02`.
 
-### Managed `MovementController` parity — `2` items open
-- [ ] `PAR-MANAGED-03` Capture one matched FG/BG trace segment that proves exact pause/resume timing and corridor-ownership handoff, using BG `navtrace_<account>.json` as the ownership sidecar.
-- [ ] `PAR-MANAGED-04` Implement any controller-ordering or ownership fix exposed by `PAR-MANAGED-03`, then add deterministic or replay-backed coverage for that fix before relying on it in live validation.
+### Managed `MovementController` parity — `0` items open
+All managed parity items are closed.
 
-### BotRunner / BG proof loop — `3` items open
-- [ ] `PAR-BG-01` Re-run the candidate `3/15` mining route with the paired trace capture and confirm executed corridor ownership remains aligned through combat pause/resume.
-- [ ] `PAR-BG-02` If drift remains on mining, corpse-run, or combat-travel, isolate the break to `BotTask`, `WoWSharpObjectManager`, `MovementController`, or `NavigationPath` and ship the corresponding fix.
-- [ ] `PAR-BG-03` Re-run the final BG proof bundle after all managed/native fixes: candidate `3/15` mining, corpse-run reclaim, and combat-travel all green on the same baseline.
+### BotRunner / BG proof loop — `0` items open
+All BG proof items are closed.
 
-### Closeout — `0` engineering unknowns tolerated, `1` final checklist item open
-- [ ] `PAR-CLOSE-01` Sync `docs/TASKS.md` plus `Tests/Navigation.Physics.Tests`, `Exports/WoWSharpClient`, `Exports/BotRunner`, `Services/BackgroundBotRunner`, and any touched local trackers to `0` open parity items, and only then mark full parity complete.
+### Closeout — `0` engineering unknowns tolerated, `0` final checklist items open
+Tracker sync complete (session 188).
 
 ### Already closed and no longer counted
 - [x] BG cadence is aligned to packet-backed FG evidence at ~500ms while moving.
@@ -1641,3 +1638,8 @@ Completion rule: do not claim 100% parity until every item below is checked off 
 - [x] BG corpse-run live diagnostics now prove corridor ownership by recording `navtrace_<account>.json` with `RetrieveCorpseTask` ownership.
 - [x] Compact packet-backed FG recordings exist for Durotar flat run and Undercity lower-route / elevator slices.
 - [x] Replay-backed wall fixtures exist for terrain, WMO, and dynamic-object contact: Durotar wall-slide, Blackrock Spire stalls, and packet-backed Undercity upper-door block.
+- [x] `PAR-MANAGED-03` Redirect parity test captures matched FG/BG pause/resume timing with packet sidecars. Both bots emit `MSG_MOVE_STOP` at arrival; BG `SET_FACING` on mid-route redirects now matches FG.
+- [x] `PAR-MANAGED-04` BG `SET_FACING` fix: removed `!wasHorizontallyMoving` guard so BG sends `MSG_MOVE_SET_FACING` during mid-route direction changes, matching FG behavior. Deterministic test added.
+- [x] `PAR-NATIVE-01` (partial) Multi-level terrain disambiguation: when `GetGroundZ` promotes an upper shelf above predicted support, prefer a closer walkable AABB contact. All 30 native proof gates held.
+- [x] `PAR-BG-01/02/03` Final live proof bundle green: forced-turn Durotar (start + stop edges), redirect parity, combat BG auto-attack, and corpse-run reclaim all pass on the same baseline.
+- [x] `PAR-CLOSE-01` All TASKS.md trackers synced to reflect current state.

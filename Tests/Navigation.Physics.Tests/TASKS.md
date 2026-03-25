@@ -21,11 +21,10 @@
 5. Recording corpus compact: `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact`
 
 ## Remaining Physics Parity Backlog
-Known remaining work in this owner: `4` items.
-1. Replace the remaining grounded wall/corner heuristics in `CollisionStepWoW` with the exact post-`TestTerrain` grounded wall/corner resolution sequence from `WoW.exe`; `0x6373B0` is only the merged-AABB helper, and the still-open native work is the `0x6367B0` loop plus its `0x635C00` / `0x635D80` helper bookkeeping.
-2. Audit the last grounded clamp/static-overlap shortcuts in native movement against current decomp notes and remove only the branches that still lack binary support.
-3. Keep the verified replay-backed wall regressions on terrain, WMO, and dynamic-object surfaces green while reducing the remaining native heuristics; do not regress back to the stale RFC / Un'Goro / Stormwind wall coordinates.
-4. Keep `MovementControllerPhysics` and `PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds` green after every native parity slice so controller-facing regressions surface immediately.
+Known remaining work in this owner: `3` items (all blocked on new `WoW.exe` binary evidence).
+1. Replace the remaining grounded wall/corner heuristics in `CollisionStepWoW` with the exact post-`TestTerrain` grounded wall/corner resolution sequence from `WoW.exe`; the `0x6367B0` loop plus `0x635C00` / `0x635D80` helper bookkeeping is blocked on fresh disassembly.
+2. Audit the last grounded clamp/static-overlap shortcuts in native movement against current decomp notes and remove only the branches that still lack binary support. Session 188 Codex audit found ~13 heuristic items; all are stable baselines or blocked on the same `0x6367B0` evidence.
+3. Keep `MovementControllerPhysics` (29/29) and `AggregateDriftGate` green. Session 188 added multi-level terrain disambiguation and all 30 proof gates held.
 
 ## Session Handoff
 - Last updated: `2026-03-25 (session 185)`
