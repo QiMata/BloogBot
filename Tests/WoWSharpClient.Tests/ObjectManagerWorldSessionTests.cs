@@ -1044,6 +1044,36 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
     }
 
+    [Fact]
+    public void NotifyTeleportIncoming_ClearsMovementFlagsToNone()
+    {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12D;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(100f, 200f, 50f);
+        player.Facing = 1.5f;
+        // Simulate active movement before teleport
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        // Teleport incoming — should clear all movement flags
+        objectManager.NotifyTeleportIncoming(75f);
+
+        Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(

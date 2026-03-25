@@ -72,9 +72,9 @@
 - [x] Target files:
   - `Tests/BotRunner.Tests/ActivitySnapshotMovementTests.cs`
   - `Tests/BotRunner.Tests/BotRunner.Tests.csproj`
-- [ ] Evidence gap: current test file asserts movement serialization but has no `CorpseRecoveryDelaySeconds` or life-state (`Health`/`Bytes1`) round-trip assertions.
-- [ ] Required change: add serialization/deserialization assertions for corpse lifecycle + movement fields used during corpse-run decisions.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
+- [x] Evidence gap closed: `DeathState_GhostForm_ShouldRoundTrip`, `DeathState_AliveAfterResurrect_ShouldClearDeathFields`, and `DeathState_CorpseRunMovement_ShouldPreserveRunbackFields` all assert `CorpseRecoveryDelaySeconds`, `Health`, `Bytes1`, and `PlayerFlags` round-trip.
+- [x] Required change: done — 17/17 snapshot tests pass.
+- [x] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
 - [x] Validation: 17/17 snapshot tests pass including new death state assertions.
 - [x] Acceptance: tests fail if corpse-run critical snapshot fields (health, bytes1, playerFlags, corpseRecoveryDelaySeconds, movementFlags) are dropped or remapped incorrectly.
 
