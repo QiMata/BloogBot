@@ -806,7 +806,58 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     G3D::Vector3 resolvedMove = requestedMove;
     G3D::Vector3 wallNormal(0, 0, 1);
     float blockedFraction = 1.0f;
-    bool hitWall = resolveWallSlide(requestedMove, resolvedMove, wallNormal, blockedFraction);
+
+    // Binary-backed retry loop from WoW.exe 0x6367B0:
+    // After each wall slide, re-query contacts at the new position and retry
+    // if significant remaining distance exists. Max 5 iterations. Exit when
+    // originalDist - accumulated < 1.0f yard.
+    {
+        const float originalDist = intendedDist;
+        float remainingDist = intendedDist;
+        float accumulatedDist = 0.0f;
+        G3D::Vector3 currentMoveVec = requestedMove;
+        G3D::Vector3 totalResolvedMove(0, 0, 0);
+        bool anyHitWall = false;
+
+        for (int wallIter = 0; wallIter < 5; wallIter++) {
+            G3D::Vector3 iterResolved = currentMoveVec;
+            G3D::Vector3 iterWallNormal(0, 0, 1);
+            float iterBlocked = 1.0f;
+
+            bool iterHit = resolveWallSlide(currentMoveVec, iterResolved, iterWallNormal, iterBlocked);
+
+            totalResolvedMove = totalResolvedMove + iterResolved;
+            if (iterHit) {
+                anyHitWall = true;
+                wallNormal = iterWallNormal;
+                blockedFraction = iterBlocked;
+            }
+
+            // Accumulate distance consumed by this iteration
+            float iterXYDist = std::sqrt(iterResolved.x * iterResolved.x + iterResolved.y * iterResolved.y);
+            accumulatedDist += iterXYDist;
+
+            float leftover = originalDist - accumulatedDist;
+            if (leftover < 1.0f || !iterHit)
+                break;  // Converged or no wall hit — done
+
+            // Prepare next iteration: move vector = remaining distance in slide direction
+            // The slide direction is the resolved move normalized, scaled by leftover distance
+            float resolvedLen = std::sqrt(iterResolved.x * iterResolved.x + iterResolved.y * iterResolved.y);
+            if (resolvedLen < 1e-6f)
+                break;  // Stuck — no progress
+
+            // Re-query will happen implicitly via resolveWallSlide's shared slideContacts
+            // Scale next move to remaining distance
+            float scale = leftover / resolvedLen;
+            currentMoveVec = G3D::Vector3(iterResolved.x * scale, iterResolved.y * scale, 0.0f);
+            remainingDist = leftover;
+        }
+
+        resolvedMove = totalResolvedMove;
+    }
+
+    bool hitWall = blockedFraction < 0.99f;
     endX = startX + resolvedMove.x;
     endY = startY + resolvedMove.y;
     st.wallBlockedFraction = blockedFraction;

@@ -1,0 +1,34 @@
+=== WoW.exe 1.12.1 disassembly: 0x635D80 (horizontal epsilon) ===
+
+  0x00635D80: push     ebp
+  0x00635D81: mov      ebp, esp
+  0x00635D83: sub      esp, 0xc
+  0x00635D86: push     esi
+  0x00635D87: mov      esi, dword ptr [ebp + 0x14]
+  0x00635D8A: fld      dword ptr [esi + 8]
+  0x00635D8D: fcomp    dword ptr [0x7ffd74]
+  0x00635D93: fnstsw   ax
+  0x00635D95: test     ah, 5
+  0x00635D98: jp       0x635dd3
+  0x00635D9A: mov      eax, esi
+  0x00635D9C: mov      ecx, dword ptr [eax]
+  0x00635D9E: mov      edx, dword ptr [eax + 4]
+  0x00635DA1: mov      eax, dword ptr [eax + 8]
+  0x00635DA4: mov      dword ptr [ebp - 4], eax
+  0x00635DA7: fld      dword ptr [ebp - 4]
+  0x00635DAA: fchs     
+  0x00635DAC: mov      dword ptr [ebp - 0xc], ecx
+  0x00635DAF: fcomp    dword ptr [0x80dffc]
+  0x00635DB5: mov      dword ptr [ebp - 8], edx
+  0x00635DB8: fnstsw   ax
+  0x00635DBA: test     ah, 0x41
+  0x00635DBD: jnp      0x635dd3
+  0x00635DBF: mov      eax, dword ptr [ebp + 8]
+  0x00635DC2: xor      ecx, ecx
+  0x00635DC4: mov      dword ptr [eax], ecx
+  0x00635DC6: mov      dword ptr [eax + 4], ecx
+  0x00635DC9: mov      dword ptr [eax + 8], ecx
+  0x00635DCC: pop      esi
+  0x00635DCD: mov      esp, ebp
+  0x00635DCF: pop      ebp
+  0x00635DD0: ret      0x10
