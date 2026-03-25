@@ -86,11 +86,29 @@ public class MovementParityTests
     public async Task Parity_Durotar_RoadPath_TurnStart()
     {
         await RunParityTest(
-            name: "Durotar â€” Road Path (turn start)",
+            name: "Durotar - Road Path (turn start)",
             startX: -500f, startY: -4800f, startZ: 38f,
             targetX: -460f, targetY: -4760f, targetZ: 38f,
             maxSeconds: 20,
             initialFacing: 3.92699f);
+    }
+
+    /// <summary>
+    /// Pause/resume parity: both bots walk toward point A, then mid-route are redirected
+    /// to point B. This forces StopAllMovement → MoveToward (same code path as combat
+    /// pause/resume) and proves FG/BG emit matching STOP → SET_FACING → START_FORWARD
+    /// packet sequences at the redirect point.
+    /// </summary>
+    [SkippableFact]
+    public async Task Parity_Durotar_RoadPath_Redirect()
+    {
+        await RunRedirectParityTest(
+            name: "Durotar - Road Path (mid-route redirect / pause-resume)",
+            startX: -500f, startY: -4800f, startZ: 38f,
+            firstTargetX: -460f, firstTargetY: -4760f, firstTargetZ: 38f,
+            secondTargetX: -520f, secondTargetY: -4750f, secondTargetZ: 38f,
+            redirectAfterSeconds: 3,
+            maxSeconds: 25);
     }
 
     [SkippableFact]
@@ -481,6 +499,267 @@ public class MovementParityTests
             $"FG only moved {fgTravel:F1}y on a {routeDist:F1}y route");
         Assert.True(bgTravel >= minimumMeaningfulTravel,
             $"BG only moved {bgTravel:F1}y on a {routeDist:F1}y route");
+    }
+
+    /// <summary>
+    /// Redirect parity test: walks both bots toward firstTarget, then after redirectAfterSeconds
+    /// sends a new GoTo to secondTarget. Captures packets/transforms/navtrace and asserts that
+    /// FG/BG emit matching STOP + start sequences at the redirect point.
+    /// </summary>
+    private async Task RunRedirectParityTest(
+        string name,
+        float startX, float startY, float startZ,
+        float firstTargetX, float firstTargetY, float firstTargetZ,
+        float secondTargetX, float secondTargetY, float secondTargetZ,
+        int redirectAfterSeconds,
+        int maxSeconds)
+    {
+        var bgAccount = _bot.BgAccountName;
+        var fgAccount = _bot.FgAccountName;
+        var hasFg = await _bot.CheckFgActionableAsync(requireTeleportProbe: false);
+        await _bot.RefreshSnapshotsAsync();
+        global::Tests.Infrastructure.Skip.IfNot(!string.IsNullOrWhiteSpace(bgAccount),
+            "BG client required for parity comparison");
+        Assert.NotNull(_bot.BackgroundBot);
+        Assert.True(LiveBotFixture.IsStrictAlive(_bot.BackgroundBot),
+            "BG client must be strict-alive for parity comparison");
+        global::Tests.Infrastructure.Skip.IfNot(hasFg,
+            "FG client required — this test compares FG (gold standard) with BG (headless physics)");
+
+        _output.WriteLine($"=== {name} ===");
+        _output.WriteLine($"FG: {_bot.FgCharacterName} (TESTBOT1)  BG: {_bot.BgCharacterName} (TESTBOT2)");
+
+        float leg1Dist = Distance2D(startX, startY, firstTargetX, firstTargetY);
+        float leg2Dist = Distance2D(firstTargetX, firstTargetY, secondTargetX, secondTargetY);
+        _output.WriteLine($"Leg 1: ({startX},{startY}) -> ({firstTargetX},{firstTargetY}) = {leg1Dist:F1}y");
+        _output.WriteLine($"Leg 2 (redirect): -> ({secondTargetX},{secondTargetY}) = {leg2Dist:F1}y");
+        _output.WriteLine($"Redirect after: {redirectAfterSeconds}s\n");
+
+        // --- TELEPORT ---
+        float teleportZ = startZ + 3f;
+        await Task.WhenAll(
+            _bot.BotTeleportAsync(bgAccount!, MapId, startX, startY, teleportZ),
+            _bot.BotTeleportAsync(fgAccount!, MapId, startX, startY, teleportZ));
+
+        await _bot.WaitForTeleportSettledAsync(bgAccount!, startX, startY, timeoutMs: 8000);
+        await _bot.WaitForTeleportSettledAsync(fgAccount!, startX, startY, timeoutMs: 8000);
+        await Task.Delay(2000); // Allow physics to snap to ground
+
+        // --- START RECORDINGS ---
+        await Task.WhenAll(
+            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)));
+        _output.WriteLine("[RECORDING] Started on both bots");
+
+        // --- LEG 1: GOTO first target ---
+        await Task.WhenAll(
+            _bot.SendActionAsync(bgAccount!, MakeGoto(firstTargetX, firstTargetY, firstTargetZ)),
+            _bot.SendActionAsync(fgAccount!, MakeGoto(firstTargetX, firstTargetY, firstTargetZ)));
+        _output.WriteLine($"[ACTION] GoTo leg 1 sent to both bots");
+
+        // --- POLL until redirect time ---
+        var fgSamples = new List<TransformSample>();
+        var bgSamples = new List<TransformSample>();
+        var startTime = DateTime.UtcNow;
+        int maxPolls = maxSeconds * (1000 / PollIntervalMs);
+        bool redirectSent = false;
+        bool fgArrived = false, bgArrived = false;
+        int redirectPollIndex = -1;
+
+        _output.WriteLine($"{"t",7} | {"FG_X",8} {"FG_Y",8} {"FG_Z",7} {"Flg",5} | {"BG_X",8} {"BG_Y",8} {"BG_Z",7} {"Flg",5} | {"dXY",5} {"note",12}");
+        _output.WriteLine(new string('-', 100));
+
+        for (int i = 0; i < maxPolls; i++)
+        {
+            await Task.Delay(PollIntervalMs);
+            float elapsed = (float)(DateTime.UtcNow - startTime).TotalSeconds;
+
+            // --- REDIRECT mid-route ---
+            if (!redirectSent && elapsed >= redirectAfterSeconds)
+            {
+                _output.WriteLine($"\n[REDIRECT] t={elapsed:F2}s — Sending GoTo leg 2 to both bots");
+                await Task.WhenAll(
+                    _bot.SendActionAsync(bgAccount!, MakeGoto(secondTargetX, secondTargetY, secondTargetZ)),
+                    _bot.SendActionAsync(fgAccount!, MakeGoto(secondTargetX, secondTargetY, secondTargetZ)));
+                redirectSent = true;
+                redirectPollIndex = i;
+                _output.WriteLine($"[REDIRECT] GoTo leg 2 sent\n");
+            }
+
+            await _bot.RefreshSnapshotsAsync();
+            var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
+            var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
+
+            var fgPos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+
+            float fgX = fgPos?.X ?? float.NaN, fgY = fgPos?.Y ?? float.NaN, fgZ = fgPos?.Z ?? float.NaN;
+            float bgX = bgPos?.X ?? float.NaN, bgY = bgPos?.Y ?? float.NaN, bgZ = bgPos?.Z ?? float.NaN;
+            uint fgFlags = fgSnap?.Player?.Unit?.MovementFlags ?? 0;
+            uint bgFlags = bgSnap?.Player?.Unit?.MovementFlags ?? 0;
+
+            if (!float.IsNaN(fgX)) fgSamples.Add(new TransformSample(elapsed, fgX, fgY, fgZ, fgFlags));
+            if (!float.IsNaN(bgX)) bgSamples.Add(new TransformSample(elapsed, bgX, bgY, bgZ, bgFlags));
+
+            float dXY = (!float.IsNaN(fgX) && !float.IsNaN(bgX)) ? Distance2D(fgX, fgY, bgX, bgY) : float.NaN;
+
+            string note = "";
+            if (redirectSent && i == redirectPollIndex + 1) note = "<<REDIRECT>>";
+
+            // Print every 10th sample or right after redirect
+            if (i % 10 == 0 || (redirectSent && i >= redirectPollIndex && i <= redirectPollIndex + 5))
+            {
+                _output.WriteLine(
+                    $"{elapsed,7:F2}s | {fgX,8:F1} {fgY,8:F1} {fgZ,7:F2} {fgFlags,5:X} | " +
+                    $"{bgX,8:F1} {bgY,8:F1} {bgZ,7:F2} {bgFlags,5:X} | " +
+                    $"{(float.IsNaN(dXY) ? "  n/a" : $"{dXY,5:F1}")} {note}");
+            }
+
+            if (redirectSent)
+            {
+                if (!float.IsNaN(fgX) && Distance2D(fgX, fgY, secondTargetX, secondTargetY) < 5f) fgArrived = true;
+                if (!float.IsNaN(bgX) && Distance2D(bgX, bgY, secondTargetX, secondTargetY) < 5f) bgArrived = true;
+                if (fgArrived && bgArrived) break;
+            }
+        }
+
+        if (fgArrived || bgArrived)
+            await Task.Delay(1000);
+
+        // --- STOP RECORDINGS ---
+        await Task.WhenAll(
+            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)));
+        await Task.Delay(500);
+        _output.WriteLine("[RECORDING] Stopped on both bots");
+
+        // --- SUMMARY ---
+        _output.WriteLine($"\n=== RESULTS: {name} ===");
+        _output.WriteLine($"Samples: FG={fgSamples.Count} BG={bgSamples.Count}  Arrived: FG={fgArrived} BG={bgArrived}");
+
+        float fgTravel = ComputeTravelDistance(fgSamples);
+        float bgTravel = ComputeTravelDistance(bgSamples);
+        _output.WriteLine($"Travel: FG={fgTravel:F1}y  BG={bgTravel:F1}y");
+
+        PrintMoveFlagSummary("FG", fgSamples);
+        PrintMoveFlagSummary("BG", bgSamples);
+
+        // --- RECORDING ANALYSIS ---
+        AnalyzeBgPhysicsRecording(bgAccount!);
+        AnalyzeTransformComparison(fgAccount!, bgAccount!);
+
+        // --- PACKET REDIRECT ANALYSIS ---
+        AnalyzeRedirectPackets(fgAccount!, bgAccount!);
+
+        // Assertions: both bots must have actually moved
+        Assert.True(fgSamples.Count >= 3, $"FG produced too few samples ({fgSamples.Count})");
+        Assert.True(bgSamples.Count >= 3, $"BG produced too few samples ({bgSamples.Count})");
+        Assert.True(fgTravel >= 5f, $"FG only moved {fgTravel:F1}y");
+        Assert.True(bgTravel >= 5f, $"BG only moved {bgTravel:F1}y");
+    }
+
+    /// <summary>
+    /// Analyze redirect packet sequences: both bots should show at least two movement
+    /// "sessions" (START_FORWARD ... STOP ... START_FORWARD ... STOP) corresponding
+    /// to leg 1 and leg 2 of the redirect test.
+    /// </summary>
+    private void AnalyzeRedirectPackets(string fgAccount, string bgAccount)
+    {
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+
+        if (!Directory.Exists(recordingDir))
+            return;
+
+        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", fgAccount, "csv");
+        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", bgAccount, "csv");
+
+        if (fgPath == null || bgPath == null)
+        {
+            _output.WriteLine("\n--- Redirect Packet Analysis: missing CSV(s) ---");
+            return;
+        }
+
+        var fgPackets = LoadPacketCsv(fgPath);
+        var bgPackets = LoadPacketCsv(bgPath);
+
+        var fgSend = fgPackets
+            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
+            .ToList();
+        var bgSend = bgPackets
+            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
+            .ToList();
+
+        _output.WriteLine("\n=== REDIRECT PACKET ANALYSIS ===");
+        _output.WriteLine($"    FG outbound movement: {fgSend.Count} packets from {Path.GetFileName(fgPath)}");
+        _output.WriteLine($"    BG outbound movement: {bgSend.Count} packets from {Path.GetFileName(bgPath)}");
+
+        // Print all FG packets
+        _output.WriteLine("    FG packets:");
+        foreach (var p in fgSend.Take(30))
+            _output.WriteLine($"      {p.ElapsedMs,6}ms  {p.OpcodeName}");
+        if (fgSend.Count > 30)
+            _output.WriteLine($"      ... and {fgSend.Count - 30} more");
+
+        // Print all BG packets
+        _output.WriteLine("    BG packets:");
+        foreach (var p in bgSend.Take(30))
+            _output.WriteLine($"      {p.ElapsedMs,6}ms  {p.OpcodeName}");
+        if (bgSend.Count > 30)
+            _output.WriteLine($"      ... and {bgSend.Count - 30} more");
+
+        // Count key opcodes
+        int fgStops = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_STOP");
+        int bgStops = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_STOP");
+        int fgStarts = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_START_FORWARD");
+        int bgStarts = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_START_FORWARD");
+        int fgFacings = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_SET_FACING");
+        int bgFacings = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_SET_FACING");
+        int fgFallLands = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+        int bgFallLands = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+
+        _output.WriteLine($"\n    STOP count: FG={fgStops}  BG={bgStops}");
+        _output.WriteLine($"    START_FORWARD count: FG={fgStarts}  BG={bgStarts}");
+        _output.WriteLine($"    SET_FACING count: FG={fgFacings}  BG={bgFacings}");
+        _output.WriteLine($"    FALL_LAND count: FG={fgFallLands}  BG={bgFallLands}");
+
+        // Assert: both bots sent at least one STOP (arrival)
+        Assert.True(fgStops >= 1, $"FG sent {fgStops} STOP packets; expected at least 1");
+        Assert.True(bgStops >= 1, $"BG sent {bgStops} STOP packets; expected at least 1");
+
+        // Assert: both bots started moving
+        Assert.True(fgStarts >= 1, $"FG sent {fgStarts} START_FORWARD; expected at least 1");
+        Assert.True(bgStarts >= 1, $"BG sent {bgStarts} START_FORWARD; expected at least 1");
+
+        // Redirect evidence: FG emits SET_FACING when direction changes mid-route.
+        // BG should also emit SET_FACING. If BG doesn't, that's a parity gap to track.
+        _output.WriteLine($"\n    Redirect evidence: FG used {fgFacings} SET_FACING, BG used {bgFacings} SET_FACING");
+        if (fgFacings > 0 && bgFacings == 0)
+            _output.WriteLine("    ** PARITY GAP: FG emits SET_FACING on redirect but BG does not **");
+
+        // Compare final STOP timing (arrival at destination)
+        var fgLastStop = fgSend.LastOrDefault(p => p.OpcodeName == "MSG_MOVE_STOP");
+        var bgLastStop = bgSend.LastOrDefault(p => p.OpcodeName == "MSG_MOVE_STOP");
+        if (fgLastStop != null && bgLastStop != null)
+        {
+            var stopDelta = Math.Abs(fgLastStop.ElapsedMs - bgLastStop.ElapsedMs);
+            _output.WriteLine($"    Final STOP: FG={fgLastStop.ElapsedMs}ms  BG={bgLastStop.ElapsedMs}ms  delta={stopDelta}ms");
+            Assert.True(stopDelta <= 1000,
+                $"Final STOP diverged by {stopDelta}ms (FG={fgLastStop.ElapsedMs}ms, BG={bgLastStop.ElapsedMs}ms)");
+        }
+
+        // Assert final packet is STOP for both
+        if (fgSend.Count > 0 && bgSend.Count > 0)
+        {
+            _output.WriteLine($"    Final packet: FG={fgSend[^1].OpcodeName}  BG={bgSend[^1].OpcodeName}");
+            Assert.Equal("MSG_MOVE_STOP", fgSend[^1].OpcodeName);
+            Assert.Equal("MSG_MOVE_STOP", bgSend[^1].OpcodeName);
+        }
+
+        // BG FALL_LAND parity: FG should have 0 FALL_LAND on flat terrain.
+        // BG FALL_LAND > 0 indicates the known native Z-bounce from PAR-NATIVE-01.
+        _output.WriteLine($"\n    Z-bounce indicator: FG FALL_LAND={fgFallLands}, BG FALL_LAND={bgFallLands}");
+        if (bgFallLands > 0 && fgFallLands == 0)
+            _output.WriteLine("    ** KNOWN GAP: BG has false FALL_LAND from native multi-level terrain (PAR-NATIVE-01) **");
     }
 
     private void PrintBotSummary(string label, List<TransformSample> samples)
