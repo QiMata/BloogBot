@@ -1613,6 +1613,19 @@ if (transportGuid != 0) {
   - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
     - Passed (`1/1`); both clients now end on outbound `MSG_MOVE_STOP`, no late outbound `SET_FACING` remains after the opening pair, and the stop-edge delta is bounded to `50ms`
 
+- **Session 188 — 6 parity items closed, multi-level terrain + BG SET_FACING fixes shipped:**
+  - Native: multi-level terrain disambiguation in `PhysicsEngine.cpp` — when `GetGroundZ` promotes an upper shelf significantly above predicted support, prefer a closer walkable AABB contact. 30/30 native proof gates held.
+  - Managed: BG `SET_FACING` on mid-route redirects — removed `!wasHorizontallyMoving` guard so BG sends `MSG_MOVE_SET_FACING` during movement for large (>0.20 rad) facing changes, matching FG behavior. Small waypoint drift stays below threshold and doesn't send a packet.
+  - Tests: added `Parity_Durotar_RoadPath_Redirect` live test proving matched FG/BG pause/resume packet ordering, and `MoveTowardWithFacing_AlreadyMovingForward_SendsSetFacingOnRedirect` + `SmallFacingChange_NoSetFacingPacket` deterministic tests.
+  - Closed: PAR-MANAGED-03/04, PAR-BG-01/02/03, PAR-CLOSE-01, NAV-MISS-004, BBR-PAR-001.
+  - Remaining: 3 native items (PAR-NATIVE-01 full/02/03) blocked on fresh `WoW.exe` `0x6367B0` disassembly.
+- **Test baseline (session 188):**
+  - `dotnet test Tests/WoWSharpClient.Tests` -> `1371 passed, 1 skipped`
+  - `dotnet test Tests/BotRunner.Tests --filter "GoToArrivalTests|NavigationPathTests|GatheringRouteTaskTests|CombatRotationTaskTests|RecordingArtifactHelperTests|PathfindingClientTimeoutTests|SessionStatisticsTests"` -> `180 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests --filter "MovementControllerPhysics|AggregateDriftGate"` -> `30 passed`
+  - `dotnet test Tests/ForegroundBotRunner.Tests` -> `105 passed`
+  - Live: `Parity_Durotar_RoadPath_TurnStart` passed, `Parity_Durotar_RoadPath_Redirect` passed, `CombatBgTests` passed, `DeathCorpseRunTests` passed
+
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 
 Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `3` items (all blocked on new `WoW.exe` binary evidence).
