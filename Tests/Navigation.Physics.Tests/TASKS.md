@@ -34,9 +34,11 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 201)`
+- Last updated: `2026-03-26 (session 202)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 202 added `WowSelectorSupportPlaneTests.cs`, which now pins the pure `0x631440` support-plane strip through the production DLL. `NavigationInterop.cs` exposes `BuildWoWSelectorSupportPlanes(...)`, and the new tests assert the exact axis-plane formulas plus the binary diagonal constants `0x80DFE4` / `0x80DFE0`.
+  - Practical implication: this owner now has the real 9-plane strip that sits in front of `0x631BE0` / `0x632830`. The next missing deterministic seam is the 9-point neighborhood builder itself, not the support-strip geometry.
   - Session 201 tightened the packet-backed frame-16 direct-pair scan into a real deterministic regression. `NavigationInterop.cs` now exposes the pure `EvaluateWoWSelectedContactThresholdGate(...)` export, and `UndercityUpperDoorContactTests.cs` now asserts the merged frame-16 query contains zero direct-pair candidates under both threshold modes.
   - Practical implication: this owner no longer needs to keep sampling that merged-query shortcut. The missing deterministic seam is one level earlier in the selector-builder path (`0x632280` / `0x632830` / `0x6318C0`), because the current frame-16 query never contains a contact that would stay on the direct `0xC4E544[index]` path under the binary threshold/prism rules.
   - Session 200 extended the production-DLL grounded-wall trace into the selected-contact `0x633760` threshold/prism gate without changing runtime behavior. `NavigationInterop.cs` now exposes the selected threshold point, `normal.z`, current/projected `0x6335D0` prism inclusion, and the direct-pair outcome under both the relaxed and standard thresholds.

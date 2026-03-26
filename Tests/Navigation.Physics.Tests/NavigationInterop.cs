@@ -132,6 +132,13 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorSupportPlane
+    {
+        public Vector3 Normal;
+        public float PlaneDistance;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -536,6 +543,14 @@ public static partial class NavigationInterop
         [MarshalAs(UnmanagedType.I1)] out bool projectedPositionInsidePrism,
         [MarshalAs(UnmanagedType.I1)] out bool thresholdSensitive,
         out float normalZ);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int BuildWoWSelectorSupportPlanes(
+        in Vector3 position,
+        float verticalOffset,
+        float horizontalRadius,
+        [Out] SelectorSupportPlane[] outPlanes,
+        int maxPlanes);
 
     [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
     public static extern int QueryTerrainAABBContacts(

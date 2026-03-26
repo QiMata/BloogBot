@@ -1187,3 +1187,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not spend another pass searching the raw frame-16 merged query for a missing direct-pair-ready contact under the current `0x633760 -> 0x6335D0` rules; the deterministic scan now proves there are none.
 - Recommended next single hypothesis:
   - Trace the production resolver one step earlier so deterministic tests can compare its selected blocker against the binary `0x632280` / `0x632830` candidate-buffer rules.
+
+## 2026-03-26 Selector support-plane builder addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to expose the next pure binary building block behind the selector chain: the fixed 9-plane support strip that `0x631BE0` prepares before `0x632830` starts validating candidate directions.
+- Binary/evidence delta shipped:
+  - added a raw capture in `docs/physics/0x631440_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the `0x631440` support-plane strip and its diagonal constants `0x80DFE4` / `0x80DFE0`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildSelectorSupportPlanes(...)`, mirroring the binary `0x631440` plane-strip builder
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWSelectorSupportPlanes(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching `SelectorSupportPlane` interop
+  - `Tests/Navigation.Physics.Tests/WowSelectorSupportPlaneTests.cs`
+    - added deterministic coverage for both the axis planes and the diagonal planes/constants
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests" --logger "console;verbosity=minimal"`
+    - passed (`2/2`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector-builder prework is now constrained by an exact 9-plane strip instead of an inferred shape. That removes one more place where the BG could be carrying a geometry approximation that never existed in the client.
+- Do Not Repeat:
+  - Do not replace the selector-builder support strip with ad-hoc axis or corner planes. The binary now gives us the exact 9-plane layout and constants.
+- Recommended next single hypothesis:
+  - Mirror the next pure builder in the same chain (`0x631BE0`) so deterministic tests can combine the exact 9-point neighborhood with the now-pinned 9-plane support strip before tackling `0x632830`.

@@ -123,6 +123,8 @@ namespace
     constexpr float WOW_TRIANGLE_PRISM_EPSILON = 0.0833333358168602f;        // 0x80E004
     constexpr float WOW_CORNER_PLANE_EPSILON = 0.0013888889225199819f;       // 0x80DFEC
     constexpr float WOW_PLANE_BUILD_EPSILON = 9.54e-7f;                      // 0x8026BC
+    constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_X = 0.8796418905258179f;   // 0x80DFE4
+    constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_Z = 0.4756366014480591f;   // 0x80DFE0
 
     inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
     {
@@ -257,6 +259,37 @@ WoWCollision::SelectedContactThresholdGateResult WoWCollision::EvaluateSelectedC
         : WOW_RELAXED_WALKABLE_MIN_NORMAL_Z);
     result.wouldUseDirectPair = result.thresholdSensitive && result.projectedPositionInsidePrism;
     return result;
+}
+
+void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
+                                              float verticalOffset,
+                                              float horizontalRadius,
+                                              std::array<SelectorSupportPlane, 9>& outPlanes)
+{
+    outPlanes[0] = { G3D::Vector3(-1.0f, 0.0f, 0.0f), position.x - horizontalRadius };
+    outPlanes[1] = { G3D::Vector3(1.0f, 0.0f, 0.0f), -position.x - horizontalRadius };
+    outPlanes[2] = { G3D::Vector3(0.0f, 1.0f, 0.0f), -position.y - horizontalRadius };
+    outPlanes[3] = { G3D::Vector3(0.0f, -1.0f, 0.0f), position.y - horizontalRadius };
+    outPlanes[4] = { G3D::Vector3(0.0f, 0.0f, 1.0f), -position.z - verticalOffset };
+
+    const float diagonalX = WOW_SELECTOR_SUPPORT_DIAGONAL_X;
+    const float diagonalZ = WOW_SELECTOR_SUPPORT_DIAGONAL_Z;
+    outPlanes[5] = {
+        G3D::Vector3(-diagonalX, 0.0f, -diagonalZ),
+        (position.x * diagonalX) + (position.z * diagonalZ)
+    };
+    outPlanes[6] = {
+        G3D::Vector3(diagonalX, 0.0f, -diagonalZ),
+        (position.z * diagonalZ) - (position.x * diagonalX)
+    };
+    outPlanes[7] = {
+        G3D::Vector3(0.0f, diagonalX, -diagonalZ),
+        (position.z * diagonalZ) - (position.y * diagonalX)
+    };
+    outPlanes[8] = {
+        G3D::Vector3(0.0f, -diagonalX, -diagonalZ),
+        (position.y * diagonalX) + (position.z * diagonalZ)
+    };
 }
 
 namespace

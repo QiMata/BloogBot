@@ -50,6 +50,12 @@ struct ExportAABBContact
     uint32_t walkable;
 };
 
+struct ExportSelectorSupportPlane
+{
+    G3D::Vector3 normal;
+    float planeDistance;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -825,6 +831,29 @@ extern "C"
         if (outThresholdSensitive) *outThresholdSensitive = result.thresholdSensitive;
         if (outNormalZ) *outNormalZ = result.normalZ;
         return result.wouldUseDirectPair;
+    }
+
+    __declspec(dllexport) int BuildWoWSelectorSupportPlanes(
+        const G3D::Vector3* position,
+        float verticalOffset,
+        float horizontalRadius,
+        ExportSelectorSupportPlane* outPlanes,
+        int maxPlanes)
+    {
+        if (!position || !outPlanes || maxPlanes <= 0) {
+            return 0;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> planes{};
+        WoWCollision::BuildSelectorSupportPlanes(*position, verticalOffset, horizontalRadius, planes);
+
+        const int count = std::min<int>(static_cast<int>(planes.size()), maxPlanes);
+        for (int i = 0; i < count; ++i) {
+            outPlanes[i].normal = planes[static_cast<size_t>(i)].normal;
+            outPlanes[i].planeDistance = planes[static_cast<size_t>(i)].planeDistance;
+        }
+
+        return count;
     }
 
     __declspec(dllexport) int QueryTerrainAABBContacts(

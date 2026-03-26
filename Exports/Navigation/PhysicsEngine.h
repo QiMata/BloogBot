@@ -5,6 +5,7 @@
 #include "MapLoader.h"
 #include <memory>
 #include <cmath>
+#include <array>
 #include <vector>
 #include "Vector3.h" // Needed for by-value usage of G3D::Vector3
 #include "SceneQuery.h"
@@ -555,6 +556,12 @@ namespace WoWCollision
         bool wouldUseDirectPair = false;
     };
 
+    struct SelectorSupportPlane
+    {
+        G3D::Vector3 normal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float planeDistance = 0.0f;
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -617,6 +624,11 @@ namespace WoWCollision
                                                                            const G3D::Vector3& currentPosition,
                                                                            const G3D::Vector3& projectedPosition,
                                                                            bool useStandardWalkableThreshold);
+
+    void BuildSelectorSupportPlanes(const G3D::Vector3& position,
+                                    float verticalOffset,
+                                    float horizontalRadius,
+                                    std::array<SelectorSupportPlane, 9>& outPlanes);
 
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,

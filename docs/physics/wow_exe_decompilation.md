@@ -609,6 +609,10 @@ CollisionStep (0x633840)
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
   - its helper tail is also now better mapped:
+    - fresh raw capture now also lives in `docs/physics/0x631440_disasm.txt`
+    - `0x631440` is a pure support-plane builder used by `0x631BE0` before the selector-builder chain reaches `0x632830`
+    - it emits a fixed 9-plane strip: `±X`, `±Y`, `+Z`, plus four diagonal planes using the binary constants `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`
+    - the production DLL now mirrors that builder through a pure `BuildSelectorSupportPlanes(...)` helper and deterministic export/test seam
     - `0x632830` walks the generated support planes with `0x6329E0`, tracks the largest non-negative ratio, and clears its success bit if any ratio exceeds the binary threshold at `0x80DFF4`
     - if that first pass survives, `0x632830` calls `0x632980` to rebuild a 9-entry strip while excluding the current candidate index, then rechecks the rebuilt planes with `0x6329E0` against the stricter scalar at `0x7FF9C8`
     - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs

@@ -1,0 +1,135 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x631440
+Date: 2026-03-26
+Notes:
+- Pure support-plane builder used by `0x631BE0` before the selector-builder chain reaches `0x632830`.
+- Inputs resolve as `(position, verticalOffset, horizontalRadius, outPlanes)`.
+- Emits a fixed 9-plane strip: `±X`, `±Y`, `+Z`, plus four diagonal planes using `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`.
+
+0x00631440: push     ebp
+0x00631441: mov      ebp, esp
+0x00631443: sub      esp, 0xc
+0x00631446: mov      eax, dword ptr [ebp + 0x14]
+0x00631449: mov      ecx, dword ptr [ebp + 8]
+0x0063144C: fld      dword ptr [ecx]
+0x0063144E: mov      dword ptr [eax], 0xbf800000
+0x00631454: fsub     dword ptr [ebp + 0x10]
+0x00631457: xor      edx, edx
+0x00631459: mov      dword ptr [eax + 4], edx
+0x0063145C: mov      dword ptr [eax + 8], edx
+0x0063145F: fstp     dword ptr [eax + 0xc]
+0x00631462: push     esi
+0x00631463: fld      dword ptr [ecx]
+0x00631465: mov      dword ptr [eax + 0x14], edx
+0x00631468: fchs
+0x0063146A: mov      dword ptr [eax + 0x18], edx
+0x0063146D: fsub     dword ptr [ebp + 0x10]
+0x00631470: mov      esi, 0x3f800000
+0x00631475: mov      dword ptr [eax + 0x10], esi
+0x00631478: push     edi
+0x00631479: fstp     dword ptr [eax + 0x1c]
+0x0063147C: mov      dword ptr [ebp - 8], edx
+0x0063147F: fld      dword ptr [ecx + 4]
+0x00631482: mov      dword ptr [eax + 0x20], edx
+0x00631485: fchs
+0x00631487: mov      dword ptr [eax + 0x24], esi
+0x0063148A: fsub     dword ptr [ebp + 0x10]
+0x0063148D: mov      dword ptr [eax + 0x28], edx
+0x00631490: mov      dword ptr [ebp - 0xc], 0xbf613036
+0x00631497: mov      edi, dword ptr [ebp - 0xc]
+0x0063149A: fstp     dword ptr [eax + 0x2c]
+0x0063149D: mov      dword ptr [ebp - 4], 0xbef386a4
+0x006314A4: fld      dword ptr [ecx + 4]
+0x006314A7: mov      dword ptr [eax + 0x30], edx
+0x006314AA: fsub     dword ptr [ebp + 0x10]
+0x006314AD: mov      dword ptr [eax + 0x38], edx
+0x006314B0: mov      dword ptr [eax + 0x34], 0xbf800000
+0x006314B7: mov      dword ptr [ebp - 0xc], 0x3f613036
+0x006314BE: fstp     dword ptr [eax + 0x3c]
+0x006314C1: fld      dword ptr [ecx + 8]
+0x006314C4: mov      dword ptr [eax + 0x40], edx
+0x006314C7: fchs
+0x006314C9: mov      dword ptr [eax + 0x44], edx
+0x006314CC: fsub     dword ptr [ebp + 0xc]
+0x006314CF: mov      dword ptr [eax + 0x48], esi
+0x006314D2: lea      edx, [eax + 0x50]
+0x006314D5: mov      esi, edx
+0x006314D7: fstp     dword ptr [eax + 0x4c]
+0x006314DA: mov      dword ptr [esi], edi
+0x006314DC: mov      edi, dword ptr [ebp - 8]
+0x006314DF: mov      dword ptr [esi + 4], edi
+0x006314E2: mov      edi, dword ptr [ebp - 4]
+0x006314E5: mov      dword ptr [esi + 8], edi
+0x006314E8: fld      dword ptr [ecx]
+0x006314EA: fmul     dword ptr [0x80dfe4]
+0x006314F0: mov      edi, dword ptr [ebp - 0xc]
+0x006314F3: fld      dword ptr [ecx + 8]
+0x006314F6: mov      dword ptr [ebp - 8], 0
+0x006314FD: fmul     dword ptr [0x80dfe0]
+0x00631503: mov      dword ptr [ebp - 4], 0xbef386a4
+0x0063150A: mov      dword ptr [ebp - 0xc], 0
+0x00631511: faddp    st(1)
+0x00631513: fld      dword ptr [ecx + 4]
+0x00631516: fmul     dword ptr [0x7ffd74]
+0x0063151C: faddp    st(1)
+0x0063151E: fstp     dword ptr [edx + 0xc]
+0x00631521: lea      edx, [eax + 0x60]
+0x00631524: mov      esi, edx
+0x00631526: mov      dword ptr [esi], edi
+0x00631528: mov      edi, dword ptr [ebp - 8]
+0x0063152B: mov      dword ptr [esi + 4], edi
+0x0063152E: mov      edi, dword ptr [ebp - 4]
+0x00631531: mov      dword ptr [esi + 8], edi
+0x00631534: fld      dword ptr [ecx + 8]
+0x00631537: fmul     dword ptr [0x80dfe0]
+0x0063153D: mov      dword ptr [ebp - 8], 0x3f613036
+0x00631544: fld      dword ptr [ecx]
+0x00631546: fmul     dword ptr [0x80dfe4]
+0x0063154C: fsubp    st(1)
+0x0063154E: fld      dword ptr [ecx + 4]
+0x00631551: fmul     dword ptr [0x7ffd74]
+0x00631557: faddp    st(1)
+0x00631559: fstp     dword ptr [edx + 0xc]
+0x0063155C: mov      edi, dword ptr [ebp - 0xc]
+0x0063155F: lea      edx, [eax + 0x70]
+0x00631562: mov      esi, edx
+0x00631564: mov      dword ptr [esi], edi
+0x00631566: mov      edi, dword ptr [ebp - 8]
+0x00631569: mov      dword ptr [esi + 4], edi
+0x0063156C: mov      dword ptr [ebp - 4], 0xbef386a4
+0x00631573: mov      edi, dword ptr [ebp - 4]
+0x00631576: mov      dword ptr [esi + 8], edi
+0x00631579: fld      dword ptr [ecx]
+0x0063157B: fmul     dword ptr [0x7ffd74]
+0x00631581: add      eax, 0x80
+0x00631586: fld      dword ptr [ecx + 8]
+0x00631589: mov      dword ptr [ebp - 0xc], 0
+0x00631590: fmul     dword ptr [0x80dfe0]
+0x00631596: mov      esi, dword ptr [ebp - 0xc]
+0x00631599: mov      dword ptr [ebp - 8], 0xbf613036
+0x006315A0: mov      dword ptr [ebp - 4], 0xbef386a4
+0x006315A7: faddp    st(1)
+0x006315A9: pop      edi
+0x006315AA: fld      dword ptr [ecx + 4]
+0x006315AD: fmul     dword ptr [0x80dfe4]
+0x006315B3: fsubp    st(1)
+0x006315B5: fstp     dword ptr [edx + 0xc]
+0x006315B8: mov      edx, eax
+0x006315BA: mov      dword ptr [edx], esi
+0x006315BC: mov      esi, dword ptr [ebp - 8]
+0x006315BF: mov      dword ptr [edx + 4], esi
+0x006315C2: mov      esi, dword ptr [ebp - 4]
+0x006315C5: mov      dword ptr [edx + 8], esi
+0x006315C8: fld      dword ptr [ecx]
+0x006315CA: fmul     dword ptr [0x7ffd74]
+0x006315D0: pop      esi
+0x006315D1: fld      dword ptr [ecx + 8]
+0x006315D4: fmul     dword ptr [0x80dfe0]
+0x006315DA: faddp    st(1)
+0x006315DC: fld      dword ptr [ecx + 4]
+0x006315DF: fmul     dword ptr [0x80dfe4]
+0x006315E5: faddp    st(1)
+0x006315E7: fstp     dword ptr [eax + 0xc]
+0x006315EA: mov      esp, ebp
+0x006315EC: pop      ebp
+0x006315ED: ret      0x10

@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 201)
+- Last updated: 2026-03-26 (session 202)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 202 kept runtime behavior unchanged and exposed the next pure binary helper behind the selector-builder chain. `BuildSelectorSupportPlanes(...)` now mirrors `0x631440`, `BuildWoWSelectorSupportPlanes(...)` exports it through the production DLL, and `WowSelectorSupportPlaneTests.cs` now pins the exact 9-plane strip.
+  - New binary evidence now lives in `docs/physics/0x631440_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the pre-`0x632830` builder path: `0x631440` emits the fixed `±X`, `±Y`, `+Z`, and four diagonal support planes using `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`.
+  - Practical implication: the next native parity unit no longer needs to infer the selector support-strip geometry. It can build on the now-pinned binary plane strip while tracing `0x631BE0` / `0x632830`.
   - Session 201 kept runtime behavior unchanged and narrowed the open selector gap one step further. `EvaluateSelectedContactThresholdGate(...)` is now a pure native helper, `EvaluateWoWSelectedContactThresholdGate(...)` exports it through the production DLL, and `UndercityUpperDoorContactTests.cs` now asserts the packet-backed frame-16 merged query contains zero direct-pair candidates under both `0x633760` threshold modes.
   - New binary evidence now lives in `docs/physics/0x632280_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the selector-builder side: `0x632280` initializes a five-slot local candidate buffer, walks four source entries into `0x632460` / `0x632700`, and uses `0x80DFEC` epsilon-ranked overwrite/append/swap logic on the caller-visible best record. The same note now captures the `0x632830` / `0x6329E0` helper shape around that loop.
   - Practical implication: the frame-16 blocker is not “we picked the wrong already-good direct-pair contact.” The raw merged query offers none. The next native parity unit has to trace why the earlier selector-builder path (`0x632280` / `0x632830` / `0x6318C0`) still leads to the WMO wall entry.
@@ -330,8 +333,8 @@
   - `docs/TASKS.md`
 - Next command: `@'
 from capstone import *
-va=0x632830
-size=0x260
+va=0x631BE0
+size=0x320
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
     f.seek(va-0x400000)
     code=f.read(size)
