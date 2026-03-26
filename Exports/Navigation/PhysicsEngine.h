@@ -603,6 +603,22 @@ namespace WoWCollision
         uint32_t selectedStripCount = 0;
     };
 
+    struct SelectorSourceRankingTrace
+    {
+        float inputBestRatio = 0.0f;
+        float outputBestRatio = 0.0f;
+        uint32_t dotRejectedCount = 0;
+        uint32_t builderRejectedCount = 0;
+        uint32_t evaluatorRejectedCount = 0;
+        uint32_t acceptedSourceCount = 0;
+        uint32_t overwriteCount = 0;
+        uint32_t appendCount = 0;
+        uint32_t bestRatioUpdatedCount = 0;
+        uint32_t swappedBestToFront = 0;
+        uint32_t finalCandidateCount = 0;
+        uint32_t selectedSourceIndex = 0xFFFFFFFFu;
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -722,6 +738,18 @@ namespace WoWCollision
                                             float& inOutBestRatio,
                                             uint32_t& outBestRecordIndex,
                                             SelectorRecordEvaluationTrace* outTrace = nullptr);
+
+    bool EvaluateSelectorTriangleSourceRanking(const SelectorCandidateRecord* records,
+                                               uint32_t recordCount,
+                                               const G3D::Vector3& testPoint,
+                                               const G3D::Vector3& candidateDirection,
+                                               const std::array<G3D::Vector3, 9>& points,
+                                               const std::array<SelectorSupportPlane, 9>& supportPlanes,
+                                               const std::array<uint8_t, 32>& selectorIndices,
+                                               std::array<SelectorSupportPlane, 5>& ioBestCandidates,
+                                               uint32_t& ioCandidateCount,
+                                               float& ioBestRatio,
+                                               SelectorSourceRankingTrace* outTrace = nullptr);
 
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,

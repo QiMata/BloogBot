@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 207)
+- Last updated: 2026-03-26 (session 208)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 208 still kept runtime grounded behavior unchanged and exposed the next pure caller-side selector body. `EvaluateSelectorTriangleSourceRanking(...)` now mirrors binary `0x632280` inside the production DLL, including the 4-source loop over `supportPlanes[5..8]`, the `0x632460` translated-triplet clip-plane build, the `0x632700` evaluator handoff, and the binary `0x80DFEC` overwrite/append/swap ranking window on the 5-slot best-candidate buffer.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorSourceRankingTests.cs` now pins five exact binary-backed behaviors: the source-plane dot-reject path, the builder-reject path, the evaluator-reject path, the overwrite path, and the append-and-swap near-tie path.
+  - `docs/physics/wow_exe_decompilation.md` now records that the production DLL mirrors the full `0x632280` caller-side ranking loop instead of only the surrounding builders/evaluator. Practical implication: the remaining selector gap is no longer the 4-source overwrite/append/swap body; it is the 5-direction chooser in `0x632BA0` plus the post-choice `0x6351A0` / `0x635410` gate.
   - Session 207 still kept runtime grounded behavior unchanged and exposed the next pure selector builder. `BuildSelectorCandidateQuadPlaneRecord(...)` now mirrors binary `0x632F80` inside the production DLL, including the 4-selector ring walk, the previous-point flip, and the translated source-plane anchor in slot 4.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorCandidateQuadPlaneRecordTests.cs` now pins the four oriented side planes, the slot-4 source-plane re-anchor, and the binary early-fail path when one side-plane normal degenerates below `0x8026BC`.
   - New raw capture now lives in `docs/physics/0x632F80_disasm.txt`. Practical implication: the remaining selector gap is no longer the per-record geometry builders; it is the multi-record overwrite/append/swap ranking path in `0x632280` / `0x632BA0` that feeds the now-pinned `0x632700` evaluator.
@@ -209,6 +212,10 @@
   - Session 172 corrected `0x6373B0` from “Collide” to the merged-AABB helper and updated grounded `CollisionStepWoW` so the wall query now uses the merged start/full/half-step `TestTerrainAABB` volume instead of accumulating synthetic full-step and half-step `SweepAABB` contacts.
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (17/17)`
@@ -393,19 +400,17 @@
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- Next command: `@'
-from capstone import *
-FUNCS = [(0x632280, 0x320), (0x632BA0, 0x300), (0x635410, 0x180)]
-with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
-    md = Cs(CS_ARCH_X86, CS_MODE_32)
-    for va, size in FUNCS:
-        f.seek(va - 0x400000)
-        code = f.read(size)
-        print(f'===== 0x{va:08X} =====')
-        for insn in md.disasm(code, va):
-            print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
-        print()
-'@ | py -`
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowSelectorSourceRankingTests.cs`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `Get-Content docs/physics/0x632BA0_disasm.txt | Select-Object -First 260`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

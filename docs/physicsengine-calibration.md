@@ -1393,3 +1393,37 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not infer the `0x632F80` side-plane orientation from generic quad extrusion. The binary fixes the ring order, the previous-point flip test, and the slot-4 source-plane anchor.
 - Recommended next single hypothesis:
   - Mirror the `0x632280` overwrite/append/swap ranking path on top of the now-pinned `0x632460` / `0x632F80` record builders and the now-pinned `0x632700` evaluator.
+
+## 2026-03-26 Selector source-ranking addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next caller-side selector body itself: the `0x632280` four-source overwrite/append/swap ranking loop that sits between the `0x632460` translated-triplet builder and the already-mirrored `0x632700` evaluator.
+- Binary/evidence delta shipped:
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632280` section now explicitly records the production-DLL mirror: source-plane dot reject, `0x632460` clip-plane build, `0x632700` evaluator handoff, and the `0x80DFEC` overwrite/append/swap window on the 5-slot best-candidate buffer
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `EvaluateSelectorTriangleSourceRanking(...)`
+    - added `SelectorSourceRankingTrace`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWSelectorTriangleSourceRanking(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector-ranking seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorSourceRankingTests.cs`
+    - added deterministic coverage for the dot-reject path, builder-reject path, evaluator-reject path, overwrite path, and append-and-swap near-tie path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`22/22`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector caller chain is now pinned through the first caller-side multi-source ranking body: exact support planes, exact neighborhood/table, exact translated-triplet clip planes, exact record evaluator, and now the exact caller-best overwrite/append/swap behavior that keeps the newest near-tie best in slot 0.
+  - The remaining unknown is no longer how `0x632280` ranks four source planes; it is how `0x632BA0` assembles and ranks the 5 candidate directions before `0x6351A0` gates the chosen result.
+- Do Not Repeat:
+  - Do not treat `0x632280` as a record builder. The binary scratch block is a translated-triplet clip-plane buffer feeding `0x632700`, while the candidate records themselves stay in the already-pinned `0x34` record array.
+- Recommended next single hypothesis:
+  - Mirror the `0x632BA0` five-direction chooser on top of the now-pinned `0x632280` source-ranking helper and the already-pinned `0x632F80` quad-record builder before touching `0x6351A0` / `0x635410`.

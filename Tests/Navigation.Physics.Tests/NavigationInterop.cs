@@ -178,6 +178,23 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorSourceRankingTrace
+    {
+        public float InputBestRatio;
+        public float OutputBestRatio;
+        public uint DotRejectedCount;
+        public uint BuilderRejectedCount;
+        public uint EvaluatorRejectedCount;
+        public uint AcceptedSourceCount;
+        public uint OverwriteCount;
+        public uint AppendCount;
+        public uint BestRatioUpdatedCount;
+        public uint SwappedBestToFront;
+        public uint FinalCandidateCount;
+        public uint SelectedSourceIndex;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -656,6 +673,25 @@ public static partial class NavigationInterop
         ref float inOutBestRatio,
         ref int inOutBestRecordIndex,
         out SelectorRecordEvaluationTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorTriangleSourceRanking", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorTriangleSourceRanking(
+        [In] SelectorCandidateRecord[] records,
+        int recordCount,
+        in Vector3 testPoint,
+        in Vector3 candidateDirection,
+        [In] Vector3[] points,
+        int pointCount,
+        [In] SelectorSupportPlane[] supportPlanes,
+        int planeCount,
+        [In] byte[] selectorIndices,
+        int selectorIndexCount,
+        [In, Out] SelectorSupportPlane[] ioBestCandidates,
+        int maxBestCandidates,
+        ref int ioCandidateCount,
+        ref float ioBestRatio,
+        out SelectorSourceRankingTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorCandidatePlaneRecord", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

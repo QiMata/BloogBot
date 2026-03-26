@@ -737,6 +737,129 @@ bool WoWCollision::EvaluateSelectorCandidateRecordSet(const SelectorCandidateRec
     return updatedBestRatio;
 }
 
+bool WoWCollision::EvaluateSelectorTriangleSourceRanking(const SelectorCandidateRecord* records,
+                                                         uint32_t recordCount,
+                                                         const G3D::Vector3& testPoint,
+                                                         const G3D::Vector3& candidateDirection,
+                                                         const std::array<G3D::Vector3, 9>& points,
+                                                         const std::array<SelectorSupportPlane, 9>& supportPlanes,
+                                                         const std::array<uint8_t, 32>& selectorIndices,
+                                                         std::array<SelectorSupportPlane, 5>& ioBestCandidates,
+                                                         uint32_t& ioCandidateCount,
+                                                         float& ioBestRatio,
+                                                         SelectorSourceRankingTrace* outTrace)
+{
+    SelectorSourceRankingTrace trace{};
+    trace.inputBestRatio = ioBestRatio;
+    trace.outputBestRatio = ioBestRatio;
+    trace.finalCandidateCount = ioCandidateCount;
+
+    constexpr uint32_t selectorSourceCount = 4u;
+    constexpr uint32_t selectorTripletOffset = 20u;
+    constexpr uint32_t selectorTripletStride = 3u;
+
+    if ((records == nullptr && recordCount != 0u) ||
+        ioCandidateCount > ioBestCandidates.size() ||
+        selectorTripletOffset + (selectorSourceCount * selectorTripletStride) > selectorIndices.size()) {
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    bool acceptedAnySource = false;
+
+    for (uint32_t sourceIndex = 0; sourceIndex < selectorSourceCount; ++sourceIndex) {
+        const SelectorSupportPlane& sourcePlane = supportPlanes[5u + sourceIndex];
+        const float sourceDot = sourcePlane.normal.dot(candidateDirection);
+        if (sourceDot >= 0.0f) {
+            trace.dotRejectedCount++;
+            continue;
+        }
+
+        const uint32_t selectorOffset = selectorTripletOffset + (sourceIndex * selectorTripletStride);
+        const std::array<uint8_t, 3> selectorTriplet = {
+            selectorIndices[selectorOffset],
+            selectorIndices[selectorOffset + 1u],
+            selectorIndices[selectorOffset + 2u]
+        };
+
+        std::array<SelectorSupportPlane, 4> candidateClipPlanes{};
+        if (!BuildSelectorCandidatePlaneRecord(
+                points,
+                selectorTriplet,
+                candidateDirection,
+                sourcePlane,
+                candidateClipPlanes)) {
+            trace.builderRejectedCount++;
+            continue;
+        }
+
+        float candidateRatio = ioBestRatio;
+        uint32_t bestRecordIndex = 0xFFFFFFFFu;
+        if (!EvaluateSelectorCandidateRecordSet(
+                records,
+                recordCount,
+                testPoint,
+                candidateClipPlanes.data(),
+                3u,
+                supportPlanes,
+                5u + sourceIndex,
+                candidateRatio,
+                bestRecordIndex)) {
+            trace.evaluatorRejectedCount++;
+            continue;
+        }
+
+        acceptedAnySource = true;
+        trace.acceptedSourceCount++;
+
+        const float overwriteThreshold = ioBestRatio - WOW_CORNER_PLANE_EPSILON;
+        if (candidateRatio < overwriteThreshold) {
+            ioBestCandidates[0] = sourcePlane;
+            ioCandidateCount = 1u;
+            trace.overwriteCount++;
+        }
+        else {
+            if (ioCandidateCount >= ioBestCandidates.size()) {
+                if (outTrace) {
+                    trace.outputBestRatio = ioBestRatio;
+                    trace.finalCandidateCount = ioCandidateCount;
+                    *outTrace = trace;
+                }
+                return false;
+            }
+
+            const float appendThreshold = ioBestRatio + WOW_CORNER_PLANE_EPSILON;
+            if (candidateRatio <= appendThreshold) {
+                ioBestCandidates[ioCandidateCount] = sourcePlane;
+                ioCandidateCount++;
+                trace.appendCount++;
+            }
+        }
+
+        if (candidateRatio <= ioBestRatio) {
+            ioBestRatio = candidateRatio;
+            trace.bestRatioUpdatedCount++;
+            trace.selectedSourceIndex = sourceIndex;
+
+            if (ioCandidateCount > 1u) {
+                const uint32_t newestIndex = ioCandidateCount - 1u;
+                std::swap(ioBestCandidates[0], ioBestCandidates[newestIndex]);
+                trace.swappedBestToFront++;
+            }
+        }
+    }
+
+    trace.outputBestRatio = ioBestRatio;
+    trace.finalCandidateCount = ioCandidateCount;
+    if (outTrace) {
+        *outTrace = trace;
+    }
+
+    return acceptedAnySource;
+}
+
 namespace
 {
     struct GroundedWallCandidate

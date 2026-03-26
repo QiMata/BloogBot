@@ -583,6 +583,7 @@ CollisionStep (0x633840)
     - iterates four source entries from `[arg+0x18]+0x50` and advances a parallel 3-byte selector table from `[arg+0x20]+0x14`
     - for each surviving source entry it first calls `0x632460`, then calls `0x632700`
     - uses the `0x80DFEC` epsilon window to decide whether the returned scalar replaces the current best record, appends as an additional near-tie candidate, or swaps the newest best record back into slot 0
+    - the production DLL now mirrors that exact overwrite/append/swap body through pure `EvaluateSelectorTriangleSourceRanking(...)` plus a deterministic export/test seam
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller

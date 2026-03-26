@@ -92,6 +92,22 @@ struct ExportSelectorRecordEvaluationTrace
     uint32_t selectedStripCount;
 };
 
+struct ExportSelectorSourceRankingTrace
+{
+    float inputBestRatio;
+    float outputBestRatio;
+    uint32_t dotRejectedCount;
+    uint32_t builderRejectedCount;
+    uint32_t evaluatorRejectedCount;
+    uint32_t acceptedSourceCount;
+    uint32_t overwriteCount;
+    uint32_t appendCount;
+    uint32_t bestRatioUpdatedCount;
+    uint32_t swappedBestToFront;
+    uint32_t finalCandidateCount;
+    uint32_t selectedSourceIndex;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -1164,6 +1180,105 @@ extern "C"
             outTrace->updatedBestRatio = trace.updatedBestRatio;
             outTrace->selectedRecordIndex = trace.selectedRecordIndex;
             outTrace->selectedStripCount = trace.selectedStripCount;
+        }
+
+        return result;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorTriangleSourceRanking(
+        const ExportSelectorCandidateRecord* records,
+        int recordCount,
+        const G3D::Vector3* testPoint,
+        const G3D::Vector3* candidateDirection,
+        const G3D::Vector3* points,
+        int pointCount,
+        const ExportSelectorSupportPlane* supportPlanes,
+        int planeCount,
+        const uint8_t* selectorIndices,
+        int selectorIndexCount,
+        ExportSelectorSupportPlane* ioBestCandidates,
+        int maxBestCandidates,
+        int* ioCandidateCount,
+        float* ioBestRatio,
+        ExportSelectorSourceRankingTrace* outTrace)
+    {
+        if ((!records && recordCount != 0) || recordCount < 0 || recordCount > 5 ||
+            !testPoint || !candidateDirection ||
+            !points || pointCount < 9 ||
+            !supportPlanes || planeCount < 9 ||
+            !selectorIndices || selectorIndexCount < 32 ||
+            !ioBestCandidates || maxBestCandidates < 5 ||
+            !ioCandidateCount || !ioBestRatio) {
+            return false;
+        }
+
+        if (*ioCandidateCount < 0 || *ioCandidateCount > 5) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorCandidateRecord, 5> recordBuffer{};
+        for (int i = 0; i < recordCount; ++i) {
+            recordBuffer[static_cast<size_t>(i)].filterPlane.normal = records[i].filterPlane.normal;
+            recordBuffer[static_cast<size_t>(i)].filterPlane.planeDistance = records[i].filterPlane.planeDistance;
+            recordBuffer[static_cast<size_t>(i)].points[0] = records[i].point0;
+            recordBuffer[static_cast<size_t>(i)].points[1] = records[i].point1;
+            recordBuffer[static_cast<size_t>(i)].points[2] = records[i].point2;
+        }
+
+        std::array<G3D::Vector3, 9> pointBuffer{};
+        for (int i = 0; i < 9; ++i) {
+            pointBuffer[static_cast<size_t>(i)] = points[i];
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> planeBuffer{};
+        for (int i = 0; i < 9; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = supportPlanes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = supportPlanes[i].planeDistance;
+        }
+
+        std::array<uint8_t, 32> selectorIndexBuffer{};
+        std::memcpy(selectorIndexBuffer.data(), selectorIndices, selectorIndexBuffer.size());
+
+        std::array<WoWCollision::SelectorSupportPlane, 5> bestCandidateBuffer{};
+        for (int i = 0; i < *ioCandidateCount; ++i) {
+            bestCandidateBuffer[static_cast<size_t>(i)].normal = ioBestCandidates[i].normal;
+            bestCandidateBuffer[static_cast<size_t>(i)].planeDistance = ioBestCandidates[i].planeDistance;
+        }
+
+        uint32_t candidateCount = static_cast<uint32_t>(*ioCandidateCount);
+        WoWCollision::SelectorSourceRankingTrace trace{};
+        const bool result = WoWCollision::EvaluateSelectorTriangleSourceRanking(
+            recordBuffer.data(),
+            static_cast<uint32_t>(recordCount),
+            *testPoint,
+            *candidateDirection,
+            pointBuffer,
+            planeBuffer,
+            selectorIndexBuffer,
+            bestCandidateBuffer,
+            candidateCount,
+            *ioBestRatio,
+            &trace);
+
+        *ioCandidateCount = static_cast<int>(candidateCount);
+        for (uint32_t i = 0; i < candidateCount; ++i) {
+            ioBestCandidates[i].normal = bestCandidateBuffer[i].normal;
+            ioBestCandidates[i].planeDistance = bestCandidateBuffer[i].planeDistance;
+        }
+
+        if (outTrace) {
+            outTrace->inputBestRatio = trace.inputBestRatio;
+            outTrace->outputBestRatio = trace.outputBestRatio;
+            outTrace->dotRejectedCount = trace.dotRejectedCount;
+            outTrace->builderRejectedCount = trace.builderRejectedCount;
+            outTrace->evaluatorRejectedCount = trace.evaluatorRejectedCount;
+            outTrace->acceptedSourceCount = trace.acceptedSourceCount;
+            outTrace->overwriteCount = trace.overwriteCount;
+            outTrace->appendCount = trace.appendCount;
+            outTrace->bestRatioUpdatedCount = trace.bestRatioUpdatedCount;
+            outTrace->swappedBestToFront = trace.swappedBestToFront;
+            outTrace->finalCandidateCount = trace.finalCandidateCount;
+            outTrace->selectedSourceIndex = trace.selectedSourceIndex;
         }
 
         return result;

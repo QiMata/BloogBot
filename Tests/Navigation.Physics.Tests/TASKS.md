@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 207)`
+- Last updated: `2026-03-26 (session 208)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 208 added `WowSelectorSourceRankingTests.cs` plus the new interop needed to pin the `0x632280` ranking loop through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorTriangleSourceRanking(...)`.
+  - The new deterministic coverage now pins five exact binary-backed behaviors: the source-plane dot-reject path, the builder-reject path, the evaluator-reject path, the overwrite path, and the append-and-swap near-tie path against the binary `0x80DFEC` epsilon window.
+  - Practical implication: this owner no longer has to infer the 4-source overwrite/append/swap body that sits between `0x632460` and `0x632700`. The next missing deterministic seam is the 5-direction chooser in `0x632BA0` and the later `0x6351A0` selection gate.
   - Session 207 added `WowSelectorCandidateQuadPlaneRecordTests.cs` plus the new interop needed to pin the `0x632F80` quad-record builder through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWSelectorCandidateQuadPlaneRecord(...)`.
   - The new deterministic coverage now pins the four oriented side planes produced from the 4-byte selector ring, the slot-4 source-plane re-anchor, and the early-fail path when one side-plane normal degenerates below `0x8026BC`.
   - Practical implication: this owner no longer has to infer either binary record-builder shape feeding the selector evaluator. The next missing deterministic seam is the `0x632280` / `0x632BA0` ranking path that chooses, appends, and swaps the candidate buffers built by `0x632460` / `0x632F80`.
@@ -157,6 +160,8 @@ Known remaining work in this owner: `0` items.
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (17/17)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
@@ -167,20 +172,18 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `@'
-from capstone import *
-FUNCS = [(0x632280, 0x320), (0x632BA0, 0x300), (0x635410, 0x180)]
-with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
-    md=Cs(CS_ARCH_X86, CS_MODE_32)
-    for va, size in FUNCS:
-        f.seek(va-0x400000)
-        code=f.read(size)
-        print(f'===== 0x{va:08X} =====')
-        for insn in md.disasm(code, va):
-            print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
-        print()
-'@ | py -`
+- Next command: `Get-Content docs/physics/0x632BA0_disasm.txt | Select-Object -First 260`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowSelectorSourceRankingTests.cs`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsTestExports.cpp`
