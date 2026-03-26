@@ -576,6 +576,10 @@ CollisionStep (0x633840)
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
+  - fresh 2026-03-26 full-window disassembly adds the branch shape:
+    - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly and marks the state out-param
+    - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success
+    - if `0x633720` fails, it falls through the `0x7C5DA0` / `0x6353D0` gate and then into `0x635090` for the alternate pair result
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`

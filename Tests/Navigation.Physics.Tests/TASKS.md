@@ -31,9 +31,11 @@ Known remaining work in this owner: `0` items.
 7. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 193)`
+- Last updated: `2026-03-26 (session 194)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 194 replaced the frame-16 blocker-selection reconstruction with a native trace export from the production `Navigation.dll`. `NavigationInterop.cs` now exposes `GroundedWallSelectionTrace`, and `UndercityUpperDoorContactTests.cs` asks the DLL directly which contact it chose, what the raw/oriented oppose scores were, and how stateful `CheckWalkable` evaluated that contact.
+  - This owner can now pin the grounded blocker transaction itself without a separate C++ test project: chosen contact, reorientation bit, raw/non-raw oppose scores, and walkability before/after state all come back from the same DLL the runtime uses.
   - Session 193 carried the binary-selected grounded-wall state through the deterministic interop path. `NavigationInterop.cs` still talks to the production `Navigation.dll`, but replay input/output now preserve `GroundedWallState` so packet-backed tests can exercise the same selected-contact state path across grounded frames that the runtime uses.
   - `UndercityUpperDoorContactTests.cs` replaced the temporary frame dumps with a real frame-16 regression: the merged query contains a statefully walkable horizontal contact that is non-opposing until the contact normal is oriented against the current collision position.
   - This owner now pins the two real packet-backed invariants behind the current runtime fix: frame 15 proves the elevator support face requires the stateful `0x6334A0` path, and frame 16 proves the chosen blocker can still be missed unless the contact is oriented the way the runtime currently reconstructs it.
@@ -75,6 +77,10 @@ Known remaining work in this owner: `0` items.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (3/3)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName=Navigation.Physics.Tests.PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (3/3)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck" --logger "console;verbosity=minimal"` -> `passed (4/4)`
@@ -106,8 +112,16 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x6351A0; data=code[start-0x400000:start-0x400000+1024]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635090; data=code[start-0x400000:start-0x400000+1024]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Files changed:
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsBridge.h`
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
@@ -142,6 +156,7 @@ Known remaining work in this owner: `0` items.
   - `Services/ForegroundBotRunner/TASKS.md`
   - `Tests/WoWSharpClient.Tests/TASKS.md`
 - Blockers:
+  - The current deterministic harness now exposes blocker selection directly; the next missing visibility is the paired `0xC4E544` selector payload and which `0x6351A0` branch produced it.
   - The best next tester is still the production-DLL deterministic harness, not a separate native test binary. The missing visibility is inside the selected-contact producer chain, so the next high-leverage delta is a transaction/export seam that records the chosen index and paired selector payload.
   - The new frame-15 contact probe proves the helper body is not the immediate blocker. Without the binary-selected contact / grounded-wall-state path, a blanket stateful `0x6334A0` call would also promote many walls in the same merged query.
   - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current native baseline now has the correct top-level branch precedence, but it still lacks the real `0x6334A0` walkability logic and the remaining `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.

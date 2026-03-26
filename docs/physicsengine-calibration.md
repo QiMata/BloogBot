@@ -963,3 +963,30 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not describe the current-position reorientation as a named binary helper. It is an inference from the selected-contact semantics plus deterministic packet-backed evidence and should stay constrained by those fixtures.
 - Recommended next single hypothesis:
   - Add a native transaction/export seam for the selected-contact producer path so deterministic tests can record the chosen index, paired selector payload, and post-selection branch result while tracing `0x6351A0` / `0x633720` / `0x635410` / `0x6353D0`.
+
+## 2026-03-26 Selected-contact native trace seam
+
+- Scope note:
+  - This pass did not change runtime movement behavior. It converted the remaining frame-16 blocker-selection reconstruction from C# into a production-DLL native trace export so grounded selector work can be pinned without a separate tester project.
+- Binary/evidence note:
+  - Full-window disassembly of `0x6351A0` now confirms the local branch shape behind the selected-contact producer chain: `0x632BA0` -> `0x633720` -> direct `0xC4E544[index]` return on `0x635410` success, zero-pair success on `0x635410` failure, and `0x7C5DA0` / `0x6353D0` -> `0x635090` on the alternate path.
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateGroundedWallSelection(...)`, a production-DLL trace export that mirrors the current grounded blocker-selection path and returns the chosen contact, raw/oriented oppose scores, reorientation bit, and stateful `CheckWalkable` result
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added `GroundedWallSelectionTrace` plus the matching P/Invoke
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - now uses the native trace export for the frame-16 blocker-selection regression instead of reconstructing the selection path in C#
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName=Navigation.Physics.Tests.PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The native trace now shows the selected frame-16 blocker as a real horizontal side face from the production DLL path (`normal ~= +X`, `oriented ~= -X`, `rawOppose ~= 0`, `orientedOppose ~= 1`, `walk0=0`, `walk1=1`), which is the exact transaction shape we need for the remaining producer-chain audit.
+- Recommended next single hypothesis:
+  - Extend the native trace seam one level deeper so deterministic tests can also record the chosen `0xC4E544` paired selector payload and the post-`0x635410` / post-`0x6353D0` branch source, then compare that against the `0x6351A0` disassembly before changing runtime behavior again.

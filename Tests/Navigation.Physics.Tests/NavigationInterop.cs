@@ -130,6 +130,26 @@ public static partial class NavigationInterop
         public readonly Triangle ToTriangle() => new(TriangleA, TriangleB, TriangleC);
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GroundedWallSelectionTrace
+    {
+        public uint QueryContactCount;
+        public uint CandidateCount;
+        public uint SelectedContactIndex;
+        public uint SelectedInstanceId;
+        public uint RawWalkable;
+        public uint WalkableWithoutState;
+        public uint WalkableWithState;
+        public uint GroundedWallStateAfter;
+        public uint UsedPositionReorientation;
+        public Vector3 SelectedPoint;
+        public Vector3 SelectedNormal;
+        public Vector3 OrientedNormal;
+        public Vector3 PrimaryAxis;
+        public float RawOpposeScore;
+        public float OrientedOpposeScore;
+    }
+
     // ==========================================================================
     // DYNAMIC OBJECT INFO (matches PhysicsBridge.h DynamicObjectInfo exactly)
     // ==========================================================================
@@ -469,6 +489,19 @@ public static partial class NavigationInterop
         in Vector3 boxMax,
         [Out] TerrainAabbContact[] contacts,
         int maxContacts);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateGroundedWallSelection", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateGroundedWallSelection(
+        uint mapId,
+        in Vector3 boxMin,
+        in Vector3 boxMax,
+        in Vector3 currentPosition,
+        in Vector3 requestedMove,
+        float collisionRadius,
+        float boundingHeight,
+        [MarshalAs(UnmanagedType.I1)] bool groundedWallFlagBefore,
+        out GroundedWallSelectionTrace trace);
 
     // ==========================================================================
     // PHYSICS STEP FUNCTION

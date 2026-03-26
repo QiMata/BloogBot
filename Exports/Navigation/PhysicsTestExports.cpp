@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #define NOMINMAX
 #include <windows.h>
@@ -46,6 +47,36 @@ struct ExportAABBContact
     uint32_t instanceId;
     uint32_t walkable;
 };
+
+struct ExportGroundedWallSelectionTrace
+{
+    uint32_t queryContactCount;
+    uint32_t candidateCount;
+    uint32_t selectedContactIndex;
+    uint32_t selectedInstanceId;
+    uint32_t rawWalkable;
+    uint32_t walkableWithoutState;
+    uint32_t walkableWithState;
+    uint32_t groundedWallStateAfter;
+    uint32_t usedPositionReorientation;
+    G3D::Vector3 selectedPoint;
+    G3D::Vector3 selectedNormal;
+    G3D::Vector3 orientedNormal;
+    G3D::Vector3 primaryAxis;
+    float rawOpposeScore;
+    float orientedOpposeScore;
+};
+
+static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D::Vector3& moveDir2D)
+{
+    G3D::Vector3 horizontal(normal.x, normal.y, 0.0f);
+    const float horizontalMag = horizontal.magnitude();
+    if (horizontalMag <= PhysicsConstants::VECTOR_EPSILON)
+        return 0.0f;
+
+    horizontal = horizontal * (1.0f / horizontalMag);
+    return std::max(0.0f, -horizontal.dot(moveDir2D));
+}
 
 extern "C"
 {
@@ -579,6 +610,139 @@ extern "C"
         }
 
         return count;
+    }
+
+    __declspec(dllexport) bool EvaluateGroundedWallSelection(
+        uint32_t mapId,
+        const G3D::Vector3* boxMin,
+        const G3D::Vector3* boxMax,
+        const G3D::Vector3* currentPosition,
+        const G3D::Vector3* requestedMove,
+        float collisionRadius,
+        float boundingHeight,
+        bool groundedWallFlagBefore,
+        ExportGroundedWallSelectionTrace* outTrace)
+    {
+        if (!boxMin || !boxMax || !currentPosition || !requestedMove || !outTrace)
+            return false;
+
+        std::memset(outTrace, 0, sizeof(ExportGroundedWallSelectionTrace));
+        outTrace->selectedContactIndex = 0xFFFFFFFFu;
+
+        std::vector<SceneQuery::AABBContact> contacts;
+        SceneQuery::TestTerrainAABB(mapId, *boxMin, *boxMax, contacts);
+        outTrace->queryContactCount = static_cast<uint32_t>(contacts.size());
+
+        const G3D::Vector3 moveDir2D(requestedMove->x, requestedMove->y, 0.0f);
+        const G3D::Vector3 normalizedMoveDir2D = moveDir2D.directionOrZero();
+        if (normalizedMoveDir2D.magnitude() <= PhysicsConstants::VECTOR_EPSILON)
+            return false;
+
+        struct Candidate
+        {
+            uint32_t index;
+            G3D::Vector3 axis;
+            G3D::Vector3 originalNormal;
+            G3D::Vector3 orientedNormal;
+            float rawOpposeScore;
+            float orientedOpposeScore;
+            bool usedPositionReorientation;
+        };
+
+        std::vector<Candidate> candidates;
+        candidates.reserve(contacts.size());
+
+        for (uint32_t i = 0; i < contacts.size(); ++i)
+        {
+            const auto& contact = contacts[i];
+            G3D::Vector3 normal = contact.normal.directionOrZero();
+            G3D::Vector3 horizontalNormal(normal.x, normal.y, 0.0f);
+            if (horizontalNormal.squaredMagnitude() <= PhysicsConstants::VECTOR_EPSILON)
+                continue;
+
+            const float rawOpposeScore = ComputeHorizontalOpposeScore(normal, normalizedMoveDir2D);
+
+            bool usedPositionReorientation = false;
+            const G3D::Vector3 toCurrentPosition(
+                currentPosition->x - contact.point.x,
+                currentPosition->y - contact.point.y,
+                0.0f);
+
+            if (toCurrentPosition.squaredMagnitude() > PhysicsConstants::VECTOR_EPSILON &&
+                horizontalNormal.dot(toCurrentPosition) < 0.0f)
+            {
+                normal = -normal;
+                horizontalNormal = -horizontalNormal;
+                usedPositionReorientation = true;
+            }
+
+            const float orientedOpposeScore = ComputeHorizontalOpposeScore(normal, normalizedMoveDir2D);
+            if (orientedOpposeScore <= 1.0e-5f)
+                continue;
+
+            G3D::Vector3 axis(0.0f, 0.0f, 0.0f);
+            if (std::fabs(horizontalNormal.x) >= std::fabs(horizontalNormal.y))
+                axis = G3D::Vector3(horizontalNormal.x > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
+            else
+                axis = G3D::Vector3(0.0f, horizontalNormal.y > 0.0f ? 1.0f : -1.0f, 0.0f);
+
+            candidates.push_back(Candidate{
+                i,
+                axis,
+                contact.normal.directionOrZero(),
+                normal,
+                rawOpposeScore,
+                orientedOpposeScore,
+                usedPositionReorientation });
+        }
+
+        outTrace->candidateCount = static_cast<uint32_t>(candidates.size());
+        if (candidates.empty())
+            return false;
+
+        size_t bestIndex = 0;
+        float bestScore = candidates[0].orientedOpposeScore;
+        for (size_t i = 1; i < candidates.size(); ++i)
+        {
+            if (candidates[i].orientedOpposeScore > bestScore)
+            {
+                bestScore = candidates[i].orientedOpposeScore;
+                bestIndex = i;
+            }
+        }
+
+        const auto& candidate = candidates[bestIndex];
+        const auto& selectedContact = contacts[candidate.index];
+        outTrace->selectedContactIndex = candidate.index;
+        outTrace->selectedInstanceId = selectedContact.instanceId;
+        outTrace->rawWalkable = selectedContact.walkable ? 1u : 0u;
+        outTrace->usedPositionReorientation = candidate.usedPositionReorientation ? 1u : 0u;
+        outTrace->selectedPoint = selectedContact.point;
+        outTrace->selectedNormal = candidate.originalNormal;
+        outTrace->orientedNormal = candidate.orientedNormal;
+        outTrace->primaryAxis = candidate.axis;
+        outTrace->rawOpposeScore = candidate.rawOpposeScore;
+        outTrace->orientedOpposeScore = candidate.orientedOpposeScore;
+
+        const auto withoutState = WoWCollision::CheckWalkable(
+            selectedContact,
+            *currentPosition,
+            collisionRadius,
+            boundingHeight,
+            true,
+            false);
+        const auto withState = WoWCollision::CheckWalkable(
+            selectedContact,
+            *currentPosition,
+            collisionRadius,
+            boundingHeight,
+            true,
+            groundedWallFlagBefore);
+
+        outTrace->walkableWithoutState = withoutState.walkable ? 1u : 0u;
+        outTrace->walkableWithState = withState.walkable ? 1u : 0u;
+        outTrace->groundedWallStateAfter = withState.groundedWallFlagAfter ? 1u : 0u;
+        return true;
     }
 
     /// Computes a capsule sweep diagnostic for a single position/direction

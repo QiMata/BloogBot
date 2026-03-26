@@ -102,25 +102,43 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             return;
 
         var scenario = LoadFrameScenario(16);
-        var contacts = QueryFrame15Contacts(scenario);
-        var candidate = contacts
-            .Select(contact => AnalyzeContactSelection(contact, scenario))
-            .Where(info =>
-                info.HorizontalMagnitude > 0.99f &&
-                !info.WalkableWithoutState &&
-                info.WalkableWithState &&
-                info.RawOpposeScore <= 1e-5f &&
-                info.ReorientedOpposeScore > 0.9f)
-            .OrderBy(info => MathF.Abs(info.Contact.Point.Z - scenario.WorldPosition.Z))
-            .FirstOrDefault();
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
 
-        Assert.True(candidate is not null,
-            "Expected frame-16 merged query to contain a statefully walkable horizontal blocker that only becomes opposing after orienting the contact normal against the current collision position.");
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
+
+        Assert.True(traced,
+            "Expected frame-16 grounded wall trace to select a contact from the production Navigation.dll path.");
+        Assert.True(trace.QueryContactCount > 0);
+        Assert.True(trace.CandidateCount > 0);
+        Assert.True(trace.UsedPositionReorientation != 0u,
+            "Expected the selected blocker to require current-position normal reorientation on frame 16.");
+        Assert.True(trace.RawOpposeScore <= 1e-5f,
+            $"Expected the raw selected-contact oppose score to be effectively zero before reorientation, got {trace.RawOpposeScore:F6}.");
+        Assert.True(trace.OrientedOpposeScore > 0.9f,
+            $"Expected the reoriented selected-contact oppose score to become strongly blocking, got {trace.OrientedOpposeScore:F6}.");
+        Assert.True(trace.SelectedNormal.X > 0.99f && MathF.Abs(trace.SelectedNormal.Z) < 1e-3f,
+            $"Expected a horizontal +X side contact before reorientation, got {trace.SelectedNormal}.");
+        Assert.True(trace.OrientedNormal.X < -0.99f && MathF.Abs(trace.OrientedNormal.Z) < 1e-3f,
+            $"Expected the oriented blocker normal to face back into motion, got {trace.OrientedNormal}.");
+        Assert.Equal(0u, trace.WalkableWithoutState);
+        Assert.Equal(1u, trace.WalkableWithState);
+        Assert.Equal(1u, trace.GroundedWallStateAfter);
 
         _output.WriteLine(
-            $"frame16 reoriented blocker inst=0x{candidate!.Contact.InstanceId:X8} point={candidate.Contact.Point} normal={candidate.Contact.Normal} " +
-            $"rawOppose={candidate.RawOpposeScore:F4} reorientedOppose={candidate.ReorientedOpposeScore:F4} " +
-            $"walk0={candidate.WalkableWithoutState} walk1={candidate.WalkableWithState}");
+            $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} point={trace.SelectedPoint} " +
+            $"normal={trace.SelectedNormal} oriented={trace.OrientedNormal} rawOppose={trace.RawOpposeScore:F4} " +
+            $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState}");
     }
 
     private Frame15Scenario LoadFrame15Scenario()
@@ -214,74 +232,6 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         return supportContact;
     }
 
-    private static ContactSelectionInfo AnalyzeContactSelection(TerrainAabbContact contact, Frame15Scenario scenario)
-    {
-        var moveDir = new Vector3(
-            MathF.Cos(scenario.CurrentFrame.Facing),
-            MathF.Sin(scenario.CurrentFrame.Facing),
-            0.0f);
-        var triangle = contact.ToTriangle();
-        var contactNormal = contact.Normal;
-        var worldPosition = scenario.WorldPosition;
-
-        float rawOppose = ComputeOpposeScore(contact.Normal, moveDir);
-
-        var reorientedNormal = contact.Normal;
-        var toCurrentPosition = new Vector3(
-            scenario.WorldPosition.X - contact.Point.X,
-            scenario.WorldPosition.Y - contact.Point.Y,
-            0.0f);
-        if (toCurrentPosition.LengthSquared() > 1e-6f)
-        {
-            var horizontal = new Vector3(reorientedNormal.X, reorientedNormal.Y, 0.0f);
-            if (Vector3.Dot(horizontal, toCurrentPosition) < 0.0f)
-                reorientedNormal = new Vector3(-reorientedNormal.X, -reorientedNormal.Y, -reorientedNormal.Z);
-        }
-
-        bool walkableWithoutState = EvaluateWoWCheckWalkable(
-            in triangle,
-            in contactNormal,
-            in worldPosition,
-            scenario.Radius,
-            scenario.Height,
-            useStandardWalkableThreshold: true,
-            groundedWallFlagBefore: false,
-            out _,
-            out _);
-
-        bool walkableWithState = EvaluateWoWCheckWalkable(
-            in triangle,
-            in contactNormal,
-            in worldPosition,
-            scenario.Radius,
-            scenario.Height,
-            useStandardWalkableThreshold: true,
-            groundedWallFlagBefore: true,
-            out _,
-            out _);
-
-        return new ContactSelectionInfo
-        {
-            Contact = contact,
-            HorizontalMagnitude = MathF.Sqrt((contact.Normal.X * contact.Normal.X) + (contact.Normal.Y * contact.Normal.Y)),
-            RawOpposeScore = rawOppose,
-            ReorientedOpposeScore = ComputeOpposeScore(reorientedNormal, moveDir),
-            WalkableWithoutState = walkableWithoutState,
-            WalkableWithState = walkableWithState,
-        };
-    }
-
-    private static float ComputeOpposeScore(Vector3 normal, Vector3 moveDir)
-    {
-        var horizontal = new Vector3(normal.X, normal.Y, 0.0f);
-        float horizontalMag = horizontal.Length();
-        if (horizontalMag <= 1e-6f)
-            return 0.0f;
-
-        horizontal = new Vector3(horizontal.X / horizontalMag, horizontal.Y / horizontalMag, 0.0f);
-        return MathF.Max(0.0f, -Vector3.Dot(moveDir, horizontal));
-    }
-
     private static (Vector3 boxMin, Vector3 boxMax) BuildMergedQueryBox(Frame15Scenario scenario)
     {
         GetPhysicsConstants(out _, out _, out float stepHeight, out _, out float walkableMinNormalZ);
@@ -325,6 +275,16 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
                 MathF.Max(startMax.Z, MathF.Max(endMax.Z, halfMax.Z))));
     }
 
+    private static Vector3 BuildRequestedMove(Frame15Scenario scenario)
+    {
+        float speed = scenario.CurrentFrame.CurrentSpeed > 0.0f ? scenario.CurrentFrame.CurrentSpeed : scenario.CurrentFrame.RunSpeed;
+        float moveDistance = speed * scenario.DeltaTime;
+        return new Vector3(
+            MathF.Cos(scenario.CurrentFrame.Facing) * moveDistance,
+            MathF.Sin(scenario.CurrentFrame.Facing) * moveDistance,
+            0.0f);
+    }
+
     private static (float x, float y, float z) TransportLocalToWorld(RecordedFrame frame, RecordedGameObject transport)
     {
         float cosO = MathF.Cos(transport.Facing);
@@ -333,15 +293,5 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         float wy = frame.Position.X * sinO + frame.Position.Y * cosO + transport.Position.Y;
         float wz = frame.Position.Z + transport.Position.Z;
         return (wx, wy, wz);
-    }
-
-    private sealed class ContactSelectionInfo
-    {
-        public required TerrainAabbContact Contact { get; init; }
-        public required float HorizontalMagnitude { get; init; }
-        public required float RawOpposeScore { get; init; }
-        public required float ReorientedOpposeScore { get; init; }
-        public required bool WalkableWithoutState { get; init; }
-        public required bool WalkableWithState { get; init; }
     }
 }
