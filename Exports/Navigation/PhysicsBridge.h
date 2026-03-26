@@ -158,6 +158,11 @@ struct PhysicsInput
     // native/C# bridge contract can be simplified.
     float stepUpBaseZ;         // reserved; set to INVALID_HEIGHT by runtime physics
     uint32_t stepUpAge;        // reserved; set to 0 by runtime physics
+
+    // Internal grounded wall-state bit (`CMovement+0x40 & 0x04000000`) carried
+    // between native steps. This is not packet moveFlags state; it feeds the
+    // selected-contact `CheckWalkable` helper on the next grounded frame.
+    uint32_t groundedWallState;
 };
 
 constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -220,4 +225,5 @@ struct PhysicsOutput
     // Reserved compatibility fields; runtime physics leaves them inert.
     float stepUpBaseZ;
     uint32_t stepUpAge;
+    uint32_t groundedWallState;
 };

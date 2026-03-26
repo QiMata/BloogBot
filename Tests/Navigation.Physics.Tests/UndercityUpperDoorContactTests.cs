@@ -95,12 +95,44 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         Assert.True(groundedWallFlagAfterWithState);
     }
 
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_CurrentPositionReorientationFindsOpposingStatefulBlocker()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        var contacts = QueryFrame15Contacts(scenario);
+        var candidate = contacts
+            .Select(contact => AnalyzeContactSelection(contact, scenario))
+            .Where(info =>
+                info.HorizontalMagnitude > 0.99f &&
+                !info.WalkableWithoutState &&
+                info.WalkableWithState &&
+                info.RawOpposeScore <= 1e-5f &&
+                info.ReorientedOpposeScore > 0.9f)
+            .OrderBy(info => MathF.Abs(info.Contact.Point.Z - scenario.WorldPosition.Z))
+            .FirstOrDefault();
+
+        Assert.True(candidate is not null,
+            "Expected frame-16 merged query to contain a statefully walkable horizontal blocker that only becomes opposing after orienting the contact normal against the current collision position.");
+
+        _output.WriteLine(
+            $"frame16 reoriented blocker inst=0x{candidate!.Contact.InstanceId:X8} point={candidate.Contact.Point} normal={candidate.Contact.Normal} " +
+            $"rawOppose={candidate.RawOpposeScore:F4} reorientedOppose={candidate.ReorientedOpposeScore:F4} " +
+            $"walk0={candidate.WalkableWithoutState} walk1={candidate.WalkableWithState}");
+    }
+
     private Frame15Scenario LoadFrame15Scenario()
+    {
+        return LoadFrameScenario(15);
+    }
+
+    private Frame15Scenario LoadFrameScenario(int frameIndex)
     {
         var recording = RecordingTestHelpers.LoadByFilename(Recordings.PacketBackedUndercityElevatorUp, _output);
         RecordingTestHelpers.TryPreloadMap(recording.MapId, _output);
 
-        const int frameIndex = 15;
         var currentFrame = recording.Frames[frameIndex];
         var nextFrame = recording.Frames[frameIndex + 1];
 
@@ -182,6 +214,74 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         return supportContact;
     }
 
+    private static ContactSelectionInfo AnalyzeContactSelection(TerrainAabbContact contact, Frame15Scenario scenario)
+    {
+        var moveDir = new Vector3(
+            MathF.Cos(scenario.CurrentFrame.Facing),
+            MathF.Sin(scenario.CurrentFrame.Facing),
+            0.0f);
+        var triangle = contact.ToTriangle();
+        var contactNormal = contact.Normal;
+        var worldPosition = scenario.WorldPosition;
+
+        float rawOppose = ComputeOpposeScore(contact.Normal, moveDir);
+
+        var reorientedNormal = contact.Normal;
+        var toCurrentPosition = new Vector3(
+            scenario.WorldPosition.X - contact.Point.X,
+            scenario.WorldPosition.Y - contact.Point.Y,
+            0.0f);
+        if (toCurrentPosition.LengthSquared() > 1e-6f)
+        {
+            var horizontal = new Vector3(reorientedNormal.X, reorientedNormal.Y, 0.0f);
+            if (Vector3.Dot(horizontal, toCurrentPosition) < 0.0f)
+                reorientedNormal = new Vector3(-reorientedNormal.X, -reorientedNormal.Y, -reorientedNormal.Z);
+        }
+
+        bool walkableWithoutState = EvaluateWoWCheckWalkable(
+            in triangle,
+            in contactNormal,
+            in worldPosition,
+            scenario.Radius,
+            scenario.Height,
+            useStandardWalkableThreshold: true,
+            groundedWallFlagBefore: false,
+            out _,
+            out _);
+
+        bool walkableWithState = EvaluateWoWCheckWalkable(
+            in triangle,
+            in contactNormal,
+            in worldPosition,
+            scenario.Radius,
+            scenario.Height,
+            useStandardWalkableThreshold: true,
+            groundedWallFlagBefore: true,
+            out _,
+            out _);
+
+        return new ContactSelectionInfo
+        {
+            Contact = contact,
+            HorizontalMagnitude = MathF.Sqrt((contact.Normal.X * contact.Normal.X) + (contact.Normal.Y * contact.Normal.Y)),
+            RawOpposeScore = rawOppose,
+            ReorientedOpposeScore = ComputeOpposeScore(reorientedNormal, moveDir),
+            WalkableWithoutState = walkableWithoutState,
+            WalkableWithState = walkableWithState,
+        };
+    }
+
+    private static float ComputeOpposeScore(Vector3 normal, Vector3 moveDir)
+    {
+        var horizontal = new Vector3(normal.X, normal.Y, 0.0f);
+        float horizontalMag = horizontal.Length();
+        if (horizontalMag <= 1e-6f)
+            return 0.0f;
+
+        horizontal = new Vector3(horizontal.X / horizontalMag, horizontal.Y / horizontalMag, 0.0f);
+        return MathF.Max(0.0f, -Vector3.Dot(moveDir, horizontal));
+    }
+
     private static (Vector3 boxMin, Vector3 boxMax) BuildMergedQueryBox(Frame15Scenario scenario)
     {
         GetPhysicsConstants(out _, out _, out float stepHeight, out _, out float walkableMinNormalZ);
@@ -233,5 +333,15 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         float wy = frame.Position.X * sinO + frame.Position.Y * cosO + transport.Position.Y;
         float wz = frame.Position.Z + transport.Position.Z;
         return (wx, wy, wz);
+    }
+
+    private sealed class ContactSelectionInfo
+    {
+        public required TerrainAabbContact Contact { get; init; }
+        public required float HorizontalMagnitude { get; init; }
+        public required float RawOpposeScore { get; init; }
+        public required float ReorientedOpposeScore { get; init; }
+        public required bool WalkableWithoutState { get; init; }
+        public required bool WalkableWithState { get; init; }
     }
 }

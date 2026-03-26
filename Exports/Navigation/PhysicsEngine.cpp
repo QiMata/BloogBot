@@ -669,15 +669,18 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     std::vector<SceneQuery::AABBContact> slideContacts;
     SceneQuery::TestTerrainAABB(input.mapId, queryBoxMin, queryBoxMax, slideContacts);
 
-    auto buildMergedBlockerNormal = [&](const G3D::Vector3& moveDir2D,
+    auto buildMergedBlockerNormal = [&](const G3D::Vector3& currentPosition,
+        const G3D::Vector3& moveDir2D,
         G3D::Vector3& outNormal,
         G3D::Vector3& outPrimaryAxis,
-        G3D::Vector3& outPrimaryContactNormal) -> bool {
+        G3D::Vector3& outPrimaryContactNormal,
+        const SceneQuery::AABBContact*& outPrimaryContact) -> bool {
         struct BlockerCandidate
         {
             G3D::Vector3 axis;
             G3D::Vector3 sourceNormal;
             float score;
+            const SceneQuery::AABBContact* contact;
         };
 
         std::vector<BlockerCandidate> candidates;
@@ -713,28 +716,40 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
             if (horizontalMag <= PhysicsConstants::VECTOR_EPSILON)
                 continue;
 
+            const G3D::Vector3 toCurrentPosition(
+                currentPosition.x - contact.point.x,
+                currentPosition.y - contact.point.y,
+                0.0f);
+            if (toCurrentPosition.squaredMagnitude() > PhysicsConstants::VECTOR_EPSILON &&
+                horizontalNormal.dot(toCurrentPosition) < 0.0f) {
+                normal = -normal;
+                horizontalNormal = -horizontalNormal;
+            }
+
             horizontalNormal = horizontalNormal * (1.0f / horizontalMag);
             const float opposeScore = -horizontalNormal.dot(moveDir2D);
-            if (opposeScore <= 0.15f)
+            if (opposeScore <= 1.0e-5f)
                 continue;
 
-            if (std::fabs(horizontalNormal.x) >= std::fabs(horizontalNormal.y) &&
-                std::fabs(horizontalNormal.x) > 0.25f) {
+            if (std::fabs(horizontalNormal.x) >= std::fabs(horizontalNormal.y)) {
                 candidates.push_back(BlockerCandidate{
                     G3D::Vector3(horizontalNormal.x > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f),
                     normal,
-                    opposeScore });
+                    opposeScore,
+                    &contact });
             }
-            else if (std::fabs(horizontalNormal.y) > 0.25f) {
+            else {
                 candidates.push_back(BlockerCandidate{
                     G3D::Vector3(0.0f, horizontalNormal.y > 0.0f ? 1.0f : -1.0f, 0.0f),
                     normal,
-                    opposeScore });
+                    opposeScore,
+                    &contact });
             }
         }
 
         outPrimaryAxis = G3D::Vector3(0, 0, 0);
         outPrimaryContactNormal = G3D::Vector3(0, 0, 0);
+        outPrimaryContact = nullptr;
         if (!candidates.empty()) {
             float bestScore = 0.0f;
             size_t bestIndex = 0;
@@ -749,6 +764,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 
             outPrimaryAxis = candidates[bestIndex].axis;
             outPrimaryContactNormal = candidates[bestIndex].sourceNormal;
+            outPrimaryContact = candidates[bestIndex].contact;
             appendAxis(outPrimaryAxis);
             for (const auto& candidate : candidates) {
                 if ((candidate.axis - outPrimaryAxis).squaredMagnitude() <= 1e-6f)
@@ -807,7 +823,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         return outNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON;
     };
 
-    auto resolveWallSlide = [&](const G3D::Vector3& requestedMove,
+    auto resolveWallSlide = [&](const G3D::Vector3& currentPosition,
+        const G3D::Vector3& requestedMove,
         G3D::Vector3& outResolvedMove,
         G3D::Vector3& outWallNormal,
         float& outBlockedFraction) -> bool {
@@ -823,8 +840,9 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         const G3D::Vector3 moveDir2D = G3D::Vector3(requestedMove.x, requestedMove.y, 0.0f).directionOrZero();
         G3D::Vector3 primaryAxis(0, 0, 0);
         G3D::Vector3 primaryContactNormal(0, 0, 0);
+        const SceneQuery::AABBContact* primaryContact = nullptr;
         if (moveDir2D.magnitude() <= PhysicsConstants::VECTOR_EPSILON ||
-            !buildMergedBlockerNormal(moveDir2D, outWallNormal, primaryAxis, primaryContactNormal)) {
+            !buildMergedBlockerNormal(currentPosition, moveDir2D, outWallNormal, primaryAxis, primaryContactNormal, primaryContact)) {
             outBlockedFraction = 1.0f;
             return false;
         }
@@ -851,6 +869,37 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         float horizontalResolved2D = std::sqrt(
             (horizontalProjectedMove.x * horizontalProjectedMove.x) +
             (horizontalProjectedMove.y * horizontalProjectedMove.y));
+        bool usedWalkableSelectedContact = false;
+        bool usedNonWalkableVertical = false;
+
+        if (primaryContact != nullptr) {
+            WoWCollision::CheckWalkableResult walkableResult = WoWCollision::CheckWalkable(
+                *primaryContact,
+                currentPosition,
+                radius,
+                height,
+                true,
+                st.groundedWallState);
+
+            if (walkableResult.walkable) {
+                const float intoPlane = requestedMove.dot(primaryContactNormal);
+                G3D::Vector3 verticalCorrection = requestedMove - (primaryContactNormal * intoPlane);
+
+                const float verticalLimit = radius;
+                if (std::fabs(verticalCorrection.z) > verticalLimit &&
+                    verticalLimit > PhysicsConstants::VECTOR_EPSILON) {
+                    verticalCorrection.z = (verticalCorrection.z > 0.0f ? verticalLimit : -verticalLimit);
+                }
+
+                // Local WoW.exe 0x635C00 returns the selected-plane vertical correction
+                // only (X = Y = 0). Preserve that shape on the stateful walkable path
+                // instead of turning the support face into a plane-slide vector.
+                projectedMove = G3D::Vector3(0.0f, 0.0f, verticalCorrection.z);
+                st.groundedWallState = walkableResult.groundedWallFlagAfter;
+                usedWalkableSelectedContact = true;
+            }
+
+        }
 
         // Binary-backed 0x636100 branch gate: decides between horizontal (0x635D80)
         // and vertical (0x635C00) correction paths.
@@ -860,7 +909,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         //   - If upward probe finds nontrivial clearance → vertical path (return 2, set 0x04000000)
         //   - If upward probe finds ~zero clearance → horizontal path (return 1)
         //   - If probe fails → exit (return 0)
-        if (std::fabs(primaryContactNormal.z) > 0.01f) {
+        if (!usedWalkableSelectedContact && std::fabs(primaryContactNormal.z) > 0.01f) {
             // 0x636100 gate: for contacts with a significant Z component in the normal,
             // project onto the selected contact plane and clamp Z to radius.
             // Binary uses upward probe to gate this, but the .z > 0.01 heuristic
@@ -888,10 +937,14 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
                 horizontalResolved2D > slopedResolved2D + 1e-4f) {
                 projectedMove = horizontalProjectedMove;
             }
+            else {
+                usedNonWalkableVertical = true;
+            }
         }
 
         float resolved2D = std::sqrt((projectedMove.x * projectedMove.x) + (projectedMove.y * projectedMove.y));
-        if (resolved2D < (requested2D * 0.25f) &&
+        if (!usedWalkableSelectedContact &&
+            resolved2D < (requested2D * 0.25f) &&
             primaryAxis.magnitude() > PhysicsConstants::VECTOR_EPSILON &&
             (primaryAxis - outWallNormal).squaredMagnitude() > 1e-6f) {
             const float primaryInto = requestedMove.dot(primaryAxis);
@@ -908,6 +961,10 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
                     outWallNormal = primaryAxis;
                 }
             }
+        }
+
+        if (usedNonWalkableVertical) {
+            st.groundedWallState = true;
         }
 
         if (resolved2D <= PhysicsConstants::VECTOR_EPSILON ||
@@ -977,7 +1034,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
             G3D::Vector3 iterWallNormal(0, 0, 1);
             float iterBlocked = 1.0f;
 
-            bool iterHit = resolveWallSlide(currentMoveVec, iterResolved, iterWallNormal, iterBlocked);
+            const G3D::Vector3 currentPosition(currentX, currentY, startZ);
+            bool iterHit = resolveWallSlide(currentPosition, currentMoveVec, iterResolved, iterWallNormal, iterBlocked);
 
             totalResolvedMove = totalResolvedMove + iterResolved;
             if (iterHit) {
@@ -1034,6 +1092,25 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     std::vector<SceneQuery::AABBContact> contacts;
     SceneQuery::TestTerrainAABB(input.mapId, finalBoxMin, finalBoxMax, contacts);
 
+    auto isStatefulSupportWalkable = [&](const SceneQuery::AABBContact& contact, float queryZ) -> bool {
+        if (contact.walkable) {
+            return true;
+        }
+
+        if (!st.groundedWallState) {
+            return false;
+        }
+
+        WoWCollision::CheckWalkableResult walkableResult = WoWCollision::CheckWalkable(
+            contact,
+            G3D::Vector3(endX, endY, queryZ),
+            radius,
+            height,
+            true,
+            st.groundedWallState);
+        return walkableResult.walkable;
+    };
+
     auto resolveSupportContact = [&](float supportZ, G3D::Vector3& outNormal,
         const SceneQuery::AABBContact*& outSupport) -> bool {
         const float minGroundZ = startZ - PhysicsConstants::STEP_DOWN_HEIGHT;
@@ -1043,7 +1120,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         float bestNormalZ = -FLT_MAX;
 
         for (const auto& c : contacts) {
-            if (!c.walkable)
+            if (!isStatefulSupportWalkable(c, supportZ))
                 continue;
             if (c.point.z < minGroundZ || c.point.z > maxGroundZ)
                 continue;
@@ -1110,7 +1187,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         float closestError = FLT_MAX;
         const SceneQuery::AABBContact* closestContact = nullptr;
         for (const auto& c : contacts) {
-            if (!c.walkable) continue;
+            if (!isStatefulSupportWalkable(c, predictedSupportZ)) continue;
             if (c.point.z < startZ - PhysicsConstants::STEP_DOWN_HEIGHT) continue;
             if (c.point.z > startZ + stepH + stepUp) continue;
             float err = std::fabs(c.point.z - predictedSupportZ);
@@ -1134,7 +1211,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     // If center GetGroundZ failed, try AABB contacts as fallback
     if (!foundGround) {
         for (const auto& c : contacts) {
-            if (!c.walkable) continue;
+            if (!isStatefulSupportWalkable(c, predictedSupportZ)) continue;
             if (c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
                 c.point.z <= startZ + stepH + stepUp) {
                 if (c.point.z > bestGroundZ || !foundGround) {
@@ -1429,6 +1506,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		out.hitWall = false;
 		out.wallNormalX = 0.0f; out.wallNormalY = 0.0f; out.wallNormalZ = 1.0f;
 		out.blockedFraction = 1.0f;
+		out.groundedWallState = input.groundedWallState;
 		PHYS_INFO(PHYS_MOVE, "[StepV2] dt<=0; returning output without simulation");
 		return out;
 	}
@@ -1444,6 +1522,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		out.vy = input.vy;
 		out.vz = input.vz;
 		out.moveFlags = input.moveFlags;
+		out.groundedWallState = input.groundedWallState;
 		return out;
 	}
 
@@ -1490,6 +1569,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	st.fallTime = input.fallTime / 1000.0f;  // Convert ms (from client) → seconds for internal physics
 	st.fallStartZ = input.fallStartZ;
 	st.groundNormal = { 0,0,1 };
+	st.groundedWallState = input.groundedWallState != 0;
 	const bool inputSwimmingFlag = (input.moveFlags & MOVEFLAG_SWIMMING) != 0;
 	const bool inputAirborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
 	const bool inputFlyingFlag = (input.moveFlags & (MOVEFLAG_FLYING | MOVEFLAG_LEVITATING | MOVEFLAG_HOVER)) != 0;
@@ -2778,6 +2858,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.pendingDepenX = deferredDepen.x;
 	out.pendingDepenY = deferredDepen.y;
 	out.pendingDepenZ = deferredDepen.z;
+	out.groundedWallState = st.groundedWallState ? 1u : 0u;
 
 	out.standingOnInstanceId = st.supportInstanceId;
 	out.standingOnLocalX = st.supportLocalPoint.x;
@@ -2797,6 +2878,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	else {
 		out.moveFlags &= ~MOVEFLAG_SWIMMING;
 	}
+
 	// Output summary log
 	{
 		std::ostringstream oss;

@@ -189,6 +189,7 @@ public static partial class NavigationInterop
         public uint PhysicsFlags;
         public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint StepUpAge;          // frames since step-up detected
+        public uint GroundedWallState;  // internal selected-contact walkability state
     }
 
     public const uint PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -223,6 +224,7 @@ public static partial class NavigationInterop
         public float BlockedFraction;
         public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint StepUpAge;          // frames since step-up detected
+        public uint GroundedWallState;  // internal selected-contact walkability state
     }
 
     // ==========================================================================

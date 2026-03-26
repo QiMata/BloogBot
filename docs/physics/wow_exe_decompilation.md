@@ -559,6 +559,31 @@ CollisionStep (0x633840)
   - the remaining stateless mismatch is no longer the merged blocker selector or the horizontal epsilon nudge
   - the open work is the selected-plane `Z` correction and distance bookkeeping that still happens around `0x635C00` / `0x636100`
 
+### Selected-contact container (`0xC4E52C` / `0xC4E534` / `0xC4E544`)
+
+- Fresh local disassembly on 2026-03-26 adds one important structural constraint around the grounded helper chain:
+  - `0x6312C0` zero-initializes a small global container rooted at `0xC4E52C`
+  - that container carries separate child-array pointers at:
+    - `0xC4E534` = `0x34`-stride contact/plane records
+    - `0xC4E544` = `0x08`-stride paired selector payload
+  - both child arrays default to capacity `0x100`
+- `0x6367B0` consumes those globals as a selected-contact path, not a whole-query walk:
+  - it reads one chosen `0x34` record from `0xC4E534[index]`
+  - it also reads one paired `0x08` payload from `0xC4E544[index]`
+  - the following `0x6334A0` / `0x636100` work therefore runs on a selected entry, not on every contact in the merged query
+- `0x6351A0` is the only direct caller currently identified that returns the paired `0xC4E544[index]` payload:
+  - it first calls `0x632BA0`
+  - then gates the selected index through `0x633720`
+  - then checks the local candidate buffer with `0x635410` / `0x6353D0`
+  - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
+- `0x632700` adds one concrete filter detail for that selector chain:
+  - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
+  - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
+  - removing those thresholds alone did not fix the packet-backed Undercity frame-15 transport stall, which reinforces that the real blocker is the missing selected-contact state/path rather than the score guards by themselves
+- Practical implication for parity work:
+  - do not broadcast `CheckWalkable` over every merged-query contact as a replacement for the raw `walkable` bit
+  - the missing parity path is the binary-selected contact + grounded-wall-state feed into `0x6334A0`, not the helper body by itself
+
 ## Remote Unit Extrapolation (VA 0x616DE0)
 
 Used for OTHER players/NPCs (not local player). Predicts position between heartbeats:

@@ -264,6 +264,7 @@ namespace PathfindingService.Repository
         public uint physicsFlags;
         public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint stepUpAge;          // frames since step-up detected
+        public uint groundedWallState;  // internal selected-contact walkability state
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -309,5 +310,6 @@ namespace PathfindingService.Repository
         public float blockedFraction; // 0=fully blocked, 1=no block
         public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint stepUpAge;          // frames since step-up detected
+        public uint groundedWallState;  // internal selected-contact walkability state
     }
 }

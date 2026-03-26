@@ -33,6 +33,7 @@ public static class ReplayEngine
     {
         FallStartZ = InvalidHeight,
         StepUpBaseZ = InvalidHeight,
+        GroundedWallState = 0,
     };
 
     /// <summary>
@@ -384,6 +385,7 @@ public static class ReplayEngine
                     FrameCounter = (uint)i,
                     StepUpBaseZ = prevOutput.StepUpBaseZ,
                     StepUpAge = prevOutput.StepUpAge,
+                    GroundedWallState = prevOutput.GroundedWallState,
                 };
 
                 // Pin and set nearby objects

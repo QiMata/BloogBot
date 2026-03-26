@@ -893,3 +893,73 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not treat the helper alone as the missing fix for the packet-backed Undercity blocker; the unresolved piece is the binary-selected contact / `0xC4E544` state path that feeds it.
 - Recommended next single hypothesis:
   - Continue tracing the `0xC4E544` producer chain (`0x632BA0` / `0x633720` / `0x6351A0` / `0x635410` / `0x6353D0`) and map how the selected contact index plus grounded-wall state are chosen before `0x6334A0` runs.
+
+## 2026-03-26 Grounded blocker-threshold retry (reverted)
+
+- Scope note:
+  - This pass targeted one explicit non-binary-backed grounded heuristic in `CollisionStepWoW`: the blocker-candidate filters `opposeScore <= 0.15f` and dominant-axis `> 0.25f`.
+  - Fresh local disassembly around `0x632700` shows the client's candidate filter is effectively a near-zero opposing-dot test (`dot < -1e-5f`), so those custom thresholds are unsupported.
+- Behavioral change tried:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - removed the grounded blocker-candidate score and dominant-axis thresholds so any materially opposing contact could contribute to the existing axis merge path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"`
+    - failed unchanged: `frame 15`, simulated step `3.5793y`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - the only failure remained the same packet-backed Undercity transport replay; no new deterministic wall regression was uncovered in that slice
+- Frame-pattern note:
+  - Removing those thresholds did not move the failing transport stall at all. The same blocked window still holds through frame `14` and still breaks at frame `15`.
+  - Practical implication:
+    - the unsupported `0.15f` / `0.25f` filters are cleanup work, but they are not the missing selected-contact behavior that causes the packet-backed elevator escape.
+- Do Not Repeat:
+  - Do not spend another run on removing the blocker-candidate thresholds by themselves; the frame-15 transport miss is unchanged.
+  - Do not treat `0x632700`'s near-zero opposing-dot filter as sufficient to reconstruct the selected-contact path; the unresolved piece is still the binary candidate/selector chain feeding `0xC4E544`.
+
+## 2026-03-26 Grounded-wall state plumbing plus selected-contact walkability
+
+- Scope note:
+  - This pass targeted the reopened packet-backed Undercity upper-door blocker on the current baseline instead of packet cadence or live integration.
+  - The goal was to move one level closer to the binary-selected contact path feeding `0x6334A0` without broadcasting stateful walkability across the whole merged query.
+- Binary/evidence note:
+  - The fresh note in `docs/physics/wow_exe_decompilation.md` records the selected-contact container rooted at `0xC4E52C` with `0xC4E534` (`0x34` contacts) and `0xC4E544` (`0x08` paired selector payload).
+  - That evidence keeps the constraint explicit: `0x6367B0` consumes one selected entry plus one paired payload, so runtime `CheckWalkable` must stay on a chosen contact path rather than becoming a merged-query broadcast.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsBridge.h`, `Exports/Navigation/PhysicsEngine.h`, `Services/PathfindingService/Repository/Physics.cs`, `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`, and `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - now carry `groundedWallState` through native step/replay boundaries
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - now feeds `WoWCollision::CheckWalkable(...)` only from the selected primary contact in grounded wall resolution
+    - uses a `0x635C00`-shaped Z-only correction on the stateful selected-contact walkable path instead of turning that support face into a horizontal plane-slide vector
+    - sets `groundedWallState` after the non-walkable vertical branch and reuses that state in the later support-surface selection path
+    - reorients blocker normals against the current collision position before the opposing-dot test
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - replaced the ad hoc frame dumps with a deterministic frame-16 assertion that the merged query contains a statefully walkable horizontal contact which is non-opposing until oriented against the current collision position
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck" --logger "console;verbosity=minimal"`
+    - passed (`4/4`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`29/29`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The selected-contact walkable branch must remain Z-only. A plane-slide vector on that path reopens the frame-15/16 forward escape on the elevator doorway.
+  - The frame-16 merged query still contains raw `+X` side contacts that score as non-opposing until their normals are oriented against the current collision position. After that reorientation, the statefully walkable side face becomes a full opposing blocker and the blocked replay window stays green.
+- Do Not Repeat:
+  - Do not turn the stateful selected-contact walkable path back into a plane-slide vector; keep the local `0x635C00`-style Z-only shape unless new binary evidence disproves it.
+  - Do not broadcast stateful `CheckWalkable` over every merged-query contact.
+  - Do not describe the current-position reorientation as a named binary helper. It is an inference from the selected-contact semantics plus deterministic packet-backed evidence and should stay constrained by those fixtures.
+- Recommended next single hypothesis:
+  - Add a native transaction/export seam for the selected-contact producer path so deterministic tests can record the chosen index, paired selector payload, and post-selection branch result while tracing `0x6351A0` / `0x633720` / `0x635410` / `0x6353D0`.
