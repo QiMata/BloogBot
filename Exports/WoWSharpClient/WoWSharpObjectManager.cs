@@ -302,6 +302,17 @@ namespace WoWSharpClient
                     }
                 }
 
+                // 3b. Clear teleport flag once ground snap is complete.
+                // Previously _isBeingTeleported stayed true until the 500ms fallback timer,
+                // blocking MoveToward and physics for up to 500ms after landing. Now we clear
+                // it as soon as ground snap finishes, so the bot can immediately start moving.
+                // This matches FG behavior where WoW.exe resumes movement immediately after
+                // the teleport ACK + gravity settle.
+                if (_isBeingTeleported && _movementController != null && !_movementController.NeedsGroundSnap)
+                {
+                    _isBeingTeleported = false;
+                }
+
                 // 4. Bot AI callback
                 OnBotTick?.Invoke(deltaSec);
 
