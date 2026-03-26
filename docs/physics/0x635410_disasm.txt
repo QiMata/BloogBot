@@ -1,0 +1,30 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x635410
+Date: 2026-03-26
+Notes:
+- This is the local selector-buffer z-match gate on the direct-return `0x6351A0` path.
+- It scans a `0x10`-stride local candidate buffer, starting at `ecx + 8`, and returns success when any candidate's third float matches `0x80E014 = -0.4756366014f` within `0x8026BC`.
+
+0x00635410: push     esi
+0x00635411: xor      esi, esi
+0x00635413: test     edx, edx
+0x00635415: jbe      0x63543f
+0x00635417: add      ecx, 8
+0x0063541A: lea      ebx, [ebx]
+0x00635420: fld      dword ptr [ecx]
+0x00635422: fsub     dword ptr [0x80e014]
+0x00635428: fabs
+0x0063542A: fcomp    dword ptr [0x8026bc]
+0x00635430: fnstsw   ax
+0x00635432: test     ah, 5
+0x00635435: jnp      0x635443
+0x00635437: inc      esi
+0x00635438: add      ecx, 0x10
+0x0063543B: cmp      esi, edx
+0x0063543D: jb       0x635420
+0x0063543F: xor      eax, eax
+0x00635441: pop      esi
+0x00635442: ret
+0x00635443: mov      eax, 1
+0x00635448: pop      esi
+0x00635449: ret

@@ -588,6 +588,11 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that exact overwrite/append/swap body through pure `EvaluateSelectorTriangleSourceRanking(...)` plus a deterministic export/test seam
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
+    - fresh raw captures now also live in `docs/physics/0x635410_disasm.txt` and `docs/physics/0x6353D0_disasm.txt`
+    - both are tiny `0x10`-stride scans over the same local candidate buffer starting at `buffer + 8`, which means they compare the candidate plane's `normal.z`, not any world-height field
+    - `0x635410` returns success when any candidate `normal.z` matches `0x80E014 = -0.4756366014f` within `0x8026BC`
+    - `0x6353D0` returns success when any candidate `normal.z` matches `0x7FF9D8 = 1.0f` within `0x8026BC`
+    - the production DLL now mirrors those exact post-selector gates through pure `HasSelectorCandidateWithNegativeDiagonalZ(...)` and `HasSelectorCandidateWithUnitZ(...)` helpers plus deterministic export/test seams
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
   - fresh 2026-03-26 full-window disassembly adds the branch shape:
     - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly and marks the state out-param

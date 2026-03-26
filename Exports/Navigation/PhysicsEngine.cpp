@@ -126,6 +126,7 @@ namespace
     constexpr float WOW_PLANE_BUILD_EPSILON = 9.54e-7f;                      // 0x8026BC
     constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_X = 0.8796418905258179f;   // 0x80DFE4
     constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_Z = 0.4756366014480591f;   // 0x80DFE0
+    constexpr float WOW_SELECTOR_SUPPORT_NEGATIVE_DIAGONAL_Z = -0.4756366014480591f; // 0x80E014
     constexpr float WOW_SELECTOR_CLIP_NEGATIVE_EPSILON = -0.0013888889225199819f; // 0x80DFF0
     constexpr float WOW_SELECTOR_RATIO_EPSILON = 2.384185791015625e-7f;      // 0x8029D4
     constexpr float WOW_SELECTOR_LOOSE_RATIO_THRESHOLD = -9.5367431640625e-07f; // 0x80DFF4
@@ -655,6 +656,37 @@ bool WoWCollision::BuildSelectorCandidateQuadPlaneRecord(const std::array<G3D::V
     outPlanes[4].normal = sourcePlane.normal;
     outPlanes[4].planeDistance = -sourcePlane.normal.dot(points[selectorIndices[0]] + translation);
     return true;
+}
+
+bool WoWCollision::HasSelectorCandidateWithUnitZ(const SelectorSupportPlane* candidates, uint32_t candidateCount)
+{
+    if (candidates == nullptr && candidateCount != 0u) {
+        return false;
+    }
+
+    for (uint32_t candidateIndex = 0; candidateIndex < candidateCount; ++candidateIndex) {
+        if (std::fabs(candidates[candidateIndex].normal.z - 1.0f) <= WOW_PLANE_BUILD_EPSILON) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSupportPlane* candidates,
+                                                             uint32_t candidateCount)
+{
+    if (candidates == nullptr && candidateCount != 0u) {
+        return false;
+    }
+
+    for (uint32_t candidateIndex = 0; candidateIndex < candidateCount; ++candidateIndex) {
+        if (std::fabs(candidates[candidateIndex].normal.z - WOW_SELECTOR_SUPPORT_NEGATIVE_DIAGONAL_Z) <= WOW_PLANE_BUILD_EPSILON) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool WoWCollision::EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,

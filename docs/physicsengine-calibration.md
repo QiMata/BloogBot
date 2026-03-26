@@ -1461,3 +1461,39 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not treat the new seam as the full `0x632BA0` mirror. The early zero-distance success path and the `0x632A30` / `0x631E70` gating logic are still unresolved and must stay explicit until separately pinned from the binary.
 - Recommended next single hypothesis:
   - Mirror the tiny `0x635410` height-match helper next, then return to the unresolved `0x632A30` / `0x631E70` setup gates so the full `0x632BA0 -> 0x6351A0` producer chain can be assembled without guesswork.
+
+## 2026-03-26 Selector post-gate z-match addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the tiny post-selector gates that `0x6351A0` uses after `0x633720`: `0x635410` on the direct-return path and `0x6353D0` on the alternate path.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x635410_disasm.txt` and `docs/physics/0x6353D0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the selected-contact note now records that both helpers scan the same local `0x10`-stride candidate buffer at `buffer + 8`, which means they compare `normal.z`, not world height
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `HasSelectorCandidateWithNegativeDiagonalZ(...)`
+    - added pure `HasSelectorCandidateWithUnitZ(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `HasWoWSelectorCandidateWithNegativeDiagonalZ(...)`
+    - added `HasWoWSelectorCandidateWithUnitZ(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new post-selector z-match seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidateZMatchTests.cs`
+    - added deterministic coverage for the `0x635410` negative-diagonal match, the `0x6353D0` unit-Z match, the binary epsilon window, and the bounded-candidate-count path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - passed (`31/31`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selected-contact producer chain is now pinned one step deeper on the `0x6351A0` side: after the already-mirrored selector builders/evaluators/rankers and the already-documented `0x633720` gate, both tiny local candidate-buffer tests are now explicit binary seams.
+  - The remaining unknown is no longer those post-selector z-match scans; it is the unresolved `0x632A30` / `0x631E70` setup side of `0x632BA0` and the broader `0x6351A0` transaction around the selected index and paired `0xC4E544` payload.
+- Do Not Repeat:
+  - Do not refer to `0x635410` as a height-match helper again. The binary is explicit that it reads the third float from the local candidate plane record, so this is a `normal.z` match gate, not a world-height check.
+- Recommended next single hypothesis:
+  - Disassemble and mirror the unresolved `0x631E70` and `0x632A30` setup gates next so the full `0x632BA0` producer path can be assembled before wiring a wider `0x6351A0` transaction seam.

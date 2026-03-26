@@ -904,6 +904,44 @@ extern "C"
         return result.wouldUseDirectPair;
     }
 
+    __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
+        const ExportSelectorSupportPlane* candidates,
+        int candidateCount)
+    {
+        if ((!candidates && candidateCount != 0) || candidateCount < 0 || candidateCount > 5) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 5> candidateBuffer{};
+        for (int i = 0; i < candidateCount; ++i) {
+            candidateBuffer[static_cast<size_t>(i)].normal = candidates[i].normal;
+            candidateBuffer[static_cast<size_t>(i)].planeDistance = candidates[i].planeDistance;
+        }
+
+        return WoWCollision::HasSelectorCandidateWithUnitZ(
+            candidateBuffer.data(),
+            static_cast<uint32_t>(candidateCount));
+    }
+
+    __declspec(dllexport) bool HasWoWSelectorCandidateWithNegativeDiagonalZ(
+        const ExportSelectorSupportPlane* candidates,
+        int candidateCount)
+    {
+        if ((!candidates && candidateCount != 0) || candidateCount < 0 || candidateCount > 5) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 5> candidateBuffer{};
+        for (int i = 0; i < candidateCount; ++i) {
+            candidateBuffer[static_cast<size_t>(i)].normal = candidates[i].normal;
+            candidateBuffer[static_cast<size_t>(i)].planeDistance = candidates[i].planeDistance;
+        }
+
+        return WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(
+            candidateBuffer.data(),
+            static_cast<uint32_t>(candidateCount));
+    }
+
     __declspec(dllexport) int BuildWoWSelectorSupportPlanes(
         const G3D::Vector3* position,
         float verticalOffset,

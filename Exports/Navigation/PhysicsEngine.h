@@ -747,6 +747,12 @@ namespace WoWCollision
                                                const SelectorSupportPlane& sourcePlane,
                                                std::array<SelectorSupportPlane, 5>& outPlanes);
 
+    bool HasSelectorCandidateWithUnitZ(const SelectorSupportPlane* candidates,
+                                       uint32_t candidateCount);
+
+    bool HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSupportPlane* candidates,
+                                                   uint32_t candidateCount);
+
     bool EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
                                             uint32_t recordCount,
                                             const G3D::Vector3& testPoint,

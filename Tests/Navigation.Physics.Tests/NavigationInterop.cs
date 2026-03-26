@@ -628,6 +628,18 @@ public static partial class NavigationInterop
         [Out] SelectorSupportPlane[] outPlanes,
         int maxPlanes);
 
+    [DllImport(NavigationDll, EntryPoint = "HasWoWSelectorCandidateWithUnitZ", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool HasWoWSelectorCandidateWithUnitZ(
+        [In] SelectorSupportPlane[] candidates,
+        int candidateCount);
+
+    [DllImport(NavigationDll, EntryPoint = "HasWoWSelectorCandidateWithNegativeDiagonalZ", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool HasWoWSelectorCandidateWithNegativeDiagonalZ(
+        [In] SelectorSupportPlane[] candidates,
+        int candidateCount);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorNeighborhood", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool BuildWoWSelectorNeighborhood(
