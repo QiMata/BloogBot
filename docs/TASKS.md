@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 210)
+- **Last updated:** 2026-03-26 (session 211)
 - **Branch:** `main`
+- **Session 211 — cached query-bounds containment gate is now pinned as a pure binary seam:**
+  - Added pure [IsPointInsideAabbInclusive(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowAabbContainmentTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowAabbContainmentTests.cs), which now pins the inclusive min/max behavior on both bounds and the below-min / above-max rejection paths from `0x637350`.
+  - Practical implication: the remaining native gap inside the unresolved `0x631E70` / `0x632A30` setup side is no longer the cached-query AABB reuse gate. The open work is the larger query-builder / selector-wrapper transaction around that gate.
+- **Fresh binary evidence (session 211):**
+  - Added raw capture [0x637350_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x637350_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) to record that `0x631E70` uses `0x637350` to decide whether the cached bounds at `0xC4E5A0` already contain both current and projected points before rebuilding the merged query.
+- **Test baseline (session 211):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - Passed (`34/34`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 210 — post-selector z-match gates are now pinned as pure binary seams:**
   - Added pure [HasSelectorCandidateWithNegativeDiagonalZ(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [HasSelectorCandidateWithUnitZ(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorCandidateZMatchTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidateZMatchTests.cs), which now pins the direct-return `0x635410` negative-diagonal match, the alternate-path `0x6353D0` unit-Z match, the binary epsilon window, and the bounded-candidate-count behavior.

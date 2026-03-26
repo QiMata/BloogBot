@@ -268,6 +268,21 @@ WoWCollision::SelectedContactThresholdGateResult WoWCollision::EvaluateSelectedC
     return result;
 }
 
+bool WoWCollision::IsPointInsideAabbInclusive(const G3D::Vector3& boundsMin,
+                                              const G3D::Vector3& boundsMax,
+                                              const G3D::Vector3& point)
+{
+    if (point.x < boundsMin.x || point.y < boundsMin.y || point.z < boundsMin.z) {
+        return false;
+    }
+
+    if (point.x > boundsMax.x || point.y > boundsMax.y || point.z > boundsMax.z) {
+        return false;
+    }
+
+    return true;
+}
+
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                               float verticalOffset,
                                               float horizontalRadius,

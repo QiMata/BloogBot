@@ -1497,3 +1497,37 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not refer to `0x635410` as a height-match helper again. The binary is explicit that it reads the third float from the local candidate plane record, so this is a `normal.z` match gate, not a world-height check.
 - Recommended next single hypothesis:
   - Disassemble and mirror the unresolved `0x631E70` and `0x632A30` setup gates next so the full `0x632BA0` producer path can be assembled before wiring a wider `0x6351A0` transaction seam.
+
+## 2026-03-26 Cached query-bounds gate addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the first explicit cache-hit gate inside the newly reviewed `0x631E70` path: the inclusive point-vs-AABB test at `0x637350`.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x637350_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that it uses `0x637350` against the cached bounds at `0xC4E5A0` before rebuilding the merged query
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `IsPointInsideAabbInclusive(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWPointInsideAabbInclusive(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new bounds-containment seam
+  - `Tests/Navigation.Physics.Tests/WowAabbContainmentTests.cs`
+    - added deterministic coverage for inclusive min/max acceptance plus below-min / above-max rejection
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - passed (`34/34`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is now slightly narrower: before touching the expensive merged-query rebuild, the binary first checks whether both current and projected points are already inside the cached query AABB.
+  - The remaining unknown is no longer that inclusive bounds check; it is the rest of the `0x631E70` query-builder body and the `0x632A30` wrapper that decides when to invoke it.
+- Do Not Repeat:
+  - Do not collapse this helper into a strict `< max` test or an epsilon-grown bounds check. The binary compares `point >= min` and `point <= max` directly on all three axes.
+- Recommended next single hypothesis:
+  - Capture and mirror the smallest self-contained branch of `0x632A30` next, using the now-pinned `0x637350` cache-hit gate as part of the setup path instead of re-inferring it.

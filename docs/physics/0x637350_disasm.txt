@@ -1,0 +1,47 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x637350
+Date: 2026-03-26
+Notes:
+- This is the inclusive point-vs-AABB containment helper used by `0x631E70`.
+- `ecx` points at six floats laid out as `minX,minY,minZ,maxX,maxY,maxZ`; the stack argument is the point.
+- It returns `1` only when `min <= point <= max` on all three axes.
+
+0x00637350: push     ebp
+0x00637351: mov      ebp, esp
+0x00637353: mov      edx, dword ptr [ebp + 8]
+0x00637356: fld      dword ptr [edx]
+0x00637358: fcomp    dword ptr [ecx]
+0x0063735A: fnstsw   ax
+0x0063735C: test     ah, 1
+0x0063735F: jne      0x6373aa
+0x00637361: fld      dword ptr [edx + 4]
+0x00637364: fcomp    dword ptr [ecx + 4]
+0x00637367: fnstsw   ax
+0x00637369: test     ah, 1
+0x0063736C: jne      0x6373aa
+0x0063736E: fld      dword ptr [edx + 8]
+0x00637371: fcomp    dword ptr [ecx + 8]
+0x00637374: fnstsw   ax
+0x00637376: test     ah, 1
+0x00637379: jne      0x6373aa
+0x0063737B: fld      dword ptr [edx]
+0x0063737D: fcomp    dword ptr [ecx + 0xc]
+0x00637380: fnstsw   ax
+0x00637382: test     ah, 0x41
+0x00637385: jp       0x6373aa
+0x00637387: fld      dword ptr [edx + 4]
+0x0063738A: fcomp    dword ptr [ecx + 0x10]
+0x0063738D: fnstsw   ax
+0x0063738F: test     ah, 0x41
+0x00637392: jp       0x6373aa
+0x00637394: fld      dword ptr [edx + 8]
+0x00637397: fcomp    dword ptr [ecx + 0x14]
+0x0063739A: fnstsw   ax
+0x0063739C: test     ah, 0x41
+0x0063739F: jp       0x6373aa
+0x006373A1: mov      eax, 1
+0x006373A6: pop      ebp
+0x006373A7: ret      4
+0x006373AA: xor      eax, eax
+0x006373AC: pop      ebp
+0x006373AD: ret      4

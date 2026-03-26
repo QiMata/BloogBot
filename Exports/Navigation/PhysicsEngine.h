@@ -701,6 +701,10 @@ namespace WoWCollision
                                                                            const G3D::Vector3& projectedPosition,
                                                                            bool useStandardWalkableThreshold);
 
+    bool IsPointInsideAabbInclusive(const G3D::Vector3& boundsMin,
+                                    const G3D::Vector3& boundsMax,
+                                    const G3D::Vector3& point);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

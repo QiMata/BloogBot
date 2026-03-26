@@ -904,6 +904,18 @@ extern "C"
         return result.wouldUseDirectPair;
     }
 
+    __declspec(dllexport) bool EvaluateWoWPointInsideAabbInclusive(
+        const G3D::Vector3* boundsMin,
+        const G3D::Vector3* boundsMax,
+        const G3D::Vector3* point)
+    {
+        if (!boundsMin || !boundsMax || !point) {
+            return false;
+        }
+
+        return WoWCollision::IsPointInsideAabbInclusive(*boundsMin, *boundsMax, *point);
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

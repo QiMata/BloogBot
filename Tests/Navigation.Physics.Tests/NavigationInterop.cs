@@ -620,6 +620,13 @@ public static partial class NavigationInterop
         [MarshalAs(UnmanagedType.I1)] out bool thresholdSensitive,
         out float normalZ);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWPointInsideAabbInclusive", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWPointInsideAabbInclusive(
+        in Vector3 boundsMin,
+        in Vector3 boundsMax,
+        in Vector3 point);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
         in Vector3 position,
