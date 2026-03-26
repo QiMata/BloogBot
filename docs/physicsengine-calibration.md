@@ -1324,3 +1324,39 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not infer the `0x632460` record layout from generic extrusion logic or from reordered selector corners. The binary now fixes the cyclic selector order, the opposite-point flip test, and the translated source-plane anchor.
 - Recommended next single hypothesis:
   - Mirror the `0x632700` single-record evaluator on top of the now-pinned `0x632460` output so deterministic tests can explain one candidate's filter, strip clipping, and selected-ratio result before `0x632280` performs tie ranking.
+
+## 2026-03-26 Selector record-evaluator addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next caller-side selector body itself: the `0x631870` plane-prefix clip helper plus the `0x632700` record-set evaluator that sits between the record builders and the already-mirrored `0x632830` validator.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x631870_disasm.txt` and `docs/physics/0x632700_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the exact `0x34` record layout, the local strip seeding path, the prefix clip loop, and the final best-ratio/index update rule
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `ClipSelectorPointStripAgainstPlanePrefix(...)`
+    - added pure `EvaluateSelectorCandidateRecordSet(...)`
+    - added `SelectorCandidateRecord` and `SelectorRecordEvaluationTrace`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `ClipWoWSelectorPointStripAgainstPlanePrefix(...)`
+    - added `EvaluateWoWSelectorCandidateRecordSet(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector evaluator seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidateRecordSetTests.cs`
+    - added deterministic coverage for the plane-prefix early-fail path, the dot-reject path, the clip-reject path, and the lowest-ratio record selection path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests" --logger "console;verbosity=minimal"`
+    - passed (`15/15`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector chain is now pinned through the first caller-side evaluator: exact support planes, exact neighborhood/table, exact plane record, exact prefix clip, exact validator, and now the exact record-set walk that updates the chosen ratio/index. The remaining unknown is no longer how one record is evaluated; it is how `0x632F80` / `0x632280` build and rank the multi-record buffers that feed this helper.
+- Do Not Repeat:
+  - Do not reintroduce inferred record scoring or guessed strip seeding here. The binary now fixes the dot filter threshold, the `-1` source-id seed, the prefix clip order, and the final caller-best update rule.
+- Recommended next single hypothesis:
+  - Mirror the `0x632F80` five-record builder on top of the now-pinned selector neighborhood and candidate directions so deterministic tests can feed real binary-shaped record arrays into the now-pinned `0x632700` evaluator.

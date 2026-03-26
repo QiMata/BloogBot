@@ -153,6 +153,31 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorCandidateRecord
+    {
+        public SelectorSupportPlane FilterPlane;
+        public Vector3 Point0;
+        public Vector3 Point1;
+        public Vector3 Point2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorRecordEvaluationTrace
+    {
+        public float InputBestRatio;
+        public float OutputBestRatio;
+        public float SelectedBestRatio;
+        public uint RecordCount;
+        public uint DotRejectedCount;
+        public uint ClipRejectedCount;
+        public uint ValidationRejectedCount;
+        public uint ValidationAcceptedCount;
+        public uint UpdatedBestRatio;
+        public uint SelectedRecordIndex;
+        public uint SelectedStripCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -593,6 +618,16 @@ public static partial class NavigationInterop
         int maxCapacity,
         ref int ioCount);
 
+    [DllImport(NavigationDll, EntryPoint = "ClipWoWSelectorPointStripAgainstPlanePrefix", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ClipWoWSelectorPointStripAgainstPlanePrefix(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        [In, Out] Vector3[] ioPoints,
+        [In, Out] uint[] ioSourceIndices,
+        int maxCapacity,
+        ref int ioCount);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorCandidateValidation", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool EvaluateWoWSelectorCandidateValidation(
@@ -606,6 +641,21 @@ public static partial class NavigationInterop
         ref int ioCount,
         ref float inOutBestRatio,
         out SelectorCandidateValidationTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorCandidateRecordSet", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorCandidateRecordSet(
+        [In] SelectorCandidateRecord[] records,
+        int recordCount,
+        in Vector3 testPoint,
+        [In] SelectorSupportPlane[] clipPlanes,
+        int clipPlaneCount,
+        [In] SelectorSupportPlane[] validationPlanes,
+        int validationPlaneCount,
+        int validationPlaneIndex,
+        ref float inOutBestRatio,
+        ref int inOutBestRecordIndex,
+        out SelectorRecordEvaluationTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorCandidatePlaneRecord", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

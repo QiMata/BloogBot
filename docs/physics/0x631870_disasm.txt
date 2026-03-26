@@ -1,0 +1,45 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x631870
+Date: 2026-03-26
+Notes:
+- Prefix clip helper used by `0x632700`.
+- Iterates planes `0..count-1`, calls `0x6318C0` for each plane, and returns `0` as soon as the strip count becomes zero.
+
+0x00631870: push     ebp
+0x00631871: mov      ebp, esp
+0x00631873: push     ecx
+0x00631874: push     ebx
+0x00631875: push     esi
+0x00631876: xor      esi, esi
+0x00631878: test     edx, edx
+0x0063187A: push     edi
+0x0063187B: mov      dword ptr [ebp - 4], edx
+0x0063187E: jbe      0x6318a4
+0x00631880: mov      ebx, dword ptr [ebp + 8]
+0x00631883: mov      edi, ecx
+0x00631885: push     esi
+0x00631886: mov      edx, ebx
+0x00631888: mov      ecx, edi
+0x0063188A: call     0x6318c0
+0x0063188F: mov      eax, dword ptr [ebx + 0xf0]
+0x00631895: test     eax, eax
+0x00631897: je       0x6318b2
+0x00631899: mov      eax, dword ptr [ebp - 4]
+0x0063189C: inc      esi
+0x0063189D: add      edi, 0x10
+0x006318A0: cmp      esi, eax
+0x006318A2: jb       0x631885
+0x006318A4: pop      edi
+0x006318A5: pop      esi
+0x006318A6: mov      eax, 1
+0x006318AB: pop      ebx
+0x006318AC: mov      esp, ebp
+0x006318AE: pop      ebp
+0x006318AF: ret      4
+0x006318B2: pop      edi
+0x006318B3: pop      esi
+0x006318B4: xor      eax, eax
+0x006318B6: pop      ebx
+0x006318B7: mov      esp, ebp
+0x006318B9: pop      ebp
+0x006318BA: ret      4

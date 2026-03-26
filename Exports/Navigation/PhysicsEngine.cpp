@@ -130,6 +130,7 @@ namespace
     constexpr float WOW_SELECTOR_RATIO_EPSILON = 2.384185791015625e-7f;      // 0x8029D4
     constexpr float WOW_SELECTOR_LOOSE_RATIO_THRESHOLD = -9.5367431640625e-07f; // 0x80DFF4
     constexpr float WOW_SELECTOR_STRICT_RATIO_THRESHOLD = -0.02777777798473835f; // 0x7FF9C8
+    constexpr float WOW_SELECTOR_RECORD_FILTER_THRESHOLD = -9.999999747378752e-06f; // 0x80C5C4
 
     inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
     {
@@ -429,6 +430,24 @@ void WoWCollision::ClipSelectorPointStripAgainstPlane(const SelectorSupportPlane
     }
 }
 
+bool WoWCollision::ClipSelectorPointStripAgainstPlanePrefix(const SelectorSupportPlane* planes,
+                                                            uint32_t planeCount,
+                                                            SelectorPointStrip& ioStrip)
+{
+    if (planes == nullptr && planeCount != 0u) {
+        return false;
+    }
+
+    for (uint32_t planeIndex = 0; planeIndex < planeCount; ++planeIndex) {
+        ClipSelectorPointStripAgainstPlane(planes[planeIndex], planeIndex, ioStrip);
+        if (ioStrip.count == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool WoWCollision::ClipSelectorPointStripExcludingPlane(const std::array<SelectorSupportPlane, 9>& planes,
                                                         uint32_t excludedPlaneIndex,
                                                         SelectorPointStrip& ioStrip)
@@ -587,6 +606,86 @@ bool WoWCollision::BuildSelectorCandidatePlaneRecord(const std::array<G3D::Vecto
     outPlanes[3].normal = sourcePlane.normal;
     outPlanes[3].planeDistance = -sourcePlane.normal.dot(points[selectorIndices[0]] + translation);
     return true;
+}
+
+bool WoWCollision::EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
+                                                      uint32_t recordCount,
+                                                      const G3D::Vector3& testPoint,
+                                                      const SelectorSupportPlane* clipPlanes,
+                                                      uint32_t clipPlaneCount,
+                                                      const std::array<SelectorSupportPlane, 9>& validationPlanes,
+                                                      uint32_t validationPlaneIndex,
+                                                      float& inOutBestRatio,
+                                                      uint32_t& outBestRecordIndex,
+                                                      SelectorRecordEvaluationTrace* outTrace)
+{
+    SelectorRecordEvaluationTrace trace{};
+    trace.inputBestRatio = inOutBestRatio;
+    trace.outputBestRatio = inOutBestRatio;
+    trace.recordCount = recordCount;
+    trace.selectedRecordIndex = outBestRecordIndex;
+
+    if ((records == nullptr && recordCount != 0u) ||
+        (clipPlanes == nullptr && clipPlaneCount != 0u) ||
+        validationPlaneIndex >= validationPlanes.size()) {
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    bool updatedBestRatio = false;
+
+    for (uint32_t recordIndex = 0; recordIndex < recordCount; ++recordIndex) {
+        const SelectorCandidateRecord& record = records[recordIndex];
+        const float filterDot = record.filterPlane.normal.dot(testPoint);
+        if (filterDot >= WOW_SELECTOR_RECORD_FILTER_THRESHOLD) {
+            trace.dotRejectedCount++;
+            continue;
+        }
+
+        SelectorPointStrip strip{};
+        strip.count = 3;
+        for (uint32_t pointIndex = 0; pointIndex < strip.count; ++pointIndex) {
+            strip.points[pointIndex] = record.points[pointIndex];
+            strip.sourceIndices[pointIndex] = 0xFFFFFFFFu;
+        }
+
+        if (!ClipSelectorPointStripAgainstPlanePrefix(clipPlanes, clipPlaneCount, strip)) {
+            trace.clipRejectedCount++;
+            continue;
+        }
+
+        float candidateBestRatio = std::numeric_limits<float>::max();
+        if (!ValidateSelectorPointStripCandidate(
+                strip,
+                testPoint,
+                validationPlanes,
+                validationPlaneIndex,
+                candidateBestRatio)) {
+            trace.validationRejectedCount++;
+            continue;
+        }
+
+        trace.validationAcceptedCount++;
+
+        if (candidateBestRatio <= inOutBestRatio) {
+            inOutBestRatio = candidateBestRatio;
+            outBestRecordIndex = recordIndex;
+            updatedBestRatio = true;
+            trace.updatedBestRatio = 1;
+            trace.selectedRecordIndex = recordIndex;
+            trace.selectedBestRatio = candidateBestRatio;
+            trace.selectedStripCount = strip.count;
+        }
+    }
+
+    trace.outputBestRatio = inOutBestRatio;
+    if (outTrace) {
+        *outTrace = trace;
+    }
+
+    return updatedBestRatio;
 }
 
 namespace

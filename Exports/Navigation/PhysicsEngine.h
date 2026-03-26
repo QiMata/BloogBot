@@ -582,6 +582,27 @@ namespace WoWCollision
         uint32_t finalStripCount = 0;
     };
 
+    struct SelectorCandidateRecord
+    {
+        SelectorSupportPlane filterPlane{};
+        std::array<G3D::Vector3, 3> points{};
+    };
+
+    struct SelectorRecordEvaluationTrace
+    {
+        float inputBestRatio = 0.0f;
+        float outputBestRatio = 0.0f;
+        float selectedBestRatio = 0.0f;
+        uint32_t recordCount = 0;
+        uint32_t dotRejectedCount = 0;
+        uint32_t clipRejectedCount = 0;
+        uint32_t validationRejectedCount = 0;
+        uint32_t validationAcceptedCount = 0;
+        uint32_t updatedBestRatio = 0;
+        uint32_t selectedRecordIndex = 0xFFFFFFFFu;
+        uint32_t selectedStripCount = 0;
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -664,6 +685,10 @@ namespace WoWCollision
                                             uint32_t clipPlaneIndex,
                                             SelectorPointStrip& ioStrip);
 
+    bool ClipSelectorPointStripAgainstPlanePrefix(const SelectorSupportPlane* planes,
+                                                  uint32_t planeCount,
+                                                  SelectorPointStrip& ioStrip);
+
     bool ClipSelectorPointStripExcludingPlane(const std::array<SelectorSupportPlane, 9>& planes,
                                               uint32_t excludedPlaneIndex,
                                               SelectorPointStrip& ioStrip);
@@ -680,6 +705,17 @@ namespace WoWCollision
                                            const G3D::Vector3& translation,
                                            const SelectorSupportPlane& sourcePlane,
                                            std::array<SelectorSupportPlane, 4>& outPlanes);
+
+    bool EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
+                                            uint32_t recordCount,
+                                            const G3D::Vector3& testPoint,
+                                            const SelectorSupportPlane* clipPlanes,
+                                            uint32_t clipPlaneCount,
+                                            const std::array<SelectorSupportPlane, 9>& validationPlanes,
+                                            uint32_t validationPlaneIndex,
+                                            float& inOutBestRatio,
+                                            uint32_t& outBestRecordIndex,
+                                            SelectorRecordEvaluationTrace* outTrace = nullptr);
 
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,

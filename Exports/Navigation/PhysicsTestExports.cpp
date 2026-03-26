@@ -69,6 +69,29 @@ struct ExportSelectorCandidateValidationTrace
     uint32_t finalStripCount;
 };
 
+struct ExportSelectorCandidateRecord
+{
+    ExportSelectorSupportPlane filterPlane;
+    G3D::Vector3 point0;
+    G3D::Vector3 point1;
+    G3D::Vector3 point2;
+};
+
+struct ExportSelectorRecordEvaluationTrace
+{
+    float inputBestRatio;
+    float outputBestRatio;
+    float selectedBestRatio;
+    uint32_t recordCount;
+    uint32_t dotRejectedCount;
+    uint32_t clipRejectedCount;
+    uint32_t validationRejectedCount;
+    uint32_t validationAcceptedCount;
+    uint32_t updatedBestRatio;
+    uint32_t selectedRecordIndex;
+    uint32_t selectedStripCount;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -946,6 +969,50 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool ClipWoWSelectorPointStripAgainstPlanePrefix(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        G3D::Vector3* ioPoints,
+        uint32_t* ioSourceIndices,
+        int maxCapacity,
+        int* ioCount)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || planeCount > 9 ||
+            !ioPoints || !ioSourceIndices || !ioCount || maxCapacity < 15) {
+            return false;
+        }
+
+        if (*ioCount < 0 || *ioCount > 15) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> selectorPlanes{};
+        for (int i = 0; i < planeCount; ++i) {
+            selectorPlanes[static_cast<size_t>(i)].normal = planes[i].normal;
+            selectorPlanes[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        WoWCollision::SelectorPointStrip strip{};
+        strip.count = static_cast<uint32_t>(*ioCount);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            strip.points[i] = ioPoints[i];
+            strip.sourceIndices[i] = ioSourceIndices[i];
+        }
+
+        const bool result = WoWCollision::ClipSelectorPointStripAgainstPlanePrefix(
+            selectorPlanes.data(),
+            static_cast<uint32_t>(planeCount),
+            strip);
+
+        *ioCount = static_cast<int>(strip.count);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            ioPoints[i] = strip.points[i];
+            ioSourceIndices[i] = strip.sourceIndices[i];
+        }
+
+        return result;
+    }
+
     __declspec(dllexport) bool EvaluateWoWSelectorCandidateValidation(
         const ExportSelectorSupportPlane* planes,
         int planeCount,
@@ -1016,6 +1083,87 @@ extern "C"
             outTrace->secondPassAllBelowStrictThreshold = trace.secondPassAllBelowStrictThreshold;
             outTrace->improvedBestRatio = trace.improvedBestRatio;
             outTrace->finalStripCount = trace.finalStripCount;
+        }
+
+        return result;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorCandidateRecordSet(
+        const ExportSelectorCandidateRecord* records,
+        int recordCount,
+        const G3D::Vector3* testPoint,
+        const ExportSelectorSupportPlane* clipPlanes,
+        int clipPlaneCount,
+        const ExportSelectorSupportPlane* validationPlanes,
+        int validationPlaneCount,
+        int validationPlaneIndex,
+        float* inOutBestRatio,
+        int* inOutBestRecordIndex,
+        ExportSelectorRecordEvaluationTrace* outTrace)
+    {
+        if ((!records && recordCount != 0) || recordCount < 0 || recordCount > 5 ||
+            !testPoint ||
+            (!clipPlanes && clipPlaneCount != 0) || clipPlaneCount < 0 || clipPlaneCount > 9 ||
+            !validationPlanes || validationPlaneCount < 9 ||
+            validationPlaneIndex < 0 || validationPlaneIndex >= 9 ||
+            !inOutBestRatio || !inOutBestRecordIndex) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorCandidateRecord, 5> recordBuffer{};
+        for (int i = 0; i < recordCount; ++i) {
+            recordBuffer[static_cast<size_t>(i)].filterPlane.normal = records[i].filterPlane.normal;
+            recordBuffer[static_cast<size_t>(i)].filterPlane.planeDistance = records[i].filterPlane.planeDistance;
+            recordBuffer[static_cast<size_t>(i)].points[0] = records[i].point0;
+            recordBuffer[static_cast<size_t>(i)].points[1] = records[i].point1;
+            recordBuffer[static_cast<size_t>(i)].points[2] = records[i].point2;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> clipPlaneBuffer{};
+        for (int i = 0; i < clipPlaneCount; ++i) {
+            clipPlaneBuffer[static_cast<size_t>(i)].normal = clipPlanes[i].normal;
+            clipPlaneBuffer[static_cast<size_t>(i)].planeDistance = clipPlanes[i].planeDistance;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> validationPlaneBuffer{};
+        for (int i = 0; i < 9; ++i) {
+            validationPlaneBuffer[static_cast<size_t>(i)].normal = validationPlanes[i].normal;
+            validationPlaneBuffer[static_cast<size_t>(i)].planeDistance = validationPlanes[i].planeDistance;
+        }
+
+        uint32_t bestRecordIndex = (*inOutBestRecordIndex >= 0)
+            ? static_cast<uint32_t>(*inOutBestRecordIndex)
+            : 0xFFFFFFFFu;
+
+        WoWCollision::SelectorRecordEvaluationTrace trace{};
+        const bool result = WoWCollision::EvaluateSelectorCandidateRecordSet(
+            recordBuffer.data(),
+            static_cast<uint32_t>(recordCount),
+            *testPoint,
+            clipPlaneBuffer.data(),
+            static_cast<uint32_t>(clipPlaneCount),
+            validationPlaneBuffer,
+            static_cast<uint32_t>(validationPlaneIndex),
+            *inOutBestRatio,
+            bestRecordIndex,
+            &trace);
+
+        *inOutBestRecordIndex = (bestRecordIndex == 0xFFFFFFFFu)
+            ? -1
+            : static_cast<int>(bestRecordIndex);
+
+        if (outTrace) {
+            outTrace->inputBestRatio = trace.inputBestRatio;
+            outTrace->outputBestRatio = trace.outputBestRatio;
+            outTrace->selectedBestRatio = trace.selectedBestRatio;
+            outTrace->recordCount = trace.recordCount;
+            outTrace->dotRejectedCount = trace.dotRejectedCount;
+            outTrace->clipRejectedCount = trace.clipRejectedCount;
+            outTrace->validationRejectedCount = trace.validationRejectedCount;
+            outTrace->validationAcceptedCount = trace.validationAcceptedCount;
+            outTrace->updatedBestRatio = trace.updatedBestRatio;
+            outTrace->selectedRecordIndex = trace.selectedRecordIndex;
+            outTrace->selectedStripCount = trace.selectedStripCount;
         }
 
         return result;

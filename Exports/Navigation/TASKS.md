@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 205)
+- Last updated: 2026-03-26 (session 206)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 206 still kept runtime grounded behavior unchanged and exposed the next caller-side selector body. `ClipSelectorPointStripAgainstPlanePrefix(...)` now mirrors binary `0x631870`, and `EvaluateSelectorCandidateRecordSet(...)` now mirrors binary `0x632700` inside the production DLL.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorCandidateRecordSetTests.cs` now pins four exact binary-backed behaviors: the plane-prefix early-fail path, the dot-reject path, the clip-reject path, and the lowest-ratio best-record update path.
+  - New raw captures now live in `docs/physics/0x631870_disasm.txt` and `docs/physics/0x632700_disasm.txt`. Practical implication: the remaining selector gap is no longer how one record is filtered, clipped, and validated; it is how `0x632F80` / `0x632280` build and rank the multi-record buffers that feed this now-pinned evaluator.
   - Session 205 still kept runtime grounded behavior unchanged and exposed the next pure caller-side selector helper. `BuildSelectorCandidatePlaneRecord(...)` now mirrors binary `0x632460` inside the production DLL, including the normalized three-point side planes from `0x637480`, the opposite-point flip, and the translated source-plane anchor in slot 3.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorCandidatePlaneRecordTests.cs` now pins the three oriented side planes, the source-plane re-anchor through the translated first selector point, and the binary early-fail path when one side-plane normal degenerates below `0x8026BC`.
   - New raw captures now live in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`. Practical implication: the remaining selector gap is no longer the per-record plane geometry; it is the caller-side evaluator/ranking path in `0x632700` / `0x632280` that feeds the now-pinned record into `0x633720` / `0x635090`.
@@ -205,6 +208,10 @@
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests" --logger "console;verbosity=minimal"` -> `passed (15/15)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
@@ -260,6 +267,18 @@
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `35 passed`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidateRecordSetTests.cs`
+  - `docs/physics/0x631870_disasm.txt`
+  - `docs/physics/0x632700_disasm.txt`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsTestExports.cpp`
@@ -358,7 +377,7 @@
   - `docs/TASKS.md`
 - Next command: `@'
 from capstone import *
-FUNCS = [(0x632700, 0x260), (0x632280, 0x300), (0x632F80, 0x240)]
+FUNCS = [(0x632F80, 0x320), (0x632280, 0x300), (0x632BA0, 0x280)]
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     for va, size in FUNCS:

@@ -608,6 +608,12 @@ CollisionStep (0x633840)
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
+  - fresh raw captures now also live in `docs/physics/0x632700_disasm.txt` and `docs/physics/0x631870_disasm.txt`
+  - `0x632700` walks the `0x34`-stride record array at `recordsBase + index * 0x34`, where each record is `SelectorSupportPlane filterPlane + 3 strip points`
+  - for every dot-accepted record it seeds a local strip from `record + 0x10`, sets the first three source ids to `-1`, clips that strip through `0x631870`, and only then calls `0x632830`
+  - `0x631870` is the simple plane-prefix clip helper around `0x6318C0`: it clips against planes `0..count-1` and returns false as soon as the strip count reaches zero
+  - once `0x632830` returns a local best ratio, `0x632700` only updates the caller best ratio/index when that local ratio is not greater than the caller's current best
+  - the production DLL now mirrors that prefix-clip and record-evaluation chain through pure `ClipSelectorPointStripAgainstPlanePrefix(...)` and `EvaluateSelectorCandidateRecordSet(...)` helpers plus deterministic export/test seams
   - its helper tail is also now better mapped:
     - fresh raw capture now also lives in `docs/physics/0x631440_disasm.txt`
     - `0x631440` is a pure support-plane builder used by `0x631BE0` before the selector-builder chain reaches `0x632830`
