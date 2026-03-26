@@ -46,6 +46,7 @@ struct ExportAABBContact
     float planeDistance;
     float distance;
     uint32_t instanceId;
+    uint32_t sourceType;
     uint32_t walkable;
 };
 
@@ -55,6 +56,7 @@ struct ExportGroundedWallSelectionTrace
     uint32_t candidateCount;
     uint32_t selectedContactIndex;
     uint32_t selectedInstanceId;
+    uint32_t selectedSourceType;
     uint32_t rawWalkable;
     uint32_t walkableWithoutState;
     uint32_t walkableWithState;
@@ -88,6 +90,8 @@ struct ExportGroundedWallSelectionTrace
     int32_t selectedRootId;
     int32_t selectedGroupId;
     uint32_t selectedGroupMatchFound;
+    uint32_t selectedResolvedModelFlags;
+    uint32_t selectedMetadataSource;
 };
 
 static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D::Vector3& moveDir2D)
@@ -109,6 +113,16 @@ struct ResolvedStaticContactMetadata
     int32_t rootId = -1;
     int32_t groupId = -1;
     bool groupMatchFound = false;
+    uint32_t resolvedModelFlags = 0u;
+    uint32_t metadataSource = 0u;
+};
+
+enum ResolvedContactMetadataSource : uint32_t
+{
+    RESOLVED_CONTACT_METADATA_NONE = 0u,
+    RESOLVED_CONTACT_METADATA_PARENT_INSTANCE = 1u,
+    RESOLVED_CONTACT_METADATA_WMO_GROUP = 2u,
+    RESOLVED_CONTACT_METADATA_WMO_DOODAD = 3u,
 };
 
 static const VMAP::ModelInstance* FindStaticModelInstance(uint32_t mapId, uint32_t instanceId)
@@ -179,18 +193,45 @@ static bool MatchTriangleVerticesUnordered(const G3D::Vector3& a,
 static ResolvedStaticContactMetadata ResolveStaticContactMetadata(uint32_t mapId, const SceneQuery::AABBContact& contact)
 {
     ResolvedStaticContactMetadata metadata{};
+    metadata.instanceFlags = contact.instanceFlags;
+    metadata.modelFlags = contact.modelFlags;
+    metadata.groupFlags = contact.groupFlags;
+    metadata.rootId = contact.rootId;
+    metadata.groupId = contact.groupId;
+    metadata.groupMatchFound = contact.groupId != -1;
+
+    if (contact.groupId != -1)
+    {
+        metadata.resolvedModelFlags = (contact.modelFlags != 0u) ? contact.modelFlags : metadata.resolvedModelFlags;
+        metadata.metadataSource = RESOLVED_CONTACT_METADATA_WMO_GROUP;
+    }
+
+    if (contact.sourceType == 2u)
+    {
+        metadata.resolvedModelFlags = VMAP::MOD_M2;
+        metadata.metadataSource = RESOLVED_CONTACT_METADATA_WMO_DOODAD;
+    }
+
     const VMAP::ModelInstance* instance = FindStaticModelInstance(mapId, contact.instanceId);
+
     if (!instance)
         return metadata;
 
-    metadata.instanceFlags = instance->flags;
+    if (metadata.instanceFlags == 0u)
+        metadata.instanceFlags = instance->flags;
+    if (metadata.metadataSource == RESOLVED_CONTACT_METADATA_NONE)
+        metadata.metadataSource = RESOLVED_CONTACT_METADATA_PARENT_INSTANCE;
     if (!instance->iModel)
         return metadata;
 
-    metadata.modelFlags = instance->iModel->getModelFlags();
-    metadata.rootId = static_cast<int32_t>(instance->iModel->GetRootWmoId());
+    if (metadata.modelFlags == 0u)
+        metadata.modelFlags = instance->iModel->getModelFlags();
+    if (metadata.resolvedModelFlags == 0u)
+        metadata.resolvedModelFlags = metadata.modelFlags;
+    if (metadata.rootId == -1)
+        metadata.rootId = static_cast<int32_t>(instance->iModel->GetRootWmoId());
 
-    if (instance->flags & VMAP::MOD_M2)
+    if (contact.sourceType == 2u || metadata.groupMatchFound || (instance->flags & VMAP::MOD_M2))
         return metadata;
 
     const auto worldToLocal = [&](const G3D::Vector3& worldPoint) -> G3D::Vector3
@@ -224,6 +265,7 @@ static ResolvedStaticContactMetadata ResolveStaticContactMetadata(uint32_t mapId
             metadata.groupFlags = group->GetMogpFlags();
             metadata.groupId = static_cast<int32_t>(group->GetWmoID());
             metadata.groupMatchFound = true;
+            metadata.metadataSource = RESOLVED_CONTACT_METADATA_WMO_GROUP;
             return metadata;
         }
     }
@@ -725,7 +767,8 @@ extern "C"
             triangle->b,
             triangle->c,
             0.0f,
-            0u);
+            0u,
+            nullptr);
 
         if (outNormal) *outNormal = contact.normal;
         if (outPlaneDistance) *outPlaneDistance = contact.planeDistance;
@@ -759,6 +802,7 @@ extern "C"
             contacts[i].planeDistance = src.planeDistance;
             contacts[i].distance = src.distance;
             contacts[i].instanceId = src.instanceId;
+            contacts[i].sourceType = src.sourceType;
             contacts[i].walkable = src.walkable ? 1u : 0u;
         }
 
@@ -807,6 +851,9 @@ extern "C"
         outTrace->candidateCount = trace.candidateCount;
         outTrace->selectedContactIndex = trace.selectedContactIndex;
         outTrace->selectedInstanceId = trace.selectedInstanceId;
+        outTrace->selectedSourceType = (trace.selectedContactIndex != 0xFFFFFFFFu && trace.selectedContactIndex < contacts.size())
+            ? contacts[trace.selectedContactIndex].sourceType
+            : 0u;
         outTrace->rawWalkable = trace.rawWalkable;
         outTrace->walkableWithoutState = trace.walkableWithoutState;
         outTrace->walkableWithState = trace.walkableWithState;
@@ -844,6 +891,8 @@ extern "C"
             outTrace->selectedRootId = metadata.rootId;
             outTrace->selectedGroupId = metadata.groupId;
             outTrace->selectedGroupMatchFound = metadata.groupMatchFound ? 1u : 0u;
+            outTrace->selectedResolvedModelFlags = metadata.resolvedModelFlags;
+            outTrace->selectedMetadataSource = metadata.metadataSource;
         }
 
         return resolved;

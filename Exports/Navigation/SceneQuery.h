@@ -13,6 +13,7 @@
 namespace VMAP { class StaticMapTree; class ModelInstance; class VMapManager2; }
 class MapLoader; // forward declaration (global namespace)
 class SceneCache; // forward declaration
+struct SceneTriMetadata; // forward declaration
 
 // Unified query parameter set (from main branch - similar conceptually to UE4/UE5 query params)
 // Placed in global namespace to align with SceneQuery/SceneHit architecture
@@ -244,6 +245,12 @@ class SceneQuery
             float distance;         // Distance along sweep direction to contact
             bool walkable;          // signed normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
             uint32_t instanceId = 0; // Static instance ID or dynamic runtime instance ID
+            uint32_t sourceType = 0; // 0 = static VMAP, 1 = ADT, 2 = WMO doodad M2, 3 = dynamic runtime object
+            uint32_t instanceFlags = 0;
+            uint32_t modelFlags = 0;
+            uint32_t groupFlags = 0;
+            int32_t rootId = -1;
+            int32_t groupId = -1;
         };
 
         static AABBContact BuildTerrainAABBContact(const G3D::Vector3& boxCenter,
@@ -252,7 +259,8 @@ class SceneQuery
                                                    const G3D::Vector3& triangleB,
                                                    const G3D::Vector3& triangleC,
                                                    float distance,
-                                                   uint32_t instanceId);
+                                                   uint32_t instanceId,
+                                                   const SceneTriMetadata* metadata);
 
         static int SweepAABB(uint32_t mapId,
                              const G3D::Vector3& boxMin,

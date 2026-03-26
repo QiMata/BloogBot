@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using Navigation.Physics.Tests.Helpers;
 using Xunit;
@@ -12,6 +13,17 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
 {
     private readonly PhysicsEngineFixture _fixture = fixture;
     private readonly ITestOutputHelper _output = output;
+
+    private sealed class DelegateDisposable(Action onDispose) : IDisposable
+    {
+        private Action? _onDispose = onDispose;
+
+        public void Dispose()
+        {
+            _onDispose?.Invoke();
+            _onDispose = null;
+        }
+    }
 
     private sealed class Frame15Scenario
     {
@@ -37,7 +49,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         var supportContact = FindElevatorSupportContact(contacts, scenario.WorldPosition.Z);
 
         _output.WriteLine(
-            $"support inst=0x{supportContact.InstanceId:X8} point={supportContact.Point} normal={supportContact.Normal} raw={supportContact.RawNormal} walk={supportContact.Walkable}");
+            $"support inst=0x{supportContact.InstanceId:X8} stype={supportContact.SourceType} point={supportContact.Point} normal={supportContact.Normal} raw={supportContact.RawNormal} walk={supportContact.Walkable}");
 
         Assert.Equal(0u, supportContact.Walkable);
         Assert.True(supportContact.Normal.Z < -0.99f,
@@ -118,10 +130,11 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             out GroundedWallSelectionTrace trace);
 
         _output.WriteLine(
-            $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} point={trace.SelectedPoint} " +
+            $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} stype={trace.SelectedSourceType} point={trace.SelectedPoint} " +
             $"normal={trace.SelectedNormal} oriented={trace.OrientedNormal} rawOppose={trace.RawOpposeScore:F4} " +
             $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState} after={trace.GroundedWallStateAfter} " +
-            $"iflags=0x{trace.SelectedInstanceFlags:X8} mflags=0x{trace.SelectedModelFlags:X8} gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
+            $"iflags=0x{trace.SelectedInstanceFlags:X8} mflags=0x{trace.SelectedModelFlags:X8} resolved=0x{trace.SelectedResolvedModelFlags:X8} src={trace.SelectedMetadataSource} " +
+            $"gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
 
         Assert.True(traced,
             "Expected frame-16 grounded wall trace to select a contact from the production Navigation.dll path.");
@@ -148,6 +161,13 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             return;
 
         var scenario = LoadFrameScenario(16);
+        string legacyScenePath = Path.Combine(GetTempScenesDirectory(scenario.Recording.MapId), $"{scenario.Recording.MapId}.scene");
+        using var scenesDir = UseScenesDirectory(scenario.Recording.MapId, Path.GetDirectoryName(legacyScenePath)!);
+        CreateLegacyLocalSceneCache(scenario, legacyScenePath);
+        UnloadSceneCache(scenario.Recording.MapId);
+        Assert.True(LoadSceneCache(scenario.Recording.MapId, legacyScenePath),
+            $"Expected to load legacy v1 scene cache from {legacyScenePath}.");
+
         var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
         var requestedMove = BuildRequestedMove(scenario);
         var worldPosition = scenario.WorldPosition;
@@ -164,18 +184,70 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             out GroundedWallSelectionTrace trace);
 
         _output.WriteLine(
-            $"frame16 metadata inst=0x{trace.SelectedInstanceId:X8} iflags=0x{trace.SelectedInstanceFlags:X8} " +
-            $"mflags=0x{trace.SelectedModelFlags:X8} gflags=0x{trace.SelectedGroupFlags:X8} " +
-            $"root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
+            $"frame16 metadata inst=0x{trace.SelectedInstanceId:X8} stype={trace.SelectedSourceType} iflags=0x{trace.SelectedInstanceFlags:X8} " +
+            $"mflags=0x{trace.SelectedModelFlags:X8} resolved=0x{trace.SelectedResolvedModelFlags:X8} src={trace.SelectedMetadataSource} " +
+            $"gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
 
         Assert.True(traced);
         Assert.NotEqual(0u, trace.SelectedInstanceId);
         Assert.Equal(0x00000004u, trace.SelectedInstanceFlags);
         Assert.Equal(trace.SelectedInstanceFlags, trace.SelectedModelFlags);
+        Assert.Equal(0x00000004u, trace.SelectedResolvedModelFlags);
+        Assert.Equal(1u, trace.SelectedMetadataSource);
         Assert.Equal(1150, trace.SelectedRootId);
         Assert.Equal(-1, trace.SelectedGroupId);
         Assert.Equal(0u, trace.SelectedGroupFlags);
         Assert.Equal(0u, trace.SelectedGroupMatchFound);
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_EnsureMapLoaded_UpgradesLegacySceneCacheToMetadataBearingFormat()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        string tempScenesDir = GetTempScenesDirectory(scenario.Recording.MapId);
+        string legacyScenePath = Path.Combine(tempScenesDir, $"{scenario.Recording.MapId}.scene");
+        using var scenesDir = UseScenesDirectory(scenario.Recording.MapId, tempScenesDir);
+        CreateLegacyLocalSceneCache(scenario, legacyScenePath);
+        Assert.Equal(1u, ReadSceneCacheVersion(legacyScenePath));
+
+        UnloadSceneCache(scenario.Recording.MapId);
+
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
+
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
+
+        _output.WriteLine(
+            $"frame16 upgraded-autoload inst=0x{trace.SelectedInstanceId:X8} stype={trace.SelectedSourceType} " +
+            $"iflags=0x{trace.SelectedInstanceFlags:X8} mflags=0x{trace.SelectedModelFlags:X8} " +
+            $"resolved=0x{trace.SelectedResolvedModelFlags:X8} src={trace.SelectedMetadataSource} " +
+            $"gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound} " +
+            $"version={ReadSceneCacheVersion(legacyScenePath)}");
+
+        Assert.True(traced);
+        Assert.Equal(2u, ReadSceneCacheVersion(legacyScenePath));
+        Assert.Equal(0u, trace.SelectedSourceType);
+        Assert.Equal(0x00000004u, trace.SelectedInstanceFlags);
+        Assert.Equal(0x00000004u, trace.SelectedModelFlags);
+        Assert.Equal(0x00000004u, trace.SelectedResolvedModelFlags);
+        Assert.Equal(2u, trace.SelectedMetadataSource);
+        Assert.Equal(0x0000AA05u, trace.SelectedGroupFlags);
+        Assert.Equal(1150, trace.SelectedRootId);
+        Assert.Equal(3228, trace.SelectedGroupId);
+        Assert.Equal(1u, trace.SelectedGroupMatchFound);
     }
 
     [Fact]
@@ -216,6 +288,52 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             $"Expected the horizontal branch to stay flat on frame 16, got branchMove={trace.BranchProjectedMove}.");
         Assert.True(MathF.Abs(trace.FinalProjectedMove.Z) <= 1e-6f,
             $"Expected the final resolved move to stay flat on frame 16, got finalMove={trace.FinalProjectedMove}.");
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_FreshSceneExtract_ReportsSelectedContactMetadata()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        using var freshScene = UseFreshExtractedLocalSceneCache(scenario);
+        string tempScenePath = GetTempLocalSceneCachePath(scenario.Recording.MapId);
+        UnloadSceneCache(scenario.Recording.MapId);
+        Assert.True(LoadSceneCache(scenario.Recording.MapId, tempScenePath),
+            $"Expected to reload fresh scene cache from {tempScenePath}.");
+
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
+
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
+
+        _output.WriteLine(
+            $"frame16 fresh-extract inst=0x{trace.SelectedInstanceId:X8} stype={trace.SelectedSourceType} " +
+            $"iflags=0x{trace.SelectedInstanceFlags:X8} mflags=0x{trace.SelectedModelFlags:X8} " +
+            $"resolved=0x{trace.SelectedResolvedModelFlags:X8} src={trace.SelectedMetadataSource} " +
+            $"gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
+
+        Assert.True(traced);
+        Assert.Equal(0u, trace.SelectedSourceType);
+        Assert.Equal(0x00000004u, trace.SelectedInstanceFlags);
+        Assert.Equal(0x00000004u, trace.SelectedModelFlags);
+        Assert.Equal(0x00000004u, trace.SelectedResolvedModelFlags);
+        Assert.Equal(2u, trace.SelectedMetadataSource);
+        Assert.Equal(0x0000AA05u, trace.SelectedGroupFlags);
+        Assert.Equal(1150, trace.SelectedRootId);
+        Assert.Equal(3228, trace.SelectedGroupId);
+        Assert.Equal(1u, trace.SelectedGroupMatchFound);
     }
 
     private Frame15Scenario LoadFrame15Scenario()
@@ -370,5 +488,144 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         float wy = frame.Position.X * sinO + frame.Position.Y * cosO + transport.Position.Y;
         float wz = frame.Position.Z + transport.Position.Z;
         return (wx, wy, wz);
+    }
+
+    private IDisposable UseFreshExtractedLocalSceneCache(Frame15Scenario scenario)
+    {
+        string dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR") ?? string.Empty;
+        string? originalScenePath = string.IsNullOrEmpty(dataDir)
+            ? null
+            : Path.Combine(dataDir, "scenes", $"{scenario.Recording.MapId}.scene");
+        bool restoreOriginalScene = !string.IsNullOrEmpty(originalScenePath) && File.Exists(originalScenePath);
+
+        string tempScenePath = GetTempLocalSceneCachePath(scenario.Recording.MapId);
+        ExtractLocalSceneCache(scenario, tempScenePath);
+
+        return new DelegateDisposable(() =>
+        {
+            UnloadSceneCache(scenario.Recording.MapId);
+            if (restoreOriginalScene && originalScenePath is not null)
+            {
+                Assert.True(LoadSceneCache(scenario.Recording.MapId, originalScenePath),
+                    $"Expected to restore scene cache from {originalScenePath}.");
+            }
+        });
+    }
+
+    private static string GetTempLocalSceneCachePath(uint mapId)
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "wwow-scene-tests");
+        return Path.Combine(tempDir, $"map{mapId}_undercity_local.scene");
+    }
+
+    private static string GetTempScenesDirectory(uint mapId)
+    {
+        return Path.Combine(Path.GetTempPath(), "wwow-scene-tests", $"map{mapId}_scenes");
+    }
+
+    private IDisposable UseScenesDirectory(uint mapId, string scenesDir)
+    {
+        string normalizedTempDir = EnsureTrailingDirectorySeparator(scenesDir);
+        string dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR") ?? string.Empty;
+        string originalScenesDir = string.IsNullOrEmpty(dataDir)
+            ? EnsureTrailingDirectorySeparator("scenes")
+            : EnsureTrailingDirectorySeparator(Path.Combine(dataDir, "scenes"));
+
+        Directory.CreateDirectory(scenesDir);
+        SetScenesDir(normalizedTempDir);
+
+        return new DelegateDisposable(() =>
+        {
+            SetScenesDir(originalScenesDir);
+            UnloadSceneCache(mapId);
+        });
+    }
+
+    private void ExtractLocalSceneCache(Frame15Scenario scenario, string outPath)
+    {
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        const float extractPad = 30.0f;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+
+        UnloadSceneCache(scenario.Recording.MapId);
+        bool extracted = ExtractSceneCache(
+            scenario.Recording.MapId,
+            outPath,
+            boxMin.X - extractPad,
+            boxMin.Y - extractPad,
+            boxMax.X + extractPad,
+            boxMax.Y + extractPad);
+
+        Assert.True(extracted,
+            $"Expected local scene extraction to succeed for map {scenario.Recording.MapId}.");
+    }
+
+    private void CreateLegacyLocalSceneCache(Frame15Scenario scenario, string outPath)
+    {
+        ExtractLocalSceneCache(scenario, outPath);
+        WriteLegacySceneCacheVersion1(outPath);
+    }
+
+    private static void WriteLegacySceneCacheVersion1(string path)
+    {
+        const int headerSize = 64;
+        const int sceneTriSize = 44;
+        const int sceneTriMetadataSize = 28;
+        const int liquidCellSize = 12;
+
+        byte[] allBytes = File.ReadAllBytes(path);
+        using var input = new MemoryStream(allBytes, writable: false);
+        using var reader = new BinaryReader(input);
+
+        uint magic = reader.ReadUInt32();
+        uint version = reader.ReadUInt32();
+        reader.ReadUInt32(); // mapId
+        uint triCount = reader.ReadUInt32();
+        reader.ReadSingle(); // cellSize
+        uint cellsX = reader.ReadUInt32();
+        uint cellsY = reader.ReadUInt32();
+        uint triIdxCount = reader.ReadUInt32();
+        reader.ReadSingle(); // liquidCellSize
+        uint liquidCellsX = reader.ReadUInt32();
+        uint liquidCellsY = reader.ReadUInt32();
+
+        Assert.Equal(0x454E4353u, magic);
+        Assert.Equal(2u, version);
+
+        int triangleBytes = checked((int)triCount * sceneTriSize);
+        int triangleMetadataBytes = checked((int)triCount * sceneTriMetadataSize);
+        int cellTotal = checked((int)(cellsX * cellsY));
+        int spatialBytes = checked((cellTotal * sizeof(uint) * 2) + ((int)triIdxCount * sizeof(uint)));
+        int liquidBytes = checked((2 * sizeof(float)) + ((int)(liquidCellsX * liquidCellsY) * liquidCellSize));
+        int spatialOffset = headerSize + triangleBytes + triangleMetadataBytes;
+        int expectedLength = checked(spatialOffset + spatialBytes + liquidBytes);
+
+        Assert.Equal(expectedLength, allBytes.Length);
+
+        byte[] header = allBytes[..headerSize].ToArray();
+        BitConverter.GetBytes(1u).CopyTo(header, sizeof(uint));
+
+        using var output = new MemoryStream(expectedLength - triangleMetadataBytes);
+        using var writer = new BinaryWriter(output);
+        writer.Write(header);
+        writer.Write(allBytes, headerSize, triangleBytes);
+        writer.Write(allBytes, spatialOffset, spatialBytes + liquidBytes);
+        File.WriteAllBytes(path, output.ToArray());
+    }
+
+    private static uint ReadSceneCacheVersion(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var reader = new BinaryReader(stream);
+        reader.ReadUInt32(); // magic
+        return reader.ReadUInt32();
+    }
+
+    private static string EnsureTrailingDirectorySeparator(string path)
+    {
+        return Path.EndsInDirectorySeparator(path)
+            ? path
+            : path + Path.DirectorySeparatorChar;
     }
 }

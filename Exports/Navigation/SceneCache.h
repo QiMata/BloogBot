@@ -19,8 +19,19 @@ struct SceneTri
     float ax, ay, az;
     float bx, by, bz;
     float cx, cy, cz;
-    uint32_t sourceType;   // 0 = VMAP (WMO/M2), 1 = ADT terrain
+    uint32_t sourceType;   // 0 = static VMAP (WMO group / standalone M2), 1 = ADT terrain, 2 = WMO doodad M2
     uint32_t instanceId;   // VMAP ModelInstance::ID, 0 for ADT
+};
+
+struct SceneTriMetadata
+{
+    uint32_t sourceType = 0;
+    uint32_t instanceId = 0;
+    uint32_t instanceFlags = 0;
+    uint32_t modelFlags = 0;
+    uint32_t groupFlags = 0;
+    int32_t rootId = -1;
+    int32_t groupId = -1;
 };
 
 // Liquid sample in the SceneCache grid
@@ -72,9 +83,13 @@ public:
     // Returns world-space triangles whose XY AABB overlaps the query box.
     // outTris receives CapsuleCollision::Triangle ready for narrow-phase tests.
     // outInstanceIds (optional) receives per-triangle instance IDs.
+    // outSourceTypes (optional) receives per-triangle SceneTri::sourceType values.
+    // outMetadata (optional) receives the richer extraction-time metadata when available.
     void QueryTrianglesInAABB(float minX, float minY, float maxX, float maxY,
                               std::vector<CapsuleCollision::Triangle>& outTris,
-                              std::vector<uint32_t>* outInstanceIds = nullptr) const;
+                              std::vector<uint32_t>* outInstanceIds = nullptr,
+                              std::vector<uint32_t>* outSourceTypes = nullptr,
+                              std::vector<SceneTriMetadata>* outMetadata = nullptr) const;
 
     // Ground Z query via barycentric point-in-triangle on cached geometry.
     // Returns highest Z at (x,y) that is at or below z, within maxSearchDist.
@@ -87,10 +102,21 @@ public:
     // Diagnostics
     size_t GetTriangleCount() const { return m_triangles.size(); }
     size_t GetCellCount() const { return m_cellsX * m_cellsY; }
+    bool HasTriangleMetadata() const { return m_triangleMetadata.size() == m_triangles.size() && !m_triangleMetadata.empty(); }
+    ExtractBounds GetExtractBounds() const
+    {
+        ExtractBounds bounds;
+        bounds.minX = m_minX;
+        bounds.minY = m_minY;
+        bounds.maxX = m_maxX;
+        bounds.maxY = m_maxY;
+        return bounds;
+    }
 
 private:
     // Collision geometry (world-space)
     std::vector<SceneTri> m_triangles;
+    std::vector<SceneTriMetadata> m_triangleMetadata;
 
     // 2D uniform grid spatial index
     float m_cellSize = 4.0f;
@@ -111,5 +137,5 @@ private:
 
     // File format magic and version
     static constexpr uint32_t FILE_MAGIC = 0x454E4353;   // "SCNE"
-    static constexpr uint32_t FILE_VERSION = 1;  // bump when scene cache format changes
+    static constexpr uint32_t FILE_VERSION = 2;  // bump when scene cache format changes
 };

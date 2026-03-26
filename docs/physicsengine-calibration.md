@@ -1059,3 +1059,63 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not spend another pass extracting more raw geometry before preserving child WMO/M2 metadata through the selected-contact path.
 - Recommended next single hypothesis:
   - Preserve child doodad/WMO metadata through the `SceneCache` -> `TestTerrainAABB` contact path, then rerun the frame-16 selected-contact trace to see whether the `0x633760` threshold gate can distinguish parent WMO vs child model identity.
+
+## 2026-03-26 Selected-contact metadata source trace
+
+- Scope note:
+  - This follow-up still did not change runtime physics behavior.
+  - It extended the static metadata trace with a best-effort child doodad match so the selected contact can report whether it resolves as parent WMO, WMO group, or child doodad M2.
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `selectedResolvedModelFlags` and `selectedMetadataSource` to `EvaluateGroundedWallSelection(...)`
+    - after parent/group lookup, the trace now tries to match the selected contact triangle against the parent WMO's default doodad set using the same `.doodads` + `.vmo` transform path the extractor uses
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching interop fields
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - logs and asserts the resolved metadata source on the packet-backed frame-16 blocker
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - passed (`5/5`)
+- Frame-pattern note:
+  - The new metadata source field still reports `1` (`parent instance`) on the frame-16 selected blocker, and `selectedResolvedModelFlags` stays `0x00000004`.
+  - That means the current best-effort static lookup still cannot recover a deeper child doodad/group identity from the selected triangle; the next real fix has to preserve that metadata earlier in the `SceneCache` / `TestTerrainAABB` pipeline.
+
+## 2026-03-26 Legacy scene-cache auto-upgrade to metadata-bearing format
+
+- Scope note:
+  - This pass changed the production scene-loader path, not the grounded resolver body.
+  - The goal was to remove the last non-binary metadata collapse in the normal `EnsureMapLoaded(...)` path before tracing deeper into the selected-contact producer chain.
+- Binary/evidence note:
+  - The already-captured packet-backed frame-16 blocker remains the same binary-selected triangle throughout: static WMO instance `0x00003B34`, root WMO `1150`, WMO group `3228`, `groupFlags = 0x0000AA05` once per-triangle metadata is preserved. That is the `0x5FA550`-relevant identity the client-side walkability threshold split needs.
+- Diagnostic/runtime change shipped:
+  - `Exports/Navigation/SceneCache.h`
+    - added `GetExtractBounds()` so legacy caches can be rebuilt with the same bounded coverage they were loaded with
+  - `Exports/Navigation/SceneQuery.cpp`
+    - `EnsureMapLoaded(...)` now detects metadata-less legacy `.scene` files, rebuilds them through `SceneCache::Extract(...)`, saves back a v2 cache, and loads the metadata-bearing result instead of staying on the flattened parent-only path
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - added a direct legacy-v1 load regression proving collapse to parent WMO metadata still happens if the runtime is forced onto a v1 file
+    - added an `EnsureMapLoaded(...)` upgrade regression proving the normal autoload path upgrades that same legacy file to v2 and returns the correct WMO-group metadata
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketBackedUndercityElevatorUp_Frame16_SelectedContactCurrentlyCollapsesToParentWmoMetadata|FullyQualifiedName~PacketBackedUndercityElevatorUp_Frame16_EnsureMapLoaded_UpgradesLegacySceneCacheToMetadataBearingFormat|FullyQualifiedName~PacketBackedUndercityElevatorUp_Frame16_FreshSceneExtract_ReportsSelectedContactMetadata" --logger "console;verbosity=detailed"`
+    - passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`14/14`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - passed (`32/32`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The scene-loader fix changes metadata source only. The selected frame-16 blocker stays the same triangle/instance, but the normal autoload path now resolves it as WMO group `3228` (`src=2`) instead of collapsing to parent-only metadata (`src=1`).
+- Do Not Repeat:
+  - Do not spend another pass on raw MPQ/WMO extraction for this blocker.
+  - Do not add a separate native tester binary for scene-cache upgrade coverage; the production DLL + deterministic tests already prove the runtime loader behavior.
+- Recommended next single hypothesis:
+  - Extend the native transaction seam into the selected-contact producer chain so deterministic tests can capture the paired `0xC4E544` payload and whether the `0x633720` / `0x635090` path chose the frame-16 blocker for the same reason the binary does.

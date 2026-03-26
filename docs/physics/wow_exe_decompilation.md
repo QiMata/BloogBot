@@ -604,7 +604,9 @@ CollisionStep (0x633840)
   - the missing parity path is the binary-selected contact + grounded-wall-state feed into `0x6334A0`, not the helper body by itself
   - production-DLL tracing on packet-backed Undercity frame 16 now adds one more concrete constraint: the selected blocker contact resolves only to parent static WMO instance `0x00003B34` with `instance/model flags = 0x00000004` and `rootWmoId = 1150`, while no WMO group match is found for the exact contact triangle
   - inference from that trace: the current `SceneCache` / `TestTerrainAABB` path is preserving the triangle geometry but collapsing the deeper child model identity the client's `0x5FA550` model-property walk uses
-  - practical follow-up: parity work should preserve child WMO/M2 metadata through `TestTerrainAABB`; this is not a “extract more raw MPQ triangles” blocker
+  - fresh bounded scene-cache extraction now narrows that one step further: the frame-16 selected blocker is not a doodad child triangle, it is a static WMO-group triangle that round-trips with `rootId = 1150`, `groupId = 3228`, and `groupFlags = 0x0000AA05`
+  - the normal `EnsureMapLoaded(...)` path now rebuilds legacy metadata-less `.scene` caches with their preserved bounds, so production queries can auto-upgrade to metadata-bearing caches instead of staying flattened on parent-only WMO identity
+  - practical follow-up: this is not an "extract more raw MPQ triangles" blocker anymore; the next native parity pass should trace the selected-contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) on top of the now-correct WMO-group metadata feed
 
 ## Remote Unit Extrapolation (VA 0x616DE0)
 

@@ -58,6 +58,27 @@ bool SceneCache::SaveToFile(const char* path) const
     // Triangles
     if (triCount > 0)
         fwrite(m_triangles.data(), sizeof(SceneTri), triCount, f);
+    if (triCount > 0)
+    {
+        if (m_triangleMetadata.size() == m_triangles.size())
+        {
+            fwrite(m_triangleMetadata.data(), sizeof(SceneTriMetadata), triCount, f);
+        }
+        else
+        {
+            std::vector<SceneTriMetadata> synthesizedMetadata;
+            synthesizedMetadata.reserve(m_triangles.size());
+            for (const auto& tri : m_triangles)
+            {
+                SceneTriMetadata metadata;
+                metadata.sourceType = tri.sourceType;
+                metadata.instanceId = tri.instanceId;
+                synthesizedMetadata.push_back(metadata);
+            }
+
+            fwrite(synthesizedMetadata.data(), sizeof(SceneTriMetadata), triCount, f);
+        }
+    }
 
     // Spatial index
     uint32_t cellTotal = m_cellsX * m_cellsY;
@@ -91,7 +112,7 @@ SceneCache* SceneCache::LoadFromFile(const char* path)
 
     fread(&magic, 4, 1, f);
     fread(&version, 4, 1, f);
-    if (magic != FILE_MAGIC || version != FILE_VERSION)
+    if (magic != FILE_MAGIC || (version != 1u && version != FILE_VERSION))
     {
         fclose(f);
         delete cache;
@@ -120,6 +141,16 @@ SceneCache* SceneCache::LoadFromFile(const char* path)
     cache->m_triangles.resize(triCount);
     if (triCount > 0)
         fread(cache->m_triangles.data(), sizeof(SceneTri), triCount, f);
+    if (version >= 2u)
+    {
+        cache->m_triangleMetadata.resize(triCount);
+        if (triCount > 0)
+            fread(cache->m_triangleMetadata.data(), sizeof(SceneTriMetadata), triCount, f);
+    }
+    else
+    {
+        cache->m_triangleMetadata.clear();
+    }
 
     // Spatial index
     uint32_t cellTotal = cache->m_cellsX * cache->m_cellsY;
@@ -232,6 +263,113 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                         instPosW.y + instRadius < bMinY || instPosW.y - instRadius > bMaxY)
                         continue;
                 }
+
+                const uint32_t instanceFlags = mi.flags;
+                const uint32_t modelFlags = mi.iModel->getModelFlags();
+                const int32_t rootId = static_cast<int32_t>(mi.iModel->GetRootWmoId());
+
+                const auto emitTriangleWithMetadata = [&](const G3D::Vector3& a,
+                                                          const G3D::Vector3& b,
+                                                          const G3D::Vector3& c,
+                                                          uint32_t sourceType,
+                                                          uint32_t groupFlags,
+                                                          int32_t groupId)
+                {
+                    if (hasBounds)
+                    {
+                        const float txMin = std::min({ a.x, b.x, c.x });
+                        const float txMax = std::max({ a.x, b.x, c.x });
+                        const float tyMin = std::min({ a.y, b.y, c.y });
+                        const float tyMax = std::max({ a.y, b.y, c.y });
+                        if (txMax < bMinX || txMin > bMaxX ||
+                            tyMax < bMinY || tyMin > bMaxY)
+                            return;
+                    }
+
+                    SceneTri st;
+                    st.ax = a.x; st.ay = a.y; st.az = a.z;
+                    st.bx = b.x; st.by = b.y; st.bz = b.z;
+                    st.cx = c.x; st.cy = c.y; st.cz = c.z;
+                    st.sourceType = sourceType;
+                    st.instanceId = mi.ID;
+                    cache->m_triangles.push_back(st);
+
+                    SceneTriMetadata metadata;
+                    metadata.sourceType = sourceType;
+                    metadata.instanceId = mi.ID;
+                    metadata.instanceFlags = instanceFlags;
+                    metadata.modelFlags = modelFlags;
+                    metadata.groupFlags = groupFlags;
+                    metadata.rootId = rootId;
+                    metadata.groupId = groupId;
+                    cache->m_triangleMetadata.push_back(metadata);
+
+                    actualMinX = std::min(actualMinX, std::min({ a.x, b.x, c.x }));
+                    actualMinY = std::min(actualMinY, std::min({ a.y, b.y, c.y }));
+                    actualMaxX = std::max(actualMaxX, std::max({ a.x, b.x, c.x }));
+                    actualMaxY = std::max(actualMaxY, std::max({ a.y, b.y, c.y }));
+                };
+
+                if (mi.flags & VMAP::MOD_M2)
+                {
+                    std::vector<G3D::Vector3> localVerts;
+                    std::vector<uint32_t> indices;
+                    if (!mi.iModel->GetAllMeshData(localVerts, indices))
+                        continue;
+                    if (localVerts.empty() || indices.size() < 3)
+                        continue;
+
+                    std::vector<G3D::Vector3> worldVerts(localVerts.size());
+                    for (size_t v = 0; v < localVerts.size(); ++v)
+                    {
+                        const G3D::Vector3 internal = mi.iRot * (localVerts[v] * mi.iScale) + mi.iPos;
+                        worldVerts[v] = NavCoord::InternalToWorld(internal);
+                    }
+
+                    for (size_t t = 0; t + 2 < indices.size(); t += 3)
+                    {
+                        emitTriangleWithMetadata(worldVerts[indices[t]],
+                                                 worldVerts[indices[t + 1]],
+                                                 worldVerts[indices[t + 2]],
+                                                 0u,
+                                                 0u,
+                                                 -1);
+                    }
+
+                    continue;
+                }
+
+                const uint32_t groupCount = mi.iModel->GetGroupModelCount();
+                for (uint32_t groupIndex = 0; groupIndex < groupCount; ++groupIndex)
+                {
+                    const VMAP::GroupModel* group = mi.iModel->GetGroupModel(groupIndex);
+                    if (!group)
+                        continue;
+
+                    const auto& groupVerts = group->GetVertices();
+                    const auto& groupTris = group->GetTriangles();
+                    if (groupVerts.empty() || groupTris.empty())
+                        continue;
+
+                    std::vector<G3D::Vector3> worldVerts(groupVerts.size());
+                    for (size_t v = 0; v < groupVerts.size(); ++v)
+                    {
+                        const G3D::Vector3 internal = mi.iRot * (groupVerts[v] * mi.iScale) + mi.iPos;
+                        worldVerts[v] = NavCoord::InternalToWorld(internal);
+                    }
+
+                    for (const auto& tri : groupTris)
+                    {
+                        emitTriangleWithMetadata(worldVerts[tri.idx0],
+                                                 worldVerts[tri.idx1],
+                                                 worldVerts[tri.idx2],
+                                                 0u,
+                                                 group->GetMogpFlags(),
+                                                 static_cast<int32_t>(group->GetWmoID()));
+                    }
+                }
+
+                continue;
 
                 // Get all mesh data from WorldModel (model-local vertices + indices)
                 std::vector<G3D::Vector3> localVerts;
@@ -463,6 +601,16 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                         st.sourceType = 2; // Doodad (M2 inside WMO)
                         st.instanceId = mi.ID;
                         cache->m_triangles.push_back(st);
+
+                        SceneTriMetadata metadata;
+                        metadata.sourceType = 2u;
+                        metadata.instanceId = mi.ID;
+                        metadata.instanceFlags = mi.flags;
+                        metadata.modelFlags = VMAP::MOD_M2;
+                        metadata.rootId = mi.iModel ? static_cast<int32_t>(mi.iModel->GetRootWmoId()) : -1;
+                        metadata.groupId = -1;
+                        cache->m_triangleMetadata.push_back(metadata);
+
                         doodadTrisAdded++;
 
                         actualMinX = std::min(actualMinX, std::min({a.x, b.x, c.x}));
@@ -507,6 +655,11 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
             st.sourceType = 1; // ADT
             st.instanceId = 0;
             cache->m_triangles.push_back(st);
+
+            SceneTriMetadata metadata;
+            metadata.sourceType = 1u;
+            metadata.instanceId = 0u;
+            cache->m_triangleMetadata.push_back(metadata);
 
             actualMinX = std::min(actualMinX, std::min({tw.ax, tw.bx, tw.cx}));
             actualMinY = std::min(actualMinY, std::min({tw.ay, tw.by, tw.cy}));
@@ -640,10 +793,14 @@ void SceneCache::BuildSpatialIndex()
 
 void SceneCache::QueryTrianglesInAABB(float minX, float minY, float maxX, float maxY,
                                       std::vector<CapsuleCollision::Triangle>& outTris,
-                                      std::vector<uint32_t>* outInstanceIds) const
+                                      std::vector<uint32_t>* outInstanceIds,
+                                      std::vector<uint32_t>* outSourceTypes,
+                                      std::vector<SceneTriMetadata>* outMetadata) const
 {
     outTris.clear();
     if (outInstanceIds) outInstanceIds->clear();
+    if (outSourceTypes) outSourceTypes->clear();
+    if (outMetadata) outMetadata->clear();
     if (m_cellsX == 0 || m_cellsY == 0) return;
 
     // Compute cell range
@@ -685,6 +842,22 @@ void SceneCache::QueryTrianglesInAABB(float minX, float minY, float maxX, float 
 
                 if (outInstanceIds)
                     outInstanceIds->push_back(st.instanceId);
+                if (outSourceTypes)
+                    outSourceTypes->push_back(st.sourceType);
+                if (outMetadata)
+                {
+                    if (ti < m_triangleMetadata.size())
+                    {
+                        outMetadata->push_back(m_triangleMetadata[ti]);
+                    }
+                    else
+                    {
+                        SceneTriMetadata metadata;
+                        metadata.sourceType = st.sourceType;
+                        metadata.instanceId = st.instanceId;
+                        outMetadata->push_back(metadata);
+                    }
+                }
             }
         }
     }

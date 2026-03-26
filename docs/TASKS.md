@@ -1842,6 +1842,20 @@ if (transportGuid != 0) {
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
     - Passed (`5/5`)
 
+- **Session 197 — resolved metadata source still stays on the parent WMO shell:**
+  - Extended the same native trace with `selectedResolvedModelFlags` and `selectedMetadataSource`, plus a best-effort child doodad match against the parent WMO's default `.doodads` set.
+  - The frame-16 blocker still resolves as metadata source `1` (`parent instance`) with `resolvedModelFlags = 0x00000004`, which means even the current best-effort lookup cannot recover deeper child identity from the selected triangle after the fact.
+  - Practical implication: the next implementation unit has to preserve child WMO/M2 metadata earlier in `SceneCache` / `TestTerrainAABB`; post-hoc lookup from the collapsed contact is not enough.
+
+- **Session 198 — fresh extracted scene caches preserve the selected WMO group:**
+  - `SceneCache` now carries per-triangle extraction metadata in memory and serializes it through the deterministic `.scene` round-trip path.
+  - A fresh bounded Undercity extract, followed by an unload/reload round-trip through the temp `.scene`, proves the packet-backed frame-16 selected blocker is a static WMO-group triangle: `instance=0x00003B34`, `rootId=1150`, `groupId=3228`, `groupFlags=0x0000AA05`, `selectedMetadataSource=2`.
+  - Practical implication: no more raw MPQ extraction is needed for this blocker. The remaining runtime work is to make the normal scene-load path provide this same WMO-group metadata to `TestTerrainAABB`, then use it in the `0x633760` threshold/state path.
+- **Session 199 — normal scene autoload now upgrades legacy caches to metadata-bearing format:**
+  - `SceneQuery::EnsureMapLoaded(...)` no longer accepts metadata-less v1 `.scene` files as the steady-state runtime path. If a legacy cache is found, it now rebuilds the same bounds through `SceneCache::Extract(...)`, writes back a v2 cache, and loads the metadata-bearing result.
+  - Deterministic proof now covers all three states on the packet-backed Undercity frame-16 blocker: manual legacy v1 load still collapses to parent WMO metadata (`src=1`), fresh extract round-trip resolves the real WMO group (`src=2`, `groupId=3228`, `groupFlags=0x0000AA05`), and the normal `EnsureMapLoaded(...)` path now upgrades the legacy cache and returns that same WMO-group identity.
+  - Practical implication: the blocker is no longer in scene extraction or scene autoload. The next native parity unit is the binary-selected contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) that feeds the remaining `0x6334A0` / `0x636100` grounded-wall state.
+
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 
 Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `0` items.

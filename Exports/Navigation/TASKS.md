@@ -30,6 +30,9 @@
 ## P0 Active Tasks (Ordered)
 
 ### NAV-PAR-001 PhysicsEngine parity with original WoW.exe grounded movement
+- [x] Session 199: `SceneQuery::EnsureMapLoaded(...)` now upgrades legacy metadata-less `.scene` caches instead of treating them as the steady-state runtime path. It rebuilds the same cached bounds through `SceneCache::Extract(...)`, writes back a v2 cache, and loads the metadata-bearing result, which makes the normal production autoload path return the same frame-16 WMO-group blocker identity (`rootId=1150`, `groupId=3228`, `groupFlags=0x0000AA05`, `selectedMetadataSource=2`) that the fresh-extract proof already showed.
+- [x] Session 198: `SceneCache` now preserves per-triangle WMO-group metadata on fresh extracts and through the deterministic `.scene` round-trip path. The packet-backed Undercity frame-16 blocker still selects instance `0x00003B34`, but a fresh bounded extract now proves that selected triangle is `rootId=1150`, `groupId=3228`, `groupFlags=0x0000AA05`, and `selectedMetadataSource=2` after unload/reload. Practical implication: no more MPQ extraction is needed for this blocker; the next runtime fix is getting the normal scene-load path onto the same metadata-bearing cache data.
+- [x] Session 197: extended the selected-contact trace with `selectedResolvedModelFlags` and `selectedMetadataSource`, plus a best-effort child doodad match against the parent WMO's default `.doodads` set. The packet-backed Undercity frame-16 blocker still resolves as metadata source `1` (`parent instance`) with `resolvedModelFlags = 0x00000004`, which means post-hoc lookup on the collapsed contact is not enough; the next native fix has to preserve child WMO/M2 metadata earlier in `SceneCache` / `TestTerrainAABB`.
 - [x] Session 196: extended the production-DLL grounded-wall trace seam to resolve selected-contact static metadata, which answered the open “more MPQ extraction?” question with binary-backed evidence. The packet-backed Undercity frame-16 blocker still resolves only to parent WMO instance `0x00003B34` with `instance/model flags = 0x00000004` and `rootWmoId = 1150`, while no WMO group match is found for the exact contact triangle. Practical implication: the current `SceneCache` / `TestTerrainAABB` path is preserving geometry but collapsing the deeper child WMO/M2 identity that `0x5FA550` appears to walk, so the next native parity unit is metadata preservation, not more raw triangle extraction.
 - [x] Session 192: added a deterministic frame-15 Undercity upper-door contact probe around the production `Navigation.dll`. `QueryTerrainAABBContacts(...)` now exposes the merged `TestTerrainAABB` contact set, and the new tests prove the elevator deck support face is present at the failing frame with a signed downward normal and raw `walkable=0`. They also prove `0x6334A0` only promotes that face on its stateful path, which means the missing runtime piece is the binary selected-contact / `0xC4E544` state path, not a blanket `contact.walkable -> CheckWalkable` replacement.
 - [x] Session 191: captured `0x6721B0` / `0x637330` in `docs/physics/0x6721B0_disasm.txt` and aligned `TestTerrainAABB` to emit signed box-relative contact normals instead of upward-flattened ones. The pure `0x6334A0` helper now consumes that signed contact feed, new deterministic orientation tests pin the behavior, and the focused grounded/runtime slices plus both live Durotar parity routes stayed green.
@@ -121,9 +124,18 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 196)
+- Last updated: 2026-03-26 (session 199)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 199 finished the remaining scene-loader infrastructure blocker. `SceneQuery::EnsureMapLoaded(...)` now detects legacy metadata-less `.scene` files, rebuilds the same cached bounds through `SceneCache::Extract(...)`, writes back a v2 cache, and loads the metadata-bearing result instead of leaving runtime queries on flattened parent-only metadata.
+  - `UndercityUpperDoorContactTests.cs` now proves all three relevant states deterministically: a direct manual v1 load still collapses to parent WMO metadata (`src=1`), a fresh extract round-trip resolves WMO group `3228` with `groupFlags = 0x0000AA05`, and the normal `EnsureMapLoaded(...)` path now auto-upgrades the legacy cache and returns that same WMO-group identity (`src=2`).
+  - Practical implication: no more MPQ extraction or scene-autoload work is needed for this blocker. The next native parity unit is the binary-selected contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) that still chooses and classifies the grounded blocker before `0x6334A0` / `0x636100` run.
+  - Session 198 moved the metadata preservation seam from export-time reconstruction into `SceneCache` extraction itself. Fresh extracted scene caches now carry per-triangle metadata in memory, and the deterministic `.scene` round-trip path also preserves it.
+  - The packet-backed frame-16 blocker still selects instance `0x00003B34`, but a bounded Undercity re-extract now proves that selected triangle is WMO group `3228` with `groupFlags = 0x0000AA05` under root WMO `1150` after unload/reload.
+  - Practical implication: the blocker is not missing geometry and not a doodad-child-only problem. The next runtime fix is to get the normal scene-load path onto metadata-bearing scene caches, then feed that selected WMO-group identity into the `0x633760` threshold/state parity work.
+  - Session 197 extended the selected-contact metadata trace one more step with `selectedResolvedModelFlags` and `selectedMetadataSource`. The export now does a best-effort child doodad match against the parent WMO's default `.doodads` set before reporting the final source.
+  - The packet-backed frame-16 blocker still resolves as metadata source `1` (`parent instance`) with `resolvedModelFlags = 0x00000004`, so even the current best-effort post-hoc lookup cannot recover deeper child identity from the collapsed contact.
+  - Practical implication: the next native implementation pass should stop trying to reconstruct child identity after selection and instead preserve child WMO/M2 metadata earlier in `SceneCache` / `TestTerrainAABB`.
   - Session 196 extended the production-DLL grounded wall trace seam to resolve selected-contact metadata back to the static VMAP instance/model when possible. `PhysicsTestExports.cpp` now reports `selectedInstanceFlags`, `selectedModelFlags`, `selectedRootId`, `selectedGroupId`, and whether an exact WMO group triangle match was found; `NavigationInterop.cs` and `UndercityUpperDoorContactTests.cs` carry the same fields deterministically.
   - The new packet-backed frame-16 regression changes the immediate parity target again. The selected blocker still comes back as instance `0x00003B34`, but the metadata now proves the scene-cache/TestTerrain path only resolves the parent WMO shell: `instance/model flags = 0x00000004`, `rootWmoId = 1150`, `groupId = -1`, `groupMatchFound = 0`.
   - Practical implication: this is not a missing-geometry problem. The current native path is preserving the blocker triangle itself but collapsing the deeper child WMO/M2 identity the binary `0x5FA550` model-property walk appears to use. The next parity unit should preserve child doodad/WMO metadata through `SceneCache` -> `TestTerrainAABB`, then retry the `0x633760` threshold gate.
@@ -178,6 +190,13 @@
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (5/5)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (6/6)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (5/5)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (4/4)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests" --logger "console;verbosity=minimal"` -> `passed (55/56, one skipped MPQ extraction test)`
@@ -215,6 +234,17 @@
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `35 passed`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
 - Files changed:
+  - `Exports/Navigation/SceneCache.h`
+  - `Exports/Navigation/SceneCache.cpp`
+  - `Exports/Navigation/SceneQuery.h`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/WorldModel.h`
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
@@ -288,7 +318,7 @@
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- Next command: `rg --line-number "SceneTri|QueryTrianglesInAABB|instanceId" Exports/Navigation/SceneCache.h Exports/Navigation/SceneCache.cpp Exports/Navigation/SceneQuery.h Exports/Navigation/SceneQuery.cpp`
+- Next command: `rg --line-number "0x6351A0|0x633720|0x635090|0xC4E544|selectedContactIndex|paired" docs/physics/wow_exe_decompilation.md docs/physics/0x633720_disasm.txt docs/physics/0x635090_disasm.txt Exports/Navigation/PhysicsTestExports.cpp`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

@@ -125,6 +125,7 @@ public static partial class NavigationInterop
         public float PlaneDistance;
         public float Distance;
         public uint InstanceId;
+        public uint SourceType;
         public uint Walkable;
 
         public readonly Triangle ToTriangle() => new(TriangleA, TriangleB, TriangleC);
@@ -137,6 +138,7 @@ public static partial class NavigationInterop
         public uint CandidateCount;
         public uint SelectedContactIndex;
         public uint SelectedInstanceId;
+        public uint SelectedSourceType;
         public uint RawWalkable;
         public uint WalkableWithoutState;
         public uint WalkableWithState;
@@ -170,6 +172,8 @@ public static partial class NavigationInterop
         public int SelectedRootId;
         public int SelectedGroupId;
         public uint SelectedGroupMatchFound;
+        public uint SelectedResolvedModelFlags;
+        public uint SelectedMetadataSource;
     }
 
     public enum GroundedWallBranchKind : uint

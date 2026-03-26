@@ -460,6 +460,41 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
             auto* cache = SceneCache::LoadFromFile(scenePath.c_str());
             if (cache)
             {
+                if (cache->HasTriangleMetadata())
+                {
+                    SetSceneCache(mapId, cache);
+                    return;
+                }
+
+                const SceneCache::ExtractBounds legacyBounds = cache->GetExtractBounds();
+                fprintf(stderr,
+                        "[SceneQuery] Legacy scene cache %s is missing triangle metadata; rebuilding with preserved bounds.\n",
+                        scenePath.c_str());
+
+                auto* upgradedCache = SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, legacyBounds);
+                if (upgradedCache && upgradedCache->HasTriangleMetadata())
+                {
+                    std::error_code mkdirError;
+                    const std::filesystem::path sceneDir = std::filesystem::path(scenePath).parent_path();
+                    if (!sceneDir.empty())
+                        std::filesystem::create_directories(sceneDir, mkdirError);
+
+                    if (!upgradedCache->SaveToFile(scenePath.c_str()))
+                    {
+                        fprintf(stderr,
+                                "[SceneQuery] Rebuilt scene cache for map %u but failed to save %s; using upgraded cache in memory only.\n",
+                                mapId,
+                                scenePath.c_str());
+                    }
+
+                    delete cache;
+                    SetSceneCache(mapId, upgradedCache);
+                    return;
+                }
+
+                fprintf(stderr,
+                        "[SceneQuery] Failed to rebuild legacy scene cache %s; falling back to metadata-less cache.\n",
+                        scenePath.c_str());
                 SetSceneCache(mapId, cache);
                 return;
             }
@@ -1589,7 +1624,8 @@ SceneQuery::AABBContact SceneQuery::BuildTerrainAABBContact(const G3D::Vector3& 
     const G3D::Vector3& triangleB,
     const G3D::Vector3& triangleC,
     float distance,
-    uint32_t instanceId)
+    uint32_t instanceId,
+    const SceneTriMetadata* metadata)
 {
     AABBContact contact{};
     contact.point = contactPoint;
@@ -1613,6 +1649,15 @@ SceneQuery::AABBContact SceneQuery::BuildTerrainAABBContact(const G3D::Vector3& 
     contact.distance = distance;
     contact.walkable = normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
     contact.instanceId = instanceId;
+    if (metadata)
+    {
+        contact.sourceType = metadata->sourceType;
+        contact.instanceFlags = metadata->instanceFlags;
+        contact.modelFlags = metadata->modelFlags;
+        contact.groupFlags = metadata->groupFlags;
+        contact.rootId = metadata->rootId;
+        contact.groupId = metadata->groupId;
+    }
     return contact;
 }
 
@@ -1629,7 +1674,8 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
     // Query all triangles in the XY footprint
     std::vector<CapsuleCollision::Triangle> tris;
     std::vector<uint32_t> instanceIds;
-    scCache->QueryTrianglesInAABB(boxMin.x, boxMin.y, boxMax.x, boxMax.y, tris, &instanceIds);
+    std::vector<SceneTriMetadata> triangleMetadata;
+    scCache->QueryTrianglesInAABB(boxMin.x, boxMin.y, boxMax.x, boxMax.y, tris, &instanceIds, nullptr, &triangleMetadata);
 
     G3D::Vector3 center = (boxMin + boxMax) * 0.5f;
     G3D::Vector3 halfExt = (boxMax - boxMin) * 0.5f;
@@ -1666,7 +1712,8 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
                 vb,
                 vc,
                 0.0f,
-                (i < instanceIds.size()) ? instanceIds[i] : 0u);
+                (i < instanceIds.size()) ? instanceIds[i] : 0u,
+                (i < triangleMetadata.size()) ? &triangleMetadata[i] : nullptr);
             outContacts.push_back(contact);
         }
     }
@@ -1706,8 +1753,11 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
                 vb,
                 vc,
                 0.0f,
-                (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u);
-            outContacts.push_back(contact);
+                (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u,
+                nullptr);
+            AABBContact dynamicContact = contact;
+            dynamicContact.sourceType = 3u;
+            outContacts.push_back(dynamicContact);
         }
     }
 
@@ -1739,7 +1789,8 @@ int SceneQuery::SweepAABB(uint32_t mapId,
     // Query triangles in the swept footprint
     std::vector<CapsuleCollision::Triangle> tris;
     std::vector<uint32_t> instanceIds;
-    scCache->QueryTrianglesInAABB(queryMinX, queryMinY, queryMaxX, queryMaxY, tris, &instanceIds);
+    std::vector<SceneTriMetadata> triangleMetadata;
+    scCache->QueryTrianglesInAABB(queryMinX, queryMinY, queryMaxX, queryMaxY, tris, &instanceIds, nullptr, &triangleMetadata);
 
     G3D::Vector3 center = (boxMin + boxMax) * 0.5f;
     G3D::Vector3 halfExt = (boxMax - boxMin) * 0.5f;
@@ -1776,6 +1827,15 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             contact.distance = overlapStart ? 0 : dispLen;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
+            if (i < triangleMetadata.size())
+            {
+                contact.sourceType = triangleMetadata[i].sourceType;
+                contact.instanceFlags = triangleMetadata[i].instanceFlags;
+                contact.modelFlags = triangleMetadata[i].modelFlags;
+                contact.groupFlags = triangleMetadata[i].groupFlags;
+                contact.rootId = triangleMetadata[i].rootId;
+                contact.groupId = triangleMetadata[i].groupId;
+            }
             outContacts.push_back(contact);
         }
     }
@@ -1821,6 +1881,7 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             contact.distance = overlapStart ? 0 : dispLen;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
+            contact.sourceType = 3u;
             outContacts.push_back(contact);
         }
     }
