@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 212)`
+- Last updated: `2026-03-26 (session 213)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 213 added `WowTerrainQueryBoundsTests.cs` plus the new interop needed to pin the projected query-AABB seam through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWTerrainQueryBounds(...)`.
+  - The new deterministic coverage now pins three exact binary-backed behaviors from `0x631E70`: `XY` bounds expansion from `this+0xB0`, `Z` min at the projected feet position with `Z` max at `feet + this+0xB4`, and the requirement that both corners fit the cached AABB before the cache-hit path can succeed.
+  - Practical implication: this owner no longer has to infer the projected query-box layout on the `0x631E70` path. The next missing deterministic seams are the post-cache-miss expand/merge/query transaction and the `0x632A30` wrapper that decides when to call it.
   - Session 212 added `WowTerrainQueryMaskTests.cs` plus the new interop needed to pin the `0x6315F0` terrain-query mask seam through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWTerrainQueryMask(...)`.
   - The new deterministic coverage now pins five exact binary-backed behaviors: the `0x5FA550` base-mask split, the strict `this+0x20 > 0x80DFE8` `0x30000` augment, the swim exclusion, and the two-bit `0x8000` tree augment.
   - Practical implication: this owner no longer has to infer the `0x6315F0` mask math feeding `0x6721B0` inside `0x631E70`. The next missing deterministic seams are the larger `0x631E70` merged-query builder body and the `0x632A30` wrapper that decides when to call it.
@@ -123,6 +126,10 @@ Known remaining work in this owner: `0` items.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"` -> `passed (17/17)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
@@ -200,8 +207,19 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `py -c "from capstone import *; va=0x631E70; size=1024; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(va-0x400000); code=f.read(size); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(code, va)]"`
+- Next command: `@'`nfrom capstone import *`nva=0x632A30`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632C20 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs`
+  - `docs/physics/0x631E70_disasm.txt`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsTestExports.cpp`

@@ -635,6 +635,15 @@ public static partial class NavigationInterop
         [MarshalAs(UnmanagedType.I1)] bool rootTreeFlagSet,
         [MarshalAs(UnmanagedType.I1)] bool childTreeFlagSet);
 
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWTerrainQueryBounds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWTerrainQueryBounds(
+        in Vector3 projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        out Vector3 boundsMin,
+        out Vector3 boundsMax);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
         in Vector3 position,

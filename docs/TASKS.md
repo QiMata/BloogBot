@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 212)
+- **Last updated:** 2026-03-26 (session 213)
 - **Branch:** `main`
+- **Session 213 — `0x631E70` projected query bounds are now pinned as a pure binary seam:**
+  - Added pure [BuildTerrainQueryBounds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowTerrainQueryBoundsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs), which now pins the exact `0x631E70` projected AABB shape: `XY` min/max from `this+0xB0`, `Z` min at feet level, and `Z` max at `feet + this+0xB4`, plus the double-corner cache-fit shape when paired with `0x637350`.
+  - Practical implication: the remaining native gap inside `0x631E70` is no longer the projected query-box layout feeding the cached-bounds gate. The open work is now the post-cache-miss expansion/merge transaction, optional swim-side query, and transform rewrite of `0xC4E534`.
+- **Fresh binary evidence (session 213):**
+  - Added raw capture [0x631E70_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x631E70_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) to record the exact projected query AABB and the two `0x637350` corner checks.
+- **Test baseline (session 213):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - Passed (`11/11`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 212 — `0x6315F0` terrain-query mask is now pinned as a pure binary seam:**
   - Added pure [BuildTerrainQueryMask(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowTerrainQueryMaskTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTerrainQueryMaskTests.cs), which now pins the `0x5FA550` base-mask split, the strict `this+0x20 > 0x80DFE8` `0x30000` gate, the swim exclusion, and the two-bit `0x8000` augment from `0x6315F0`.

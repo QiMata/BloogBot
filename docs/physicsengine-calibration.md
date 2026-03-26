@@ -1564,3 +1564,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not rename the `this+0x20` gate as “pitch” or any other semantic field in code yet. The binary proves the raw offset and threshold comparison, but the field meaning is still an inference.
 - Recommended next single hypothesis:
   - Mirror the smallest remaining `0x631E70` branch around the `0x6315F0 -> 0x6721B0` call site next, now that the exact query-mask math is pinned.
+
+## 2026-03-26 Projected query-bounds addendum (`0x631E70`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the exact projected AABB shape that `0x631E70` builds before the double `0x637350` cache-fit test.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x631E70_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact projected bounds layout and the two-corner cache-fit gate
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildTerrainQueryBounds(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWTerrainQueryBounds(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new projected-bounds seam
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs`
+    - added deterministic coverage for the exact `XY` radius expansion, `Z` feet/min vs `feet + height` max, and the paired-corner cache-fit shape when composed with `0x637350`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - passed (`11/11`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is now narrower again: before the cache-hit gate, the exact projected query AABB is no longer inferred. The remaining unknown is the post-cache-miss expand/merge/query transaction plus the optional swim-side query and transform rewrite of `0xC4E534`.
+- Do Not Repeat:
+  - Do not treat the projected bounds as symmetric on Z. The binary is explicit that `min.z = projected.z` while only `max.z` gets the `this+0xB4` expansion.
+- Recommended next single hypothesis:
+  - Mirror the remaining `0x631E70` cache-miss path next: `0x637300`, `0x6372D0`, `0x6373B0`, the `0x61E9C0` pre-query call, and the optional swim-side `0x30000` query.

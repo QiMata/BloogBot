@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 212)
+- Last updated: 2026-03-26 (session 213)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 213 still kept runtime grounded behavior unchanged and pinned the exact projected query AABB that `0x631E70` checks against the cached bounds. `BuildTerrainQueryBounds(...)` now mirrors the binary shape built from the projected feet position before the double `0x637350` gate.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs` now pins three exact binary-backed behaviors: `XY` min/max from `this+0xB0`, `Z` min at feet height with `Z` max at `feet + this+0xB4`, and the requirement that both corners fit the cached AABB before the cache-hit path can succeed.
+  - New raw capture now lives in `docs/physics/0x631E70_disasm.txt`. Practical implication: the remaining `0x631E70` gap is no longer the projected query-box layout; the next gap is the post-cache-miss expand/merge/query transaction and the optional swim-side query/transform work.
   - Session 212 still kept runtime grounded behavior unchanged and pinned the `0x6315F0` terrain-query mask builder as the next pure binary seam inside the unresolved `0x631E70` path. `BuildTerrainQueryMask(...)` now mirrors the exact base-mask split and both augmentation gates before `0x6721B0`.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTerrainQueryMaskTests.cs` now pins five exact binary-backed behaviors: the `0x5FA550` base-mask split (`0x100111` vs `0x102111`), the strict `this+0x20 > 0x80DFE8` `0x30000` gate, the swim exclusion, and the two-bit `0x8000` tree augment.
   - New raw capture now lives in `docs/physics/0x6315F0_disasm.txt`. Practical implication: the remaining `0x631E70` / `0x632A30` gap is no longer the query-mask math feeding `0x6721B0`; the next gap is the rest of the merged-query builder transaction around that now-pinned mask.
@@ -226,6 +229,10 @@
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"` -> `passed (17/17)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
@@ -309,6 +316,17 @@
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `35 passed`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs`
+  - `docs/physics/0x631E70_disasm.txt`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsTestExports.cpp`
@@ -449,7 +467,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; va=0x631E70; size=1024; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(va-0x400000); code=f.read(size); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(code, va)]"`
+- Next command: `@'`nfrom capstone import *`nva=0x632A30`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632C20 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

@@ -311,6 +311,21 @@ uint32_t WoWCollision::BuildTerrainQueryMask(bool modelPropertyFlagSet,
     return queryMask;
 }
 
+void WoWCollision::BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition,
+                                           float collisionRadius,
+                                           float boundingHeight,
+                                           G3D::Vector3& outBoundsMin,
+                                           G3D::Vector3& outBoundsMax)
+{
+    outBoundsMin.x = projectedPosition.x - collisionRadius;
+    outBoundsMin.y = projectedPosition.y - collisionRadius;
+    outBoundsMin.z = projectedPosition.z;
+
+    outBoundsMax.x = projectedPosition.x + collisionRadius;
+    outBoundsMax.y = projectedPosition.y + collisionRadius;
+    outBoundsMax.z = projectedPosition.z + boundingHeight;
+}
+
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                               float verticalOffset,
                                               float horizontalRadius,

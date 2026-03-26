@@ -931,6 +931,26 @@ extern "C"
             childTreeFlagSet);
     }
 
+    __declspec(dllexport) bool BuildWoWTerrainQueryBounds(
+        const G3D::Vector3* projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        G3D::Vector3* outBoundsMin,
+        G3D::Vector3* outBoundsMax)
+    {
+        if (!projectedPosition || !outBoundsMin || !outBoundsMax) {
+            return false;
+        }
+
+        WoWCollision::BuildTerrainQueryBounds(
+            *projectedPosition,
+            collisionRadius,
+            boundingHeight,
+            *outBoundsMin,
+            *outBoundsMax);
+        return true;
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

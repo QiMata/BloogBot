@@ -711,6 +711,12 @@ namespace WoWCollision
                                    bool rootTreeFlagSet,
                                    bool childTreeFlagSet);
 
+    void BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition,
+                                 float collisionRadius,
+                                 float boundingHeight,
+                                 G3D::Vector3& outBoundsMin,
+                                 G3D::Vector3& outBoundsMax);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

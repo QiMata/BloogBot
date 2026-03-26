@@ -588,6 +588,13 @@ CollisionStep (0x633840)
       - then ORs `0x30000` only when `(this->flags & 0x10000000) != 0`, `(this->flags & 0x200000) == 0`, and the raw float at `this+0x20` is strictly greater than `0x80DFE8 = -0.6457718015f`
       - then ORs `0x8000` only when both tree-bit tests succeed on `([this+0x15C]+8)->+8` and `([this+0x15C]+0xE68)->+8`
       - the production DLL now mirrors that exact mask builder through pure `BuildTerrainQueryMask(...)` plus a deterministic export/test seam
+    - fresh 2026-03-26 review now also pins the exact projected query AABB that `0x631E70` checks against the cached bounds
+    - fresh raw capture now lives in `docs/physics/0x631E70_disasm.txt`
+    - after the optional transform path, `0x631E70` treats `[ebp+8..+0x10]` as the projected feet position and builds:
+      - `boundsMin = (projected.x - this+0xB0, projected.y - this+0xB0, projected.z)`
+      - `boundsMax = (projected.x + this+0xB0, projected.y + this+0xB0, projected.z + this+0xB4)`
+    - cache reuse only succeeds when both corners are inside `0xC4E5A0`: one `0x637350` call on `boundsMin`, then one on `boundsMax`
+    - the production DLL now mirrors that exact bounds builder through pure `BuildTerrainQueryBounds(...)` plus a deterministic export/test seam
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

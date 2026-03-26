@@ -1,0 +1,90 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x631E70
+Date: 2026-03-26
+Notes:
+- This excerpt captures the projected query-AABB builder and the immediate `0x6315F0 -> 0x6721B0` terrain-query path inside `0x631E70`.
+- After optional transform handling, `0x631E70` treats the stack vector at `[ebp+8..+0x10]` as the projected feet position.
+- It then builds:
+  - `boundsMin = (projected.x - this+0xB0, projected.y - this+0xB0, projected.z)`
+  - `boundsMax = (projected.x + this+0xB0, projected.y + this+0xB0, projected.z + this+0xB4)`
+- Cache reuse requires both corners to be inside `0xC4E5A0`: one `0x637350` call against `boundsMin`, then one against `boundsMax`.
+- On cache miss, it expands/merges the AABB, calls `0x61E9C0`, calls `0x6315F0`, then feeds that mask into `0x6721B0`.
+
+Relevant `0x631E70` excerpt:
+0x00631F95: fld      dword ptr [ebp - 0x1c]
+0x00631F98: sub      esp, 0xc
+0x00631F9B: fadd     dword ptr [ebp + 0x10]
+0x00631F9E: lea      ecx, [ebp + 8]
+0x00631FA1: fstp     dword ptr [esp + 8]
+0x00631FA5: fld      dword ptr [ebp - 0x20]
+0x00631FA8: fadd     dword ptr [ebp + 0xc]
+0x00631FAB: fstp     dword ptr [esp + 4]
+0x00631FAF: fld      dword ptr [ebp - 0x24]
+0x00631FB2: fadd     dword ptr [ebp + 8]
+0x00631FB5: fstp     dword ptr [esp]
+0x00631FB8: call     0x4549a0
+0x00631FBD: fld      dword ptr [ebp + 8]
+0x00631FC0: mov      eax, dword ptr [ebp + 8]
+0x00631FC3: fsub     dword ptr [ebx + 0xb0]
+0x00631FC9: mov      ecx, dword ptr [ebp + 0xc]
+0x00631FCC: mov      edx, dword ptr [ebp + 0x10]
+0x00631FCF: mov      dword ptr [ebp - 0x14], ecx
+0x00631FD2: mov      dword ptr [ebp - 0x18], eax
+0x00631FD5: fstp     dword ptr [ebp - 0x18]
+0x00631FD8: fld      dword ptr [ebp - 0x14]
+0x00631FDB: mov      dword ptr [ebp - 8], ecx
+0x00631FDE: fsub     dword ptr [ebx + 0xb0]
+0x00631FE4: mov      dword ptr [ebp - 0xc], eax
+0x00631FE7: mov      dword ptr [ebp - 4], edx
+0x00631FEA: lea      ecx, [ebp - 0x18]
+0x00631FED: fstp     dword ptr [ebp - 0x14]
+0x00631FF0: push     ecx
+0x00631FF1: fld      dword ptr [ebp + 8]
+0x00631FF4: mov      ecx, 0xc4e5a0
+0x00631FF9: fadd     dword ptr [ebx + 0xb0]
+0x00631FFF: mov      dword ptr [ebp - 0x10], edx
+0x00632002: fstp     dword ptr [ebp - 0xc]
+0x00632005: fld      dword ptr [ebp - 8]
+0x00632008: fadd     dword ptr [ebx + 0xb0]
+0x0063200E: fstp     dword ptr [ebp - 8]
+0x00632011: fld      dword ptr [ebp - 4]
+0x00632014: fadd     dword ptr [ebx + 0xb4]
+0x0063201A: fstp     dword ptr [ebp - 4]
+0x0063201D: call     0x637350
+0x00632022: test     al, al
+0x00632024: je       0x63203c
+0x00632026: lea      edx, [ebp - 0xc]
+0x00632029: push     edx
+0x0063202A: mov      ecx, 0xc4e5a0
+0x0063202F: call     0x637350
+0x00632034: test     al, al
+0x00632036: jne      0x632270
+0x0063203C: mov      ecx, 6
+0x00632041: lea      esi, [ebp - 0x18]
+0x00632044: lea      edi, [ebp - 0xa0]
+0x0063204A: rep movsd dword ptr es:[edi], dword ptr [esi]
+0x0063204C: push     0x3e2aaaab
+0x00632051: lea      ecx, [ebp - 0xa0]
+0x00632057: call     0x637300
+0x0063205C: push     0x3e2aaaab
+0x00632061: lea      ecx, [ebp - 0x94]
+0x00632067: call     0x6372d0
+0x0063206C: push     0xc4e5a0
+0x00632071: lea      edx, [ebp - 0xa0]
+0x00632077: lea      ecx, [ebp - 0x88]
+0x0063207D: call     0x6373b0
+0x00632082: mov      esi, eax
+0x00632084: mov      ecx, 6
+0x00632089: lea      edi, [ebp - 0xa0]
+0x0063208F: rep movsd dword ptr es:[edi], dword ptr [esi]
+0x00632091: lea      ecx, [ebp - 0x88]
+0x00632097: call     0x61e9c0
+0x0063209C: push     0
+0x0063209E: mov      ecx, ebx
+0x006320A0: call     0x6315f0
+0x006320A5: push     eax
+0x006320A6: mov      edx, 0xc4e52c
+0x006320AB: lea      ecx, [ebp - 0xa0]
+0x006320B1: call     0x6721b0
+0x006320B6: test     al, al
+0x006320B8: jne      0x6320c5
