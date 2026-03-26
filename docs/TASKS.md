@@ -283,8 +283,25 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 194)
+- **Last updated:** 2026-03-26 (session 195)
 - **Branch:** `main`
+- **Session 195 — shared grounded-wall transaction trace now runs through the production resolver:**
+  - Added shared [ResolveGroundedWallContacts(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [GroundedWallResolutionTrace in PhysicsEngine.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.h), then routed the grounded runtime wall lambda through that helper. The native export and the runtime now execute the same selected-contact and branch-resolution codepath.
+  - Extended [EvaluateGroundedWallSelection(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) and the matching [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs) interop so deterministic tests can record state before/after, branch kind, merged/final wall normals, and horizontal-vs-final projected moves without a separate native tester project.
+  - Updated [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs) to pin the production-helper result. The critical new finding is that frame 16 does not select the stateful elevator support face the earlier managed reconstruction implied; the production resolver picks WMO wall instance `0x3B34` (`point=(1553.8352, 242.3765, -9.1597)`, `normal≈+X`, `oriented≈-X`) and stays on the horizontal branch.
+- **Test baseline (session 195):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - Passed (`4/4`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests" --logger "console;verbosity=minimal"`
+    - Passed (`55/56`, one skipped MPQ extraction test)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
 - **Session 194 — native grounded-wall trace seam added to the production DLL:**
   - Added [EvaluateGroundedWallSelection(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) plus the matching [GroundedWallSelectionTrace interop](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs). This export mirrors the current grounded blocker-selection path and returns the chosen contact, raw/oriented oppose scores, reorientation bit, and stateful `CheckWalkable` result from the real `Navigation.dll`.
   - Updated [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs) so the frame-16 blocker-selection regression now queries that native trace directly instead of rebuilding the selector in C#.

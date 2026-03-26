@@ -235,6 +235,425 @@ WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::
     return result;
 }
 
+namespace
+{
+    struct GroundedWallCandidate
+    {
+        uint32_t index = 0xFFFFFFFFu;
+        G3D::Vector3 axis = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 sourceNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 orientedNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float rawOpposeScore = 0.0f;
+        float orientedOpposeScore = 0.0f;
+        bool usedPositionReorientation = false;
+        const SceneQuery::AABBContact* contact = nullptr;
+    };
+
+    struct GroundedWallSelectionInfo
+    {
+        uint32_t queryContactCount = 0;
+        uint32_t candidateCount = 0;
+        uint32_t selectedContactIndex = 0xFFFFFFFFu;
+        G3D::Vector3 selectedNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 orientedNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 primaryAxis = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 mergedWallNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float rawOpposeScore = 0.0f;
+        float orientedOpposeScore = 0.0f;
+        bool usedPositionReorientation = false;
+        const SceneQuery::AABBContact* selectedContact = nullptr;
+    };
+
+    bool SelectGroundedWallContact(const std::vector<SceneQuery::AABBContact>& slideContacts,
+                                   const G3D::Vector3& currentPosition,
+                                   const G3D::Vector3& moveDir2D,
+                                   GroundedWallSelectionInfo& outInfo)
+    {
+        outInfo = GroundedWallSelectionInfo{};
+        outInfo.queryContactCount = static_cast<uint32_t>(slideContacts.size());
+
+        std::vector<GroundedWallCandidate> candidates;
+        candidates.reserve(slideContacts.size());
+        std::vector<G3D::Vector3> blockerAxes;
+        blockerAxes.reserve(4);
+
+        auto appendAxis = [&](const G3D::Vector3& axis) {
+            for (const auto& existing : blockerAxes) {
+                if ((existing - axis).squaredMagnitude() <= 1e-6f) {
+                    return;
+                }
+            }
+
+            if (blockerAxes.size() < 4) {
+                blockerAxes.push_back(axis);
+            }
+        };
+
+        for (uint32_t i = 0; i < slideContacts.size(); ++i) {
+            const auto& contact = slideContacts[i];
+            if (contact.walkable) {
+                continue;
+            }
+
+            G3D::Vector3 normal = contact.normal.directionOrZero();
+            if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+                continue;
+            }
+
+            G3D::Vector3 horizontalNormal(normal.x, normal.y, 0.0f);
+            const float horizontalMag = horizontalNormal.magnitude();
+            if (horizontalMag <= PhysicsConstants::VECTOR_EPSILON) {
+                continue;
+            }
+
+            const float rawOpposeScore = std::max(0.0f, -horizontalNormal.directionOrZero().dot(moveDir2D));
+
+            bool usedPositionReorientation = false;
+            const G3D::Vector3 toCurrentPosition(
+                currentPosition.x - contact.point.x,
+                currentPosition.y - contact.point.y,
+                0.0f);
+            if (toCurrentPosition.squaredMagnitude() > PhysicsConstants::VECTOR_EPSILON &&
+                horizontalNormal.dot(toCurrentPosition) < 0.0f) {
+                normal = -normal;
+                horizontalNormal = -horizontalNormal;
+                usedPositionReorientation = true;
+            }
+
+            horizontalNormal = horizontalNormal * (1.0f / horizontalMag);
+            const float orientedOpposeScore = -horizontalNormal.dot(moveDir2D);
+            if (orientedOpposeScore <= 1.0e-5f) {
+                continue;
+            }
+
+            G3D::Vector3 axis(0.0f, 0.0f, 0.0f);
+            if (std::fabs(horizontalNormal.x) >= std::fabs(horizontalNormal.y)) {
+                axis = G3D::Vector3(horizontalNormal.x > 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f);
+            }
+            else {
+                axis = G3D::Vector3(0.0f, horizontalNormal.y > 0.0f ? 1.0f : -1.0f, 0.0f);
+            }
+
+            candidates.push_back(GroundedWallCandidate{
+                i,
+                axis,
+                contact.normal.directionOrZero(),
+                normal,
+                rawOpposeScore,
+                orientedOpposeScore,
+                usedPositionReorientation,
+                &contact });
+        }
+
+        outInfo.candidateCount = static_cast<uint32_t>(candidates.size());
+        if (candidates.empty()) {
+            return false;
+        }
+
+        float bestScore = 0.0f;
+        size_t bestIndex = 0;
+        for (const auto& candidate : candidates) {
+            bestScore = std::max(bestScore, candidate.orientedOpposeScore);
+        }
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            if (candidates[i].orientedOpposeScore >= bestScore) {
+                bestIndex = i;
+                bestScore = candidates[i].orientedOpposeScore;
+            }
+        }
+
+        const auto& selected = candidates[bestIndex];
+        outInfo.selectedContactIndex = selected.index;
+        outInfo.selectedNormal = selected.sourceNormal;
+        outInfo.orientedNormal = selected.orientedNormal;
+        outInfo.primaryAxis = selected.axis;
+        outInfo.rawOpposeScore = selected.rawOpposeScore;
+        outInfo.orientedOpposeScore = selected.orientedOpposeScore;
+        outInfo.usedPositionReorientation = selected.usedPositionReorientation;
+        outInfo.selectedContact = selected.contact;
+
+        appendAxis(outInfo.primaryAxis);
+        for (const auto& candidate : candidates) {
+            if ((candidate.axis - outInfo.primaryAxis).squaredMagnitude() <= 1e-6f) {
+                continue;
+            }
+            appendAxis(candidate.axis);
+        }
+
+        if (blockerAxes.empty()) {
+            return false;
+        }
+
+        if (blockerAxes.size() == 1) {
+            outInfo.mergedWallNormal = blockerAxes[0];
+        }
+        else if (blockerAxes.size() == 2) {
+            G3D::Vector3 merged = blockerAxes[0] + blockerAxes[1];
+            outInfo.mergedWallNormal = merged.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? merged.directionOrZero()
+                : blockerAxes[0];
+        }
+        else if (blockerAxes.size() == 3) {
+            int xAxisIndices[3] = { 0, 0, 0 };
+            int yAxisIndices[3] = { 0, 0, 0 };
+            int xAxisCount = 0;
+            int yAxisCount = 0;
+
+            for (size_t i = 0; i < blockerAxes.size(); ++i) {
+                const auto& axis = blockerAxes[i];
+                if (std::fabs(axis.y) <= PhysicsConstants::VECTOR_EPSILON) {
+                    xAxisIndices[xAxisCount++] = static_cast<int>(i);
+                }
+                else if (std::fabs(axis.x) <= PhysicsConstants::VECTOR_EPSILON) {
+                    yAxisIndices[yAxisCount++] = static_cast<int>(i);
+                }
+            }
+
+            if (xAxisCount == 1) {
+                outInfo.mergedWallNormal = blockerAxes[xAxisIndices[0]];
+            }
+            else if (yAxisCount > 0) {
+                outInfo.mergedWallNormal = blockerAxes[yAxisIndices[0]];
+            }
+            else {
+                outInfo.mergedWallNormal = blockerAxes[0];
+            }
+        }
+        else {
+            outInfo.mergedWallNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        }
+
+        return outInfo.mergedWallNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON;
+    }
+}
+
+bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
+                                               const G3D::Vector3& currentPosition,
+                                               const G3D::Vector3& requestedMove,
+                                               float collisionRadius,
+                                               float boundingHeight,
+                                               bool& groundedWallState,
+                                               G3D::Vector3& outResolvedMove,
+                                               G3D::Vector3& outWallNormal,
+                                               float& outBlockedFraction,
+                                               GroundedWallResolutionTrace* outTrace)
+{
+    GroundedWallResolutionTrace trace{};
+    trace.queryContactCount = static_cast<uint32_t>(slideContacts.size());
+    trace.groundedWallStateBefore = groundedWallState ? 1u : 0u;
+
+    outResolvedMove = requestedMove;
+    outWallNormal = G3D::Vector3(0.0f, 0.0f, 1.0f);
+    outBlockedFraction = 1.0f;
+
+    const float requested2D = std::sqrt((requestedMove.x * requestedMove.x) + (requestedMove.y * requestedMove.y));
+    trace.requested2D = requested2D;
+    if (requested2D <= PhysicsConstants::VECTOR_EPSILON) {
+        trace.groundedWallStateAfter = groundedWallState ? 1u : 0u;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    const G3D::Vector3 moveDir2D = G3D::Vector3(requestedMove.x, requestedMove.y, 0.0f).directionOrZero();
+    if (moveDir2D.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+        trace.groundedWallStateAfter = groundedWallState ? 1u : 0u;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    GroundedWallSelectionInfo selectionInfo;
+    const bool hasMergedWallNormal = SelectGroundedWallContact(slideContacts, currentPosition, moveDir2D, selectionInfo);
+    trace.candidateCount = selectionInfo.candidateCount;
+    trace.selectedContactIndex = selectionInfo.selectedContactIndex;
+    trace.usedPositionReorientation = selectionInfo.usedPositionReorientation ? 1u : 0u;
+    trace.selectedNormal = selectionInfo.selectedNormal;
+    trace.orientedNormal = selectionInfo.orientedNormal;
+    trace.primaryAxis = selectionInfo.primaryAxis;
+    trace.mergedWallNormal = selectionInfo.mergedWallNormal;
+    trace.finalWallNormal = selectionInfo.mergedWallNormal;
+    trace.rawOpposeScore = selectionInfo.rawOpposeScore;
+    trace.orientedOpposeScore = selectionInfo.orientedOpposeScore;
+
+    if (selectionInfo.selectedContact != nullptr) {
+        trace.selectedInstanceId = selectionInfo.selectedContact->instanceId;
+        trace.rawWalkable = selectionInfo.selectedContact->walkable ? 1u : 0u;
+        trace.selectedPoint = selectionInfo.selectedContact->point;
+        const auto withoutState = WoWCollision::CheckWalkable(
+            *selectionInfo.selectedContact,
+            currentPosition,
+            collisionRadius,
+            boundingHeight,
+            true,
+            false);
+        const auto withState = WoWCollision::CheckWalkable(
+            *selectionInfo.selectedContact,
+            currentPosition,
+            collisionRadius,
+            boundingHeight,
+            true,
+            groundedWallState);
+        trace.walkableWithoutState = withoutState.walkable ? 1u : 0u;
+        trace.walkableWithState = withState.walkable ? 1u : 0u;
+    }
+
+    if (!hasMergedWallNormal) {
+        trace.groundedWallStateAfter = groundedWallState ? 1u : 0u;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    outWallNormal = selectionInfo.mergedWallNormal;
+    const float intoSurface = requestedMove.dot(outWallNormal);
+    if (intoSurface >= -PhysicsConstants::VECTOR_EPSILON) {
+        trace.groundedWallStateAfter = groundedWallState ? 1u : 0u;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    G3D::Vector3 horizontalProjectedMove = requestedMove - (outWallNormal * intoSurface);
+    horizontalProjectedMove.z = 0.0f;
+    G3D::Vector3 horizontalWallNormal(outWallNormal.x, outWallNormal.y, 0.0f);
+    const float horizontalWallMag = horizontalWallNormal.magnitude();
+    if (horizontalWallMag > PhysicsConstants::VECTOR_EPSILON) {
+        horizontalWallNormal = horizontalWallNormal * (1.0f / horizontalWallMag);
+        horizontalProjectedMove += horizontalWallNormal * 0.001f;
+    }
+
+    trace.horizontalProjectedMove = horizontalProjectedMove;
+    float horizontalResolved2D = std::sqrt(
+        (horizontalProjectedMove.x * horizontalProjectedMove.x) +
+        (horizontalProjectedMove.y * horizontalProjectedMove.y));
+    trace.horizontalResolved2D = horizontalResolved2D;
+
+    G3D::Vector3 projectedMove = horizontalProjectedMove;
+    float slopedResolved2D = horizontalResolved2D;
+    bool usedWalkableSelectedContact = false;
+    bool usedNonWalkableVertical = false;
+    bool usedUphillDiscard = false;
+    bool usedPrimaryAxisFallback = false;
+    trace.branchKind = GROUNDED_WALL_BRANCH_HORIZONTAL;
+
+    if (selectionInfo.selectedContact != nullptr) {
+        WoWCollision::CheckWalkableResult walkableResult = WoWCollision::CheckWalkable(
+            *selectionInfo.selectedContact,
+            currentPosition,
+            collisionRadius,
+            boundingHeight,
+            true,
+            groundedWallState);
+
+        if (walkableResult.walkable) {
+            const float intoPlane = requestedMove.dot(selectionInfo.selectedNormal);
+            G3D::Vector3 verticalCorrection = requestedMove - (selectionInfo.selectedNormal * intoPlane);
+
+            const float verticalLimit = collisionRadius;
+            if (std::fabs(verticalCorrection.z) > verticalLimit &&
+                verticalLimit > PhysicsConstants::VECTOR_EPSILON) {
+                verticalCorrection.z = (verticalCorrection.z > 0.0f ? verticalLimit : -verticalLimit);
+            }
+
+            projectedMove = G3D::Vector3(0.0f, 0.0f, verticalCorrection.z);
+            groundedWallState = walkableResult.groundedWallFlagAfter;
+            usedWalkableSelectedContact = true;
+            trace.branchKind = GROUNDED_WALL_BRANCH_WALKABLE_SELECTED_VERTICAL;
+        }
+    }
+
+    if (!usedWalkableSelectedContact && std::fabs(selectionInfo.selectedNormal.z) > 0.01f) {
+        const float intoPlane = requestedMove.dot(selectionInfo.selectedNormal);
+        projectedMove = requestedMove - (selectionInfo.selectedNormal * intoPlane);
+
+        const float verticalLimit = collisionRadius;
+        if (std::fabs(projectedMove.z) > verticalLimit &&
+            verticalLimit > PhysicsConstants::VECTOR_EPSILON) {
+            const float scale = verticalLimit / std::fabs(projectedMove.z);
+            projectedMove.x *= scale;
+            projectedMove.y *= scale;
+            projectedMove.z *= scale;
+        }
+
+        slopedResolved2D = std::sqrt(
+            (projectedMove.x * projectedMove.x) +
+            (projectedMove.y * projectedMove.y));
+
+        if (projectedMove.z > 0.0f &&
+            horizontalResolved2D > slopedResolved2D + 1e-4f) {
+            projectedMove = horizontalProjectedMove;
+            slopedResolved2D = horizontalResolved2D;
+            usedUphillDiscard = true;
+        }
+        else {
+            usedNonWalkableVertical = true;
+            trace.branchKind = GROUNDED_WALL_BRANCH_NON_WALKABLE_VERTICAL;
+        }
+    }
+
+    trace.branchProjectedMove = projectedMove;
+    trace.slopedResolved2D = slopedResolved2D;
+
+    float resolved2D = std::sqrt((projectedMove.x * projectedMove.x) + (projectedMove.y * projectedMove.y));
+    if (!usedWalkableSelectedContact &&
+        resolved2D < (requested2D * 0.25f) &&
+        selectionInfo.primaryAxis.magnitude() > PhysicsConstants::VECTOR_EPSILON &&
+        (selectionInfo.primaryAxis - outWallNormal).squaredMagnitude() > 1e-6f) {
+        const float primaryInto = requestedMove.dot(selectionInfo.primaryAxis);
+        if (primaryInto < -PhysicsConstants::VECTOR_EPSILON) {
+            G3D::Vector3 primaryProjectedMove = requestedMove - (selectionInfo.primaryAxis * primaryInto);
+            primaryProjectedMove.z = 0.0f;
+            const float primaryResolved2D = std::sqrt(
+                (primaryProjectedMove.x * primaryProjectedMove.x) +
+                (primaryProjectedMove.y * primaryProjectedMove.y));
+
+            if (primaryResolved2D > resolved2D + 1e-4f) {
+                projectedMove = primaryProjectedMove;
+                resolved2D = primaryResolved2D;
+                outWallNormal = selectionInfo.primaryAxis;
+                trace.finalWallNormal = selectionInfo.primaryAxis;
+                usedPrimaryAxisFallback = true;
+            }
+        }
+    }
+
+    if (usedNonWalkableVertical) {
+        groundedWallState = true;
+    }
+
+    if (resolved2D <= PhysicsConstants::VECTOR_EPSILON ||
+        projectedMove.directionOrZero().dot(moveDir2D) <= PhysicsConstants::VECTOR_EPSILON) {
+        projectedMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        resolved2D = 0.0f;
+    }
+    else if (resolved2D > requested2D) {
+        projectedMove = projectedMove * (requested2D / resolved2D);
+        resolved2D = requested2D;
+    }
+
+    outResolvedMove = projectedMove;
+    outBlockedFraction = std::max(0.0f, std::min(1.0f, resolved2D / requested2D));
+
+    trace.usedWalkableSelectedContact = usedWalkableSelectedContact ? 1u : 0u;
+    trace.usedNonWalkableVertical = usedNonWalkableVertical ? 1u : 0u;
+    trace.usedUphillDiscard = usedUphillDiscard ? 1u : 0u;
+    trace.usedPrimaryAxisFallback = usedPrimaryAxisFallback ? 1u : 0u;
+    trace.finalProjectedMove = projectedMove;
+    trace.finalResolved2D = resolved2D;
+    trace.blockedFraction = outBlockedFraction;
+    trace.groundedWallStateAfter = groundedWallState ? 1u : 0u;
+    if (outTrace) {
+        *outTrace = trace;
+    }
+
+    return true;
+}
+
 // =====================================================================================
 // SECTION 3: SMALL HELPER METHODS
 // Logging, slide computation, and single-operation utilities.
@@ -828,6 +1247,18 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         G3D::Vector3& outResolvedMove,
         G3D::Vector3& outWallNormal,
         float& outBlockedFraction) -> bool {
+        return WoWCollision::ResolveGroundedWallContacts(
+            slideContacts,
+            currentPosition,
+            requestedMove,
+            radius,
+            height,
+            st.groundedWallState,
+            outResolvedMove,
+            outWallNormal,
+            outBlockedFraction,
+            nullptr);
+
         outResolvedMove = requestedMove;
         outWallNormal = G3D::Vector3(0, 0, 1);
 

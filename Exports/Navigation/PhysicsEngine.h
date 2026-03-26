@@ -546,10 +546,64 @@ namespace WoWCollision
         bool groundedWallFlagAfter = false;
     };
 
+    enum GroundedWallResolutionBranch : uint32_t
+    {
+        GROUNDED_WALL_BRANCH_NONE = 0,
+        GROUNDED_WALL_BRANCH_HORIZONTAL = 1,
+        GROUNDED_WALL_BRANCH_WALKABLE_SELECTED_VERTICAL = 2,
+        GROUNDED_WALL_BRANCH_NON_WALKABLE_VERTICAL = 3,
+    };
+
+    struct GroundedWallResolutionTrace
+    {
+        uint32_t queryContactCount = 0;
+        uint32_t candidateCount = 0;
+        uint32_t selectedContactIndex = 0xFFFFFFFFu;
+        uint32_t selectedInstanceId = 0;
+        uint32_t rawWalkable = 0;
+        uint32_t walkableWithoutState = 0;
+        uint32_t walkableWithState = 0;
+        uint32_t groundedWallStateBefore = 0;
+        uint32_t groundedWallStateAfter = 0;
+        uint32_t usedPositionReorientation = 0;
+        uint32_t usedWalkableSelectedContact = 0;
+        uint32_t usedNonWalkableVertical = 0;
+        uint32_t usedUphillDiscard = 0;
+        uint32_t usedPrimaryAxisFallback = 0;
+        uint32_t branchKind = GROUNDED_WALL_BRANCH_NONE;
+        G3D::Vector3 selectedPoint = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 selectedNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 orientedNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 primaryAxis = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 mergedWallNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 finalWallNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 horizontalProjectedMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 branchProjectedMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 finalProjectedMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float rawOpposeScore = 0.0f;
+        float orientedOpposeScore = 0.0f;
+        float requested2D = 0.0f;
+        float horizontalResolved2D = 0.0f;
+        float slopedResolved2D = 0.0f;
+        float finalResolved2D = 0.0f;
+        float blockedFraction = 1.0f;
+    };
+
     CheckWalkableResult CheckWalkable(const SceneQuery::AABBContact& contact,
                                       const G3D::Vector3& position,
                                       float collisionRadius,
                                       float boundingHeight,
                                       bool useStandardWalkableThreshold,
                                       bool groundedWallFlagBefore);
+
+    bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
+                                     const G3D::Vector3& currentPosition,
+                                     const G3D::Vector3& requestedMove,
+                                     float collisionRadius,
+                                     float boundingHeight,
+                                     bool& groundedWallState,
+                                     G3D::Vector3& outResolvedMove,
+                                     G3D::Vector3& outWallNormal,
+                                     float& outBlockedFraction,
+                                     GroundedWallResolutionTrace* outTrace = nullptr);
 }

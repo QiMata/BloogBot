@@ -140,14 +140,38 @@ public static partial class NavigationInterop
         public uint RawWalkable;
         public uint WalkableWithoutState;
         public uint WalkableWithState;
+        public uint GroundedWallStateBefore;
         public uint GroundedWallStateAfter;
         public uint UsedPositionReorientation;
+        public uint UsedWalkableSelectedContact;
+        public uint UsedNonWalkableVertical;
+        public uint UsedUphillDiscard;
+        public uint UsedPrimaryAxisFallback;
+        public uint BranchKind;
         public Vector3 SelectedPoint;
         public Vector3 SelectedNormal;
         public Vector3 OrientedNormal;
         public Vector3 PrimaryAxis;
+        public Vector3 MergedWallNormal;
+        public Vector3 FinalWallNormal;
+        public Vector3 HorizontalProjectedMove;
+        public Vector3 BranchProjectedMove;
+        public Vector3 FinalProjectedMove;
         public float RawOpposeScore;
         public float OrientedOpposeScore;
+        public float Requested2D;
+        public float HorizontalResolved2D;
+        public float SlopedResolved2D;
+        public float FinalResolved2D;
+        public float BlockedFraction;
+    }
+
+    public enum GroundedWallBranchKind : uint
+    {
+        None = 0,
+        Horizontal = 1,
+        WalkableSelectedVertical = 2,
+        NonWalkableVertical = 3,
     }
 
     // ==========================================================================

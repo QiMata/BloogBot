@@ -120,9 +120,13 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 194)
+- Last updated: 2026-03-26 (session 195)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 195 moved the grounded wall transaction seam into the production resolver itself instead of leaving selection/branch tracing duplicated in the export layer. `PhysicsEngine.h/.cpp` now expose shared `WoWCollision::ResolveGroundedWallContacts(...)` plus `GroundedWallResolutionTrace`, and the grounded runtime wall lambda calls that helper directly.
+  - `PhysicsTestExports.cpp` still exports `EvaluateGroundedWallSelection(...)`, but it now returns the real runtime transaction: state before/after, branch kind, merged/final wall normals, and horizontal-vs-final projected moves from the same helper the live grounded path uses.
+  - The widened packet-backed frame-16 tests changed the immediate blocker. The production helper does not pick the stateful elevator support contact the earlier managed reconstruction implied; it selects WMO wall instance `0x00003B34` (`point=(1553.8352, 242.3765, -9.1597)`, `normal≈+X`, `oriented≈-X`) and stays on the horizontal branch before the final zero-move clamp.
+  - Practical implication: the next native parity target is deeper in the selected-contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544` payload), not in the post-selection branch helper alone.
   - Session 194 added a production-DLL native trace seam for grounded blocker selection instead of standing up a separate native tester project. `PhysicsTestExports.cpp` now exports `EvaluateGroundedWallSelection(...)`, which mirrors the current blocker-selection path and returns the chosen contact, raw/oriented oppose scores, reorientation bit, and stateful `CheckWalkable` result.
   - `UndercityUpperDoorContactTests.cs` now uses that native trace export for the frame-16 regression instead of rebuilding the selector in C#. This keeps the diagnostic path tied to the real `Navigation.dll` logic while still remaining deterministic and packet-backed.
   - Fresh full-window `0x6351A0` review tightened the selected-contact note in `docs/physics/wow_exe_decompilation.md`: after `0x632BA0` and `0x633720`, the function either returns `0xC4E544[index]` directly, returns a zeroed pair with success, or falls through the `0x7C5DA0` / `0x6353D0` / `0x635090` alternate path.
@@ -165,6 +169,12 @@
   - Session 172 corrected `0x6373B0` from “Collide” to the merged-AABB helper and updated grounded `CollisionStepWoW` so the wall query now uses the merged start/full/half-step `TestTerrainAABB` volume instead of accumulating synthetic full-step and half-step `SweepAABB` contacts.
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (4/4)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests" --logger "console;verbosity=minimal"` -> `passed (55/56, one skipped MPQ extraction test)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"` -> `passed (1/1)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (3/3)`

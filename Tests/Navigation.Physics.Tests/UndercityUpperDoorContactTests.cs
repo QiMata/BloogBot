@@ -96,7 +96,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
     }
 
     [Fact]
-    public void PacketBackedUndercityElevatorUp_Frame16_CurrentPositionReorientationFindsOpposingStatefulBlocker()
+    public void PacketBackedUndercityElevatorUp_Frame16_CurrentPositionReorientationFindsOpposingSelectedBlocker()
     {
         if (!_fixture.IsInitialized)
             return;
@@ -117,6 +117,11 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             groundedWallFlagBefore: true,
             out GroundedWallSelectionTrace trace);
 
+        _output.WriteLine(
+            $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} point={trace.SelectedPoint} " +
+            $"normal={trace.SelectedNormal} oriented={trace.OrientedNormal} rawOppose={trace.RawOpposeScore:F4} " +
+            $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState} after={trace.GroundedWallStateAfter}");
+
         Assert.True(traced,
             "Expected frame-16 grounded wall trace to select a contact from the production Navigation.dll path.");
         Assert.True(trace.QueryContactCount > 0);
@@ -132,13 +137,47 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         Assert.True(trace.OrientedNormal.X < -0.99f && MathF.Abs(trace.OrientedNormal.Z) < 1e-3f,
             $"Expected the oriented blocker normal to face back into motion, got {trace.OrientedNormal}.");
         Assert.Equal(0u, trace.WalkableWithoutState);
-        Assert.Equal(1u, trace.WalkableWithState);
-        Assert.Equal(1u, trace.GroundedWallStateAfter);
+        Assert.Equal(0u, trace.WalkableWithState);
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_NativeTraceCapturesHorizontalResolverBranchTransaction()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
+
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
 
         _output.WriteLine(
-            $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} point={trace.SelectedPoint} " +
-            $"normal={trace.SelectedNormal} oriented={trace.OrientedNormal} rawOppose={trace.RawOpposeScore:F4} " +
-            $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState}");
+            $"frame16 branch={trace.BranchKind} merged={trace.MergedWallNormal} finalWall={trace.FinalWallNormal} " +
+            $"horizontal={trace.HorizontalProjectedMove} branchMove={trace.BranchProjectedMove} finalMove={trace.FinalProjectedMove} " +
+            $"blockedFraction={trace.BlockedFraction:F6}");
+
+        Assert.True(traced);
+        Assert.Equal(1u, trace.GroundedWallStateBefore);
+        Assert.Equal((uint)GroundedWallBranchKind.Horizontal, trace.BranchKind);
+        Assert.Equal(0u, trace.UsedWalkableSelectedContact);
+        Assert.Equal(0u, trace.UsedNonWalkableVertical);
+        Assert.True(trace.MergedWallNormal.X < -0.99f && MathF.Abs(trace.MergedWallNormal.Z) < 1e-3f,
+            $"Expected the merged blocker normal to face back into motion, got {trace.MergedWallNormal}.");
+        Assert.True(MathF.Abs(trace.BranchProjectedMove.Z) <= 1e-6f,
+            $"Expected the horizontal branch to stay flat on frame 16, got branchMove={trace.BranchProjectedMove}.");
+        Assert.True(MathF.Abs(trace.FinalProjectedMove.Z) <= 1e-6f,
+            $"Expected the final resolved move to stay flat on frame 16, got finalMove={trace.FinalProjectedMove}.");
     }
 
     private Frame15Scenario LoadFrame15Scenario()

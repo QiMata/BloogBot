@@ -990,3 +990,42 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - The native trace now shows the selected frame-16 blocker as a real horizontal side face from the production DLL path (`normal ~= +X`, `oriented ~= -X`, `rawOppose ~= 0`, `orientedOppose ~= 1`, `walk0=0`, `walk1=1`), which is the exact transaction shape we need for the remaining producer-chain audit.
 - Recommended next single hypothesis:
   - Extend the native trace seam one level deeper so deterministic tests can also record the chosen `0xC4E544` paired selector payload and the post-`0x635410` / post-`0x6353D0` branch source, then compare that against the `0x6351A0` disassembly before changing runtime behavior again.
+
+## 2026-03-26 Shared grounded-wall transaction trace seam
+
+- Scope note:
+  - This pass stayed in native physics only. It did not try packet cadence or live parity.
+  - The goal was to make the production grounded wall resolver itself traceable, rather than keeping a second selector implementation in the export layer.
+- Diagnostic/runtime change shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added shared `WoWCollision::ResolveGroundedWallContacts(...)` plus `GroundedWallResolutionTrace`
+    - routed the grounded runtime wall lambda through that shared helper so the export and runtime now execute the same selection/branch codepath
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - extended `EvaluateGroundedWallSelection(...)` to return the full branch transaction: state before/after, selected vs merged wall normals, branch kind, horizontal/branch/final projected moves, and blocked fraction
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching interop fields and branch enum
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - updated the frame-16 regression to pin the production-helper result rather than the earlier managed reconstruction
+    - added a second frame-16 assertion for the resolver branch transaction
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - passed (`4/4`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests" --logger "console;verbosity=minimal"`
+    - passed (`55/56`, one existing skipped MPQ extraction test)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The production frame-16 trace no longer supports the earlier managed assumption that the resolver selects a statefully walkable contact on that frame.
+  - The shared helper now shows the chosen blocker is WMO instance `0x00003B34` at `point=(1553.8352, 242.3765, -9.1597)` with `normal ~= +X`, `oriented ~= -X`, `walk0=0`, `walk1=0`.
+  - The corresponding branch is the plain horizontal path (`branch=1`), with `mergedWallNormal=(-1,0,0)`, `horizontal/branch move ~= (-0.001, 0.0315, 0)`, and final move clamped to zero by the post-branch direction test.
+- Do Not Repeat:
+  - Do not rely on the earlier managed frame-16 selector reconstruction that reported `walk1=1`; the production helper disproves it.
+  - Do not add a separate native tester binary for this path. The useful harness is the production-linked export layer around the actual grounded resolver.
+- Recommended next single hypothesis:
+  - Trace the selected-contact producer chain one level deeper (`0x633720` / `0x635090`) to explain why the runtime-selected frame-16 blocker is WMO wall index `3` instead of the stateful elevator support contact present elsewhere in the merged query.

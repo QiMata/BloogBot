@@ -31,9 +31,12 @@ Known remaining work in this owner: `0` items.
 7. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 194)`
+- Last updated: `2026-03-26 (session 195)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 195 kept the native tester idea inside the production-linked harness instead of spinning up a separate C++ test binary. `NavigationInterop.cs` now exposes the full grounded branch transaction coming out of the shared native resolver helper: state before/after, branch kind, merged/final wall normals, and horizontal-vs-final projected moves.
+  - `UndercityUpperDoorContactTests.cs` now pins the production-helper result on packet-backed frame 16. The important correction is that the real DLL does not select the stateful elevator support face on that frame; it selects WMO wall instance `0x00003B34` and stays on the horizontal branch.
+  - This owner now has a deterministic way to prove whether a given parity hypothesis is failing in contact selection or in post-selection branch handling, which is exactly the missing instrumentation needed before cutting more grounded heuristics.
   - Session 194 replaced the frame-16 blocker-selection reconstruction with a native trace export from the production `Navigation.dll`. `NavigationInterop.cs` now exposes `GroundedWallSelectionTrace`, and `UndercityUpperDoorContactTests.cs` asks the DLL directly which contact it chose, what the raw/oriented oppose scores were, and how stateful `CheckWalkable` evaluated that contact.
   - This owner can now pin the grounded blocker transaction itself without a separate C++ test project: chosen contact, reorientation bit, raw/non-raw oppose scores, and walkability before/after state all come back from the same DLL the runtime uses.
   - Session 193 carried the binary-selected grounded-wall state through the deterministic interop path. `NavigationInterop.cs` still talks to the production `Navigation.dll`, but replay input/output now preserve `GroundedWallState` so packet-backed tests can exercise the same selected-contact state path across grounded frames that the runtime uses.
@@ -75,6 +78,12 @@ Known remaining work in this owner: `0` items.
   - Session 176 also shipped one native blocker-axis reduction in `PhysicsEngine.cpp`: grounded `buildMergedBlockerNormal(...)` no longer drops later distinct blocker axes with the `score + 0.1` filter once the best opposing axis has been chosen as primary.
   - The updated focused slice stayed green after the native rebuild, so the new terrain/WMO/dynamic-object wall regressions, the slope false-wall guard, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay gate all held under the slimmer blocker-axis heuristic.
 - Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (4/4)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysics|FullyQualifiedName~PhysicsReplayTests" --logger "console;verbosity=minimal"` -> `passed (55/56, one skipped MPQ extraction test)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground" --logger "console;verbosity=minimal"` -> `passed (1/1)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (3/3)`

@@ -57,14 +57,30 @@ struct ExportGroundedWallSelectionTrace
     uint32_t rawWalkable;
     uint32_t walkableWithoutState;
     uint32_t walkableWithState;
+    uint32_t groundedWallStateBefore;
     uint32_t groundedWallStateAfter;
     uint32_t usedPositionReorientation;
+    uint32_t usedWalkableSelectedContact;
+    uint32_t usedNonWalkableVertical;
+    uint32_t usedUphillDiscard;
+    uint32_t usedPrimaryAxisFallback;
+    uint32_t branchKind;
     G3D::Vector3 selectedPoint;
     G3D::Vector3 selectedNormal;
     G3D::Vector3 orientedNormal;
     G3D::Vector3 primaryAxis;
+    G3D::Vector3 mergedWallNormal;
+    G3D::Vector3 finalWallNormal;
+    G3D::Vector3 horizontalProjectedMove;
+    G3D::Vector3 branchProjectedMove;
+    G3D::Vector3 finalProjectedMove;
     float rawOpposeScore;
     float orientedOpposeScore;
+    float requested2D;
+    float horizontalResolved2D;
+    float slopedResolved2D;
+    float finalResolved2D;
+    float blockedFraction;
 };
 
 static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D::Vector3& moveDir2D)
@@ -632,6 +648,56 @@ extern "C"
         std::vector<SceneQuery::AABBContact> contacts;
         SceneQuery::TestTerrainAABB(mapId, *boxMin, *boxMax, contacts);
         outTrace->queryContactCount = static_cast<uint32_t>(contacts.size());
+
+        bool groundedWallState = groundedWallFlagBefore;
+        G3D::Vector3 resolvedMove(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 wallNormal(0.0f, 0.0f, 1.0f);
+        float blockedFraction = 1.0f;
+        WoWCollision::GroundedWallResolutionTrace trace{};
+        const bool resolved = WoWCollision::ResolveGroundedWallContacts(
+            contacts,
+            *currentPosition,
+            *requestedMove,
+            collisionRadius,
+            boundingHeight,
+            groundedWallState,
+            resolvedMove,
+            wallNormal,
+            blockedFraction,
+            &trace);
+
+        outTrace->queryContactCount = trace.queryContactCount;
+        outTrace->candidateCount = trace.candidateCount;
+        outTrace->selectedContactIndex = trace.selectedContactIndex;
+        outTrace->selectedInstanceId = trace.selectedInstanceId;
+        outTrace->rawWalkable = trace.rawWalkable;
+        outTrace->walkableWithoutState = trace.walkableWithoutState;
+        outTrace->walkableWithState = trace.walkableWithState;
+        outTrace->groundedWallStateBefore = trace.groundedWallStateBefore;
+        outTrace->groundedWallStateAfter = trace.groundedWallStateAfter;
+        outTrace->usedPositionReorientation = trace.usedPositionReorientation;
+        outTrace->usedWalkableSelectedContact = trace.usedWalkableSelectedContact;
+        outTrace->usedNonWalkableVertical = trace.usedNonWalkableVertical;
+        outTrace->usedUphillDiscard = trace.usedUphillDiscard;
+        outTrace->usedPrimaryAxisFallback = trace.usedPrimaryAxisFallback;
+        outTrace->branchKind = trace.branchKind;
+        outTrace->selectedPoint = trace.selectedPoint;
+        outTrace->selectedNormal = trace.selectedNormal;
+        outTrace->orientedNormal = trace.orientedNormal;
+        outTrace->primaryAxis = trace.primaryAxis;
+        outTrace->mergedWallNormal = trace.mergedWallNormal;
+        outTrace->finalWallNormal = trace.finalWallNormal;
+        outTrace->horizontalProjectedMove = trace.horizontalProjectedMove;
+        outTrace->branchProjectedMove = trace.branchProjectedMove;
+        outTrace->finalProjectedMove = trace.finalProjectedMove;
+        outTrace->rawOpposeScore = trace.rawOpposeScore;
+        outTrace->orientedOpposeScore = trace.orientedOpposeScore;
+        outTrace->requested2D = trace.requested2D;
+        outTrace->horizontalResolved2D = trace.horizontalResolved2D;
+        outTrace->slopedResolved2D = trace.slopedResolved2D;
+        outTrace->finalResolved2D = trace.finalResolved2D;
+        outTrace->blockedFraction = trace.blockedFraction;
+        return resolved;
 
         const G3D::Vector3 moveDir2D(requestedMove->x, requestedMove->y, 0.0f);
         const G3D::Vector3 normalizedMoveDir2D = moveDir2D.directionOrZero();
