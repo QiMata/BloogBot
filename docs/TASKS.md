@@ -283,15 +283,26 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 191)
+- **Last updated:** 2026-03-26 (session 192)
 - **Branch:** `main`
+- **Session 192 — packet-backed Undercity frame-15 contact probe locked into deterministic coverage:**
+  - Extended [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with `QueryTerrainAABBContacts(...)` and exposed the matching `TerrainAabbContact` interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs). This turns the merged `TestTerrainAABB` contact feed into a repeatable recorder on the production `Navigation.dll` instead of a one-off temp harness.
+  - Added [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs), which reconstructs the exact merged frame-15 query from the packet-backed upper-door replay and proves the query already contains the elevator deck support face at deck height with a signed downward normal and raw `walkable=0`.
+  - The same deterministic probe also proves the pure `0x6334A0` helper only promotes that support face on its stateful path and that the same state would also promote many wall contacts in the same merged query if applied indiscriminately. That closes the tempting shortcut: do not blanket-replace `contact.walkable` with stateful `CheckWalkable(...)` across the merged query.
+  - The immediate native blocker is therefore narrower and clearer than before: reproduce the binary-selected contact / grounded-wall-state path feeding `0x6334A0` (`0xC4E544` producer chain), then route the helper through that path. Do not spend another run on a broadcast helper hookup.
 - **Session 191 — `TestTerrain` signed contact orientation aligned to `0x6721B0` + `0x637330`:**
   - Captured fresh binary evidence in [0x6721B0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6721B0_disasm.txt). The new note records the relevant `0x6721B0` behavior the static AABB path was still missing: `TestTerrain` copies matching `0x34` contact structs byte-for-byte from the spatial-query buffer, and the follow-on helper [0x637330](/E:/repos/Westworld of Warcraft/docs/physics/0x6721B0_disasm.txt) is a pure three-component negate. The client therefore preserves a signed contact normal and only flips it once, instead of upward-normalizing it.
   - Updated [SceneQuery.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.h) and [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so `TestTerrainAABB` now builds signed box-relative contacts through `BuildTerrainAABBContact(...)`: the stored contact normal faces the query box center, `planeDistance` matches that signed normal, and `walkable` now uses signed `normal.z >= cos(50)` instead of `abs(normal.z)`.
   - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) so the pure `0x6334A0` helper now consumes the signed contact normal/plane feed rather than the raw triangle winding, which matches the binary's post-`Vec3Negate` data flow.
   - Added new deterministic coverage in [TerrainAabbContactOrientationTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/TerrainAabbContactOrientationTests.cs) plus a pure orientation export in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs). The new tests pin the exact distinction that was missing before: support below the query box stays upward and walkable, geometry above the query box becomes downward and non-walkable, and wall contacts face the box center.
   - The signed-orientation change held the focused native slice and both live Durotar parity routes. This is the first session where the `TestTerrain` contact-orientation blocker itself moved forward cleanly, so the next native pass can retry runtime `0x6334A0` usage on top of a parity-safe signed contact feed instead of the old upward-flattened one.
-- **Test baseline (session 191):**
+- **Test baseline (session 192):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
     - Succeeded
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
@@ -304,7 +315,14 @@ if (transportGuid != 0) {
     - Passed (`1/1`)
   - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
     - Passed (`1/1`)
-- **Files changed (session 191):**
+- **Files changed (session 192):**
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/SceneQuery.h`
   - `Exports/Navigation/SceneQuery.cpp`
   - `Exports/Navigation/PhysicsEngine.cpp`
@@ -316,8 +334,8 @@ if (transportGuid != 0) {
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- **Next priorities:** keep the signed `TestTerrainAABB` contact feed frozen, then retry runtime `0x6334A0` walkability usage against the grounded wall resolver. Only after that should the next native pass return to the still-open `0x636100` branch-gate bookkeeping.
-- **Next command:** `rg -n "CheckWalkable\\(|contact\\.walkable|BuildTerrainAABBContact|0x6334A0|0x636100" Exports/Navigation/PhysicsEngine.cpp Exports/Navigation/SceneQuery.cpp -S`
+- **Next priorities:** keep the signed `TestTerrainAABB` feed and the new frame-15 contact probe frozen, then trace the selected-contact / grounded-wall-state path feeding `0x6334A0` (`0xC4E544` producer chain). Only after that should the next native pass attempt another runtime helper hookup or return to the still-open `0x636100` bookkeeping.
+- **Next command:** `rg -n "0xC4E544|6351A0|632BA0|633720|635410|6353D0" docs/physics/*.txt docs/physics/wow_exe_decompilation.md -S`
 - **Session 190 — `0x6334A0` `CheckWalkable` semantics captured and locked in deterministic coverage:**
   - Captured fresh binary evidence in [0x6334A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6334A0_disasm.txt). The new note includes the full `0x6334A0` body plus the two supporting helper findings that matter for parity: `0x6333D0` checks the current contact plane against the four top-footprint corners with `1/720`, and `0x6335D0` accepts the current position only when it sits inside all three triangle edge planes with `1/12`.
   - Extended [SceneQuery.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.h) and [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so `TestTerrainAABB` contacts now preserve the raw triangle vertices, raw plane normal, and plane distance the binary helper actually reasons about instead of collapsing everything down to a single upward-facing `walkable` bit.

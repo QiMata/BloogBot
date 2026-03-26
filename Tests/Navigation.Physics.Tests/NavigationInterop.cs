@@ -113,6 +113,23 @@ public static partial class NavigationInterop
         );
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainAabbContact
+    {
+        public Vector3 Point;
+        public Vector3 Normal;
+        public Vector3 RawNormal;
+        public Vector3 TriangleA;
+        public Vector3 TriangleB;
+        public Vector3 TriangleC;
+        public float PlaneDistance;
+        public float Distance;
+        public uint InstanceId;
+        public uint Walkable;
+
+        public readonly Triangle ToTriangle() => new(TriangleA, TriangleB, TriangleC);
+    }
+
     // ==========================================================================
     // DYNAMIC OBJECT INFO (matches PhysicsBridge.h DynamicObjectInfo exactly)
     // ==========================================================================
@@ -442,6 +459,14 @@ public static partial class NavigationInterop
         out Vector3 normal,
         out float planeDistance,
         [MarshalAs(UnmanagedType.I1)] out bool walkable);
+
+    [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int QueryTerrainAABBContacts(
+        uint mapId,
+        in Vector3 boxMin,
+        in Vector3 boxMax,
+        [Out] TerrainAabbContact[] contacts,
+        int maxContacts);
 
     // ==========================================================================
     // PHYSICS STEP FUNCTION

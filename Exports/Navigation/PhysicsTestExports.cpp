@@ -33,6 +33,20 @@ struct ExportTriangle
     G3D::Vector3 c;
 };
 
+struct ExportAABBContact
+{
+    G3D::Vector3 point;
+    G3D::Vector3 normal;
+    G3D::Vector3 rawNormal;
+    G3D::Vector3 triangleA;
+    G3D::Vector3 triangleB;
+    G3D::Vector3 triangleC;
+    float planeDistance;
+    float distance;
+    uint32_t instanceId;
+    uint32_t walkable;
+};
+
 extern "C"
 {
     // ==========================================================================
@@ -533,6 +547,38 @@ extern "C"
         if (outPlaneDistance) *outPlaneDistance = contact.planeDistance;
         if (outWalkable) *outWalkable = contact.walkable;
         return true;
+    }
+
+    __declspec(dllexport) int QueryTerrainAABBContacts(
+        uint32_t mapId,
+        const G3D::Vector3* boxMin,
+        const G3D::Vector3* boxMax,
+        ExportAABBContact* contacts,
+        int maxContacts)
+    {
+        if (!boxMin || !boxMax || !contacts || maxContacts <= 0)
+            return 0;
+
+        std::vector<SceneQuery::AABBContact> results;
+        SceneQuery::TestTerrainAABB(mapId, *boxMin, *boxMax, results);
+
+        const int count = std::min(static_cast<int>(results.size()), maxContacts);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& src = results[static_cast<size_t>(i)];
+            contacts[i].point = src.point;
+            contacts[i].normal = src.normal;
+            contacts[i].rawNormal = src.rawNormal;
+            contacts[i].triangleA = src.triangleA;
+            contacts[i].triangleB = src.triangleB;
+            contacts[i].triangleC = src.triangleC;
+            contacts[i].planeDistance = src.planeDistance;
+            contacts[i].distance = src.distance;
+            contacts[i].instanceId = src.instanceId;
+            contacts[i].walkable = src.walkable ? 1u : 0u;
+        }
+
+        return count;
     }
 
     /// Computes a capsule sweep diagnostic for a single position/direction

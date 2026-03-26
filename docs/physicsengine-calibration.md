@@ -820,3 +820,76 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This does not yet mean runtime `0x6334A0` parity is finished; it only means the signed contact feed it depends on is now parity-safe enough to retry.
 - Recommended next single hypothesis:
   - Reintroduce runtime `0x6334A0` walkability usage on top of the signed `TestTerrainAABB` contact feed, then rerun the same focused deterministic/live Durotar gates before touching `0x636100` again.
+
+## 2026-03-26 Reopened packet-backed Undercity upper-door blocker
+
+- Scope note:
+  - The current native baseline was rechecked before any further `0x6334A0` runtime hookup work. The live Durotar turn-start route still passed, but the compact packet-backed Undercity replay slice reopened `PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`.
+  - A short-lived standard-threshold `0x6334A0` runtime hookup was tried and reverted immediately after the focused replay gate failed harder; the reopened Undercity failure remained after the revert, so the active blocker is on the current baseline rather than in that abandoned hook.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed after a transient `LNK1104 Navigation.dll` retry
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`38/38`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"`
+    - failed on the current baseline: `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`
+- Frame-pattern note:
+  - Fresh replay dumping around frames `11..19` shows frames `11..14` still preserve the blocked step (`<= 0.018y` error) while frames `15..19` inject free forward motion on transport.
+  - The engine is still transforming the transport-local position to the moving elevator correctly (`simZ` matches the next-frame elevator world `Z`), but `groundZ` remains stuck at `-28.868` after frame `14` and the grounded mover starts emitting world-space forward velocity (`~7 y/s`) instead of preserving the block.
+  - That failure shape points away from generic transport coordinate math and toward the unresolved grounded blocker-axis / support-contact feed. The current prime suspects are the heuristic `0xC4E544` blocker-axis reconstruction in `CollisionStepWoW` and the dynamic-object support query path that feeds it.
+- Do Not Repeat:
+  - Do not retry the direct runtime `0x6334A0` hookup until the reopened packet-backed Undercity upper-door blocker is green again on the baseline.
+  - Do not treat the current `38/38` widened deterministic slice as sufficient proof for this area; it does not include the packet-backed Undercity upper-door replay.
+- Recommended next single hypothesis:
+  - Finish tracing the binary producer for the `0xC4E544` blocker-axis buffer (`0x635240` / `0x633720` / `0x635410` chain), replace the remaining axis-merge heuristics with the binary-backed feed, then rerun the packet-backed Undercity upper-door slice before any further live/runtime walkability work.
+
+### Follow-up: primary-axis override removal was reverted
+
+- Hypothesis tried:
+  - Remove the extra `primaryAxis` override in `CollisionStepWoW` because it is not backed by the `0x636610` / `0x6367B0` binary merge path and looked like a plausible source of the sideways escape into freefall on the packet-backed elevator blocker.
+- Outcome:
+  - `PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock` stayed failed at the exact same frame and distance (`frame 15`, simulated step `3.5793y`).
+  - The widened deterministic native slice still passed (`38/38`), but a live turn-start parity spot check regressed badly (`Stop edge diverged by 1594ms`, repeated false-airborne `0x4001` movement and large Z bobbing), so the code change was reverted immediately.
+- Additional diagnostic evidence:
+  - Dynamic-object ground support is present at the blocked doorway point on frame `15`:
+    - start/world position `(-14.668z)` -> `GetGroundZ=-14.668`
+    - recorded blocked next point `(-14.668z)` -> `GetGroundZ=-14.668`
+    - simulated escaped point `(1551.917,245.923,-14.668)` -> `GetGroundZ=-49.522`
+  - This confirms the dynamic support query is working at the blocked position; the mover is escaping sideways first, then falling to the shaft floor.
+- Do Not Repeat:
+  - Do not spend another run on removing the `primaryAxis` override by itself; it does not fix the packet-backed blocker and it destabilizes broader movement.
+  - Do not burn more live parity time until the replay/native blocker and false-airborne bobbing are fixed in the deterministic native gates first.
+
+## 2026-03-26 Packet-backed Undercity frame-15 contact probe
+
+- Scope note:
+  - This pass did not change runtime behavior. It turned the ad-hoc native frame dump into deterministic test coverage so the failing packet-backed Undercity upper-door frame can be inspected through the production `Navigation.dll` without a separate tester binary.
+  - The target was the merged `TestTerrainAABB` query for `PacketBackedUndercityElevatorUp` frame `15`, where the replay currently escapes sideways and then falls.
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exported `QueryTerrainAABBContacts(...)` so tests can record the exact merged-query contacts that feed grounded wall resolution
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added `TerrainAabbContact` plus the P/Invoke for `QueryTerrainAABBContacts(...)`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - added deterministic coverage for the real packet-backed frame-15 contact set
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+- Frame-pattern note:
+  - The merged frame-15 query already contains the elevator support face at deck height with a signed downward normal (`normal.z ~= -1`) and raw `walkable=0`.
+  - `EvaluateWoWCheckWalkable(...)` promotes that exact support face only on the helper's stateful path (`groundedWallFlagBefore=true`).
+  - The same frame-15 contact dump also shows many wall contacts that would be promoted by that same stateful path if it were broadcast contact-by-contact across the whole merged query.
+  - Practical implication:
+    - the blocker is no longer "raw `walkable` vs `CheckWalkable`".
+    - the blocker is reproducing the binary's selected-contact plus grounded-wall-state path before `0x6334A0` is applied.
+- Do Not Repeat:
+  - Do not replace grounded merged-query `contact.walkable` checks with unconditional `CheckWalkable(..., groundedWallFlagBefore=true)` or any equivalent broadcast stateful call; the real frame-15 contact dump proves that would also bless unrelated walls.
+  - Do not treat the helper alone as the missing fix for the packet-backed Undercity blocker; the unresolved piece is the binary-selected contact / `0xC4E544` state path that feeds it.
+- Recommended next single hypothesis:
+  - Continue tracing the `0xC4E544` producer chain (`0x632BA0` / `0x633720` / `0x6351A0` / `0x635410` / `0x6353D0`) and map how the selected contact index plus grounded-wall state are chosen before `0x6334A0` runs.

@@ -22,17 +22,22 @@
 
 ## Remaining Physics Parity Backlog
 Known remaining work in this owner: `0` items.
-1. [x] Session 191: added `TerrainAabbContactOrientationTests` and a pure orientation export so the signed `TestTerrainAABB` contact feed is now pinned deterministically. The floor-below, shelf-above, and wall-facing cases all stay green alongside the `0x6334A0` helper seam and the live Durotar parity routes.
-2. [x] Session 190: added `WowCheckWalkableTests` around the pure exported `0x6334A0` helper so the signed-normal thresholds, top-corner touch path, and `0x04000000` consume/preserve behavior are now deterministic. The first direct runtime hookup regressed live Durotar parity and was reverted, so this owner now pins the helper semantics without changing the green runtime baseline.
-3. [x] Session 189: added `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` so the top-level `0x633840` airborne-before-swim branch order is now pinned in deterministic coverage.
-4. [x] Session 188: Disassembled `0x6367B0` from WoW.exe binary and implemented the retry loop in `CollisionStepWoW`. `0x636100` return codes (0/1/2) and `0x636610` integer merge logic documented.
-5. [x] Remaining heuristic thresholds audited against binary. Integer jump-table logic in `0x636610` matched by our float approximations. No regressions.
-6. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
+1. [x] Session 192: added `UndercityUpperDoorContactTests` plus the `QueryTerrainAABBContacts(...)` export seam so the failing packet-backed Undercity frame can now be inspected deterministically through the production `Navigation.dll`. The new coverage proves the merged query already contains the signed downward elevator support face, and it also proves `0x6334A0` only promotes that face on its stateful path.
+2. [x] Session 191: added `TerrainAabbContactOrientationTests` and a pure orientation export so the signed `TestTerrainAABB` contact feed is now pinned deterministically. The floor-below, shelf-above, and wall-facing cases all stay green alongside the `0x6334A0` helper seam and the live Durotar parity routes.
+3. [x] Session 190: added `WowCheckWalkableTests` around the pure exported `0x6334A0` helper so the signed-normal thresholds, top-corner touch path, and `0x04000000` consume/preserve behavior are now deterministic. The first direct runtime hookup regressed live Durotar parity and was reverted, so this owner now pins the helper semantics without changing the green runtime baseline.
+4. [x] Session 189: added `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` so the top-level `0x633840` airborne-before-swim branch order is now pinned in deterministic coverage.
+5. [x] Session 188: Disassembled `0x6367B0` from WoW.exe binary and implemented the retry loop in `CollisionStepWoW`. `0x636100` return codes (0/1/2) and `0x636610` integer merge logic documented.
+6. [x] Remaining heuristic thresholds audited against binary. Integer jump-table logic in `0x636610` matched by our float approximations. No regressions.
+7. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 191)`
+- Last updated: `2026-03-26 (session 192)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 192 added a deterministic recorder for the real failing packet-backed Undercity frame instead of relying on one-off temp harness output. `NavigationInterop.cs` now exposes `QueryTerrainAABBContacts(...)` plus `TerrainAabbContact`, and `UndercityUpperDoorContactTests.cs` reconstructs the exact merged frame-15 query against the production `Navigation.dll`.
+  - The new tests prove the merged query already contains the elevator deck support face at deck height with a signed downward normal and raw `walkable=0`.
+  - The same tests also prove `EvaluateWoWCheckWalkable(...)` only promotes that support face on the helper's stateful path and that the same state would also promote many wall contacts in the same query if applied indiscriminately.
+  - This changes the native target: the missing parity piece is now the binary selected-contact / `0xC4E544` state path feeding `0x6334A0`, not the helper body in isolation.
   - Session 191 added deterministic coverage for the signed `TestTerrainAABB` contact feed that the runtime still lacked after the first `0x6334A0` helper capture. `TerrainAabbContactOrientationTests.cs` now proves the pure orientation export keeps support below the query box upward and walkable, geometry above the query box downward and non-walkable, and wall contacts facing the box center.
   - `NavigationInterop.cs` now exposes `EvaluateTerrainAABBContactOrientation(...)`, and the native export routes through the same `BuildTerrainAABBContact(...)` helper that `SceneQuery.cpp` now uses for static `TestTerrainAABB` contacts.
   - The widened focused slice stayed green after the signed-orientation change: the new orientation tests, the `WowCheckWalkable` helper tests, the airborne-before-swim guard, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and both live Durotar parity routes all passed.
@@ -66,6 +71,9 @@ Known remaining work in this owner: `0` items.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `passed (38/38)`
   - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)`
@@ -86,9 +94,15 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
-- Next command: `rg -n "637330|Vec3Negate|0x6334A0|0x6721B0" docs/physics/0x6367B0_disasm.txt docs/physics/wow_exe_decompilation.md -S`
-- Next command: `rg -n "CheckWalkable\\(|contact\\.walkable|BuildTerrainAABBContact|0x6334A0|0x636100" Exports/Navigation/PhysicsEngine.cpp Exports/Navigation/SceneQuery.cpp -S`
+- Next command: `rg -n "0xC4E544|6351A0|632BA0|633720|635410|6353D0" docs/physics/*.txt docs/physics/wow_exe_decompilation.md -S`
 - Files changed:
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
   - `docs/physics/0x633840_disasm.txt`
@@ -104,8 +118,10 @@ Known remaining work in this owner: `0` items.
   - `Services/ForegroundBotRunner/TASKS.md`
   - `Tests/WoWSharpClient.Tests/TASKS.md`
 - Blockers:
+  - The new frame-15 contact probe proves the helper body is not the immediate blocker. Without the binary-selected contact / grounded-wall-state path, a blanket stateful `0x6334A0` call would also promote many walls in the same merged query.
   - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current native baseline now has the correct top-level branch precedence, but it still lacks the real `0x6334A0` walkability logic and the remaining `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
   - Do not route the new `0x6334A0` helper into live grounded resolution again until `TestTerrainAABB` contact orientation and the post-query `0x637330` normal-flip path are parity-safe; the first direct hookup already regressed both live Durotar routes and was reverted.
+  - Do not replace merged-query `contact.walkable` with unconditional `CheckWalkable(..., groundedWallFlagBefore=true)` or any equivalent per-contact broadcast; the new Undercity frame-15 coverage proves that would bless unrelated walls.
   - The remaining-move retry attempt has already been disproved locally and must not be retried without new binary evidence.
   - Verified replay-backed wall fixtures now exist; do not reuse the stale Stormwind / RFC / Un'Goro coordinate probes as parity evidence.
   - Managed movement no longer lacks packet-backed recordings, but exact live FG/BG ordering around heartbeat-before-stop edges, facing corrections, and corpse-run/combat pause-resume timing still needs matched live traces.
