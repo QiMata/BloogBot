@@ -775,3 +775,48 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not route `0x6334A0` straight from the current `TestTerrainAABB` contact stream into live grounded resolution. Fix the contact-orientation / `0x637330` feed first, then retry.
 - Recommended next single hypothesis:
   - Keep the new helper/tests frozen and align the `TestTerrain` contact-orientation / `Vec3Negate` path before any new grounded runtime usage of `0x6334A0`.
+
+## 2026-03-26 Signed `TestTerrain` Contact Orientation (`0x6721B0` + `0x637330`)
+
+- Scope note:
+  - This pass targeted the exact blocker left by the first `0x6334A0` helper capture: the static `TestTerrainAABB` path was still upward-flattening contacts instead of preserving the signed, post-negation contact normal the client uses after `TestTerrain`.
+  - Fresh binary evidence was captured in `docs/physics/0x6721B0_disasm.txt`.
+- Behavioral change shipped:
+  - `Exports/Navigation/SceneQuery.h/.cpp`
+    - added `BuildTerrainAABBContact(...)`
+    - static `TestTerrainAABB` contacts now face the query box center instead of always being flipped upward
+    - `planeDistance` now matches that signed contact normal
+    - `walkable` now uses signed `normal.z >= cos(50)` instead of `abs(normal.z)`
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - the pure `0x6334A0` helper path now consumes the signed contact normal first, with raw winding only as fallback
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateTerrainAABBContactOrientation(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the new pure orientation export
+  - `Tests/Navigation.Physics.Tests/TerrainAabbContactOrientationTests.cs`
+    - added deterministic coverage for floor-below, shelf-above, and wall-facing cases
+- Binary evidence captured:
+  - `0x6721B0`
+    - copies `0x34` contact structs directly with `rep movsd`; it does not rebuild generic upward face normals
+  - `0x637330`
+    - is a pure three-component negate helper
+  - Practical implication:
+    - the client preserves a signed contact normal through `TestTerrain` and flips it once, so the BG static AABB path must not flatten everything upward
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"`
+    - passed (`8/8`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TerrainAabbContactOrientationTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"`
+    - passed (`38/38`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The signed orientation feed held both live Durotar parity fixtures, which is the first clean confirmation that the `TestTerrain` contact-orientation blocker itself can move without reopening the old shelf/landing regressions.
+  - This does not yet mean runtime `0x6334A0` parity is finished; it only means the signed contact feed it depends on is now parity-safe enough to retry.
+- Recommended next single hypothesis:
+  - Reintroduce runtime `0x6334A0` walkability usage on top of the signed `TestTerrainAABB` contact feed, then rerun the same focused deterministic/live Durotar gates before touching `0x636100` again.

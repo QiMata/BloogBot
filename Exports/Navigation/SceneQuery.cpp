@@ -1583,6 +1583,39 @@ static bool AABBTriangleOverlap(
 // =============================================================================
 // Static AABB terrain test — WoW.exe TestTerrain (0x6721B0) equivalent
 // =============================================================================
+SceneQuery::AABBContact SceneQuery::BuildTerrainAABBContact(const G3D::Vector3& boxCenter,
+    const G3D::Vector3& contactPoint,
+    const G3D::Vector3& triangleA,
+    const G3D::Vector3& triangleB,
+    const G3D::Vector3& triangleC,
+    float distance,
+    uint32_t instanceId)
+{
+    AABBContact contact{};
+    contact.point = contactPoint;
+
+    const G3D::Vector3 rawNormal = (triangleB - triangleA).cross(triangleC - triangleA).directionOrZero();
+    contact.rawNormal = rawNormal;
+
+    G3D::Vector3 normal = rawNormal;
+    const G3D::Vector3 triangleCenter = (triangleA + triangleB + triangleC) * (1.0f / 3.0f);
+    if (normal.dot(boxCenter - triangleCenter) < 0.0f) {
+        normal = -normal;
+    }
+
+    contact.normal = normal;
+    contact.triangleA = triangleA;
+    contact.triangleB = triangleB;
+    contact.triangleC = triangleC;
+    contact.planeDistance = normal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+        ? -normal.dot(triangleA)
+        : 0.0f;
+    contact.distance = distance;
+    contact.walkable = normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+    contact.instanceId = instanceId;
+    return contact;
+}
+
 int SceneQuery::TestTerrainAABB(uint32_t mapId,
     const G3D::Vector3& boxMin, const G3D::Vector3& boxMax,
     std::vector<AABBContact>& outContacts)
@@ -1613,11 +1646,6 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
         if (triMaxZ < boxMin.z || triMinZ > boxMax.z) continue;
 
         if (AABBTriangleOverlap(center, halfExt, va, vb, vc)) {
-            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
-            G3D::Vector3 normal = rawNormal;
-            // Orient normal upward for ground surfaces (WoW.exe convention)
-            if (normal.z < 0) normal = -normal;
-
             // Compute exact ground Z at the AABB center XY using barycentric
             // interpolation on the triangle. This is how WoW.exe's heightmap
             // works — not triangle centroids, but exact surface height at the
@@ -1631,19 +1659,14 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
                 exactZ = triCenter.z;
             }
 
-            AABBContact contact;
-            contact.point = G3D::Vector3(center.x, center.y, exactZ);
-            contact.normal = normal;
-            contact.rawNormal = rawNormal;
-            contact.triangleA = va;
-            contact.triangleB = vb;
-            contact.triangleC = vc;
-            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
-                ? -rawNormal.dot(va)
-                : 0.0f;
-            contact.distance = 0;
-            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-            contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
+            const AABBContact contact = BuildTerrainAABBContact(
+                center,
+                G3D::Vector3(center.x, center.y, exactZ),
+                va,
+                vb,
+                vc,
+                0.0f,
+                (i < instanceIds.size()) ? instanceIds[i] : 0u);
             outContacts.push_back(contact);
         }
     }
@@ -1669,10 +1692,6 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             if (!AABBTriangleOverlap(center, halfExt, va, vb, vc))
                 continue;
 
-            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
-            G3D::Vector3 normal = rawNormal;
-            if (normal.z < 0) normal = -normal;
-
             float exactZ;
             bool hasExactZ = BarycentricZ(va, vb, vc, center.x, center.y, exactZ);
             if (!hasExactZ) {
@@ -1680,19 +1699,14 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
                 exactZ = triCenter.z;
             }
 
-            AABBContact contact;
-            contact.point = G3D::Vector3(center.x, center.y, exactZ);
-            contact.normal = normal;
-            contact.rawNormal = rawNormal;
-            contact.triangleA = va;
-            contact.triangleB = vb;
-            contact.triangleC = vc;
-            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
-                ? -rawNormal.dot(va)
-                : 0.0f;
-            contact.distance = 0;
-            contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-            contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
+            const AABBContact contact = BuildTerrainAABBContact(
+                center,
+                G3D::Vector3(center.x, center.y, exactZ),
+                va,
+                vb,
+                vc,
+                0.0f,
+                (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u);
             outContacts.push_back(contact);
         }
     }

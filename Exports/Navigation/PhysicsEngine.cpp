@@ -134,9 +134,9 @@ namespace
                                         float collisionRadius,
                                         float boundingHeight)
     {
-        G3D::Vector3 normal = contact.rawNormal.directionOrZero();
+        G3D::Vector3 normal = contact.normal.directionOrZero();
         if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
-            normal = contact.normal.directionOrZero();
+            normal = contact.rawNormal.directionOrZero();
         }
         if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
             return false;
@@ -195,9 +195,9 @@ WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::
     CheckWalkableResult result{};
     result.groundedWallFlagAfter = groundedWallFlagBefore;
 
-    G3D::Vector3 normal = contact.rawNormal.directionOrZero();
+    G3D::Vector3 normal = contact.normal.directionOrZero();
     if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
-        normal = contact.normal.directionOrZero();
+        normal = contact.rawNormal.directionOrZero();
     }
     if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
         return result;

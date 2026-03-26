@@ -232,19 +232,27 @@ class SceneQuery
         // Sweeps an axis-aligned bounding box along a direction, returning contacts
         // with scene geometry (terrain + WMO + M2 via SceneCache).
         // Uses SAT (Separating Axis Theorem) for AABB-triangle intersection.
-        // Contact normal is the triangle face normal (not swept contact normal).
+        // Contact normal is the signed post-TestTerrain normal facing the query box.
         struct AABBContact {
             G3D::Vector3 point;     // World-space contact point
-            G3D::Vector3 normal;    // Triangle face normal
-            G3D::Vector3 rawNormal; // Raw triangle winding normal used by WoW.exe helpers
+            G3D::Vector3 normal;    // Signed contact normal facing the AABB/query center
+            G3D::Vector3 rawNormal; // Raw triangle winding normal before query-center orientation
             G3D::Vector3 triangleA; // Raw triangle vertex A
             G3D::Vector3 triangleB; // Raw triangle vertex B
             G3D::Vector3 triangleC; // Raw triangle vertex C
-            float planeDistance = 0.0f; // Plane D for rawNormal . X + d = 0
+            float planeDistance = 0.0f; // Plane D for normal . X + d = 0
             float distance;         // Distance along sweep direction to contact
-            bool walkable;          // normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
+            bool walkable;          // signed normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
             uint32_t instanceId = 0; // Static instance ID or dynamic runtime instance ID
         };
+
+        static AABBContact BuildTerrainAABBContact(const G3D::Vector3& boxCenter,
+                                                   const G3D::Vector3& contactPoint,
+                                                   const G3D::Vector3& triangleA,
+                                                   const G3D::Vector3& triangleB,
+                                                   const G3D::Vector3& triangleC,
+                                                   float distance,
+                                                   uint32_t instanceId);
 
         static int SweepAABB(uint32_t mapId,
                              const G3D::Vector3& boxMin,

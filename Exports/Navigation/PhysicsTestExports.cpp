@@ -465,7 +465,7 @@ extern "C"
 
     __declspec(dllexport) bool EvaluateWoWCheckWalkable(
         const ExportTriangle* triangle,
-        const G3D::Vector3* rawNormal,
+        const G3D::Vector3* contactNormal,
         const G3D::Vector3* position,
         float collisionRadius,
         float boundingHeight,
@@ -474,22 +474,21 @@ extern "C"
         bool* outWalkableState,
         bool* outGroundedWallFlagAfter)
     {
-        if (!triangle || !rawNormal || !position) {
+        if (!triangle || !contactNormal || !position) {
             if (outWalkableState) *outWalkableState = false;
             if (outGroundedWallFlagAfter) *outGroundedWallFlagAfter = false;
             return false;
         }
 
         SceneQuery::AABBContact contact{};
-        contact.rawNormal = *rawNormal;
-        contact.normal = rawNormal->z < 0.0f ? -*rawNormal : *rawNormal;
+        contact.normal = contactNormal->directionOrZero();
+        contact.rawNormal = *contactNormal;
         contact.triangleA = triangle->a;
         contact.triangleB = triangle->b;
         contact.triangleC = triangle->c;
 
-        const G3D::Vector3 normalizedRawNormal = rawNormal->directionOrZero();
-        contact.planeDistance = normalizedRawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
-            ? -normalizedRawNormal.dot(contact.triangleA)
+        contact.planeDistance = contact.normal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+            ? -contact.normal.dot(contact.triangleA)
             : 0.0f;
 
         const auto result = WoWCollision::CheckWalkable(
@@ -503,6 +502,37 @@ extern "C"
         if (outWalkableState) *outWalkableState = result.walkableState;
         if (outGroundedWallFlagAfter) *outGroundedWallFlagAfter = result.groundedWallFlagAfter;
         return result.walkable;
+    }
+
+    __declspec(dllexport) bool EvaluateTerrainAABBContactOrientation(
+        const ExportTriangle* triangle,
+        const G3D::Vector3* boxMin,
+        const G3D::Vector3* boxMax,
+        G3D::Vector3* outNormal,
+        float* outPlaneDistance,
+        bool* outWalkable)
+    {
+        if (!triangle || !boxMin || !boxMax) {
+            if (outNormal) *outNormal = G3D::Vector3(0.0f, 0.0f, 0.0f);
+            if (outPlaneDistance) *outPlaneDistance = 0.0f;
+            if (outWalkable) *outWalkable = false;
+            return false;
+        }
+
+        const G3D::Vector3 boxCenter = (*boxMin + *boxMax) * 0.5f;
+        const auto contact = SceneQuery::BuildTerrainAABBContact(
+            boxCenter,
+            boxCenter,
+            triangle->a,
+            triangle->b,
+            triangle->c,
+            0.0f,
+            0u);
+
+        if (outNormal) *outNormal = contact.normal;
+        if (outPlaneDistance) *outPlaneDistance = contact.planeDistance;
+        if (outWalkable) *outWalkable = contact.walkable;
+        return true;
     }
 
     /// Computes a capsule sweep diagnostic for a single position/direction

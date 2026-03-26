@@ -1,0 +1,67 @@
+WoW.exe 1.12.1 (build 5875)
+Function: 0x6721B0 `CWorldCollision::TestTerrain`
+Related helper: 0x637330 `Vec3Negate`
+Image base: 0x400000
+Capture date: 2026-03-26
+
+Relevant `0x6721B0` excerpt:
+
+0x0067227B: push     edi
+0x0067227C: push     ecx
+0x0067227D: mov      ecx, dword ptr [ebp - 4]
+0x00672280: mov      edx, 0xc7b358
+0x00672285: mov      dword ptr [0xc7b35c], esi
+0x0067228B: mov      dword ptr [0xc7b36c], esi
+0x00672291: call     0x6aa8b0
+0x00672296: test     al, al
+0x00672298: jne      0x6722a3
+...
+0x006722B6: mov      edx, dword ptr [0xc7b360]
+0x006722BC: fld      dword ptr [eax + edx + 8]
+0x006722C0: add      eax, edx
+0x006722C2: fcomp    dword ptr [0x80dffc]
+0x006722C8: mov      dword ptr [ebp - 4], eax
+0x006722CB: fnstsw   ax
+0x006722CD: test     ah, 5
+0x006722D0: jnp      0x672310
+0x006722D2: push     1
+0x006722D4: push     1
+0x006722D6: mov      ecx, ebx
+0x006722D8: call     0x6742d0
+...
+0x006722F2: mov      esi, dword ptr [ebp - 4]
+0x006722F5: mov      ecx, 0xd
+0x006722FA: rep movsd dword ptr es:[edi], dword ptr [esi]
+
+Interpretation:
+- `0x6721B0` calls `0x6AA8B0` to populate a temporary contact buffer.
+- It iterates contacts at stride `0x34`.
+- Matching contacts are copied byte-for-byte with `rep movsd` (`13 dwords = 0x34 bytes`) into the output array.
+- This means the signed contact normal stored in the 0x34-byte contact struct is preserved through `TestTerrain`; `0x6721B0` does not rebuild triangle winding normals itself.
+
+`0x637330` disassembly:
+
+0x00637330: push     ebp
+0x00637331: mov      ebp, esp
+0x00637333: fld      dword ptr [ecx + 8]
+0x00637336: mov      eax, dword ptr [ebp + 8]
+0x00637339: fchs
+0x0063733B: fld      dword ptr [ecx + 4]
+0x0063733E: fchs
+0x00637340: fld      dword ptr [ecx]
+0x00637342: fchs
+0x00637344: fstp     dword ptr [eax]
+0x00637346: fstp     dword ptr [eax + 4]
+0x00637349: fstp     dword ptr [eax + 8]
+0x0063734C: pop      ebp
+0x0063734D: ret      4
+
+Interpretation:
+- `0x637330` is a pure vector negation helper.
+- It negates all three components of the contact normal vector.
+- The grounded helper chain uses this after `TestTerrain`, so downstream logic reasons about the negated signed contact normal, not a generic upward-flattened face normal.
+
+Parity implication for BG:
+- `TestTerrainAABB` contacts must preserve a signed, query-relative contact normal.
+- Upward-normalizing every static AABB contact is not equivalent to the client because it erases the distinction between support below the query box and obstructing geometry above it.
+- `0x6334A0` `CheckWalkable` therefore needs the signed contact normal/plane feed, not the raw triangle winding alone.
