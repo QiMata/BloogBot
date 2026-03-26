@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 208)`
+- Last updated: `2026-03-26 (session 209)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 209 added `WowSelectorDirectionRankingTests.cs` plus the new interop needed to pin the second-half `0x632BA0` chooser core through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorDirectionRanking(...)`.
+  - The new deterministic coverage now pins five exact binary-backed behaviors: the direction-plane dot-reject path, the builder-reject path, the evaluator-reject path, the append-and-swap near-tie promotion path, and the final `0x80DFEC` zero-clamp gate.
+  - Practical implication: this owner no longer has to infer the 5-direction overwrite/append/swap ranking body that sits between `0x632F80` and `0x632700`. The next missing deterministic seams are the earlier `0x632A30` / `0x631E70` setup gates and the later `0x6351A0` / `0x635410` selection gate.
   - Session 208 added `WowSelectorSourceRankingTests.cs` plus the new interop needed to pin the `0x632280` ranking loop through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorTriangleSourceRanking(...)`.
   - The new deterministic coverage now pins five exact binary-backed behaviors: the source-plane dot-reject path, the builder-reject path, the evaluator-reject path, the overwrite path, and the append-and-swap near-tie path against the binary `0x80DFEC` epsilon window.
   - Practical implication: this owner no longer has to infer the 4-source overwrite/append/swap body that sits between `0x632460` and `0x632700`. The next missing deterministic seam is the 5-direction chooser in `0x632BA0` and the later `0x6351A0` selection gate.
@@ -109,6 +112,10 @@ Known remaining work in this owner: `0` items.
   - Session 176 also shipped one native blocker-axis reduction in `PhysicsEngine.cpp`: grounded `buildMergedBlockerNormal(...)` no longer drops later distinct blocker axes with the `score + 0.1` filter once the best opposing axis has been chosen as primary.
   - The updated focused slice stayed green after the native rebuild, so the new terrain/WMO/dynamic-object wall regressions, the slope false-wall guard, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay gate all held under the slimmer blocker-axis heuristic.
 - Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"` -> `passed (27/27)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (5/5)`

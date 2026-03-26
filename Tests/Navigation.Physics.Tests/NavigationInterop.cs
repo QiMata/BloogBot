@@ -195,6 +195,26 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorDirectionRankingTrace
+    {
+        public float InputBestRatio;
+        public float OutputBestRatio;
+        public float ReportedBestRatio;
+        public uint DotRejectedCount;
+        public uint BuilderRejectedCount;
+        public uint EvaluatorRejectedCount;
+        public uint AcceptedDirectionCount;
+        public uint OverwriteCount;
+        public uint AppendCount;
+        public uint BestRatioUpdatedCount;
+        public uint SwappedBestToFront;
+        public uint ZeroClampedOutput;
+        public uint FinalCandidateCount;
+        public uint SelectedDirectionIndex;
+        public uint SelectedRecordIndex;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -692,6 +712,27 @@ public static partial class NavigationInterop
         ref int ioCandidateCount,
         ref float ioBestRatio,
         out SelectorSourceRankingTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorDirectionRanking", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorDirectionRanking(
+        [In] SelectorCandidateRecord[] records,
+        int recordCount,
+        in Vector3 testPoint,
+        in Vector3 candidateDirection,
+        [In] Vector3[] points,
+        int pointCount,
+        [In] SelectorSupportPlane[] supportPlanes,
+        int planeCount,
+        [In] byte[] selectorIndices,
+        int selectorIndexCount,
+        [In, Out] SelectorSupportPlane[] ioBestCandidates,
+        int maxBestCandidates,
+        ref int ioCandidateCount,
+        ref float ioBestRatio,
+        ref float outReportedBestRatio,
+        ref int ioBestRecordIndex,
+        out SelectorDirectionRankingTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorCandidatePlaneRecord", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

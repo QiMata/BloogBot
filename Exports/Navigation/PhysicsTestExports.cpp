@@ -108,6 +108,25 @@ struct ExportSelectorSourceRankingTrace
     uint32_t selectedSourceIndex;
 };
 
+struct ExportSelectorDirectionRankingTrace
+{
+    float inputBestRatio;
+    float outputBestRatio;
+    float reportedBestRatio;
+    uint32_t dotRejectedCount;
+    uint32_t builderRejectedCount;
+    uint32_t evaluatorRejectedCount;
+    uint32_t acceptedDirectionCount;
+    uint32_t overwriteCount;
+    uint32_t appendCount;
+    uint32_t bestRatioUpdatedCount;
+    uint32_t swappedBestToFront;
+    uint32_t zeroClampedOutput;
+    uint32_t finalCandidateCount;
+    uint32_t selectedDirectionIndex;
+    uint32_t selectedRecordIndex;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -1279,6 +1298,120 @@ extern "C"
             outTrace->swappedBestToFront = trace.swappedBestToFront;
             outTrace->finalCandidateCount = trace.finalCandidateCount;
             outTrace->selectedSourceIndex = trace.selectedSourceIndex;
+        }
+
+        return result;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorDirectionRanking(
+        const ExportSelectorCandidateRecord* records,
+        int recordCount,
+        const G3D::Vector3* testPoint,
+        const G3D::Vector3* candidateDirection,
+        const G3D::Vector3* points,
+        int pointCount,
+        const ExportSelectorSupportPlane* supportPlanes,
+        int planeCount,
+        const uint8_t* selectorIndices,
+        int selectorIndexCount,
+        ExportSelectorSupportPlane* ioBestCandidates,
+        int maxBestCandidates,
+        int* ioCandidateCount,
+        float* ioBestRatio,
+        float* outReportedBestRatio,
+        int* ioBestRecordIndex,
+        ExportSelectorDirectionRankingTrace* outTrace)
+    {
+        if ((!records && recordCount != 0) || recordCount < 0 || recordCount > 5 ||
+            !testPoint || !candidateDirection ||
+            !points || pointCount < 9 ||
+            !supportPlanes || planeCount < 9 ||
+            !selectorIndices || selectorIndexCount < 32 ||
+            !ioBestCandidates || maxBestCandidates < 5 ||
+            !ioCandidateCount || !ioBestRatio || !outReportedBestRatio || !ioBestRecordIndex) {
+            return false;
+        }
+
+        if (*ioCandidateCount < 0 || *ioCandidateCount > 5) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorCandidateRecord, 5> recordBuffer{};
+        for (int i = 0; i < recordCount; ++i) {
+            recordBuffer[static_cast<size_t>(i)].filterPlane.normal = records[i].filterPlane.normal;
+            recordBuffer[static_cast<size_t>(i)].filterPlane.planeDistance = records[i].filterPlane.planeDistance;
+            recordBuffer[static_cast<size_t>(i)].points[0] = records[i].point0;
+            recordBuffer[static_cast<size_t>(i)].points[1] = records[i].point1;
+            recordBuffer[static_cast<size_t>(i)].points[2] = records[i].point2;
+        }
+
+        std::array<G3D::Vector3, 9> pointBuffer{};
+        for (int i = 0; i < 9; ++i) {
+            pointBuffer[static_cast<size_t>(i)] = points[i];
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> planeBuffer{};
+        for (int i = 0; i < 9; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = supportPlanes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = supportPlanes[i].planeDistance;
+        }
+
+        std::array<uint8_t, 32> selectorIndexBuffer{};
+        std::memcpy(selectorIndexBuffer.data(), selectorIndices, selectorIndexBuffer.size());
+
+        std::array<WoWCollision::SelectorSupportPlane, 5> bestCandidateBuffer{};
+        for (int i = 0; i < *ioCandidateCount; ++i) {
+            bestCandidateBuffer[static_cast<size_t>(i)].normal = ioBestCandidates[i].normal;
+            bestCandidateBuffer[static_cast<size_t>(i)].planeDistance = ioBestCandidates[i].planeDistance;
+        }
+
+        uint32_t candidateCount = static_cast<uint32_t>(*ioCandidateCount);
+        uint32_t bestRecordIndex = (*ioBestRecordIndex >= 0)
+            ? static_cast<uint32_t>(*ioBestRecordIndex)
+            : 0xFFFFFFFFu;
+
+        WoWCollision::SelectorDirectionRankingTrace trace{};
+        const bool result = WoWCollision::EvaluateSelectorDirectionRanking(
+            recordBuffer.data(),
+            static_cast<uint32_t>(recordCount),
+            *testPoint,
+            *candidateDirection,
+            pointBuffer,
+            planeBuffer,
+            selectorIndexBuffer,
+            bestCandidateBuffer,
+            candidateCount,
+            *ioBestRatio,
+            *outReportedBestRatio,
+            bestRecordIndex,
+            &trace);
+
+        *ioCandidateCount = static_cast<int>(candidateCount);
+        *ioBestRecordIndex = (bestRecordIndex == 0xFFFFFFFFu)
+            ? -1
+            : static_cast<int>(bestRecordIndex);
+
+        for (uint32_t i = 0; i < candidateCount; ++i) {
+            ioBestCandidates[i].normal = bestCandidateBuffer[i].normal;
+            ioBestCandidates[i].planeDistance = bestCandidateBuffer[i].planeDistance;
+        }
+
+        if (outTrace) {
+            outTrace->inputBestRatio = trace.inputBestRatio;
+            outTrace->outputBestRatio = trace.outputBestRatio;
+            outTrace->reportedBestRatio = trace.reportedBestRatio;
+            outTrace->dotRejectedCount = trace.dotRejectedCount;
+            outTrace->builderRejectedCount = trace.builderRejectedCount;
+            outTrace->evaluatorRejectedCount = trace.evaluatorRejectedCount;
+            outTrace->acceptedDirectionCount = trace.acceptedDirectionCount;
+            outTrace->overwriteCount = trace.overwriteCount;
+            outTrace->appendCount = trace.appendCount;
+            outTrace->bestRatioUpdatedCount = trace.bestRatioUpdatedCount;
+            outTrace->swappedBestToFront = trace.swappedBestToFront;
+            outTrace->zeroClampedOutput = trace.zeroClampedOutput;
+            outTrace->finalCandidateCount = trace.finalCandidateCount;
+            outTrace->selectedDirectionIndex = trace.selectedDirectionIndex;
+            outTrace->selectedRecordIndex = trace.selectedRecordIndex;
         }
 
         return result;

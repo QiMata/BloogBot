@@ -1427,3 +1427,37 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not treat `0x632280` as a record builder. The binary scratch block is a translated-triplet clip-plane buffer feeding `0x632700`, while the candidate records themselves stay in the already-pinned `0x34` record array.
 - Recommended next single hypothesis:
   - Mirror the `0x632BA0` five-direction chooser on top of the now-pinned `0x632280` source-ranking helper and the already-pinned `0x632F80` quad-record builder before touching `0x6351A0` / `0x635410`.
+
+## 2026-03-26 Selector direction-ranking addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next caller-side selector body itself: the second-half `0x632BA0` five-direction chooser core that sits between the already-mirrored `0x632F80` quad-record builder and the later `0x6351A0` selected-contact gate.
+- Binary/evidence delta shipped:
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632BA0` section now explicitly records the production-DLL mirror for the second-half chooser core and also keeps the unresolved `0x632A30` / `0x631E70` setup gates explicit
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `EvaluateSelectorDirectionRanking(...)`
+    - added `SelectorDirectionRankingTrace`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWSelectorDirectionRanking(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector-ranking seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorDirectionRankingTests.cs`
+    - added deterministic coverage for the direction-plane dot-reject path, builder-reject path, evaluator-reject path, append-and-swap near-tie promotion path, and the final `0x80DFEC` zero-clamp gate
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`27/27`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector caller chain is now pinned through both caller-side ranking bodies: exact support planes, exact neighborhood/table, exact translated-triplet ranking in `0x632280`, exact five-direction quad-record ranking in the second half of `0x632BA0`, and the same binary `0x80DFEC` overwrite/append/swap window that keeps the newest near-tie best in slot `0`.
+  - The remaining unknown is no longer how the second-half chooser ranks five directions; it is how the earlier `0x632A30` / `0x631E70` setup gates seed or bypass that loop and how `0x6351A0` / `0x635410` consume the selected record afterward.
+- Do Not Repeat:
+  - Do not treat the new seam as the full `0x632BA0` mirror. The early zero-distance success path and the `0x632A30` / `0x631E70` gating logic are still unresolved and must stay explicit until separately pinned from the binary.
+- Recommended next single hypothesis:
+  - Mirror the tiny `0x635410` height-match helper next, then return to the unresolved `0x632A30` / `0x631E70` setup gates so the full `0x632BA0 -> 0x6351A0` producer chain can be assembled without guesswork.

@@ -860,6 +860,150 @@ bool WoWCollision::EvaluateSelectorTriangleSourceRanking(const SelectorCandidate
     return acceptedAnySource;
 }
 
+bool WoWCollision::EvaluateSelectorDirectionRanking(const SelectorCandidateRecord* records,
+                                                    uint32_t recordCount,
+                                                    const G3D::Vector3& testPoint,
+                                                    const G3D::Vector3& candidateDirection,
+                                                    const std::array<G3D::Vector3, 9>& points,
+                                                    const std::array<SelectorSupportPlane, 9>& supportPlanes,
+                                                    const std::array<uint8_t, 32>& selectorIndices,
+                                                    std::array<SelectorSupportPlane, 5>& ioBestCandidates,
+                                                    uint32_t& ioCandidateCount,
+                                                    float& ioBestRatio,
+                                                    float& outReportedBestRatio,
+                                                    uint32_t& ioBestRecordIndex,
+                                                    SelectorDirectionRankingTrace* outTrace)
+{
+    SelectorDirectionRankingTrace trace{};
+    trace.inputBestRatio = ioBestRatio;
+    trace.outputBestRatio = ioBestRatio;
+    trace.reportedBestRatio = ioBestRatio;
+    trace.finalCandidateCount = ioCandidateCount;
+    trace.selectedRecordIndex = ioBestRecordIndex;
+
+    constexpr uint32_t selectorDirectionCount = 5u;
+    constexpr uint32_t selectorRingStride = 4u;
+
+    if ((records == nullptr && recordCount != 0u) ||
+        ioCandidateCount > ioBestCandidates.size() ||
+        selectorDirectionCount * selectorRingStride > selectorIndices.size()) {
+        outReportedBestRatio = ioBestRatio;
+        if (outTrace) {
+            trace.reportedBestRatio = outReportedBestRatio;
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    bool acceptedAnyDirection = false;
+
+    for (uint32_t directionIndex = 0; directionIndex < selectorDirectionCount; ++directionIndex) {
+        const SelectorSupportPlane& directionPlane = supportPlanes[directionIndex];
+        const float directionDot = directionPlane.normal.dot(candidateDirection);
+        if (directionDot >= 0.0f) {
+            trace.dotRejectedCount++;
+            continue;
+        }
+
+        const uint32_t selectorOffset = directionIndex * selectorRingStride;
+        const std::array<uint8_t, 4> selectorRing = {
+            selectorIndices[selectorOffset],
+            selectorIndices[selectorOffset + 1u],
+            selectorIndices[selectorOffset + 2u],
+            selectorIndices[selectorOffset + 3u]
+        };
+
+        std::array<SelectorSupportPlane, 5> candidateClipPlanes{};
+        if (!BuildSelectorCandidateQuadPlaneRecord(
+                points,
+                selectorRing,
+                candidateDirection,
+                directionPlane,
+                candidateClipPlanes)) {
+            trace.builderRejectedCount++;
+            continue;
+        }
+
+        float candidateRatio = ioBestRatio;
+        uint32_t bestRecordIndex = ioBestRecordIndex;
+        if (!EvaluateSelectorCandidateRecordSet(
+                records,
+                recordCount,
+                testPoint,
+                candidateClipPlanes.data(),
+                4u,
+                supportPlanes,
+                directionIndex,
+                candidateRatio,
+                bestRecordIndex)) {
+            trace.evaluatorRejectedCount++;
+            continue;
+        }
+
+        acceptedAnyDirection = true;
+        trace.acceptedDirectionCount++;
+
+        const float overwriteThreshold = ioBestRatio - WOW_CORNER_PLANE_EPSILON;
+        if (candidateRatio < overwriteThreshold) {
+            ioBestCandidates[0] = directionPlane;
+            ioCandidateCount = 1u;
+            trace.overwriteCount++;
+        }
+        else {
+            if (ioCandidateCount >= ioBestCandidates.size()) {
+                outReportedBestRatio = (ioBestRatio <= WOW_CORNER_PLANE_EPSILON) ? 0.0f : ioBestRatio;
+                trace.outputBestRatio = ioBestRatio;
+                trace.reportedBestRatio = outReportedBestRatio;
+                trace.finalCandidateCount = ioCandidateCount;
+                trace.selectedRecordIndex = ioBestRecordIndex;
+                if (outReportedBestRatio == 0.0f) {
+                    trace.zeroClampedOutput = 1u;
+                }
+                if (outTrace) {
+                    *outTrace = trace;
+                }
+                return false;
+            }
+
+            const float appendThreshold = ioBestRatio + WOW_CORNER_PLANE_EPSILON;
+            if (candidateRatio <= appendThreshold) {
+                ioBestCandidates[ioCandidateCount] = directionPlane;
+                ioCandidateCount++;
+                trace.appendCount++;
+            }
+        }
+
+        if (candidateRatio <= ioBestRatio) {
+            ioBestRatio = candidateRatio;
+            ioBestRecordIndex = bestRecordIndex;
+            trace.bestRatioUpdatedCount++;
+            trace.selectedDirectionIndex = directionIndex;
+            trace.selectedRecordIndex = ioBestRecordIndex;
+
+            if (ioCandidateCount > 1u) {
+                const uint32_t newestIndex = ioCandidateCount - 1u;
+                std::swap(ioBestCandidates[0], ioBestCandidates[newestIndex]);
+                trace.swappedBestToFront++;
+            }
+        }
+    }
+
+    outReportedBestRatio = (ioBestRatio <= WOW_CORNER_PLANE_EPSILON) ? 0.0f : ioBestRatio;
+    trace.outputBestRatio = ioBestRatio;
+    trace.reportedBestRatio = outReportedBestRatio;
+    trace.finalCandidateCount = ioCandidateCount;
+    trace.selectedRecordIndex = ioBestRecordIndex;
+    if (outReportedBestRatio == 0.0f) {
+        trace.zeroClampedOutput = 1u;
+    }
+
+    if (outTrace) {
+        *outTrace = trace;
+    }
+
+    return acceptedAnyDirection;
+}
+
 namespace
 {
     struct GroundedWallCandidate

@@ -577,6 +577,8 @@ CollisionStep (0x633840)
   - `0x632BA0`
     - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
     - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
+    - the production DLL now mirrors that second-half 5-direction ranking core through pure `EvaluateSelectorDirectionRanking(...)`: it walks `supportPlanes[0..4]`, builds each surviving quad clip set through `0x632F80`, feeds `0x632700`, applies the same `0x80DFEC` overwrite/append/swap rules, and zero-clamps the reported scalar when the final best ratio falls under the same epsilon
+    - the earlier `0x632A30` / `0x631E70` setup gates are still unresolved and are not yet mirrored by that seam
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`
