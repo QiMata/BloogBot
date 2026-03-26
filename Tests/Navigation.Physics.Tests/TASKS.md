@@ -22,14 +22,18 @@
 
 ## Remaining Physics Parity Backlog
 Known remaining work in this owner: `0` items.
-1. [x] Session 188: Disassembled `0x6367B0` from WoW.exe binary and implemented the retry loop in `CollisionStepWoW`. `0x636100` return codes (0/1/2) and `0x636610` integer merge logic documented.
-2. [x] Remaining heuristic thresholds audited against binary. Integer jump-table logic in `0x636610` matched by our float approximations. No regressions.
-3. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
+1. [x] Session 189: added `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` so the top-level `0x633840` airborne-before-swim branch order is now pinned in deterministic coverage.
+2. [x] Session 188: Disassembled `0x6367B0` from WoW.exe binary and implemented the retry loop in `CollisionStepWoW`. `0x636100` return codes (0/1/2) and `0x636610` integer merge logic documented.
+3. [x] Remaining heuristic thresholds audited against binary. Integer jump-table logic in `0x636610` matched by our float approximations. No regressions.
+4. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-25 (session 185)`
-- Pass result: `docs-only parity checklist update; 4 native parity items remain`
+- Last updated: `2026-03-25 (session 189)`
+- Pass result: `delta shipped`
 - Last delta:
+  - Session 189 added a deterministic guard for the top-level `0x633840` branch order before touching the still-partial grounded helper. Fresh binary disassembly now lives in `docs/physics/0x633840_disasm.txt` and shows airborne is checked before swim (`0x633A29`/`0x633A4C` before `0x633B5E`).
+  - `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` proves the native engine now treats `FALLINGFAR | SWIMMING` on dry ground as airborne motion: the frame descends like pure freefall and the final output clears `MOVEFLAG_SWIMMING`.
+  - The focused native slice stayed green after the rebuild: the new precedence test, an existing jump-arc sanity check, the packet-backed swim replay, and the live Durotar redirect parity route all passed unchanged.
   - Session 185 converted the native parity backlog into an exact counted checklist. This owner now records `4` known remaining native-proof items, aligned to the master `11`-item parity checklist in `docs/TASKS.md`.
   - No code or tests changed in session 185; this was a docs-only planning update.
   - Session 184 re-ran `RecordingMaintenance compact` after the new BotRunner live-recording work to keep the parity corpus lean: the canonical recordings directory still contains `26` logical recordings totaling `411.67 MiB`, all `.bin` sidecars were already current (`written=0, skipped=26`), and the duplicate `Bot/Debug|Release/net8.0/Recordings` output trees were already missing/clean.
@@ -52,6 +56,10 @@ Known remaining work in this owner: `0` items.
   - Session 176 also shipped one native blocker-axis reduction in `PhysicsEngine.cpp`: grounded `buildMergedBlockerNormal(...)` no longer drops later distinct blocker axes with the `score + 0.1` filter once the best opposing axis has been chosen as primary.
   - The updated focused slice stayed green after the native rebuild, so the new terrain/WMO/dynamic-object wall regressions, the slope false-wall guard, `GroundMovement_Position_NotUnderground`, `MovementControllerPhysics`, and the aggregate replay gate all held under the slimmer blocker-axis heuristic.
 - Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~FrameAheadIntegrationTests.JumpArc_FlatGround_PeakHeightMatchesPhysics|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"` -> `passed (1/1)`
   - `No code/tests run in session 185; docs-only planning update.`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"` -> `3 passed`
   - `dotnet run --project tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact` -> `26 logical recordings, 411.67 MiB canonical corpus, 0 sidecars refreshed, duplicate Bot/*/Recordings copies missing/clean`
@@ -60,8 +68,15 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
-- Next command: `rg -n "0x636100|return-code `2`|04000000|distance pointer|movement fraction|0x6367B0" docs/physicsengine-calibration.md docs/physics/wow_exe_decompilation.md Exports/Navigation/PhysicsEngine.cpp`
+- Next command: `py -c "from capstone import *; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(0x6334A0-0x400000); code=f.read(768); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') or (i.address >= 0x633560 and i.mnemonic in ('ret','retn') and (_ for _ in ()).throw(SystemExit)) for i in md.disasm(code, 0x6334A0)]"`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
+  - `docs/physics/0x633840_disasm.txt`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
   - `Tests/Navigation.Physics.Tests/Helpers/TestConstants.cs`
@@ -70,13 +85,10 @@ Known remaining work in this owner: `0` items.
   - `Services/ForegroundBotRunner/TASKS.md`
   - `Tests/WoWSharpClient.Tests/TASKS.md`
 - Blockers:
-  - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current native baseline remains the merged blocker-axis path without the real `0x6367B0` remaining-distance bookkeeping or the `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
+  - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current native baseline now has the correct top-level branch precedence, but it still lacks the real `0x6334A0` walkability logic and the remaining `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
   - The remaining-move retry attempt has already been disproved locally and must not be retried without new binary evidence.
   - Verified replay-backed wall fixtures now exist; do not reuse the stale Stormwind / RFC / Un'Goro coordinate probes as parity evidence.
   - Managed movement no longer lacks packet-backed recordings, but exact live FG/BG ordering around heartbeat-before-stop edges, facing corrections, and corpse-run/combat pause-resume timing still needs matched live traces.
-- Next command:
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"`
-
 ## Prior Session
 - Last updated: `2026-03-24 (session 171)`
 - Pass result: `delta shipped`

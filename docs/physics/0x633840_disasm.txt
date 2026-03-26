@@ -1,0 +1,96 @@
+=== WoW.exe 1.12.1 disassembly: 0x633840 (CollisionStep top-level branch order excerpt) ===
+
+Captured from `D:/World of Warcraft/WoW.exe` on 2026-03-25.
+The relevant branch-order evidence starts at `0x633A29` after the shared setup/AABB work.
+
+  0x00633A29: mov      eax, dword ptr [ebx + 0x40]
+  0x00633A2C: test     ah, 0x20
+  0x00633A2F: je       0x633a49
+  0x00633A31: mov      edx, dword ptr [ebx + 0x78]
+  0x00633A34: add      edx, dword ptr [ebp + 0xc]
+  0x00633A37: push     edx
+  0x00633A38: mov      ecx, ebx
+  0x00633A3A: call     0x7c6140
+  0x00633A3F: fld      dword ptr [ebp - 0x40]
+  0x00633A42: fsub     st(1)
+  0x00633A44: fstp     dword ptr [ebp - 0x40]
+  0x00633A47: fstp     st(0)
+  0x00633A49: mov      eax, dword ptr [ebx + 0x40]
+  0x00633A4C: test     ah, 0x20
+  0x00633A4F: je       0x633b5e
+  0x00633A55: mov      ecx, 6
+  0x00633A5A: mov      esi, 0xc4e5a0
+  0x00633A5F: lea      edi, [ebp - 0x18]
+  0x00633A62: lea      eax, [ebp - 0x48]
+  0x00633A65: rep movsd dword ptr es:[edi], dword ptr [esi]
+  0x00633A67: push     eax
+  0x00633A68: lea      ecx, [ebp - 0x18]
+  0x00633A6B: call     0x4841c0
+  0x00633A70: lea      ecx, [ebp - 0x48]
+  0x00633A73: push     ecx
+  0x00633A74: lea      ecx, [ebp - 0xc]
+  0x00633A77: call     0x4841c0
+  0x00633A7C: lea      edx, [ebp - 0x18]
+  0x00633A7F: push     edx
+  0x00633A80: mov      edx, 0xc4e5a0
+  0x00633A85: lea      ecx, [ebp - 0xa0]
+  0x00633A8B: call     0x6373b0
+  0x00633A90: mov      esi, eax
+  0x00633A92: mov      ecx, 6
+  0x00633A97: mov      edi, 0xc4e5a0
+  0x00633A9C: rep movsd dword ptr es:[edi], dword ptr [esi]
+  0x00633A9E: lea      ecx, [ebp - 0xa0]
+  0x00633AA4: call     0x61e9c0
+  0x00633AA9: test     dword ptr [ebx + 0x40], 0x40000000
+  0x00633AB0: je       0x633ac4
+  0x00633AB2: fld      dword ptr [0xc4e5a8]
+  0x00633AB8: fsub     dword ptr [0x7ff9d8]
+  0x00633ABE: fstp     dword ptr [0xc4e5a8]
+  0x00633AC4: fld      dword ptr [ebp - 0x40]
+  0x00633AC7: fmul     dword ptr [0x80e010]
+  0x00633ACD: fcom     dword ptr [0x7ffd74]
+  0x00633AD3: fnstsw   ax
+  0x00633AD5: test     ah, 0x41
+  0x00633AD8: jne      0x633b12
+  0x00633ADA: fld      dword ptr [0xc4e5a0]
+  0x00633AE0: fsub     st(1)
+  0x00633AE2: fstp     dword ptr [0xc4e5a0]
+  0x00633AE8: fld      dword ptr [0xc4e5ac]
+  0x00633AEE: fadd     st(1)
+  0x00633AF0: fstp     dword ptr [0xc4e5ac]
+  0x00633AF6: fld      dword ptr [0xc4e5a4]
+  0x00633AFC: fsub     st(1)
+  0x00633AFE: fstp     dword ptr [0xc4e5a4]
+  0x00633B04: fld      dword ptr [0xc4e5b0]
+  0x00633B0A: fadd     st(1)
+  0x00633B0C: fstp     dword ptr [0xc4e5b0]
+  0x00633B12: fstp     st(0)
+  0x00633B14: push     0x3ab60b61
+  0x00633B19: mov      ecx, 0xc4e5a0
+  0x00633B1E: call     0x637300
+  0x00633B23: push     0x3ab60b61
+  0x00633B28: mov      ecx, 0xc4e5ac
+  0x00633B2D: call     0x6372d0
+  0x00633B32: mov      ecx, ebx
+  0x00633B34: call     0x6315f0
+  0x00633B39: push     0
+  0x00633B3B: push     eax
+  0x00633B3C: mov      edx, 0xc4e52c
+  0x00633B41: mov      ecx, 0xc4e5a0
+  0x00633B46: call     0x6721b0
+  0x00633B4B: test     al, al
+  0x00633B4D: jne      0x633e76
+  0x00633B53: pop      edi
+  0x00633B54: pop      esi
+  0x00633B55: xor      eax, eax
+  0x00633B57: pop      ebx
+  0x00633B58: mov      esp, ebp
+  0x00633B5A: pop      ebp
+  0x00633B5B: ret      0x14
+  0x00633B5E: test     eax, 0x200000
+  0x00633B63: je       0x633c7b
+
+Interpretation:
+- `0x633A29` / `0x633A4C` checks `0x2000` first (`test ah, 0x20`) and routes to the airborne helper before the swim branch.
+- Only after that does `0x633B5E` check `0x200000` (`MOVEFLAG_SWIMMING`).
+- The grounded branch begins at `0x633C7B` when neither airborne nor swimming is selected.

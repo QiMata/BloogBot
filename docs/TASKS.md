@@ -283,8 +283,33 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-25 (session 188)
+- **Last updated:** 2026-03-25 (session 189)
 - **Branch:** `main`
+- **Session 189 — native top-level CollisionStep branch order aligned to `0x633840`:**
+  - Captured fresh binary evidence in [0x633840_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x633840_disasm.txt). The relevant top-level branch order is explicit: `0x633A29` / `0x633A4C` checks the airborne helper first (`test ah, 0x20`), `0x633B5E` checks swimming second (`test eax, 0x200000`), and the grounded branch does not start until `0x633C7B`.
+  - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so `StepV2` now preserves that same precedence. When airborne flags and `MOVEFLAG_SWIMMING` overlap on the same frame, BG now takes the airborne path instead of incorrectly routing through `ProcessSwimMovement`.
+  - Added deterministic coverage in [FrameAheadIntegrationTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs): `AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` proves a dry-ground `FALLINGFAR | SWIMMING` frame descends like pure airborne motion and clears `MOVEFLAG_SWIMMING` in the output.
+  - The focused proof set held after the rebuild: native `Navigation.dll`, the local `Navigation.Physics.Tests` build, the new precedence test plus existing jump/swim regressions, and the live [MovementParityTests.cs](/E:/repos/Westworld of Warcraft/Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs) redirect route all passed unchanged.
+  - This cleans up one real top-level mismatch without pretending the grounded helper is solved. The remaining native blocker is still the grounded post-`TestTerrain` sequence: current BG logic still simplifies `0x6334A0` and `0x636100`, which is where the live Durotar turn-start route still diverges.
+- **Test baseline (session 189):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~FrameAheadIntegrationTests.JumpArc_FlatGround_PeakHeightMatchesPhysics|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" --logger "console;verbosity=minimal"`
+    - Passed (`3/3`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 189):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
+  - `docs/physics/0x633840_disasm.txt`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the `0x633840` branch precedence frozen, then move to the still-open grounded parity blocker: disassemble `0x6334A0` `CheckWalkable`, replace the current fixed walkability simplification, and only then revisit the unresolved `0x636100` branch-gate helper.
+- **Next command:** `py -c "from capstone import *; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(0x6334A0-0x400000); code=f.read(768); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') or (i.address >= 0x633560 and i.mnemonic in ('ret','retn') and (_ for _ in ()).throw(SystemExit)) for i in md.disasm(code, 0x6334A0)]"`
 - **Session 188 — managed SET_FACING packet path corrected to match WoW.exe; native collision audit surfaced the next real blocker:**
   - Re-audited the managed facing send path against `WoW.exe` instead of the older heuristic notes. Binary evidence from `0x60E1EA` shows `MSG_MOVE_SET_FACING` is gated by the float at `0x80C408`, which reads as `0.1f`, and the send path falls directly into the movement send helper without a synthetic `MSG_MOVE_HEARTBEAT` before the facing packet.
   - Updated [MovementController.cs](/E:/repos/Westworld of Warcraft/Exports/WoWSharpClient/Movement/MovementController.cs) so `SendFacingUpdate(...)` now emits only `MSG_MOVE_SET_FACING`, records the opcode in the frame diagnostics, and keeps `_lastPacketTime` / `_lastPacketPosition` in sync with the actual sent packet.

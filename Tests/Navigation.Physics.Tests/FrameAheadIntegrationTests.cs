@@ -25,6 +25,7 @@ public class FrameAheadIntegrationTests(PhysicsEngineFixture fixture, ITestOutpu
     private const uint FLAG_FORWARD = 0x00000001;
     private const uint FLAG_JUMPING = 0x00002000;
     private const uint FLAG_FALLINGFAR = 0x00004000;
+    private const uint FLAG_SWIMMING = 0x00200000;
 
     // ==========================================================================
     // JUMP ARC TESTS
@@ -99,6 +100,37 @@ public class FrameAheadIntegrationTests(PhysicsEngineFixture fixture, ITestOutpu
 
         Assert.True(landingFrame > 0, "Should have landed within simulation");
         Assert.InRange(landingZ, startZ - 3f, startZ + 3f); // within 3y of start (terrain variance)
+    }
+
+    [Fact]
+    public void AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var dryGround = WoWWorldCoordinates.Durotar.Orgrimmar.ValleyOfStrength;
+        var airborneOnly = CreateInput(
+            new WorldPosition(dryGround.MapId, dryGround.X, dryGround.Y, dryGround.Z + 20f),
+            FLAG_FALLINGFAR,
+            RUN_SPEED);
+        var mixedFlags = airborneOnly;
+        mixedFlags.MoveFlags = FLAG_FALLINGFAR | FLAG_SWIMMING;
+
+        airborneOnly.DeltaTime = DT;
+        mixedFlags.DeltaTime = DT;
+
+        var airborneOutput = StepPhysicsV2(ref airborneOnly);
+        var mixedOutput = StepPhysicsV2(ref mixedFlags);
+
+        _output.WriteLine(
+            $"Air only: Z={airborneOutput.Z:F4} Vz={airborneOutput.Vz:F4} Flags=0x{airborneOutput.MoveFlags:X8}");
+        _output.WriteLine(
+            $"Air+swim: Z={mixedOutput.Z:F4} Vz={mixedOutput.Vz:F4} Flags=0x{mixedOutput.MoveFlags:X8}");
+
+        Assert.True(airborneOutput.Z < airborneOnly.Z, "Pure airborne frame should descend on dry ground.");
+        Assert.True(mixedOutput.Z < mixedFlags.Z, "Airborne+swimming frame should still take the airborne path on dry ground.");
+        Assert.False((mixedOutput.MoveFlags & FLAG_SWIMMING) != 0, "Dry-ground airborne frame should not preserve MOVEFLAG_SWIMMING.");
+        Assert.InRange(MathF.Abs(mixedOutput.Z - airborneOutput.Z), 0.0f, 0.05f);
+        Assert.InRange(MathF.Abs(mixedOutput.Vz - airborneOutput.Vz), 0.0f, 0.1f);
     }
 
     // ==========================================================================

@@ -708,3 +708,29 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not replace the final grounded support lookup wholesale with `GetCapsuleSupportZ(...)`; the helper is too aggressive as a global primary support source and reopens the underground regression gate.
 - Recommended next single hypothesis:
   - Keep the reverted mid-height center query as the stable baseline. The next support fix must be narrower than a full footprint-probe swap, likely a conditional multi-level disambiguation path that only activates when the center query promotes an upper shelf.
+
+## 2026-03-25 Top-Level CollisionStep Branch Precedence (`0x633840`)
+
+- Scope note:
+  - This pass did not touch the still-unresolved grounded helper. It only aligned the top-level `CollisionStep` branch order after a fresh binary capture showed BG still treated overlapping airborne/swim frames in the wrong order.
+  - Captured evidence lives in `docs/physics/0x633840_disasm.txt`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `StepV2` now prefers the airborne path whenever airborne flags are present, even if `MOVEFLAG_SWIMMING` overlaps on the same frame
+    - pure swim frames still route through `ProcessSwimMovement`
+  - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
+    - added `AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~FrameAheadIntegrationTests.JumpArc_FlatGround_PeakHeightMatchesPhysics|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" --logger "console;verbosity=minimal"`
+    - passed (`3/3`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The new dry-ground overlap regression now matches the binary intent: `FALLINGFAR | SWIMMING` produces the same descending frame shape as pure airborne motion and does not preserve `MOVEFLAG_SWIMMING` on dry land.
+  - The live Durotar redirect slice remained green, so this cleanup did not disturb the existing dry-ground runtime path.
+- Recommended next single hypothesis:
+  - Keep the top-level `0x633840` precedence fixed and move to the next grounded blocker with direct binary evidence: disassemble `0x6334A0` `CheckWalkable`, then replace the current fixed walkability simplification before touching `0x636100` again.

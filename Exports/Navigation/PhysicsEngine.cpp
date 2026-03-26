@@ -347,7 +347,8 @@ bool PhysicsEngine::TryStepUpSnap(
 // =====================================================================================
 
 // [DELETED] Old 3-pass system (DecomposeMovement, ExecuteUp/Side/Down, PerformThreePassMove, GroundMoveElevatedSweep)
-// Replaced by CollisionStepWoW which matches WoW.exe VA 0x633840 exactly.
+// Replaced by the grounded CollisionStepWoW helper; StepV2 owns the top-level
+// 0x633840 branch selection between airborne, swim, and grounded movement.
 
 
 // -----------------------------------------------------------------------------
@@ -457,9 +458,10 @@ bool PhysicsEngine::VerticalSweepSnapDown(const PhysicsInput& input,
 
 
 // =============================================================================
-// WoW.exe CollisionStep (VA 0x633840) — Exact AABB-based implementation
+// WoW.exe grounded CollisionStep branch (0x633C7B onward) — AABB-based implementation
 //
-// Replaces ALL custom collision logic with the binary's algorithm:
+// StepV2 handles the top-level 0x633840 branch order. This helper covers the
+// grounded branch only and replaces the old custom ground collision logic with:
 // 1. Build AABB at position: ±collisionSkin XY, Z to Z+stepHeight
 // 2. Compute slope-limited sweep distance
 // 3. SWEEP 1: full displacement → TestTerrainAABB
@@ -1094,7 +1096,8 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
 }
 
 // [DELETED] Old 3-pass system (DecomposeMovement, ExecuteUp/Side/Down, PerformThreePassMove, GroundMoveElevatedSweep)
-// Replaced by CollisionStepWoW which matches WoW.exe VA 0x633840 exactly.
+// Replaced by the grounded CollisionStepWoW helper; StepV2 remains responsible
+// for the top-level 0x633840 branch order.
 
 
 // =====================================================================================
@@ -1464,6 +1467,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		st.isGrounded = false;
 	}
 	st.isSwimming = isSwimming;
+	// WoW.exe 0x633A29 checks the airborne helper before the swim helper.
+	// Preserve that precedence when both states are present on the same frame,
+	// while still allowing non-swimming unsupported states to fall through to air.
+	const bool useAirbornePath = inputAirborneFlag || (!st.isGrounded && !isSwimming);
 	const bool isFlying = inputFlyingFlag;
 	const bool isRooted = (input.moveFlags & MOVEFLAG_ROOT) != 0;
 
@@ -1729,24 +1736,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		st.y += st.vy * dt;
 		st.z += st.vz * dt;
 	}
-	else if (isSwimming) {
-		st.isGrounded = false;
-		st.isSwimming = true;
-		if (trustInputVel) {
-			// Replay trust: use provided velocity for exact position matching.
-			// ProcessSwimMovement recalculates velocity from intent direction/pitch
-			// which doesn't perfectly match the client's swim movement model.
-			st.vx = input.vx;
-			st.vy = input.vy;
-			st.vz = input.vz;
-			st.x += st.vx * dt;
-			st.y += st.vy * dt;
-			st.z += st.vz * dt;
-		} else {
-			ProcessSwimMovement(input, intent, st, dt, moveSpeed);
-		}
-	}
-	else if (!st.isGrounded) {
+	else if (useAirbornePath) {
 		// Airborne: the character has JUMPING or FALLINGFAR flags set.
 		// Apply jump impulse ONLY when:
 		//   1. JUMPING flag is set (jumpRequested)
@@ -1777,6 +1767,23 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			st.vy = moveDir.y * moveSpeed;
 		}
 		ProcessAirMovement(input, intent, st, dt, moveSpeed);
+	}
+	else if (isSwimming) {
+		st.isGrounded = false;
+		st.isSwimming = true;
+		if (trustInputVel) {
+			// Replay trust: use provided velocity for exact position matching.
+			// ProcessSwimMovement recalculates velocity from intent direction/pitch
+			// which doesn't perfectly match the client's swim movement model.
+			st.vx = input.vx;
+			st.vy = input.vy;
+			st.vz = input.vz;
+			st.x += st.vx * dt;
+			st.y += st.vy * dt;
+			st.z += st.vz * dt;
+		} else {
+			ProcessSwimMovement(input, intent, st, dt, moveSpeed);
+		}
 	}
 	else if (intent.jumpRequested) {
 		// Grounded jump: character was grounded last frame, jump requested this frame.
