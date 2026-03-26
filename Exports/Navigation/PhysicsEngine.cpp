@@ -292,6 +292,34 @@ void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
     };
 }
 
+void WoWCollision::BuildSelectorNeighborhood(const G3D::Vector3& position,
+                                             float verticalOffset,
+                                             float horizontalRadius,
+                                             std::array<G3D::Vector3, 9>& outPoints,
+                                             std::array<uint8_t, 32>& outSelectorIndices)
+{
+    outPoints[0] = position;
+    outPoints[1] = G3D::Vector3(position.x - horizontalRadius, position.y - horizontalRadius, position.z - horizontalRadius);
+    outPoints[2] = G3D::Vector3(position.x - horizontalRadius, position.y + horizontalRadius, position.z - horizontalRadius);
+    outPoints[3] = G3D::Vector3(position.x + horizontalRadius, position.y + horizontalRadius, position.z - horizontalRadius);
+    outPoints[4] = G3D::Vector3(position.x + horizontalRadius, position.y - horizontalRadius, position.z - horizontalRadius);
+    outPoints[5] = G3D::Vector3(position.x - horizontalRadius, position.y - horizontalRadius, position.z + verticalOffset);
+    outPoints[6] = G3D::Vector3(position.x - horizontalRadius, position.y + horizontalRadius, position.z + verticalOffset);
+    outPoints[7] = G3D::Vector3(position.x + horizontalRadius, position.y + horizontalRadius, position.z + verticalOffset);
+    outPoints[8] = G3D::Vector3(position.x + horizontalRadius, position.y - horizontalRadius, position.z + verticalOffset);
+
+    outSelectorIndices = {
+        1u, 2u, 6u, 5u,
+        3u, 4u, 8u, 7u,
+        2u, 3u, 7u, 6u,
+        4u, 1u, 5u, 8u,
+        5u, 6u, 7u, 8u,
+        0u, 1u, 2u, 0u,
+        3u, 4u, 0u, 2u,
+        3u, 0u, 4u, 1u
+    };
+}
+
 namespace
 {
     struct GroundedWallCandidate

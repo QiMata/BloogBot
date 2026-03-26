@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 202)
+- **Last updated:** 2026-03-26 (session 203)
 - **Branch:** `main`
+- **Session 203 — selector neighborhood/table is now pinned as a pure binary seam:**
+  - Added pure [BuildSelectorNeighborhood(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) plus the production-DLL export [BuildWoWSelectorNeighborhood(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added new deterministic coverage in [WowSelectorNeighborhoodTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorNeighborhoodTests.cs), which pins the exact 9-point layout and 32-byte selector table emitted by binary helper `0x631BE0`.
+  - Practical implication: both upstream selector builders are now exact in the production DLL. The remaining selector-chain unknown is the candidate-validation/rebuild logic around `0x6329E0` / `0x632830` / `0x6318C0`, not the plane strip or neighborhood data they consume.
+- **Fresh binary evidence (session 203):**
+  - Added raw capture [0x631BE0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x631BE0_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the `0x631BE0` point/table builder.
+- **Test baseline (session 203):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests" --logger "console;verbosity=minimal"`
+    - Passed (`4/4`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 202 — selector support-plane strip is now pinned as a pure binary seam:**
   - Added pure [BuildSelectorSupportPlanes(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) plus the production-DLL export [BuildWoWSelectorSupportPlanes(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added new deterministic coverage in [WowSelectorSupportPlaneTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorSupportPlaneTests.cs), which pins the exact 9-plane support strip emitted by binary helper `0x631440`: the `±X`, `±Y`, and `+Z` planes plus the four diagonal planes driven by `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`.

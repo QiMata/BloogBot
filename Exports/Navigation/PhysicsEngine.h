@@ -630,6 +630,12 @@ namespace WoWCollision
                                     float horizontalRadius,
                                     std::array<SelectorSupportPlane, 9>& outPlanes);
 
+    void BuildSelectorNeighborhood(const G3D::Vector3& position,
+                                   float verticalOffset,
+                                   float horizontalRadius,
+                                   std::array<G3D::Vector3, 9>& outPoints,
+                                   std::array<uint8_t, 32>& outSelectorIndices);
+
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,
                                      const G3D::Vector3& requestedMove,

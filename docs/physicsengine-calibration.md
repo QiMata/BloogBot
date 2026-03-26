@@ -1220,3 +1220,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not replace the selector-builder support strip with ad-hoc axis or corner planes. The binary now gives us the exact 9-plane layout and constants.
 - Recommended next single hypothesis:
   - Mirror the next pure builder in the same chain (`0x631BE0`) so deterministic tests can combine the exact 9-point neighborhood with the now-pinned 9-plane support strip before tackling `0x632830`.
+
+## 2026-03-26 Selector neighborhood builder addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to expose the binary `0x631BE0` neighborhood/selector-table builder so the next `0x632830` work can start from exact data rather than inferred corner layouts.
+- Binary/evidence delta shipped:
+  - added a raw capture in `docs/physics/0x631BE0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the exact 9-point neighborhood and 32-byte selector table emitted by `0x631BE0`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildSelectorNeighborhood(...)`, mirroring the binary `0x631BE0` point/table builder
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWSelectorNeighborhood(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching interop seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorNeighborhoodTests.cs`
+    - added deterministic coverage for the 9-point layout and the exact 32-byte selector table
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests" --logger "console;verbosity=minimal"`
+    - passed (`4/4`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector-builder prework is now constrained by both exact upstream builders: the 9-plane support strip (`0x631440`) and the 9-point neighborhood / selector table (`0x631BE0`). That leaves `0x632830` / `0x6318C0` as the next real unknown, not the data they consume.
+- Do Not Repeat:
+  - Do not substitute an inferred corner order or inferred selector-byte pattern for this stage. The binary now gives the exact 9-point layout and exact 32-byte table.
+- Recommended next single hypothesis:
+  - Mirror the first candidate-validation helper (`0x6329E0` / `0x632830`) on top of the now-pinned support planes and selector neighborhood so deterministic tests can explain why a candidate survives or fails before `0x632700` returns.

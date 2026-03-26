@@ -552,6 +552,17 @@ public static partial class NavigationInterop
         [Out] SelectorSupportPlane[] outPlanes,
         int maxPlanes);
 
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorNeighborhood", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorNeighborhood(
+        in Vector3 position,
+        float verticalOffset,
+        float horizontalRadius,
+        [Out] Vector3[] outPoints,
+        int maxPoints,
+        [Out] byte[] outSelectorIndices,
+        int maxSelectorIndices);
+
     [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
     public static extern int QueryTerrainAABBContacts(
         uint mapId,

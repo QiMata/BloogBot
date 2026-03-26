@@ -856,6 +856,30 @@ extern "C"
         return count;
     }
 
+    __declspec(dllexport) bool BuildWoWSelectorNeighborhood(
+        const G3D::Vector3* position,
+        float verticalOffset,
+        float horizontalRadius,
+        G3D::Vector3* outPoints,
+        int maxPoints,
+        uint8_t* outSelectorIndices,
+        int maxSelectorIndices)
+    {
+        if (!position || !outPoints || !outSelectorIndices || maxPoints < 9 || maxSelectorIndices < 32) {
+            return false;
+        }
+
+        std::array<G3D::Vector3, 9> points{};
+        std::array<uint8_t, 32> selectorIndices{};
+        WoWCollision::BuildSelectorNeighborhood(*position, verticalOffset, horizontalRadius, points, selectorIndices);
+
+        for (size_t i = 0; i < points.size(); ++i) {
+            outPoints[i] = points[i];
+        }
+        std::memcpy(outSelectorIndices, selectorIndices.data(), selectorIndices.size());
+        return true;
+    }
+
     __declspec(dllexport) int QueryTerrainAABBContacts(
         uint32_t mapId,
         const G3D::Vector3* boxMin,

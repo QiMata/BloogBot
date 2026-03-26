@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 202)
+- Last updated: 2026-03-26 (session 203)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 203 kept runtime behavior unchanged and exposed the next pure binary helper behind the selector-builder chain. `BuildSelectorNeighborhood(...)` now mirrors `0x631BE0`, `BuildWoWSelectorNeighborhood(...)` exports it through the production DLL, and `WowSelectorNeighborhoodTests.cs` now pins the exact 9-point layout plus 32-byte selector table.
+  - New binary evidence now lives in `docs/physics/0x631BE0_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the pre-`0x632830` builder path again: `0x631BE0` consumes the now-pinned `0x631440` support strip, emits the exact 9-point neighborhood, and writes the selector bytes used by `0x632460` / `0x632F80`.
+  - Practical implication: the remaining native selector gap is no longer the input geometry. The next unit has to explain the candidate-validation and rebuild helpers (`0x6329E0` / `0x632830` / `0x6318C0`) on top of those exact binary inputs.
   - Session 202 kept runtime behavior unchanged and exposed the next pure binary helper behind the selector-builder chain. `BuildSelectorSupportPlanes(...)` now mirrors `0x631440`, `BuildWoWSelectorSupportPlanes(...)` exports it through the production DLL, and `WowSelectorSupportPlaneTests.cs` now pins the exact 9-plane strip.
   - New binary evidence now lives in `docs/physics/0x631440_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the pre-`0x632830` builder path: `0x631440` emits the fixed `±X`, `±Y`, `+Z`, and four diagonal support planes using `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`.
   - Practical implication: the next native parity unit no longer needs to infer the selector support-strip geometry. It can build on the now-pinned binary plane strip while tracing `0x631BE0` / `0x632830`.
@@ -333,8 +336,8 @@
   - `docs/TASKS.md`
 - Next command: `@'
 from capstone import *
-va=0x631BE0
-size=0x320
+va=0x632830
+size=0x260
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
     f.seek(va-0x400000)
     code=f.read(size)
