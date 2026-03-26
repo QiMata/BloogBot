@@ -535,3 +535,20 @@ private:
     // [DELETED] Old 3-pass system (PhysX CCT style) replaced by CollisionStepWoW
     // matching WoW.exe VA 0x633840 AABB-based collision.
 };
+
+namespace WoWCollision
+{
+    struct CheckWalkableResult
+    {
+        bool walkable = false;
+        bool walkableState = false;
+        bool groundedWallFlagAfter = false;
+    };
+
+    CheckWalkableResult CheckWalkable(const SceneQuery::AABBContact& contact,
+                                      const G3D::Vector3& position,
+                                      float collisionRadius,
+                                      float boundingHeight,
+                                      bool useStandardWalkableThreshold,
+                                      bool groundedWallFlagBefore);
+}

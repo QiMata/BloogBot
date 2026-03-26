@@ -236,6 +236,11 @@ class SceneQuery
         struct AABBContact {
             G3D::Vector3 point;     // World-space contact point
             G3D::Vector3 normal;    // Triangle face normal
+            G3D::Vector3 rawNormal; // Raw triangle winding normal used by WoW.exe helpers
+            G3D::Vector3 triangleA; // Raw triangle vertex A
+            G3D::Vector3 triangleB; // Raw triangle vertex B
+            G3D::Vector3 triangleC; // Raw triangle vertex C
+            float planeDistance = 0.0f; // Plane D for rawNormal . X + d = 0
             float distance;         // Distance along sweep direction to contact
             bool walkable;          // normal.z >= DEFAULT_WALKABLE_MIN_NORMAL_Z
             uint32_t instanceId = 0; // Static instance ID or dynamic runtime instance ID

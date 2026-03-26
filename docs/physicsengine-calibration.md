@@ -89,6 +89,7 @@ If steps 1-3 are skipped, calibration work will likely repeat failed attempts.
 - Do not run multiple simultaneous hypotheses in one test pass.
 - Do not recalibrate by re-scanning unrelated systems (MovementController/task-wide state) for this stream.
 - Do not reuse the first RFC / Un'Goro "wall" regression coordinates as-is; current map data reports open space there, so they do not exercise grounded wall-slide behavior.
+- Do not wire the new `0x6334A0` helper directly into live grounded resolution until `TestTerrainAABB` contact orientation and the post-query `0x637330` normal-flip path match the client; the first direct hookup already regressed both live Durotar parity routes.
 
 ## Recommended Next Single Hypothesis
 
@@ -734,3 +735,43 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - The live Durotar redirect slice remained green, so this cleanup did not disturb the existing dry-ground runtime path.
 - Recommended next single hypothesis:
   - Keep the top-level `0x633840` precedence fixed and move to the next grounded blocker with direct binary evidence: disassemble `0x6334A0` `CheckWalkable`, then replace the current fixed walkability simplification before touching `0x636100` again.
+
+## 2026-03-25 `0x6334A0` CheckWalkable Helper Capture
+
+- Scope note:
+  - This pass targeted the next grounded blocker with direct binary evidence: `0x6334A0` `CheckWalkable`.
+  - The shipped delta was intentionally limited to binary capture, raw contact-data plumbing, a pure helper, and deterministic tests. A first runtime hookup was tried, regressed live parity immediately, and was reverted before handoff.
+- Behavioral change shipped:
+  - `Exports/Navigation/SceneQuery.h/.cpp`
+    - `AABBContact` now preserves raw plane normals, raw triangle vertices, and plane distance so native code can evaluate the same contact geometry that `0x6334A0` reasons about
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `WoWCollision::CheckWalkable(...)` plus the local helper logic mirroring `0x6333D0` and `0x6335D0`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exported `EvaluateWoWCheckWalkable(...)` for deterministic test coverage
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the P/Invoke for the pure helper export
+  - `Tests/Navigation.Physics.Tests/WowCheckWalkableTests.cs`
+    - added deterministic coverage for steep positive, shallow positive, steep negative-touch, and steep negative-no-touch cases
+- Binary evidence captured:
+  - `docs/physics/0x6334A0_disasm.txt`
+    - `0x6334A0` uses `0.6427876f` when the `this+0x15C` path says the normal threshold is steep-only, and `0.17364818f` otherwise
+    - positive normals above threshold call `0x6335D0` and may clear `0x04000000`
+    - negative normals call `0x6333D0`, may consume `0x04000000`, and only succeed when `-normal.z > 0.6427876f`
+    - `0x6333D0` uses the top-footprint corner test with `1/720`
+    - `0x6335D0` uses the three edge planes with `1/12`
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"`
+    - passed (`5/5`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - passed (`1/1`)
+- Frame-pattern note:
+  - The pure helper/test seam is solid, but the first runtime hookup into grounded wall resolution regressed the live Durotar turn-start and redirect routes immediately.
+  - Reverting that hookup returned both live routes to green, which narrows the remaining blocker to contact orientation / normal-flip parity rather than the helper logic itself.
+- Do Not Repeat:
+  - Do not route `0x6334A0` straight from the current `TestTerrainAABB` contact stream into live grounded resolution. Fix the contact-orientation / `0x637330` feed first, then retry.
+- Recommended next single hypothesis:
+  - Keep the new helper/tests frozen and align the `TestTerrain` contact-orientation / `Vec3Negate` path before any new grounded runtime usage of `0x6334A0`.

@@ -420,6 +420,19 @@ public static partial class NavigationInterop
         out float stepDownHeight,
         out float walkableMinNormalZ);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWCheckWalkable", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWCheckWalkable(
+        in Triangle triangle,
+        in Vector3 rawNormal,
+        in Vector3 position,
+        float collisionRadius,
+        float boundingHeight,
+        [MarshalAs(UnmanagedType.I1)] bool useStandardWalkableThreshold,
+        [MarshalAs(UnmanagedType.I1)] bool groundedWallFlagBefore,
+        [MarshalAs(UnmanagedType.I1)] out bool walkableState,
+        [MarshalAs(UnmanagedType.I1)] out bool groundedWallFlagAfter);
+
     // ==========================================================================
     // PHYSICS STEP FUNCTION
     // ==========================================================================

@@ -283,8 +283,37 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-25 (session 189)
+- **Last updated:** 2026-03-25 (session 190)
 - **Branch:** `main`
+- **Session 190 — `0x6334A0` `CheckWalkable` semantics captured and locked in deterministic coverage:**
+  - Captured fresh binary evidence in [0x6334A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6334A0_disasm.txt). The new note includes the full `0x6334A0` body plus the two supporting helper findings that matter for parity: `0x6333D0` checks the current contact plane against the four top-footprint corners with `1/720`, and `0x6335D0` accepts the current position only when it sits inside all three triangle edge planes with `1/12`.
+  - Extended [SceneQuery.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.h) and [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so `TestTerrainAABB` contacts now preserve the raw triangle vertices, raw plane normal, and plane distance the binary helper actually reasons about instead of collapsing everything down to a single upward-facing `walkable` bit.
+  - Added a binary-backed pure helper in [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), exposed it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) / [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs), and pinned the rule in new [WowCheckWalkableTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowCheckWalkableTests.cs). The deterministic coverage now locks the strict signed-normal thresholds, the top-corner touch rule, and the `0x04000000` consumed-flag behavior.
+  - Important: a direct runtime hookup of that helper into the current grounded wall resolver was attempted and immediately regressed both live Durotar parity routes. That hookup was reverted before handoff. This session therefore ships the binary evidence, raw-contact plumbing, and deterministic helper tests only, while deliberately leaving the live grounded runtime unchanged until the `TestTerrain` contact-orientation / normal-flip path itself is brought into parity.
+- **Test baseline (session 190):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"`
+    - Passed (`5/5`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+- **Files changed (session 190):**
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/SceneQuery.h`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowCheckWalkableTests.cs`
+  - `docs/physics/0x6334A0_disasm.txt`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the new `0x6334A0` helper/tests frozen, then align the `TestTerrain` contact-orientation / `Vec3Negate` path before routing that helper into the grounded runtime. Only after that should the next native pass return to the still-open `0x636100` branch-gate helper.
+- **Next command:** `rg -n "637330|Vec3Negate|0x6334A0|0x6721B0" docs/physics/0x6367B0_disasm.txt docs/physics/wow_exe_decompilation.md -S`
 - **Session 189 — native top-level CollisionStep branch order aligned to `0x633840`:**
   - Captured fresh binary evidence in [0x633840_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x633840_disasm.txt). The relevant top-level branch order is explicit: `0x633A29` / `0x633A4C` checks the airborne helper first (`test ah, 0x20`), `0x633B5E` checks swimming second (`test eax, 0x200000`), and the grounded branch does not start until `0x633C7B`.
   - Updated [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) so `StepV2` now preserves that same precedence. When airborne flags and `MOVEFLAG_SWIMMING` overlap on the same frame, BG now takes the airborne path instead of incorrectly routing through `ProcessSwimMovement`.

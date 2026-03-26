@@ -26,6 +26,13 @@
 // Global instances for testing
 static MapLoader* g_testMapLoader = nullptr;
 
+struct ExportTriangle
+{
+    G3D::Vector3 a;
+    G3D::Vector3 b;
+    G3D::Vector3 c;
+};
+
 extern "C"
 {
     // ==========================================================================
@@ -454,6 +461,48 @@ extern "C"
         if (stepHeight) *stepHeight = PhysicsConstants::STEP_HEIGHT;
         if (stepDownHeight) *stepDownHeight = PhysicsConstants::STEP_DOWN_HEIGHT;
         if (walkableMinNormalZ) *walkableMinNormalZ = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWCheckWalkable(
+        const ExportTriangle* triangle,
+        const G3D::Vector3* rawNormal,
+        const G3D::Vector3* position,
+        float collisionRadius,
+        float boundingHeight,
+        bool useStandardWalkableThreshold,
+        bool groundedWallFlagBefore,
+        bool* outWalkableState,
+        bool* outGroundedWallFlagAfter)
+    {
+        if (!triangle || !rawNormal || !position) {
+            if (outWalkableState) *outWalkableState = false;
+            if (outGroundedWallFlagAfter) *outGroundedWallFlagAfter = false;
+            return false;
+        }
+
+        SceneQuery::AABBContact contact{};
+        contact.rawNormal = *rawNormal;
+        contact.normal = rawNormal->z < 0.0f ? -*rawNormal : *rawNormal;
+        contact.triangleA = triangle->a;
+        contact.triangleB = triangle->b;
+        contact.triangleC = triangle->c;
+
+        const G3D::Vector3 normalizedRawNormal = rawNormal->directionOrZero();
+        contact.planeDistance = normalizedRawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+            ? -normalizedRawNormal.dot(contact.triangleA)
+            : 0.0f;
+
+        const auto result = WoWCollision::CheckWalkable(
+            contact,
+            *position,
+            collisionRadius,
+            boundingHeight,
+            useStandardWalkableThreshold,
+            groundedWallFlagBefore);
+
+        if (outWalkableState) *outWalkableState = result.walkableState;
+        if (outGroundedWallFlagAfter) *outGroundedWallFlagAfter = result.groundedWallFlagAfter;
+        return result.walkable;
     }
 
     /// Computes a capsule sweep diagnostic for a single position/direction

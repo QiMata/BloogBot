@@ -30,6 +30,7 @@
 ## P0 Active Tasks (Ordered)
 
 ### NAV-PAR-001 PhysicsEngine parity with original WoW.exe grounded movement
+- [x] Session 190: disassembled `0x6334A0` `CheckWalkable`, captured its helper semantics in `docs/physics/0x6334A0_disasm.txt`, and added raw contact triangle/plane data plus a pure `WoWCollision::CheckWalkable(...)` helper with deterministic tests. A direct runtime hookup regressed the live Durotar parity routes and was reverted, so the shipped delta stops at binary evidence, test seams, and deterministic coverage until `TestTerrain` contact orientation / `0x637330` parity is fixed.
 - [x] Session 189: top-level `0x633840` branch precedence documented and enforced in `StepV2`. Airborne now wins over swim when both states overlap, matching the binary's `0x633A29` -> `0x633B5E` order.
 - [x] Session 188: Disassembled `0x6367B0` and implemented binary-backed retry loop (up to 5 iterations, exit < 1.0f yard). Also documented `0x636100` return codes and `0x636610` merge logic.
 - [x] Session 188: Remaining heuristic thresholds audited against binary. `0x636610` uses integer jump-table; our float approximations match.
@@ -117,9 +118,13 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-25 (session 189)
+- Last updated: 2026-03-25 (session 190)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 190 captured the real `0x6334A0` `CheckWalkable` rule set in `docs/physics/0x6334A0_disasm.txt`. The new binary-backed note documents the positive-slope threshold split (`0.6427876f` vs `0.17364818f`), the negative-normal top-corner touch helper at `0x6333D0` (`1/720`), and the inside-expanded-triangle helper at `0x6335D0` (`1/12`).
+  - `SceneQuery.h/.cpp` now preserve raw triangle vertices, raw plane normals, and plane distances on `AABBContact`, so native code can reason about the same contact data the client uses instead of a flattened walkable bit.
+  - `PhysicsEngine.h/.cpp` now expose a pure `WoWCollision::CheckWalkable(...)` helper, `PhysicsTestExports.cpp` exports it, and `WowCheckWalkableTests.cs` locks the major binary branches: steep positive slope clears `0x04000000`, shallow positive slope preserves it, steep negative slope consumes it only when the top footprint touches the plane, and the no-touch case stays blocked.
+  - A direct runtime hookup of that helper into the current grounded wall resolver regressed both live Durotar parity fixtures immediately. That hookup was reverted before handoff, which leaves the runtime on the previous green baseline and records a new do-not-repeat: do not feed `0x6334A0` from the current `TestTerrainAABB` contact stream until the `TestTerrain` contact-orientation / normal-flip path matches the client.
   - Session 189 closed the first top-level `0x633840` mismatch instead of going deeper into the grounded helper immediately. Fresh disassembly captured in `docs/physics/0x633840_disasm.txt` shows the client checks the airborne helper (`test ah, 0x20`) before the swim helper (`test eax, 0x200000`), with grounded falling through only after both fail.
   - `PhysicsEngine.cpp` now enforces that same precedence in `StepV2`: `useAirbornePath` wins whenever airborne flags are present, even if `MOVEFLAG_SWIMMING` also overlaps on the same frame. Pure swim frames still route through `ProcessSwimMovement`.
   - Added deterministic regression `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround`, which proves a dry-ground `FALLINGFAR | SWIMMING` frame descends like pure airborne motion and clears `MOVEFLAG_SWIMMING` in the output instead of being misrouted through the swim helper.
@@ -143,6 +148,10 @@
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround|FullyQualifiedName~FrameAheadIntegrationTests.JumpArc_FlatGround_PeakHeightMatchesPhysics|FullyQualifiedName~PhysicsReplayTests.SwimForward_FrameByFrame_PositionMatchesRecording" --logger "console;verbosity=minimal"` -> `passed (3/3)`
   - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"` -> `passed (1/1)`
@@ -150,6 +159,18 @@
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection|FullyQualifiedName~PhysicsReplayTests.BlackrockSpireBackpedal_ReplayPreservesWmoContactStalls|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~FrameByFramePhysicsTests.ValleyOfTrialsSlopeRoute_DoesNotReportFalseWallHits|FullyQualifiedName~ServerMovementValidationTests.GroundMovement_Position_NotUnderground|FullyQualifiedName~MovementControllerPhysics" --logger "console;verbosity=minimal"` -> `35 passed`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/SceneQuery.h`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowCheckWalkableTests.cs`
+  - `docs/physics/0x6334A0_disasm.txt`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/physicsengine-calibration.md`
+  - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
   - `docs/physics/0x633840_disasm.txt`
@@ -164,9 +185,10 @@
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(0x6334A0-0x400000); code=f.read(768); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') or (i.address >= 0x633560 and i.mnemonic in ('ret','retn') and (_ for _ in ()).throw(SystemExit)) for i in md.disasm(code, 0x6334A0)]"`
+- Next command: `rg -n "637330|Vec3Negate|0x6334A0|0x6721B0" docs/physics/0x6367B0_disasm.txt docs/physics/wow_exe_decompilation.md -S`
 - Blockers:
   - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current stateless path now uses merged blocker-axis resolution on top of the correct merged query volume, but it still lacks the real `0x6334A0` walkability logic and the remaining `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
+  - Do not route the new `0x6334A0` helper into live grounded resolution again until `TestTerrainAABB` contact orientation and the post-query `0x637330` normal-flip path are parity-safe; the first direct hookup already regressed both live Durotar routes and was reverted.
   - Do not reintroduce the reverted two-pass remaining-move reprojection loop without new binary evidence; it is now a documented regression.
   - `0x6373B0` is closed as the merged-AABB helper; do not spend more time treating it as the missing collision/slide routine.
   - Verified replay-backed wall fixtures now exist, so the next native pass should use those fixtures instead of the stale Stormwind / RFC / Un'Goro coordinate probes.

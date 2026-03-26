@@ -1,0 +1,115 @@
+WoW.exe 1.12.1 (build 5875)
+Function: 0x6334A0 `CheckWalkable`
+Image base: 0x400000
+Capture date: 2026-03-25
+
+0x006334A0: push     ebp
+0x006334A1: mov      ebp, esp
+0x006334A3: sub      esp, 0xc
+0x006334A6: push     ebx
+0x006334A7: mov      ebx, dword ptr [ebp + 0xc]
+0x006334AA: push     esi
+0x006334AB: push     edi
+0x006334AC: mov      edi, ecx
+0x006334AE: mov      dword ptr [ebx], 0
+0x006334B4: mov      ecx, dword ptr [edi + 0x15c]
+0x006334BA: call     0x5fa550
+0x006334BF: mov      ecx, dword ptr [ebp + 8]
+0x006334C2: mov      esi, ecx
+0x006334C4: imul     esi, esi, 0x34
+0x006334C7: test     al, al
+0x006334C9: jne      0x6334e0
+0x006334CB: mov      eax, dword ptr [0xc4e534]
+0x006334D0: fld      dword ptr [esi + eax + 8]
+0x006334D4: lea      edx, [esi + eax + 8]
+0x006334D8: fcomp    dword ptr [0x80e000]
+0x006334DE: jmp      0x6334f4
+0x006334E0: mov      edx, dword ptr [0xc4e534]
+0x006334E6: fld      dword ptr [esi + edx + 8]
+0x006334EA: lea      edx, [esi + edx + 8]
+0x006334EE: fcomp    dword ptr [0x80dffc]
+0x006334F4: fnstsw   ax
+0x006334F6: test     ah, 0x41
+0x006334F9: jnp      0x63351c
+0x006334FB: lea      edx, [edi + 0x10]
+0x006334FE: call     0x6335d0
+0x00633503: test     eax, eax
+0x00633505: je       0x63350e
+0x00633507: and      dword ptr [edi + 0x40], 0xfbffffff
+0x0063350E: pop      edi
+0x0063350F: pop      esi
+0x00633510: mov      eax, 1
+0x00633515: pop      ebx
+0x00633516: mov      esp, ebp
+0x00633518: pop      ebp
+0x00633519: ret      8
+0x0063351C: fld      dword ptr [edx]
+0x0063351E: fcomp    dword ptr [0x7ffd74]
+0x00633524: fnstsw   ax
+0x00633526: test     ah, 1
+0x00633529: jne      0x63353c
+0x0063352B: mov      eax, dword ptr [edi + 0x40]
+0x0063352E: pop      edi
+0x0063352F: pop      esi
+0x00633530: and      eax, 0x4000000
+0x00633535: pop      ebx
+0x00633536: mov      esp, ebp
+0x00633538: pop      ebp
+0x00633539: ret      8
+0x0063353C: push     ecx
+0x0063353D: mov      ecx, edi
+0x0063353F: call     0x6333d0
+0x00633544: test     eax, eax
+0x00633546: mov      eax, dword ptr [edi + 0x40]
+0x00633549: jne      0x633559
+0x0063354B: pop      edi
+0x0063354C: pop      esi
+0x0063354D: and      eax, 0x4000000
+0x00633552: pop      ebx
+0x00633553: mov      esp, ebp
+0x00633555: pop      ebp
+0x00633556: ret      8
+0x00633559: test     eax, 0x4000000
+0x0063355E: je       0x63356d
+0x00633560: mov      dword ptr [ebx], 1
+0x00633566: and      dword ptr [edi + 0x40], 0xfbffffff
+0x0063356D: mov      eax, dword ptr [0xc4e534]
+0x00633572: add      esi, eax
+0x00633574: mov      ecx, dword ptr [esi]
+0x00633576: mov      edx, dword ptr [esi + 4]
+0x00633579: mov      eax, dword ptr [esi + 8]
+0x0063357C: mov      dword ptr [ebp - 4], eax
+0x0063357F: fld      dword ptr [ebp - 4]
+0x00633582: fchs
+0x00633584: mov      dword ptr [ebp - 0xc], ecx
+0x00633587: fcomp    dword ptr [0x80dffc]
+0x0063358D: mov      dword ptr [ebp - 8], edx
+0x00633590: fnstsw   ax
+0x00633592: test     ah, 0x41
+0x00633595: jp       0x6335ae
+0x00633597: mov      eax, 1
+0x0063359C: xor      ecx, ecx
+0x0063359E: test     eax, eax
+0x006335A0: sete     cl
+0x006335A3: pop      edi
+0x006335A4: pop      esi
+0x006335A5: pop      ebx
+0x006335A6: mov      eax, ecx
+0x006335A8: mov      esp, ebp
+0x006335AA: pop      ebp
+0x006335AB: ret      8
+0x006335AE: xor      eax, eax
+0x006335B0: xor      ecx, ecx
+0x006335B2: test     eax, eax
+0x006335B4: sete     cl
+0x006335B7: pop      edi
+0x006335B8: pop      esi
+0x006335B9: pop      ebx
+0x006335BA: mov      eax, ecx
+0x006335BC: mov      esp, ebp
+0x006335BE: pop      ebp
+0x006335BF: ret      8
+
+Helper notes from the same capture window:
+- `0x6333D0` checks the current contact plane against four top-footprint corners with epsilon `0x80DFEC = 1/720`.
+- `0x6335D0` builds three vertical edge planes from the contact triangle and accepts the contact when the current position is inside all three planes with epsilon `0x80E004 = 1/12`.

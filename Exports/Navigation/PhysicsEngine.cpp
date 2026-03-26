@@ -117,7 +117,123 @@ namespace
     {
         bool forceSlide{ false };
     };
+
+    constexpr float WOW_WALKABLE_MIN_NORMAL_Z = 0.6427876353263855f;        // 0x80DFFC
+    constexpr float WOW_RELAXED_WALKABLE_MIN_NORMAL_Z = 0.1736481785774231f; // 0x80E000
+    constexpr float WOW_TRIANGLE_PRISM_EPSILON = 0.0833333358168602f;        // 0x80E004
+    constexpr float WOW_CORNER_PLANE_EPSILON = 0.0013888889225199819f;       // 0x80DFEC
+    constexpr float WOW_PLANE_BUILD_EPSILON = 9.54e-7f;                      // 0x8026BC
+
+    inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
+    {
+        return normal.dot(point) + planeDistance;
+    }
+
+    bool PlaneTouchesTopFootprintCorner(const SceneQuery::AABBContact& contact,
+                                        const G3D::Vector3& position,
+                                        float collisionRadius,
+                                        float boundingHeight)
+    {
+        G3D::Vector3 normal = contact.rawNormal.directionOrZero();
+        if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+            normal = contact.normal.directionOrZero();
+        }
+        if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+            return false;
+        }
+
+        const float topZ = position.z + boundingHeight;
+        const G3D::Vector3 corners[4] = {
+            G3D::Vector3(position.x - collisionRadius, position.y + collisionRadius, topZ),
+            G3D::Vector3(position.x + collisionRadius, position.y + collisionRadius, topZ),
+            G3D::Vector3(position.x - collisionRadius, position.y - collisionRadius, topZ),
+            G3D::Vector3(position.x + collisionRadius, position.y - collisionRadius, topZ),
+        };
+
+        for (const auto& corner : corners) {
+            if (std::fabs(EvaluatePlane(normal, contact.planeDistance, corner)) <= WOW_CORNER_PLANE_EPSILON) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool PointInsideExpandedTrianglePrism(const SceneQuery::AABBContact& contact, const G3D::Vector3& position)
+    {
+        const G3D::Vector3 up(0.0f, 0.0f, 1.0f);
+        const G3D::Vector3 vertices[3] = { contact.triangleA, contact.triangleB, contact.triangleC };
+
+        for (int i = 0; i < 3; ++i) {
+            const G3D::Vector3& current = vertices[i];
+            const G3D::Vector3& next = vertices[(i + 1) % 3];
+
+            G3D::Vector3 edgePlaneNormal = (next - current).cross(up);
+            const float edgePlaneMagSq = edgePlaneNormal.squaredMagnitude();
+            if (edgePlaneMagSq <= WOW_PLANE_BUILD_EPSILON) {
+                return false;
+            }
+
+            edgePlaneNormal = edgePlaneNormal * (1.0f / std::sqrt(edgePlaneMagSq));
+            const float edgePlaneDistance = -edgePlaneNormal.dot(current);
+            if (EvaluatePlane(edgePlaneNormal, edgePlaneDistance, position) > WOW_TRIANGLE_PRISM_EPSILON) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 } // end anonymous namespace
+
+WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::AABBContact& contact,
+                                                              const G3D::Vector3& position,
+                                                              float collisionRadius,
+                                                              float boundingHeight,
+                                                              bool useStandardWalkableThreshold,
+                                                              bool groundedWallFlagBefore)
+{
+    CheckWalkableResult result{};
+    result.groundedWallFlagAfter = groundedWallFlagBefore;
+
+    G3D::Vector3 normal = contact.rawNormal.directionOrZero();
+    if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+        normal = contact.normal.directionOrZero();
+    }
+    if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+        return result;
+    }
+
+    const float walkableThreshold = useStandardWalkableThreshold
+        ? WOW_WALKABLE_MIN_NORMAL_Z
+        : WOW_RELAXED_WALKABLE_MIN_NORMAL_Z;
+
+    if (normal.z > walkableThreshold) {
+        if (PointInsideExpandedTrianglePrism(contact, position)) {
+            result.groundedWallFlagAfter = false;
+        }
+
+        result.walkable = true;
+        return result;
+    }
+
+    if (normal.z >= 0.0f) {
+        result.walkable = groundedWallFlagBefore;
+        return result;
+    }
+
+    if (!PlaneTouchesTopFootprintCorner(contact, position, collisionRadius, boundingHeight)) {
+        result.walkable = groundedWallFlagBefore;
+        return result;
+    }
+
+    if (groundedWallFlagBefore) {
+        result.walkableState = true;
+        result.groundedWallFlagAfter = false;
+    }
+
+    result.walkable = (-normal.z) > WOW_WALKABLE_MIN_NORMAL_Z;
+    return result;
+}
 
 // =====================================================================================
 // SECTION 3: SMALL HELPER METHODS

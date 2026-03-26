@@ -1613,7 +1613,8 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
         if (triMaxZ < boxMin.z || triMinZ > boxMax.z) continue;
 
         if (AABBTriangleOverlap(center, halfExt, va, vb, vc)) {
-            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 normal = rawNormal;
             // Orient normal upward for ground surfaces (WoW.exe convention)
             if (normal.z < 0) normal = -normal;
 
@@ -1633,6 +1634,13 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             AABBContact contact;
             contact.point = G3D::Vector3(center.x, center.y, exactZ);
             contact.normal = normal;
+            contact.rawNormal = rawNormal;
+            contact.triangleA = va;
+            contact.triangleB = vb;
+            contact.triangleC = vc;
+            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? -rawNormal.dot(va)
+                : 0.0f;
             contact.distance = 0;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
@@ -1661,7 +1669,8 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             if (!AABBTriangleOverlap(center, halfExt, va, vb, vc))
                 continue;
 
-            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 normal = rawNormal;
             if (normal.z < 0) normal = -normal;
 
             float exactZ;
@@ -1674,6 +1683,13 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             AABBContact contact;
             contact.point = G3D::Vector3(center.x, center.y, exactZ);
             contact.normal = normal;
+            contact.rawNormal = rawNormal;
+            contact.triangleA = va;
+            contact.triangleB = vb;
+            contact.triangleC = vc;
+            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? -rawNormal.dot(va)
+                : 0.0f;
             contact.distance = 0;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
@@ -1727,7 +1743,8 @@ int SceneQuery::SweepAABB(uint32_t mapId,
         bool overlapEnd = AABBTriangleOverlap(endCenter, halfExt, va, vb, vc);
 
         if (overlapStart || overlapEnd) {
-            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 normal = rawNormal;
             G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
             G3D::Vector3 testCenter = overlapStart ? center : endCenter;
             if (normal.dot(testCenter - triCenter) < 0) normal = -normal;
@@ -1735,6 +1752,13 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             AABBContact contact;
             contact.point = triCenter;
             contact.normal = normal;
+            contact.rawNormal = rawNormal;
+            contact.triangleA = va;
+            contact.triangleB = vb;
+            contact.triangleC = vc;
+            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? -rawNormal.dot(va)
+                : 0.0f;
             contact.distance = overlapStart ? 0 : dispLen;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < instanceIds.size()) ? instanceIds[i] : 0u;
@@ -1764,7 +1788,8 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             if (!(overlapStart || overlapEnd))
                 continue;
 
-            G3D::Vector3 normal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 rawNormal = (vb - va).cross(vc - va).directionOrZero();
+            G3D::Vector3 normal = rawNormal;
             G3D::Vector3 triCenter = (va + vb + vc) * (1.0f / 3.0f);
             G3D::Vector3 testCenter = overlapStart ? center : endCenter;
             if (normal.dot(testCenter - triCenter) < 0) normal = -normal;
@@ -1772,6 +1797,13 @@ int SceneQuery::SweepAABB(uint32_t mapId,
             AABBContact contact;
             contact.point = triCenter;
             contact.normal = normal;
+            contact.rawNormal = rawNormal;
+            contact.triangleA = va;
+            contact.triangleB = vb;
+            contact.triangleC = vc;
+            contact.planeDistance = rawNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+                ? -rawNormal.dot(va)
+                : 0.0f;
             contact.distance = overlapStart ? 0 : dispLen;
             contact.walkable = std::fabs(normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
             contact.instanceId = (i < dynInstanceIds.size()) ? dynInstanceIds[i] : 0u;
