@@ -1,0 +1,63 @@
+0x00633720: push     ebp
+0x00633721: mov      ebp, esp
+0x00633723: sub      esp, 0xc
+0x00633726: mov      eax, dword ptr [ebp + 0xc]
+0x00633729: fld      dword ptr [eax]
+0x0063372B: mov      edx, dword ptr [ebp + 8]
+0x0063372E: fadd     dword ptr [ecx + 0x10]
+0x00633731: fstp     dword ptr [ebp - 0xc]
+0x00633734: fld      dword ptr [ecx + 0x14]
+0x00633737: fadd     dword ptr [eax + 4]
+0x0063373A: fstp     dword ptr [ebp - 8]
+0x0063373D: fld      dword ptr [ecx + 0x18]
+0x00633740: fadd     dword ptr [eax + 8]
+0x00633743: mov      eax, dword ptr [ecx + 0x15c]
+0x00633749: push     eax
+0x0063374A: lea      ecx, [ebp - 0xc]
+0x0063374D: fstp     dword ptr [ebp - 4]
+0x00633750: call     0x633760
+0x00633755: neg      eax
+0x00633757: sbb      eax, eax
+0x00633759: inc      eax
+0x0063375A: mov      esp, ebp
+0x0063375C: pop      ebp
+0x0063375D: ret      8
+0x00633760: push     ebp
+0x00633761: mov      ebp, esp
+0x00633763: push     esi
+0x00633764: push     edi
+0x00633765: mov      edi, ecx
+0x00633767: mov      ecx, dword ptr [ebp + 8]
+0x0063376A: mov      esi, edx
+0x0063376C: call     0x5fa550
+0x00633771: test     al, al
+0x00633773: jne      0x63378c
+0x00633775: mov      ecx, dword ptr [0xc4e534]
+0x0063377B: mov      eax, esi
+0x0063377D: imul     eax, eax, 0x34
+0x00633780: fld      dword ptr [eax + ecx + 8]
+0x00633784: fcomp    dword ptr [0x80e000]
+0x0063378A: jmp      0x6337a0
+0x0063378C: mov      eax, dword ptr [0xc4e534]
+0x00633791: mov      edx, esi
+0x00633793: imul     edx, edx, 0x34
+0x00633796: fld      dword ptr [edx + eax + 8]
+0x0063379A: fcomp    dword ptr [0x80dffc]
+0x006337A0: fnstsw   ax
+0x006337A2: test     ah, 0x41
+0x006337A5: jnp      0x6337bc
+0x006337A7: mov      edx, edi
+0x006337A9: mov      ecx, esi
+0x006337AB: call     0x6335d0
+0x006337B0: test     eax, eax
+0x006337B2: je       0x6337bc
+0x006337B4: pop      edi
+0x006337B5: xor      eax, eax
+0x006337B7: pop      esi
+0x006337B8: pop      ebp
+0x006337B9: ret      4
+0x006337BC: pop      edi
+0x006337BD: mov      eax, 1
+0x006337C2: pop      esi
+0x006337C3: pop      ebp
+0x006337C4: ret      4

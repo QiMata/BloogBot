@@ -580,6 +580,21 @@ CollisionStep (0x633840)
     - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly and marks the state out-param
     - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success
     - if `0x633720` fails, it falls through the `0x7C5DA0` / `0x6353D0` gate and then into `0x635090` for the alternate pair result
+  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt` and `docs/physics/0x635090_disasm.txt`
+  - `0x633720`
+    - wrapper builds `position + offset`, passes that world point plus the selected index and `this+0x15C` into `0x633760`, then returns the inverse boolean of `0x633760`
+  - `0x633760`
+    - reads `normal.z` from `0xC4E534[index]`
+    - compares that selected contact against the relaxed `0x80E000` threshold when `0x5FA550(...)` is false and against the standard walkable `0x80DFFC` threshold when `0x5FA550(...)` is true
+    - on the threshold-sensitive path it then calls `0x6335D0` before deciding whether the selected index stays on the direct `0xC4E544[index]` return path or falls into the alternate `0x635090` path
+  - `0x635090`
+    - first calls `0x6336A0`
+    - on success it delegates to `0x634AE0` to produce the working 3-vector
+    - on failure it negates the incoming vector
+    - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
+  - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
+    - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
+    - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
@@ -587,6 +602,9 @@ CollisionStep (0x633840)
 - Practical implication for parity work:
   - do not broadcast `CheckWalkable` over every merged-query contact as a replacement for the raw `walkable` bit
   - the missing parity path is the binary-selected contact + grounded-wall-state feed into `0x6334A0`, not the helper body by itself
+  - production-DLL tracing on packet-backed Undercity frame 16 now adds one more concrete constraint: the selected blocker contact resolves only to parent static WMO instance `0x00003B34` with `instance/model flags = 0x00000004` and `rootWmoId = 1150`, while no WMO group match is found for the exact contact triangle
+  - inference from that trace: the current `SceneCache` / `TestTerrainAABB` path is preserving the triangle geometry but collapsing the deeper child model identity the client's `0x5FA550` model-property walk uses
+  - practical follow-up: parity work should preserve child WMO/M2 metadata through `TestTerrainAABB`; this is not a “extract more raw MPQ triangles” blocker
 
 ## Remote Unit Extrapolation (VA 0x616DE0)
 

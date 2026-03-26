@@ -12,6 +12,7 @@
 #include "VMapManager2.h"
 #include "VMapFactory.h"
 #include "StaticMapTree.h"
+#include "WorldModel.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
@@ -81,6 +82,12 @@ struct ExportGroundedWallSelectionTrace
     float slopedResolved2D;
     float finalResolved2D;
     float blockedFraction;
+    uint32_t selectedInstanceFlags;
+    uint32_t selectedModelFlags;
+    uint32_t selectedGroupFlags;
+    int32_t selectedRootId;
+    int32_t selectedGroupId;
+    uint32_t selectedGroupMatchFound;
 };
 
 static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D::Vector3& moveDir2D)
@@ -92,6 +99,136 @@ static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D:
 
     horizontal = horizontal * (1.0f / horizontalMag);
     return std::max(0.0f, -horizontal.dot(moveDir2D));
+}
+
+struct ResolvedStaticContactMetadata
+{
+    uint32_t instanceFlags = 0u;
+    uint32_t modelFlags = 0u;
+    uint32_t groupFlags = 0u;
+    int32_t rootId = -1;
+    int32_t groupId = -1;
+    bool groupMatchFound = false;
+};
+
+static const VMAP::ModelInstance* FindStaticModelInstance(uint32_t mapId, uint32_t instanceId)
+{
+    if (instanceId == 0u)
+        return nullptr;
+
+    auto* vmapMgr = static_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager());
+    if (!vmapMgr)
+        return nullptr;
+
+    if (!vmapMgr->isMapInitialized(mapId))
+        vmapMgr->initializeMap(mapId);
+    const VMAP::StaticMapTree* mapTree = vmapMgr->GetStaticMapTree(mapId);
+    if (!mapTree || !mapTree->GetInstancesPtr())
+        return nullptr;
+
+    const VMAP::ModelInstance* instances = mapTree->GetInstancesPtr();
+    const uint32_t instanceCount = mapTree->GetInstanceCount();
+    for (uint32_t i = 0; i < instanceCount; ++i)
+    {
+        if (instances[i].ID == instanceId)
+            return &instances[i];
+    }
+
+    return nullptr;
+}
+
+static bool NearlyEqualVertex(const G3D::Vector3& lhs, const G3D::Vector3& rhs, float epsilon)
+{
+    return (lhs - rhs).squaredMagnitude() <= (epsilon * epsilon);
+}
+
+static bool MatchTriangleVerticesUnordered(const G3D::Vector3& a,
+                                          const G3D::Vector3& b,
+                                          const G3D::Vector3& c,
+                                          const G3D::Vector3& v0,
+                                          const G3D::Vector3& v1,
+                                          const G3D::Vector3& v2,
+                                          float epsilon)
+{
+    const G3D::Vector3 expected[3] = { a, b, c };
+    const G3D::Vector3 actual[3] = { v0, v1, v2 };
+    bool used[3] = { false, false, false };
+
+    for (const auto& wanted : expected)
+    {
+        bool matched = false;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (used[i])
+                continue;
+            if (!NearlyEqualVertex(wanted, actual[i], epsilon))
+                continue;
+
+            used[i] = true;
+            matched = true;
+            break;
+        }
+
+        if (!matched)
+            return false;
+    }
+
+    return true;
+}
+
+static ResolvedStaticContactMetadata ResolveStaticContactMetadata(uint32_t mapId, const SceneQuery::AABBContact& contact)
+{
+    ResolvedStaticContactMetadata metadata{};
+    const VMAP::ModelInstance* instance = FindStaticModelInstance(mapId, contact.instanceId);
+    if (!instance)
+        return metadata;
+
+    metadata.instanceFlags = instance->flags;
+    if (!instance->iModel)
+        return metadata;
+
+    metadata.modelFlags = instance->iModel->getModelFlags();
+    metadata.rootId = static_cast<int32_t>(instance->iModel->GetRootWmoId());
+
+    if (instance->flags & VMAP::MOD_M2)
+        return metadata;
+
+    const auto worldToLocal = [&](const G3D::Vector3& worldPoint) -> G3D::Vector3
+    {
+        const G3D::Vector3 internalPoint = NavCoord::WorldToInternal(worldPoint);
+        return instance->iInvRot * (internalPoint - instance->iPos) * instance->iInvScale;
+    };
+
+    const G3D::Vector3 localA = worldToLocal(contact.triangleA);
+    const G3D::Vector3 localB = worldToLocal(contact.triangleB);
+    const G3D::Vector3 localC = worldToLocal(contact.triangleC);
+    constexpr float localVertexMatchEpsilon = 1.0e-3f;
+
+    const uint32_t groupCount = instance->iModel->GetGroupModelCount();
+    for (uint32_t groupIndex = 0; groupIndex < groupCount; ++groupIndex)
+    {
+        const VMAP::GroupModel* group = instance->iModel->GetGroupModel(groupIndex);
+        if (!group)
+            continue;
+
+        const auto& vertices = group->GetVertices();
+        const auto& triangles = group->GetTriangles();
+        for (const auto& triangle : triangles)
+        {
+            const G3D::Vector3& v0 = vertices[triangle.idx0];
+            const G3D::Vector3& v1 = vertices[triangle.idx1];
+            const G3D::Vector3& v2 = vertices[triangle.idx2];
+            if (!MatchTriangleVerticesUnordered(localA, localB, localC, v0, v1, v2, localVertexMatchEpsilon))
+                continue;
+
+            metadata.groupFlags = group->GetMogpFlags();
+            metadata.groupId = static_cast<int32_t>(group->GetWmoID());
+            metadata.groupMatchFound = true;
+            return metadata;
+        }
+    }
+
+    return metadata;
 }
 
 extern "C"
@@ -697,6 +834,18 @@ extern "C"
         outTrace->slopedResolved2D = trace.slopedResolved2D;
         outTrace->finalResolved2D = trace.finalResolved2D;
         outTrace->blockedFraction = trace.blockedFraction;
+
+        if (trace.selectedContactIndex != 0xFFFFFFFFu && trace.selectedContactIndex < contacts.size())
+        {
+            const auto metadata = ResolveStaticContactMetadata(mapId, contacts[trace.selectedContactIndex]);
+            outTrace->selectedInstanceFlags = metadata.instanceFlags;
+            outTrace->selectedModelFlags = metadata.modelFlags;
+            outTrace->selectedGroupFlags = metadata.groupFlags;
+            outTrace->selectedRootId = metadata.rootId;
+            outTrace->selectedGroupId = metadata.groupId;
+            outTrace->selectedGroupMatchFound = metadata.groupMatchFound ? 1u : 0u;
+        }
+
         return resolved;
 
         const G3D::Vector3 moveDir2D(requestedMove->x, requestedMove->y, 0.0f);

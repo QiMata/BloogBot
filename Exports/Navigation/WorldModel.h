@@ -198,6 +198,8 @@ namespace VMAP
         {
             return (index < groupModels.size()) ? &groupModels[index] : nullptr;
         }
+        inline uint32_t GetGroupModelCount() const { return static_cast<uint32_t>(groupModels.size()); }
+        inline uint32_t GetRootWmoId() const { return RootWMOID; }
 
     protected:
         uint32_t RootWMOID;

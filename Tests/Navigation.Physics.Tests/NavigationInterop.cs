@@ -164,6 +164,12 @@ public static partial class NavigationInterop
         public float SlopedResolved2D;
         public float FinalResolved2D;
         public float BlockedFraction;
+        public uint SelectedInstanceFlags;
+        public uint SelectedModelFlags;
+        public uint SelectedGroupFlags;
+        public int SelectedRootId;
+        public int SelectedGroupId;
+        public uint SelectedGroupMatchFound;
     }
 
     public enum GroundedWallBranchKind : uint

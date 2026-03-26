@@ -1,0 +1,55 @@
+0x005FA550: mov      eax, dword ptr [ecx + 0x110]
+0x005FA556: mov      eax, dword ptr [eax + 0xa0]
+0x005FA55C: mov      edx, eax
+0x005FA55E: shr      edx, 1
+0x005FA560: test     dl, 1
+0x005FA563: push     ebx
+0x005FA564: jne      0x5fa571
+0x005FA566: test     eax, 0xc00004
+0x005FA56B: je       0x5fa571
+0x005FA56D: xor      al, al
+0x005FA56F: pop      ebx
+0x005FA570: ret      
+0x005FA571: mov      eax, dword ptr [ecx + 0x110]
+0x005FA577: mov      edx, dword ptr [eax + 0xa0]
+0x005FA57D: mov      ebx, edx
+0x005FA57F: shr      ebx, 0x18
+0x005FA582: test     bl, 1
+0x005FA585: je       0x5fa5c7
+0x005FA587: mov      ecx, eax
+0x005FA589: mov      edx, dword ptr [ecx + 0x10]
+0x005FA58C: mov      ebx, dword ptr [ecx + 0x14]
+0x005FA58F: or       edx, ebx
+0x005FA591: lea      eax, [ecx + 0x10]
+0x005FA594: jne      0x5fa599
+0x005FA596: lea      eax, [ecx + 0x20]
+0x005FA599: mov      ecx, dword ptr [eax + 4]
+0x005FA59C: mov      edx, dword ptr [eax]
+0x005FA59E: push     0x1df
+0x005FA5A3: push     ecx
+0x005FA5A4: push     edx
+0x005FA5A5: mov      edx, 0x860c0c
+0x005FA5AA: mov      ecx, 8
+0x005FA5AF: call     0x468460
+0x005FA5B4: test     eax, eax
+0x005FA5B6: je       0x5fa5c3
+0x005FA5B8: mov      ecx, eax
+0x005FA5BA: call     0x5fa550
+0x005FA5BF: test     al, al
+0x005FA5C1: jne      0x5fa5e2
+0x005FA5C3: xor      eax, eax
+0x005FA5C5: pop      ebx
+0x005FA5C6: ret      
+0x005FA5C7: mov      ecx, dword ptr [ecx + 8]
+0x005FA5CA: mov      ecx, dword ptr [ecx + 8]
+0x005FA5CD: shr      ecx, 4
+0x005FA5D0: test     cl, 1
+0x005FA5D3: je       0x5fa5c3
+0x005FA5D5: mov      ecx, dword ptr [eax + 0x10]
+0x005FA5D8: or       ecx, dword ptr [eax + 0x14]
+0x005FA5DB: jne      0x5fa5c3
+0x005FA5DD: test     dl, 1
+0x005FA5E0: jne      0x5fa5c3
+0x005FA5E2: mov      eax, 1
+0x005FA5E7: pop      ebx
+0x005FA5E8: ret

@@ -1830,6 +1830,18 @@ if (transportGuid != 0) {
   - `dotnet test Tests/ForegroundBotRunner.Tests` -> `105 passed`
   - Live: `Parity_Durotar_RoadPath_TurnStart` passed, `Parity_Durotar_RoadPath_Redirect` passed, `CombatBgTests` passed, `DeathCorpseRunTests` passed
 
+- **Session 196 — selected-contact metadata collapse pinned in the production DLL trace:**
+  - Extended the native `EvaluateGroundedWallSelection(...)` export so deterministic physics tests can resolve the selected contact back to static instance/model/root metadata when possible.
+  - The packet-backed Undercity frame-16 blocker still selects instance `0x00003B34`, but the new trace proves the metadata currently collapses to the parent WMO shell only: `instance/model flags = 0x00000004`, `rootWmoId = 1150`, `groupId = -1`, `groupMatchFound = 0`.
+  - Practical implication: this is not a missing-geometry problem. The current `SceneCache` / `TestTerrainAABB` path preserves the blocker triangle but drops the deeper child WMO/M2 identity the binary `0x5FA550` model-property walk appears to use.
+- **Test baseline (session 196):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - Passed (`5/5`)
+
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 
 Completion rule: do not claim 100% parity until every item below is checked off and the final proof run does not surface any new mismatch. Current known remaining work: `0` items.

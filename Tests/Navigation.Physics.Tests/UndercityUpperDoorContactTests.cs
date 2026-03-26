@@ -120,7 +120,8 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         _output.WriteLine(
             $"frame16 native trace idx={trace.SelectedContactIndex} inst=0x{trace.SelectedInstanceId:X8} point={trace.SelectedPoint} " +
             $"normal={trace.SelectedNormal} oriented={trace.OrientedNormal} rawOppose={trace.RawOpposeScore:F4} " +
-            $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState} after={trace.GroundedWallStateAfter}");
+            $"orientedOppose={trace.OrientedOpposeScore:F4} walk0={trace.WalkableWithoutState} walk1={trace.WalkableWithState} after={trace.GroundedWallStateAfter} " +
+            $"iflags=0x{trace.SelectedInstanceFlags:X8} mflags=0x{trace.SelectedModelFlags:X8} gflags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
 
         Assert.True(traced,
             "Expected frame-16 grounded wall trace to select a contact from the production Navigation.dll path.");
@@ -138,6 +139,43 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             $"Expected the oriented blocker normal to face back into motion, got {trace.OrientedNormal}.");
         Assert.Equal(0u, trace.WalkableWithoutState);
         Assert.Equal(0u, trace.WalkableWithState);
+    }
+
+    [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_SelectedContactCurrentlyCollapsesToParentWmoMetadata()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
+
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
+
+        _output.WriteLine(
+            $"frame16 metadata inst=0x{trace.SelectedInstanceId:X8} iflags=0x{trace.SelectedInstanceFlags:X8} " +
+            $"mflags=0x{trace.SelectedModelFlags:X8} gflags=0x{trace.SelectedGroupFlags:X8} " +
+            $"root={trace.SelectedRootId} group={trace.SelectedGroupId} gmatch={trace.SelectedGroupMatchFound}");
+
+        Assert.True(traced);
+        Assert.NotEqual(0u, trace.SelectedInstanceId);
+        Assert.Equal(0x00000004u, trace.SelectedInstanceFlags);
+        Assert.Equal(trace.SelectedInstanceFlags, trace.SelectedModelFlags);
+        Assert.Equal(1150, trace.SelectedRootId);
+        Assert.Equal(-1, trace.SelectedGroupId);
+        Assert.Equal(0u, trace.SelectedGroupFlags);
+        Assert.Equal(0u, trace.SelectedGroupMatchFound);
     }
 
     [Fact]

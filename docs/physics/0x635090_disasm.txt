@@ -1,0 +1,106 @@
+0x00635090: push     ebp
+0x00635091: mov      ebp, esp
+0x00635093: sub      esp, 0x24
+0x00635096: push     esi
+0x00635097: push     edi
+0x00635098: mov      edi, dword ptr [ebp + 0x18]
+0x0063509B: push     edi
+0x0063509C: mov      esi, ecx
+0x0063509E: call     0x6336a0
+0x006350A3: test     eax, eax
+0x006350A5: je       0x6350c5
+0x006350A7: mov      eax, dword ptr [ebp + 0x20]
+0x006350AA: mov      ecx, dword ptr [ebp + 0x1c]
+0x006350AD: push     eax
+0x006350AE: push     ecx
+0x006350AF: push     edi
+0x006350B0: lea      edx, [ebp - 0x24]
+0x006350B3: push     edx
+0x006350B4: mov      ecx, esi
+0x006350B6: call     0x634ae0
+0x006350BB: mov      ecx, dword ptr [eax]
+0x006350BD: mov      edx, dword ptr [eax + 4]
+0x006350C0: mov      eax, dword ptr [eax + 8]
+0x006350C3: jmp      0x6350e8
+0x006350C5: mov      eax, dword ptr [ebp + 0x1c]
+0x006350C8: fld      dword ptr [eax]
+0x006350CA: fchs     
+0x006350CC: fstp     dword ptr [ebp - 0xc]
+0x006350CF: fld      dword ptr [eax + 4]
+0x006350D2: mov      ecx, dword ptr [ebp - 0xc]
+0x006350D5: fchs     
+0x006350D7: fstp     dword ptr [ebp - 8]
+0x006350DA: fld      dword ptr [eax + 8]
+0x006350DD: mov      edx, dword ptr [ebp - 8]
+0x006350E0: fchs     
+0x006350E2: fstp     dword ptr [ebp - 4]
+0x006350E5: mov      eax, dword ptr [ebp - 4]
+0x006350E8: mov      dword ptr [ebp - 0x18], ecx
+0x006350EB: mov      dword ptr [ebp - 8], ecx
+0x006350EE: lea      ecx, [ebp - 8]
+0x006350F1: mov      dword ptr [ebp - 0x14], edx
+0x006350F4: mov      dword ptr [ebp - 0x10], eax
+0x006350F7: mov      dword ptr [ebp - 4], edx
+0x006350FA: call     0x454980
+0x006350FF: fsqrt    
+0x00635101: pop      edi
+0x00635102: pop      esi
+0x00635103: fld      st(0)
+0x00635105: fabs     
+0x00635107: fcomp    dword ptr [0x8029d4]
+0x0063510D: fnstsw   ax
+0x0063510F: test     ah, 5
+0x00635112: jnp      0x635127
+0x00635114: fdivr    dword ptr [0x7ff9d8]
+0x0063511A: fld      dword ptr [ebp - 8]
+0x0063511D: fmul     st(1)
+0x0063511F: fstp     dword ptr [ebp - 8]
+0x00635122: fmul     dword ptr [ebp - 4]
+0x00635125: jmp      0x63512c
+0x00635127: fstp     st(0)
+0x00635129: fld      dword ptr [ebp - 4]
+0x0063512C: fld      dword ptr [ebp - 0x18]
+0x0063512F: mov      eax, dword ptr [ebp + 0xc]
+0x00635132: fchs     
+0x00635134: fld      dword ptr [ebp - 0x14]
+0x00635137: fchs     
+0x00635139: fld      dword ptr [ebp - 0x10]
+0x0063513C: fchs     
+0x0063513E: fmul     dword ptr [eax + 8]
+0x00635141: fxch     st(1)
+0x00635143: fmul     dword ptr [eax + 4]
+0x00635146: faddp    st(1)
+0x00635148: fxch     st(1)
+0x0063514A: fmul     dword ptr [eax]
+0x0063514C: faddp    st(1)
+0x0063514E: fld      dword ptr [ebp + 0x14]
+0x00635151: fsub     dword ptr [ebp + 0x10]
+0x00635154: fmulp    st(1)
+0x00635156: fld      dword ptr [ebp - 0x14]
+0x00635159: fmul     st(2)
+0x0063515B: fld      dword ptr [ebp - 8]
+0x0063515E: fmul     dword ptr [ebp - 0x18]
+0x00635161: faddp    st(1)
+0x00635163: fld      dword ptr [ebp - 0x10]
+0x00635166: fmul     dword ptr [0x7ffd74]
+0x0063516C: faddp    st(1)
+0x0063516E: fld      st(0)
+0x00635170: fabs     
+0x00635172: fcomp    dword ptr [0x8029d4]
+0x00635178: fnstsw   ax
+0x0063517A: test     ah, 5
+0x0063517D: jnp      0x635183
+0x0063517F: fdivp    st(1)
+0x00635181: jmp      0x635185
+0x00635183: fstp     st(0)
+0x00635185: fld      dword ptr [ebp - 8]
+0x00635188: mov      eax, dword ptr [ebp + 8]
+0x0063518B: fmul     st(1)
+0x0063518D: fstp     dword ptr [eax]
+0x0063518F: fxch     st(1)
+0x00635191: fmul     st(1)
+0x00635193: fstp     dword ptr [eax + 4]
+0x00635196: fstp     st(0)
+0x00635198: mov      esp, ebp
+0x0063519A: pop      ebp
+0x0063519B: ret      0x1c

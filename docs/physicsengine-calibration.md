@@ -1029,3 +1029,33 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not add a separate native tester binary for this path. The useful harness is the production-linked export layer around the actual grounded resolver.
 - Recommended next single hypothesis:
   - Trace the selected-contact producer chain one level deeper (`0x633720` / `0x635090`) to explain why the runtime-selected frame-16 blocker is WMO wall index `3` instead of the stateful elevator support contact present elsewhere in the merged query.
+
+## 2026-03-26 Selected-contact metadata collapse evidence
+
+- Scope note:
+  - This pass did not change runtime physics behavior.
+  - It extended the production-DLL grounded-wall trace seam so deterministic tests could resolve the selected contact back to static VMAP/WMO metadata.
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/WorldModel.h`
+    - added read-only getters needed by the test export to inspect root/group metadata
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - `EvaluateGroundedWallSelection(...)` now resolves the selected contact back to static instance flags, model flags, root WMO id, and best-effort WMO group match
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching metadata fields on `GroundedWallSelectionTrace`
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - added a packet-backed regression proving the frame-16 selected blocker currently collapses to parent WMO metadata only
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"`
+    - passed (`5/5`)
+- Frame-pattern note:
+  - The frame-16 selected blocker still resolves to instance `0x00003B34`, but the new trace shows that metadata lookup only reaches the parent static WMO instance: `instanceFlags = modelFlags = 0x00000004`, `rootWmoId = 1150`, `groupId = -1`, `groupMatchFound = 0`.
+  - That means the current `SceneCache` / `TestTerrainAABB` path is not missing the blocker triangle; it is missing the deeper child WMO/M2 identity that the client's `0x5FA550` model-property walk appears to use.
+- Do Not Repeat:
+  - Do not treat the current scene-cache `instanceId` on packet-backed Undercity frame 16 as proof that we already have the same model-property identity the client does.
+  - Do not spend another pass extracting more raw geometry before preserving child WMO/M2 metadata through the selected-contact path.
+- Recommended next single hypothesis:
+  - Preserve child doodad/WMO metadata through the `SceneCache` -> `TestTerrainAABB` contact path, then rerun the frame-16 selected-contact trace to see whether the `0x633760` threshold gate can distinguish parent WMO vs child model identity.
