@@ -634,6 +634,10 @@ CollisionStep (0x633840)
     - `0x632460` consumes one 3-byte selector entry plus the translated 9-point neighborhood, builds three side planes through `0x637480`, flips each plane with `0x637330` when the opposite selector point lands on the positive side, then writes the source plane back at plane slot `3` with a re-anchored `planeD` through the translated first selector point
     - `0x632460` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
     - the production DLL now mirrors that four-plane record builder through pure `BuildSelectorCandidatePlaneRecord(...)` plus deterministic export/test seams
+    - fresh raw capture now also lives in `docs/physics/0x632F80_disasm.txt`
+    - `0x632F80` is the 4-selector companion builder used by the second `0x632BA0` path: it walks one 4-byte selector ring, builds four side planes through `0x637480`, flips each plane against the previous selector point, then writes the source plane back at plane slot `4` with a re-anchored `planeD` through the translated first selector point
+    - `0x632F80` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
+    - the production DLL now mirrors that five-plane record builder through pure `BuildSelectorCandidateQuadPlaneRecord(...)` plus deterministic export/test seams
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
   - removing those thresholds alone did not fix the packet-backed Undercity frame-15 transport stall, which reinforces that the real blocker is the missing selected-contact state/path rather than the score guards by themselves
 - Practical implication for parity work:

@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 206)
+- **Last updated:** 2026-03-26 (session 207)
 - **Branch:** `main`
+- **Session 207 — selector quad-record builders are now pinned as a pure binary seam:**
+  - Added pure [BuildSelectorCandidateQuadPlaneRecord(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorCandidateQuadPlaneRecordTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidateQuadPlaneRecordTests.cs), which now pins the four oriented side planes emitted from the 4-byte selector ring, the translated source-plane anchor in slot 4, and the early-fail path when one side plane degenerates below the binary epsilon.
+  - Practical implication: the selector chain is now pinned through both record-builder shapes consumed by the caller-side evaluator. The remaining native gap is the multi-record ranking path (`0x632280` / `0x632BA0`) and its handoff into `0x6351A0`, not the geometry builder inside `0x632F80`.
+- **Fresh binary evidence (session 207):**
+  - Added raw capture [0x632F80_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632F80_disasm.txt), then updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the exact 4-selector ring walk, previous-point flip, and slot-4 source-plane anchor behavior.
+- **Test baseline (session 207):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests" --logger "console;verbosity=minimal"`
+    - Passed (`17/17`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 206 — selector record evaluation is now pinned as a pure binary seam:**
   - Added pure [ClipSelectorPointStripAgainstPlanePrefix(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorCandidateRecordSet(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorCandidateRecordSetTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidateRecordSetTests.cs), which now pins the `0x631870` plane-prefix early-fail path, the `0x632700` dot-reject path, the clip-reject path, and the lowest-ratio record selection/update path.

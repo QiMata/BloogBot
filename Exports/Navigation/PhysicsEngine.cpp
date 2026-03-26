@@ -608,6 +608,55 @@ bool WoWCollision::BuildSelectorCandidatePlaneRecord(const std::array<G3D::Vecto
     return true;
 }
 
+bool WoWCollision::BuildSelectorCandidateQuadPlaneRecord(const std::array<G3D::Vector3, 9>& points,
+                                                         const std::array<uint8_t, 4>& selectorIndices,
+                                                         const G3D::Vector3& translation,
+                                                         const SelectorSupportPlane& sourcePlane,
+                                                         std::array<SelectorSupportPlane, 5>& outPlanes)
+{
+    auto buildPlaneFromPoints = [](const G3D::Vector3& pointA,
+                                   const G3D::Vector3& pointB,
+                                   const G3D::Vector3& pointC,
+                                   SelectorSupportPlane& outPlane) -> bool
+    {
+        G3D::Vector3 normal = (pointC - pointA).cross(pointB - pointA);
+        const float normalMagnitudeSq = normal.squaredMagnitude();
+        if (normalMagnitudeSq <= WOW_PLANE_BUILD_EPSILON) {
+            return false;
+        }
+
+        normal = normal * (1.0f / std::sqrt(normalMagnitudeSq));
+        outPlane.normal = normal;
+        outPlane.planeDistance = -normal.dot(pointA);
+        return true;
+    };
+
+    for (uint32_t planeIndex = 0; planeIndex < 4; ++planeIndex) {
+        const uint32_t currentSelector = selectorIndices[planeIndex];
+        const uint32_t nextSelector = selectorIndices[(planeIndex + 1u) & 3u];
+        const uint32_t previousSelector = selectorIndices[(planeIndex + 3u) & 3u];
+
+        const G3D::Vector3& pointA = points[currentSelector];
+        const G3D::Vector3& pointB = points[nextSelector];
+        const G3D::Vector3& pointC = points[previousSelector];
+        const G3D::Vector3 translatedPoint = pointA + translation;
+
+        if (!buildPlaneFromPoints(pointA, pointB, translatedPoint, outPlanes[planeIndex])) {
+            return false;
+        }
+
+        const float previousDot = outPlanes[planeIndex].normal.dot(pointC - pointA);
+        if (previousDot > 0.0f) {
+            outPlanes[planeIndex].normal = -outPlanes[planeIndex].normal;
+            outPlanes[planeIndex].planeDistance = -outPlanes[planeIndex].planeDistance;
+        }
+    }
+
+    outPlanes[4].normal = sourcePlane.normal;
+    outPlanes[4].planeDistance = -sourcePlane.normal.dot(points[selectorIndices[0]] + translation);
+    return true;
+}
+
 bool WoWCollision::EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
                                                       uint32_t recordCount,
                                                       const G3D::Vector3& testPoint,

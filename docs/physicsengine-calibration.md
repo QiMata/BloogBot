@@ -1360,3 +1360,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not reintroduce inferred record scoring or guessed strip seeding here. The binary now fixes the dot filter threshold, the `-1` source-id seed, the prefix clip order, and the final caller-best update rule.
 - Recommended next single hypothesis:
   - Mirror the `0x632F80` five-record builder on top of the now-pinned selector neighborhood and candidate directions so deterministic tests can feed real binary-shaped record arrays into the now-pinned `0x632700` evaluator.
+
+## 2026-03-26 Selector quad-record builder addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next pure builder feeding the now-mirrored `0x632700` evaluator: the 4-selector / 5-plane candidate record builder at `0x632F80`.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x632F80_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the now-confirmed 4-selector ring walk, previous-point flip rule, and slot-4 source-plane anchor
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildSelectorCandidateQuadPlaneRecord(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWSelectorCandidateQuadPlaneRecord(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new quad-record seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidateQuadPlaneRecordTests.cs`
+    - added deterministic coverage for the four oriented side planes, the translated source-plane anchor, and the degenerate-edge early-fail path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests|FullyQualifiedName~WowSelectorCandidateRecordSetTests|FullyQualifiedName~WowSelectorCandidateQuadPlaneRecordTests" --logger "console;verbosity=minimal"`
+    - passed (`17/17`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector builder chain is now pinned through both plane-record shapes consumed by the caller-side evaluator: the 3-selector / 4-plane record from `0x632460` and the 4-selector / 5-plane record from `0x632F80`. The next unknown is no longer how those records are built; it is how `0x632280` / `0x632BA0` rank, append, and swap the candidate buffers that feed `0x632700`.
+- Do Not Repeat:
+  - Do not infer the `0x632F80` side-plane orientation from generic quad extrusion. The binary fixes the ring order, the previous-point flip test, and the slot-4 source-plane anchor.
+- Recommended next single hypothesis:
+  - Mirror the `0x632280` overwrite/append/swap ranking path on top of the now-pinned `0x632460` / `0x632F80` record builders and the now-pinned `0x632700` evaluator.

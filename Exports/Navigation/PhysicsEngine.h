@@ -706,6 +706,12 @@ namespace WoWCollision
                                            const SelectorSupportPlane& sourcePlane,
                                            std::array<SelectorSupportPlane, 4>& outPlanes);
 
+    bool BuildSelectorCandidateQuadPlaneRecord(const std::array<G3D::Vector3, 9>& points,
+                                               const std::array<uint8_t, 4>& selectorIndices,
+                                               const G3D::Vector3& translation,
+                                               const SelectorSupportPlane& sourcePlane,
+                                               std::array<SelectorSupportPlane, 5>& outPlanes);
+
     bool EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
                                             uint32_t recordCount,
                                             const G3D::Vector3& testPoint,
