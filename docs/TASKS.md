@@ -283,8 +283,21 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 200)
+- **Last updated:** 2026-03-26 (session 201)
 - **Branch:** `main`
+- **Session 201 — frame-16 merged query proves the selector gap is earlier than the direct-pair gate:**
+  - Promoted the selected-contact threshold/prism math into pure [EvaluateSelectedContactThresholdGate(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and exported it through [EvaluateWoWSelectedContactThresholdGate(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Tightened [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs) so the packet-backed frame-16 merged-query scan is now a pinned regression, not an exploratory dump.
+  - New deterministic result: the entire merged query contains zero contacts that satisfy the binary `0x633760 -> 0x6335D0` direct-pair gate under either the relaxed or standard thresholds. The remaining mismatch is therefore earlier in the selector-builder path (`0x632280` / `0x632830` / `0x6318C0`), not a missed good contact later in `0x633760`.
+- **Fresh binary evidence (session 201):**
+  - Added raw capture [0x632280_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632280_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the newly confirmed `0x632280` four-entry source loop plus the `0x632830` / `0x6329E0` helper constraints.
+- **Test baseline (session 201):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
 - **Session 200 — selected-contact threshold/prism trace proves frame-16 wall stays on the alternate path:**
   - Extended [GroundedWallResolutionTrace in PhysicsEngine.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.h), [ResolveGroundedWallContacts(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [EvaluateGroundedWallSelection(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) so the production DLL now records the selected contact’s threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and the direct-pair outcome under both the relaxed and standard `0x633760` thresholds.
   - Added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs) plus a new packet-backed regression in [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs).

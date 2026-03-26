@@ -784,6 +784,49 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool EvaluateWoWSelectedContactThresholdGate(
+        const ExportTriangle* triangle,
+        const G3D::Vector3* contactNormal,
+        const G3D::Vector3* currentPosition,
+        const G3D::Vector3* projectedPosition,
+        bool useStandardWalkableThreshold,
+        bool* outCurrentPositionInsidePrism,
+        bool* outProjectedPositionInsidePrism,
+        bool* outThresholdSensitive,
+        float* outNormalZ)
+    {
+        if (outCurrentPositionInsidePrism) *outCurrentPositionInsidePrism = false;
+        if (outProjectedPositionInsidePrism) *outProjectedPositionInsidePrism = false;
+        if (outThresholdSensitive) *outThresholdSensitive = false;
+        if (outNormalZ) *outNormalZ = 0.0f;
+
+        if (!triangle || !contactNormal || !currentPosition || !projectedPosition) {
+            return false;
+        }
+
+        SceneQuery::AABBContact contact{};
+        contact.normal = contactNormal->directionOrZero();
+        contact.rawNormal = *contactNormal;
+        contact.triangleA = triangle->a;
+        contact.triangleB = triangle->b;
+        contact.triangleC = triangle->c;
+        contact.planeDistance = contact.normal.magnitude() > PhysicsConstants::VECTOR_EPSILON
+            ? -contact.normal.dot(contact.triangleA)
+            : 0.0f;
+
+        const auto result = WoWCollision::EvaluateSelectedContactThresholdGate(
+            contact,
+            *currentPosition,
+            *projectedPosition,
+            useStandardWalkableThreshold);
+
+        if (outCurrentPositionInsidePrism) *outCurrentPositionInsidePrism = result.currentPositionInsidePrism;
+        if (outProjectedPositionInsidePrism) *outProjectedPositionInsidePrism = result.projectedPositionInsidePrism;
+        if (outThresholdSensitive) *outThresholdSensitive = result.thresholdSensitive;
+        if (outNormalZ) *outNormalZ = result.normalZ;
+        return result.wouldUseDirectPair;
+    }
+
     __declspec(dllexport) int QueryTerrainAABBContacts(
         uint32_t mapId,
         const G3D::Vector3* boxMin,

@@ -546,6 +546,15 @@ namespace WoWCollision
         bool groundedWallFlagAfter = false;
     };
 
+    struct SelectedContactThresholdGateResult
+    {
+        float normalZ = 0.0f;
+        bool currentPositionInsidePrism = false;
+        bool projectedPositionInsidePrism = false;
+        bool thresholdSensitive = false;
+        bool wouldUseDirectPair = false;
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -603,6 +612,11 @@ namespace WoWCollision
                                       float boundingHeight,
                                       bool useStandardWalkableThreshold,
                                       bool groundedWallFlagBefore);
+
+    SelectedContactThresholdGateResult EvaluateSelectedContactThresholdGate(const SceneQuery::AABBContact& contact,
+                                                                           const G3D::Vector3& currentPosition,
+                                                                           const G3D::Vector3& projectedPosition,
+                                                                           bool useStandardWalkableThreshold);
 
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,

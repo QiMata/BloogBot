@@ -1155,3 +1155,35 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not spend another pass wiring a threshold-mode guess into runtime grounded resolution before the `0x632BA0` / `0x632280` selection chain is mapped more fully.
 - Recommended next single hypothesis:
   - Trace the `0x632BA0` write path one level deeper (`0x632280` and its interaction with `0x632700`) so deterministic tests can record why the frame-16 WMO wall survives selection while the stateful elevator-support contact does not.
+
+## 2026-03-26 Merged-query direct-pair absence addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to disprove one remaining shortcut hypothesis before touching the selector-builder runtime path again: whether the packet-backed frame-16 merged query already contained a direct-pair-ready contact that the current selection code was simply missing later in `0x633760`.
+- Binary/evidence delta shipped:
+  - added a raw capture in `docs/physics/0x632280_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the newly confirmed `0x632280` four-entry source loop plus the `0x632830` / `0x6329E0` helper shape
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - promoted the selected-contact threshold/prism math into a pure `EvaluateSelectedContactThresholdGate(...)` helper so tests can run the exact same `0x633760 -> 0x6335D0` gate logic over arbitrary merged-query contacts
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWSelectedContactThresholdGate(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching interop seam
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - turned the frame-16 direct-pair scan into a pinned regression and now asserts the merged query contains zero direct-pair candidates under both threshold modes
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+- Frame-pattern note:
+  - The packet-backed frame-16 merged query is not hiding a better late direct-pair candidate. Under both the relaxed and standard `0x633760` thresholds, the direct-pair candidate count is `0`.
+  - Practical implication: the next parity unit has to stay in the earlier selector-builder path (`0x632280` / `0x632830` / `0x6318C0`), not in another threshold/prism tweak.
+- Do Not Repeat:
+  - Do not spend another pass searching the raw frame-16 merged query for a missing direct-pair-ready contact under the current `0x633760 -> 0x6335D0` rules; the deterministic scan now proves there are none.
+- Recommended next single hypothesis:
+  - Trace the production resolver one step earlier so deterministic tests can compare its selected blocker against the binary `0x632280` / `0x632830` candidate-buffer rules.

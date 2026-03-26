@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 200)
+- Last updated: 2026-03-26 (session 201)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 201 kept runtime behavior unchanged and narrowed the open selector gap one step further. `EvaluateSelectedContactThresholdGate(...)` is now a pure native helper, `EvaluateWoWSelectedContactThresholdGate(...)` exports it through the production DLL, and `UndercityUpperDoorContactTests.cs` now asserts the packet-backed frame-16 merged query contains zero direct-pair candidates under both `0x633760` threshold modes.
+  - New binary evidence now lives in `docs/physics/0x632280_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the selector-builder side: `0x632280` initializes a five-slot local candidate buffer, walks four source entries into `0x632460` / `0x632700`, and uses `0x80DFEC` epsilon-ranked overwrite/append/swap logic on the caller-visible best record. The same note now captures the `0x632830` / `0x6329E0` helper shape around that loop.
+  - Practical implication: the frame-16 blocker is not “we picked the wrong already-good direct-pair contact.” The raw merged query offers none. The next native parity unit has to trace why the earlier selector-builder path (`0x632280` / `0x632830` / `0x6318C0`) still leads to the WMO wall entry.
   - Session 200 extended the production grounded-wall trace one level deeper into the `0x633760` threshold gate without changing runtime behavior. `GroundedWallResolutionTrace` / `EvaluateGroundedWallSelection(...)` now record the selected contact's threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and whether that already-selected contact would stay on the direct paired path under either `0x633760` threshold.
   - New binary evidence now lives in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens two open constraints: `0x632BA0` builds a five-slot local candidate buffer before `0x632700`, and once the packet-backed frame-16 WMO wall is already selected, the projected `position + requestedMove` point is outside the `0x6335D0` prism so that wall stays on the alternate `0x635090` path under both relaxed and standard thresholds.
   - Practical implication: the immediate blocker moved one step earlier again. The next native parity unit is not a threshold-mode guess inside `0x633760`; it is tracing why `0x632BA0` / `0x632280` select the WMO wall entry instead of the stateful elevator-support candidate present elsewhere in the merged query.
@@ -327,8 +330,8 @@
   - `docs/TASKS.md`
 - Next command: `@'
 from capstone import *
-va=0x632280
-size=0x400
+va=0x632830
+size=0x260
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
     f.seek(va-0x400000)
     code=f.read(size)

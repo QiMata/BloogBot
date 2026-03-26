@@ -577,6 +577,12 @@ CollisionStep (0x633840)
   - `0x632BA0`
     - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
     - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
+  - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
+  - `0x632280`
+    - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`
+    - iterates four source entries from `[arg+0x18]+0x50` and advances a parallel 3-byte selector table from `[arg+0x20]+0x14`
+    - for each surviving source entry it first calls `0x632460`, then calls `0x632700`
+    - uses the `0x80DFEC` epsilon window to decide whether the returned scalar replaces the current best record, appends as an additional near-tie candidate, or swaps the newest best record back into slot 0
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
@@ -602,6 +608,12 @@ CollisionStep (0x633840)
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
+  - its helper tail is also now better mapped:
+    - `0x632830` walks the generated support planes with `0x6329E0`, tracks the largest non-negative ratio, and clears its success bit if any ratio exceeds the binary threshold at `0x80DFF4`
+    - if that first pass survives, `0x632830` calls `0x632980` to rebuild a 9-entry strip while excluding the current candidate index, then rechecks the rebuilt planes with `0x6329E0` against the stricter scalar at `0x7FF9C8`
+    - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs
+    - `0x6318C0` rebuilds the candidate plane strip and explicitly zeroes `+0xF0` unless at least three outputs survive
+    - `0x6329E0` itself is a tiny plane-ratio helper: it returns `(dot(candidatePoint, planeNormal) + planeD) / dot(testPoint, planeNormal)` only when the denominator magnitude exceeds the tiny constant at `0x8029D4`; otherwise it returns `0`
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
   - removing those thresholds alone did not fix the packet-backed Undercity frame-15 transport stall, which reinforces that the real blocker is the missing selected-contact state/path rather than the score guards by themselves
 - Practical implication for parity work:
@@ -611,6 +623,7 @@ CollisionStep (0x633840)
   - inference from that trace: the current `SceneCache` / `TestTerrainAABB` path is preserving the triangle geometry but collapsing the deeper child model identity the client's `0x5FA550` model-property walk uses
   - fresh bounded scene-cache extraction now narrows that one step further: the frame-16 selected blocker is not a doodad child triangle, it is a static WMO-group triangle that round-trips with `rootId = 1150`, `groupId = 3228`, and `groupFlags = 0x0000AA05`
   - the normal `EnsureMapLoaded(...)` path now rebuilds legacy metadata-less `.scene` caches with their preserved bounds, so production queries can auto-upgrade to metadata-bearing caches instead of staying flattened on parent-only WMO identity
+  - production-DLL packet-backed scanning now adds another selector-chain constraint: on frame 16 the full merged query contains zero contacts that satisfy the `0x633760 -> 0x6335D0` direct-pair gate under either the relaxed or standard thresholds
   - practical follow-up: this is not an "extract more raw MPQ triangles" blocker anymore; the next native parity pass should trace the selected-contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) on top of the now-correct WMO-group metadata feed
 
 ## Remote Unit Extrapolation (VA 0x616DE0)

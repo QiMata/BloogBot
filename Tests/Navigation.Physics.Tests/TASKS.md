@@ -34,9 +34,11 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 200)`
+- Last updated: `2026-03-26 (session 201)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 201 tightened the packet-backed frame-16 direct-pair scan into a real deterministic regression. `NavigationInterop.cs` now exposes the pure `EvaluateWoWSelectedContactThresholdGate(...)` export, and `UndercityUpperDoorContactTests.cs` now asserts the merged frame-16 query contains zero direct-pair candidates under both threshold modes.
+  - Practical implication: this owner no longer needs to keep sampling that merged-query shortcut. The missing deterministic seam is one level earlier in the selector-builder path (`0x632280` / `0x632830` / `0x6318C0`), because the current frame-16 query never contains a contact that would stay on the direct `0xC4E544[index]` path under the binary threshold/prism rules.
   - Session 200 extended the production-DLL grounded-wall trace into the selected-contact `0x633760` threshold/prism gate without changing runtime behavior. `NavigationInterop.cs` now exposes the selected threshold point, `normal.z`, current/projected `0x6335D0` prism inclusion, and the direct-pair outcome under both the relaxed and standard thresholds.
   - `UndercityUpperDoorContactTests.cs` now pins the new packet-backed frame-16 invariant directly: once the runtime has already selected WMO wall instance `0x00003B34`, the projected `position + requestedMove` point is outside the expanded triangle prism, so that wall stays on the alternate path under both threshold modes (`directStd = 0`, `directRelaxed = 0`).
   - Practical implication: the next missing coverage in this owner is no longer threshold-mode speculation. The next useful deterministic seam is one level earlier, around `0x632BA0` / `0x632280`, so we can explain why the WMO wall is selected before `0x633760` ever runs.

@@ -184,37 +184,6 @@ namespace
         return true;
     }
 
-    struct SelectedContactThresholdGateTrace
-    {
-        float normalZ = 0.0f;
-        bool currentPositionInsidePrism = false;
-        bool projectedPositionInsidePrism = false;
-        bool thresholdSensitiveStandard = false;
-        bool thresholdSensitiveRelaxed = false;
-        bool wouldUseDirectPairStandard = false;
-        bool wouldUseDirectPairRelaxed = false;
-    };
-
-    SelectedContactThresholdGateTrace EvaluateSelectedContactThresholdGate(const SceneQuery::AABBContact& contact,
-                                                                          const G3D::Vector3& currentPosition,
-                                                                          const G3D::Vector3& projectedPosition)
-    {
-        SelectedContactThresholdGateTrace trace{};
-
-        G3D::Vector3 normal = contact.normal.directionOrZero();
-        if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
-            normal = contact.rawNormal.directionOrZero();
-        }
-
-        trace.normalZ = normal.z;
-        trace.currentPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, currentPosition);
-        trace.projectedPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, projectedPosition);
-        trace.thresholdSensitiveStandard = normal.z <= WOW_WALKABLE_MIN_NORMAL_Z;
-        trace.thresholdSensitiveRelaxed = normal.z <= WOW_RELAXED_WALKABLE_MIN_NORMAL_Z;
-        trace.wouldUseDirectPairStandard = trace.thresholdSensitiveStandard && trace.projectedPositionInsidePrism;
-        trace.wouldUseDirectPairRelaxed = trace.thresholdSensitiveRelaxed && trace.projectedPositionInsidePrism;
-        return trace;
-    }
 } // end anonymous namespace
 
 WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::AABBContact& contact,
@@ -264,6 +233,29 @@ WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::
     }
 
     result.walkable = (-normal.z) > WOW_WALKABLE_MIN_NORMAL_Z;
+    return result;
+}
+
+WoWCollision::SelectedContactThresholdGateResult WoWCollision::EvaluateSelectedContactThresholdGate(
+    const SceneQuery::AABBContact& contact,
+    const G3D::Vector3& currentPosition,
+    const G3D::Vector3& projectedPosition,
+    bool useStandardWalkableThreshold)
+{
+    SelectedContactThresholdGateResult result{};
+
+    G3D::Vector3 normal = contact.normal.directionOrZero();
+    if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+        normal = contact.rawNormal.directionOrZero();
+    }
+
+    result.normalZ = normal.z;
+    result.currentPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, currentPosition);
+    result.projectedPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, projectedPosition);
+    result.thresholdSensitive = normal.z <= (useStandardWalkableThreshold
+        ? WOW_WALKABLE_MIN_NORMAL_Z
+        : WOW_RELAXED_WALKABLE_MIN_NORMAL_Z);
+    result.wouldUseDirectPair = result.thresholdSensitive && result.projectedPositionInsidePrism;
     return result;
 }
 
@@ -529,19 +521,25 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
             boundingHeight,
             true,
             groundedWallState);
-        const auto thresholdGate = EvaluateSelectedContactThresholdGate(
+        const auto thresholdGateStandard = WoWCollision::EvaluateSelectedContactThresholdGate(
             *selectionInfo.selectedContact,
             currentPosition,
-            trace.selectedThresholdPoint);
+            trace.selectedThresholdPoint,
+            true);
+        const auto thresholdGateRelaxed = WoWCollision::EvaluateSelectedContactThresholdGate(
+            *selectionInfo.selectedContact,
+            currentPosition,
+            trace.selectedThresholdPoint,
+            false);
         trace.walkableWithoutState = withoutState.walkable ? 1u : 0u;
         trace.walkableWithState = withState.walkable ? 1u : 0u;
-        trace.selectedThresholdNormalZ = thresholdGate.normalZ;
-        trace.selectedCurrentPositionInsidePrism = thresholdGate.currentPositionInsidePrism ? 1u : 0u;
-        trace.selectedProjectedPositionInsidePrism = thresholdGate.projectedPositionInsidePrism ? 1u : 0u;
-        trace.selectedThresholdSensitiveStandard = thresholdGate.thresholdSensitiveStandard ? 1u : 0u;
-        trace.selectedThresholdSensitiveRelaxed = thresholdGate.thresholdSensitiveRelaxed ? 1u : 0u;
-        trace.selectedWouldUseDirectPairStandard = thresholdGate.wouldUseDirectPairStandard ? 1u : 0u;
-        trace.selectedWouldUseDirectPairRelaxed = thresholdGate.wouldUseDirectPairRelaxed ? 1u : 0u;
+        trace.selectedThresholdNormalZ = thresholdGateStandard.normalZ;
+        trace.selectedCurrentPositionInsidePrism = thresholdGateStandard.currentPositionInsidePrism ? 1u : 0u;
+        trace.selectedProjectedPositionInsidePrism = thresholdGateStandard.projectedPositionInsidePrism ? 1u : 0u;
+        trace.selectedThresholdSensitiveStandard = thresholdGateStandard.thresholdSensitive ? 1u : 0u;
+        trace.selectedThresholdSensitiveRelaxed = thresholdGateRelaxed.thresholdSensitive ? 1u : 0u;
+        trace.selectedWouldUseDirectPairStandard = thresholdGateStandard.wouldUseDirectPair ? 1u : 0u;
+        trace.selectedWouldUseDirectPairRelaxed = thresholdGateRelaxed.wouldUseDirectPair ? 1u : 0u;
     }
 
     if (!hasMergedWallNormal) {

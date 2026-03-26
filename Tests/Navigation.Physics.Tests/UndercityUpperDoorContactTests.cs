@@ -45,7 +45,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             return;
 
         var scenario = LoadFrame15Scenario();
-        var contacts = QueryFrame15Contacts(scenario);
+        var contacts = QueryFrameContacts(scenario);
         var supportContact = FindElevatorSupportContact(contacts, scenario.WorldPosition.Z);
 
         _output.WriteLine(
@@ -65,7 +65,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             return;
 
         var scenario = LoadFrame15Scenario();
-        var contacts = QueryFrame15Contacts(scenario);
+        var contacts = QueryFrameContacts(scenario);
         var supportContact = FindElevatorSupportContact(contacts, scenario.WorldPosition.Z);
         var triangle = supportContact.ToTriangle();
         var contactNormal = supportContact.Normal;
@@ -334,6 +334,57 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
     }
 
     [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_MergedQueryContainsNoDirectPairCandidates()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        var contacts = QueryFrameContacts(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var projectedPosition = scenario.WorldPosition + requestedMove;
+
+        var standardDirectCandidates = contacts
+            .Where(contact =>
+            {
+                bool directPair = EvaluateWoWSelectedContactThresholdGate(
+                    contact.ToTriangle(),
+                    contact.Normal,
+                    scenario.WorldPosition,
+                    projectedPosition,
+                    useStandardWalkableThreshold: true,
+                    out _,
+                    out _,
+                    out _,
+                    out _);
+                return directPair;
+            })
+            .ToArray();
+
+        var relaxedDirectCandidates = contacts
+            .Where(contact =>
+            {
+                bool directPair = EvaluateWoWSelectedContactThresholdGate(
+                    contact.ToTriangle(),
+                    contact.Normal,
+                    scenario.WorldPosition,
+                    projectedPosition,
+                    useStandardWalkableThreshold: false,
+                    out _,
+                    out _,
+                    out _,
+                    out _);
+                return directPair;
+            })
+            .ToArray();
+
+        _output.WriteLine($"frame16 directPair candidates: standard={standardDirectCandidates.Length} relaxed={relaxedDirectCandidates.Length}");
+        Assert.NotEmpty(contacts);
+        Assert.Empty(standardDirectCandidates);
+        Assert.Empty(relaxedDirectCandidates);
+    }
+
+    [Fact]
     public void PacketBackedUndercityElevatorUp_Frame16_FreshSceneExtract_ReportsSelectedContactMetadata()
     {
         if (!_fixture.IsInitialized)
@@ -431,7 +482,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
         };
     }
 
-    private TerrainAabbContact[] QueryFrame15Contacts(Frame15Scenario scenario)
+    private TerrainAabbContact[] QueryFrameContacts(Frame15Scenario scenario)
     {
         ClearAllDynamicObjects();
         try

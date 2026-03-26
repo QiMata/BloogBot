@@ -524,6 +524,19 @@ public static partial class NavigationInterop
         out float planeDistance,
         [MarshalAs(UnmanagedType.I1)] out bool walkable);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectedContactThresholdGate", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectedContactThresholdGate(
+        in Triangle triangle,
+        in Vector3 contactNormal,
+        in Vector3 currentPosition,
+        in Vector3 projectedPosition,
+        [MarshalAs(UnmanagedType.I1)] bool useStandardWalkableThreshold,
+        [MarshalAs(UnmanagedType.I1)] out bool currentPositionInsidePrism,
+        [MarshalAs(UnmanagedType.I1)] out bool projectedPositionInsidePrism,
+        [MarshalAs(UnmanagedType.I1)] out bool thresholdSensitive,
+        out float normalZ);
+
     [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
     public static extern int QueryTerrainAABBContacts(
         uint mapId,
