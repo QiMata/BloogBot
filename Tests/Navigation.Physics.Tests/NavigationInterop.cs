@@ -644,6 +644,16 @@ public static partial class NavigationInterop
         out Vector3 boundsMin,
         out Vector3 boundsMax);
 
+    [DllImport(NavigationDll, EntryPoint = "MergeWoWAabbBounds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool MergeWoWAabbBounds(
+        in Vector3 boundsMinA,
+        in Vector3 boundsMaxA,
+        in Vector3 boundsMinB,
+        in Vector3 boundsMaxB,
+        out Vector3 boundsMin,
+        out Vector3 boundsMax);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
         in Vector3 position,

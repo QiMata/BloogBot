@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 213)
+- Last updated: 2026-03-26 (session 214)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 214 still kept runtime grounded behavior unchanged and pinned the exact `0x6373B0` merged-AABB helper from fresh binary evidence. `MergeAabbBounds(...)` now mirrors the componentwise min/max union over two `min/max` boxes, and `CollisionStepWoW` uses it directly for the start/end/half-step merged query volume instead of a local lambda.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowAabbMergeTests.cs` now pins two exact binary-backed behaviors: componentwise min/max union and shared-face preservation.
+  - New raw capture now lives in `docs/physics/0x6373B0_disasm.txt`. Practical implication: one more piece of the unresolved `0x631E70` cache-miss transaction is closed, but the actual remaining gap is still `0x637300`, `0x6372D0`, `0x61E9C0`, the optional swim-side query, and the `0x632A30` wrapper that decides when to invoke that path.
   - Session 213 still kept runtime grounded behavior unchanged and pinned the exact projected query AABB that `0x631E70` checks against the cached bounds. `BuildTerrainQueryBounds(...)` now mirrors the binary shape built from the projected feet position before the double `0x637350` gate.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs` now pins three exact binary-backed behaviors: `XY` min/max from `this+0xB0`, `Z` min at feet height with `Z` max at `feet + this+0xB4`, and the requirement that both corners fit the cached AABB before the cache-hit path can succeed.
   - New raw capture now lives in `docs/physics/0x631E70_disasm.txt`. Practical implication: the remaining `0x631E70` gap is no longer the projected query-box layout; the next gap is the post-cache-miss expand/merge/query transaction and the optional swim-side query/transform work.

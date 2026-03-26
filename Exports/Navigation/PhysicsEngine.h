@@ -717,6 +717,13 @@ namespace WoWCollision
                                  G3D::Vector3& outBoundsMin,
                                  G3D::Vector3& outBoundsMax);
 
+    void MergeAabbBounds(const G3D::Vector3& boundsMinA,
+                         const G3D::Vector3& boundsMaxA,
+                         const G3D::Vector3& boundsMinB,
+                         const G3D::Vector3& boundsMaxB,
+                         G3D::Vector3& outBoundsMin,
+                         G3D::Vector3& outBoundsMax);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

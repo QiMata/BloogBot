@@ -326,6 +326,23 @@ void WoWCollision::BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition
     outBoundsMax.z = projectedPosition.z + boundingHeight;
 }
 
+void WoWCollision::MergeAabbBounds(const G3D::Vector3& boundsMinA,
+                                   const G3D::Vector3& boundsMaxA,
+                                   const G3D::Vector3& boundsMinB,
+                                   const G3D::Vector3& boundsMaxB,
+                                   G3D::Vector3& outBoundsMin,
+                                   G3D::Vector3& outBoundsMax)
+{
+    outBoundsMin = G3D::Vector3(
+        std::min(boundsMinA.x, boundsMinB.x),
+        std::min(boundsMinA.y, boundsMinB.y),
+        std::min(boundsMinA.z, boundsMinB.z));
+    outBoundsMax = G3D::Vector3(
+        std::max(boundsMaxA.x, boundsMaxB.x),
+        std::max(boundsMaxA.y, boundsMaxB.y),
+        std::max(boundsMaxA.z, boundsMaxB.z));
+}
+
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                               float verticalOffset,
                                               float horizontalRadius,
@@ -1940,26 +1957,10 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     G3D::Vector3 halfBoxMin(halfX - contracted, halfY - contracted, adjustedMinZ);
     G3D::Vector3 halfBoxMax(halfX + contracted, halfY + contracted, adjustedMaxZ);
 
-    auto mergeAabb = [](const G3D::Vector3& minA,
-        const G3D::Vector3& maxA,
-        const G3D::Vector3& minB,
-        const G3D::Vector3& maxB,
-        G3D::Vector3& outMin,
-        G3D::Vector3& outMax) {
-            outMin = G3D::Vector3(
-                std::min(minA.x, minB.x),
-                std::min(minA.y, minB.y),
-                std::min(minA.z, minB.z));
-            outMax = G3D::Vector3(
-                std::max(maxA.x, maxB.x),
-                std::max(maxA.y, maxB.y),
-                std::max(maxA.z, maxB.z));
-        };
-
     G3D::Vector3 queryBoxMin = startBoxMin;
     G3D::Vector3 queryBoxMax = startBoxMax;
-    mergeAabb(queryBoxMin, queryBoxMax, endBoxMin, endBoxMax, queryBoxMin, queryBoxMax);
-    mergeAabb(queryBoxMin, queryBoxMax, halfBoxMin, halfBoxMax, queryBoxMin, queryBoxMax);
+    WoWCollision::MergeAabbBounds(queryBoxMin, queryBoxMax, endBoxMin, endBoxMax, queryBoxMin, queryBoxMax);
+    WoWCollision::MergeAabbBounds(queryBoxMin, queryBoxMax, halfBoxMin, halfBoxMax, queryBoxMin, queryBoxMax);
 
     // Step 5c: Test terrain on the merged query volume (0x6721B0 TestTerrain)
     std::vector<SceneQuery::AABBContact> slideContacts;

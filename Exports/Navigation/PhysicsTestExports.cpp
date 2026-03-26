@@ -951,6 +951,28 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool MergeWoWAabbBounds(
+        const G3D::Vector3* boundsMinA,
+        const G3D::Vector3* boundsMaxA,
+        const G3D::Vector3* boundsMinB,
+        const G3D::Vector3* boundsMaxB,
+        G3D::Vector3* outBoundsMin,
+        G3D::Vector3* outBoundsMax)
+    {
+        if (!boundsMinA || !boundsMaxA || !boundsMinB || !boundsMaxB || !outBoundsMin || !outBoundsMax) {
+            return false;
+        }
+
+        WoWCollision::MergeAabbBounds(
+            *boundsMinA,
+            *boundsMaxA,
+            *boundsMinB,
+            *boundsMaxB,
+            *outBoundsMin,
+            *outBoundsMax);
+        return true;
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

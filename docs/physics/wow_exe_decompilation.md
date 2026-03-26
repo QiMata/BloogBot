@@ -595,6 +595,8 @@ CollisionStep (0x633840)
       - `boundsMax = (projected.x + this+0xB0, projected.y + this+0xB0, projected.z + this+0xB4)`
     - cache reuse only succeeds when both corners are inside `0xC4E5A0`: one `0x637350` call on `boundsMin`, then one on `boundsMax`
     - the production DLL now mirrors that exact bounds builder through pure `BuildTerrainQueryBounds(...)` plus a deterministic export/test seam
+    - fresh 2026-03-26 review also re-closes `0x6373B0` from raw binary evidence as the pure merged-AABB helper used on this path: it returns the componentwise min of both `min{x,y,z}` triplets and the componentwise max of both `max{x,y,z}` triplets, with no collision/query side effects
+    - the production DLL now mirrors that helper through pure `MergeAabbBounds(...)` plus a deterministic export/test seam, and `CollisionStepWoW` uses it instead of a local lambda for its merged query volume
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

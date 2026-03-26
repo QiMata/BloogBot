@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 213)`
+- Last updated: `2026-03-26 (session 214)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 214 added `WowAabbMergeTests.cs` plus the new interop needed to pin the pure merged-AABB helper through the production DLL. `NavigationInterop.cs` now exposes `MergeWoWAabbBounds(...)`.
+  - The new deterministic coverage now pins two exact binary-backed behaviors from `0x6373B0`: componentwise min/max union across two six-float AABBs and preservation of shared faces when one side already matches the winning bound.
+  - Practical implication: this owner no longer has to infer the `0x6373B0` portion of the unresolved `0x631E70` cache-miss transaction. The next missing deterministic seams are still the remaining `0x631E70` cache-miss calls plus the `0x632A30` wrapper that chooses whether to invoke that path.
   - Session 213 added `WowTerrainQueryBoundsTests.cs` plus the new interop needed to pin the projected query-AABB seam through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWTerrainQueryBounds(...)`.
   - The new deterministic coverage now pins three exact binary-backed behaviors from `0x631E70`: `XY` bounds expansion from `this+0xB0`, `Z` min at the projected feet position with `Z` max at `feet + this+0xB4`, and the requirement that both corners fit the cached AABB before the cache-hit path can succeed.
   - Practical implication: this owner no longer has to infer the projected query-box layout on the `0x631E70` path. The next missing deterministic seams are the post-cache-miss expand/merge/query transaction and the `0x632A30` wrapper that decides when to call it.

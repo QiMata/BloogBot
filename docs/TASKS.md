@@ -283,8 +283,22 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 213)
+- **Last updated:** 2026-03-26 (session 214)
 - **Branch:** `main`
+- **Session 214 — `0x6373B0` AABB merge helper is now pinned as a pure binary seam:**
+  - Added pure [MergeAabbBounds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), and added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Replaced the local merged-query lambda in [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) with the new binary-backed helper so the start/end/half-step query volume is built through the same named seam the tests pin.
+  - Added deterministic coverage in [WowAabbMergeTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowAabbMergeTests.cs), which now pins the exact componentwise min/max union semantics from `0x6373B0`, including shared-face preservation.
+  - Practical implication: one more piece of the unresolved `0x631E70` / merged-query cache-miss path is no longer inferred. The remaining open work there is `0x637300`, `0x6372D0`, `0x61E9C0`, the optional swim-side `0x30000` query, and the `0x632A30` wrapper that decides when to invoke the path.
+- **Fresh binary evidence (session 214):**
+  - Added raw capture [0x6373B0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6373B0_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) to record the exact componentwise min/max behavior.
+- **Test baseline (session 214):**
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowAabbMergeTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - Passed (`13/13`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 213 — `0x631E70` projected query bounds are now pinned as a pure binary seam:**
   - Added pure [BuildTerrainQueryBounds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowTerrainQueryBoundsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs), which now pins the exact `0x631E70` projected AABB shape: `XY` min/max from `this+0xB0`, `Z` min at feet level, and `Z` max at `feet + this+0xB4`, plus the double-corner cache-fit shape when paired with `0x637350`.

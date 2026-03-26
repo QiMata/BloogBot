@@ -1597,3 +1597,35 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not treat the projected bounds as symmetric on Z. The binary is explicit that `min.z = projected.z` while only `max.z` gets the `this+0xB4` expansion.
 - Recommended next single hypothesis:
   - Mirror the remaining `0x631E70` cache-miss path next: `0x637300`, `0x6372D0`, `0x6373B0`, the `0x61E9C0` pre-query call, and the optional swim-side `0x30000` query.
+
+## 2026-03-26 AABB-merge addendum (`0x6373B0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the already-suspected `0x6373B0` helper from fresh raw binary evidence and pin it through the production DLL so the merged-query volume stops relying on anonymous local logic.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x6373B0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that `0x6373B0` is a pure componentwise AABB union helper, not a query/collision routine
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `MergeAabbBounds(...)`
+    - replaced the local merged-query lambda in `CollisionStepWoW` with that binary-backed helper
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `MergeWoWAabbBounds(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new AABB-merge seam
+  - `Tests/Navigation.Physics.Tests/WowAabbMergeTests.cs`
+    - added deterministic coverage for the exact componentwise min/max union and shared-face preservation path
+- Validation:
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowAabbMergeTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - passed (`13/13`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again, but the closure here is structural rather than behavioral: `0x6373B0` contributes only the AABB union. The remaining unknowns are still the expand/copy/query transaction around it and the `0x632A30` wrapper.
+- Do Not Repeat:
+  - Do not spend more time treating `0x6373B0` as a hidden collision or slide helper. The raw binary closes it as a pure AABB merge.
+- Recommended next single hypothesis:
+  - Mirror the remaining `0x631E70` / `0x632A30` transaction next, starting with the full `0x632A30` wrapper and the exact `0x631E70 -> 0x632280` call/early-return shape.
