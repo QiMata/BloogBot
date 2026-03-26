@@ -581,6 +581,13 @@ CollisionStep (0x633840)
     - the earlier `0x632A30` / `0x631E70` setup gates are still unresolved and are not yet mirrored by that seam
     - fresh 2026-03-26 review now adds one concrete `0x631E70` sub-helper on that unresolved path: `0x637350` is a pure inclusive point-vs-AABB test over six floats laid out as `minX,minY,minZ,maxX,maxY,maxZ`, and `0x631E70` uses it to decide whether the cached query bounds at `0xC4E5A0` already contain both the current and projected points before rebuilding the merged query volume
     - the production DLL now mirrors that exact `0x637350` helper through pure `IsPointInsideAabbInclusive(...)` plus a deterministic export/test seam
+    - fresh 2026-03-26 review now also pins the query-mask builder `0x6315F0`, which `0x631E70` calls immediately before `0x6721B0`
+    - fresh raw capture now lives in `docs/physics/0x6315F0_disasm.txt`
+    - `0x6315F0`
+      - calls `0x5FA550(this+0x15C)` and seeds the base mask as `0x100111` on success or `0x102111` on failure
+      - then ORs `0x30000` only when `(this->flags & 0x10000000) != 0`, `(this->flags & 0x200000) == 0`, and the raw float at `this+0x20` is strictly greater than `0x80DFE8 = -0.6457718015f`
+      - then ORs `0x8000` only when both tree-bit tests succeed on `([this+0x15C]+8)->+8` and `([this+0x15C]+0xE68)->+8`
+      - the production DLL now mirrors that exact mask builder through pure `BuildTerrainQueryMask(...)` plus a deterministic export/test seam
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

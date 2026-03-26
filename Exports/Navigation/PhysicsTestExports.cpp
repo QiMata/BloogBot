@@ -916,6 +916,21 @@ extern "C"
         return WoWCollision::IsPointInsideAabbInclusive(*boundsMin, *boundsMax, *point);
     }
 
+    __declspec(dllexport) uint32_t EvaluateWoWTerrainQueryMask(
+        bool modelPropertyFlagSet,
+        uint32_t movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet)
+    {
+        return WoWCollision::BuildTerrainQueryMask(
+            modelPropertyFlagSet,
+            movementFlags,
+            field20Value,
+            rootTreeFlagSet,
+            childTreeFlagSet);
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

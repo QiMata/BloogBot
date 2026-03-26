@@ -1,0 +1,48 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x6315F0
+Date: 2026-03-26
+Notes:
+- This is the terrain-query mask builder that `0x631E70` calls immediately before `0x6721B0`.
+- `ecx` is the movement object. The helper first calls `0x5FA550(this+0x15C)` to choose the base mask.
+- Base mask is `0x100111` when `0x5FA550(...)` returns nonzero, otherwise `0x102111`.
+- The `0x30000` augment is added only when `(flags & 0x10000000) != 0`, `(flags & 0x200000) == 0`, and the raw float at `this+0x20` is strictly greater than `0x80DFE8 = -0.6457718015f`.
+- The `0x8000` augment is added only when both tree-bit tests succeed:
+  - `(([this+0x15C]+8)->+8 >> 4) & 1`
+  - `(([this+0x15C]+0xE68)->+8 >> 4) & 1`
+
+0x006315F0: push     esi
+0x006315F1: mov      esi, ecx
+0x006315F3: mov      ecx, dword ptr [esi + 0x15c]
+0x006315F9: push     edi
+0x006315FA: mov      edi, 0x100111
+0x006315FF: call     0x5fa550
+0x00631604: test     al, al
+0x00631606: jne      0x63160d
+0x00631608: mov      edi, 0x102111
+0x0063160D: mov      eax, dword ptr [esi + 0x40]
+0x00631610: test     eax, 0x10000000
+0x00631615: je       0x631634
+0x00631617: test     eax, 0x200000
+0x0063161C: jne      0x631634
+0x0063161E: fld      dword ptr [esi + 0x20]
+0x00631621: fcomp    dword ptr [0x80dfe8]
+0x00631627: fnstsw   ax
+0x00631629: test     ah, 0x41
+0x0063162C: jne      0x631634
+0x0063162E: or       edi, 0x30000
+0x00631634: mov      esi, dword ptr [esi + 0x15c]
+0x0063163A: mov      eax, dword ptr [esi + 8]
+0x0063163D: mov      ecx, dword ptr [eax + 8]
+0x00631640: shr      ecx, 4
+0x00631643: test     cl, 1
+0x00631646: je       0x63165e
+0x00631648: mov      edx, dword ptr [esi + 0xe68]
+0x0063164E: mov      eax, dword ptr [edx + 8]
+0x00631651: shr      eax, 4
+0x00631654: test     al, 1
+0x00631656: je       0x63165e
+0x00631658: or       edi, 0x8000
+0x0063165E: mov      eax, edi
+0x00631660: pop      edi
+0x00631661: pop      esi
+0x00631662: ret

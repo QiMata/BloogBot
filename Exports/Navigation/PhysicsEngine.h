@@ -705,6 +705,12 @@ namespace WoWCollision
                                     const G3D::Vector3& boundsMax,
                                     const G3D::Vector3& point);
 
+    uint32_t BuildTerrainQueryMask(bool modelPropertyFlagSet,
+                                   uint32_t movementFlags,
+                                   float field20Value,
+                                   bool rootTreeFlagSet,
+                                   bool childTreeFlagSet);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

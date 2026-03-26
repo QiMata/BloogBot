@@ -132,6 +132,11 @@ namespace
     constexpr float WOW_SELECTOR_LOOSE_RATIO_THRESHOLD = -9.5367431640625e-07f; // 0x80DFF4
     constexpr float WOW_SELECTOR_STRICT_RATIO_THRESHOLD = -0.02777777798473835f; // 0x7FF9C8
     constexpr float WOW_SELECTOR_RECORD_FILTER_THRESHOLD = -9.999999747378752e-06f; // 0x80C5C4
+    constexpr float WOW_TERRAIN_QUERY_FIELD20_THRESHOLD = -0.6457718014717102f; // 0x80DFE8
+    constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_TRUE = 0x00100111u;
+    constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_FALSE = 0x00102111u;
+    constexpr uint32_t WOW_TERRAIN_QUERY_WATERWALK_AUGMENT = 0x00030000u;
+    constexpr uint32_t WOW_TERRAIN_QUERY_TREE_AUGMENT = 0x00008000u;
 
     inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
     {
@@ -281,6 +286,29 @@ bool WoWCollision::IsPointInsideAabbInclusive(const G3D::Vector3& boundsMin,
     }
 
     return true;
+}
+
+uint32_t WoWCollision::BuildTerrainQueryMask(bool modelPropertyFlagSet,
+                                             uint32_t movementFlags,
+                                             float field20Value,
+                                             bool rootTreeFlagSet,
+                                             bool childTreeFlagSet)
+{
+    uint32_t queryMask = modelPropertyFlagSet
+        ? WOW_TERRAIN_QUERY_BASE_MASK_MODEL_TRUE
+        : WOW_TERRAIN_QUERY_BASE_MASK_MODEL_FALSE;
+
+    if ((movementFlags & MOVEFLAG_WATERWALKING) != 0u &&
+        (movementFlags & MOVEFLAG_SWIMMING) == 0u &&
+        field20Value > WOW_TERRAIN_QUERY_FIELD20_THRESHOLD) {
+        queryMask |= WOW_TERRAIN_QUERY_WATERWALK_AUGMENT;
+    }
+
+    if (rootTreeFlagSet && childTreeFlagSet) {
+        queryMask |= WOW_TERRAIN_QUERY_TREE_AUGMENT;
+    }
+
+    return queryMask;
 }
 
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,

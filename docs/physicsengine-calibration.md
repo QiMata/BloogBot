@@ -1531,3 +1531,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not collapse this helper into a strict `< max` test or an epsilon-grown bounds check. The binary compares `point >= min` and `point <= max` directly on all three axes.
 - Recommended next single hypothesis:
   - Capture and mirror the smallest self-contained branch of `0x632A30` next, using the now-pinned `0x637350` cache-hit gate as part of the setup path instead of re-inferring it.
+
+## 2026-03-26 Terrain-query mask addendum (`0x6315F0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the exact query-mask builder that `0x631E70` feeds into `0x6721B0`, so the next merged-query work stops relying on inferred mask constants.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x6315F0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact `0x6315F0` base-mask split and both augmentation gates
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildTerrainQueryMask(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWTerrainQueryMask(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new query-mask seam
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryMaskTests.cs`
+    - added deterministic coverage for the `0x5FA550` base-mask split, the strict `this+0x20 > 0x80DFE8` `0x30000` gate, the swim exclusion, and the two-bit `0x8000` augment
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`17/17`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is now narrower in one more place: the mask it passes into `0x6721B0` is no longer guesswork. The remaining unknown is the rest of the query-builder transaction around cached bounds reuse, merged AABB expansion, optional swim-side query, and post-query transform handling.
+- Do Not Repeat:
+  - Do not rename the `this+0x20` gate as “pitch” or any other semantic field in code yet. The binary proves the raw offset and threshold comparison, but the field meaning is still an inference.
+- Recommended next single hypothesis:
+  - Mirror the smallest remaining `0x631E70` branch around the `0x6315F0 -> 0x6721B0` call site next, now that the exact query-mask math is pinned.
