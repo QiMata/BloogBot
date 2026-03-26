@@ -183,6 +183,38 @@ namespace
 
         return true;
     }
+
+    struct SelectedContactThresholdGateTrace
+    {
+        float normalZ = 0.0f;
+        bool currentPositionInsidePrism = false;
+        bool projectedPositionInsidePrism = false;
+        bool thresholdSensitiveStandard = false;
+        bool thresholdSensitiveRelaxed = false;
+        bool wouldUseDirectPairStandard = false;
+        bool wouldUseDirectPairRelaxed = false;
+    };
+
+    SelectedContactThresholdGateTrace EvaluateSelectedContactThresholdGate(const SceneQuery::AABBContact& contact,
+                                                                          const G3D::Vector3& currentPosition,
+                                                                          const G3D::Vector3& projectedPosition)
+    {
+        SelectedContactThresholdGateTrace trace{};
+
+        G3D::Vector3 normal = contact.normal.directionOrZero();
+        if (normal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+            normal = contact.rawNormal.directionOrZero();
+        }
+
+        trace.normalZ = normal.z;
+        trace.currentPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, currentPosition);
+        trace.projectedPositionInsidePrism = PointInsideExpandedTrianglePrism(contact, projectedPosition);
+        trace.thresholdSensitiveStandard = normal.z <= WOW_WALKABLE_MIN_NORMAL_Z;
+        trace.thresholdSensitiveRelaxed = normal.z <= WOW_RELAXED_WALKABLE_MIN_NORMAL_Z;
+        trace.wouldUseDirectPairStandard = trace.thresholdSensitiveStandard && trace.projectedPositionInsidePrism;
+        trace.wouldUseDirectPairRelaxed = trace.thresholdSensitiveRelaxed && trace.projectedPositionInsidePrism;
+        return trace;
+    }
 } // end anonymous namespace
 
 WoWCollision::CheckWalkableResult WoWCollision::CheckWalkable(const SceneQuery::AABBContact& contact,
@@ -482,6 +514,7 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
         trace.selectedInstanceId = selectionInfo.selectedContact->instanceId;
         trace.rawWalkable = selectionInfo.selectedContact->walkable ? 1u : 0u;
         trace.selectedPoint = selectionInfo.selectedContact->point;
+        trace.selectedThresholdPoint = currentPosition + requestedMove;
         const auto withoutState = WoWCollision::CheckWalkable(
             *selectionInfo.selectedContact,
             currentPosition,
@@ -496,8 +529,19 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
             boundingHeight,
             true,
             groundedWallState);
+        const auto thresholdGate = EvaluateSelectedContactThresholdGate(
+            *selectionInfo.selectedContact,
+            currentPosition,
+            trace.selectedThresholdPoint);
         trace.walkableWithoutState = withoutState.walkable ? 1u : 0u;
         trace.walkableWithState = withState.walkable ? 1u : 0u;
+        trace.selectedThresholdNormalZ = thresholdGate.normalZ;
+        trace.selectedCurrentPositionInsidePrism = thresholdGate.currentPositionInsidePrism ? 1u : 0u;
+        trace.selectedProjectedPositionInsidePrism = thresholdGate.projectedPositionInsidePrism ? 1u : 0u;
+        trace.selectedThresholdSensitiveStandard = thresholdGate.thresholdSensitiveStandard ? 1u : 0u;
+        trace.selectedThresholdSensitiveRelaxed = thresholdGate.thresholdSensitiveRelaxed ? 1u : 0u;
+        trace.selectedWouldUseDirectPairStandard = thresholdGate.wouldUseDirectPairStandard ? 1u : 0u;
+        trace.selectedWouldUseDirectPairRelaxed = thresholdGate.wouldUseDirectPairRelaxed ? 1u : 0u;
     }
 
     if (!hasMergedWallNormal) {

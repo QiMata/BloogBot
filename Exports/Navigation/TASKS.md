@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 199)
+- Last updated: 2026-03-26 (session 200)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 200 extended the production grounded-wall trace one level deeper into the `0x633760` threshold gate without changing runtime behavior. `GroundedWallResolutionTrace` / `EvaluateGroundedWallSelection(...)` now record the selected contact's threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and whether that already-selected contact would stay on the direct paired path under either `0x633760` threshold.
+  - New binary evidence now lives in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens two open constraints: `0x632BA0` builds a five-slot local candidate buffer before `0x632700`, and once the packet-backed frame-16 WMO wall is already selected, the projected `position + requestedMove` point is outside the `0x6335D0` prism so that wall stays on the alternate `0x635090` path under both relaxed and standard thresholds.
+  - Practical implication: the immediate blocker moved one step earlier again. The next native parity unit is not a threshold-mode guess inside `0x633760`; it is tracing why `0x632BA0` / `0x632280` select the WMO wall entry instead of the stateful elevator-support candidate present elsewhere in the merged query.
   - Session 199 finished the remaining scene-loader infrastructure blocker. `SceneQuery::EnsureMapLoaded(...)` now detects legacy metadata-less `.scene` files, rebuilds the same cached bounds through `SceneCache::Extract(...)`, writes back a v2 cache, and loads the metadata-bearing result instead of leaving runtime queries on flattened parent-only metadata.
   - `UndercityUpperDoorContactTests.cs` now proves all three relevant states deterministically: a direct manual v1 load still collapses to parent WMO metadata (`src=1`), a fresh extract round-trip resolves WMO group `3228` with `groupFlags = 0x0000AA05`, and the normal `EnsureMapLoaded(...)` path now auto-upgrades the legacy cache and returns that same WMO-group identity (`src=2`).
   - Practical implication: no more MPQ extraction or scene-autoload work is needed for this blocker. The next native parity unit is the binary-selected contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) that still chooses and classifies the grounded blocker before `0x6334A0` / `0x636100` run.
@@ -185,6 +188,10 @@
   - Session 172 corrected `0x6373B0` from “Collide” to the merged-AABB helper and updated grounded `CollisionStepWoW` so the wall query now uses the merged start/full/half-step `TestTerrainAABB` volume instead of accumulating synthetic full-step and half-step `SweepAABB` contacts.
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=detailed"` -> `passed (5/5)`
@@ -318,7 +325,17 @@
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- Next command: `rg --line-number "0x6351A0|0x633720|0x635090|0xC4E544|selectedContactIndex|paired" docs/physics/wow_exe_decompilation.md docs/physics/0x633720_disasm.txt docs/physics/0x635090_disasm.txt Exports/Navigation/PhysicsTestExports.cpp`
+- Next command: `@'
+from capstone import *
+va=0x632280
+size=0x400
+with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
+    f.seek(va-0x400000)
+    code=f.read(size)
+md=Cs(CS_ARCH_X86, CS_MODE_32)
+for insn in md.disasm(code, va):
+    print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+'@ | py -`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

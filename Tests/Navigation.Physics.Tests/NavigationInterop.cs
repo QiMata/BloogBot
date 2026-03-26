@@ -174,6 +174,14 @@ public static partial class NavigationInterop
         public uint SelectedGroupMatchFound;
         public uint SelectedResolvedModelFlags;
         public uint SelectedMetadataSource;
+        public uint SelectedCurrentPositionInsidePrism;
+        public uint SelectedProjectedPositionInsidePrism;
+        public uint SelectedThresholdSensitiveStandard;
+        public uint SelectedThresholdSensitiveRelaxed;
+        public uint SelectedWouldUseDirectPairStandard;
+        public uint SelectedWouldUseDirectPairRelaxed;
+        public Vector3 SelectedThresholdPoint;
+        public float SelectedThresholdNormalZ;
     }
 
     public enum GroundedWallBranchKind : uint

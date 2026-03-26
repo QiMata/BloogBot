@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 199)`
+- Last updated: `2026-03-26 (session 200)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 200 extended the production-DLL grounded-wall trace into the selected-contact `0x633760` threshold/prism gate without changing runtime behavior. `NavigationInterop.cs` now exposes the selected threshold point, `normal.z`, current/projected `0x6335D0` prism inclusion, and the direct-pair outcome under both the relaxed and standard thresholds.
+  - `UndercityUpperDoorContactTests.cs` now pins the new packet-backed frame-16 invariant directly: once the runtime has already selected WMO wall instance `0x00003B34`, the projected `position + requestedMove` point is outside the expanded triangle prism, so that wall stays on the alternate path under both threshold modes (`directStd = 0`, `directRelaxed = 0`).
+  - Practical implication: the next missing coverage in this owner is no longer threshold-mode speculation. The next useful deterministic seam is one level earlier, around `0x632BA0` / `0x632280`, so we can explain why the WMO wall is selected before `0x633760` ever runs.
   - Session 199 moved the scene-loader fix under deterministic coverage. `UndercityUpperDoorContactTests.cs` now writes a local legacy v1 `.scene`, proves a direct manual `LoadSceneCache(...)` still collapses the frame-16 blocker to parent WMO metadata, then proves the normal `EnsureMapLoaded(...)` path upgrades that same legacy cache to v2 and returns the real WMO-group identity (`src=2`, `groupId=3228`, `groupFlags=0x0000AA05`).
   - Practical implication: the extraction/autoload side of the blocker is now closed in this owner. The next missing coverage belongs deeper in the selected-contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`), not in scene serialization.
   - Session 197 extended the selected-contact trace one more level with `selectedResolvedModelFlags` and `selectedMetadataSource`, plus a best-effort child doodad match against the parent WMO's default `.doodads` set.
@@ -136,7 +139,17 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
-- Next command: `rg --line-number "0x6351A0|0x633720|0x635090|0xC4E544|selectedContactIndex|paired" docs/physics/wow_exe_decompilation.md docs/physics/0x633720_disasm.txt docs/physics/0x635090_disasm.txt Exports/Navigation/PhysicsTestExports.cpp`
+- Next command: `@'
+from capstone import *
+va=0x632280
+size=0x400
+with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
+    f.seek(va-0x400000)
+    code=f.read(size)
+md=Cs(CS_ARCH_X86, CS_MODE_32)
+for insn in md.disasm(code, va):
+    print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+'@ | py -`
 - Files changed:
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`

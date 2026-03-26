@@ -573,6 +573,10 @@ CollisionStep (0x633840)
   - the following `0x6334A0` / `0x636100` work therefore runs on a selected entry, not on every contact in the merged query
 - `0x6351A0` is the only direct caller currently identified that returns the paired `0xC4E544[index]` payload:
   - it first calls `0x632BA0`
+  - fresh raw captures now live in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`
+  - `0x632BA0`
+    - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
+    - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
@@ -587,6 +591,7 @@ CollisionStep (0x633840)
     - reads `normal.z` from `0xC4E534[index]`
     - compares that selected contact against the relaxed `0x80E000` threshold when `0x5FA550(...)` is false and against the standard walkable `0x80DFFC` threshold when `0x5FA550(...)` is true
     - on the threshold-sensitive path it then calls `0x6335D0` before deciding whether the selected index stays on the direct `0xC4E544[index]` return path or falls into the alternate `0x635090` path
+    - production-DLL packet-backed tracing now adds one more frame-16 constraint on top of that logic: once the runtime has already selected the WMO wall contact (`instance 0x00003B34`, `groupId 3228`), the projected `position + requestedMove` point is outside the `0x6335D0` expanded triangle prism, so the selected wall would stay on the alternate `0x635090` path under both the relaxed and standard thresholds
   - `0x635090`
     - first calls `0x6336A0`
     - on success it delegates to `0x634AE0` to produce the working 3-vector

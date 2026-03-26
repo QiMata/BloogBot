@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 195)
+- **Last updated:** 2026-03-26 (session 200)
 - **Branch:** `main`
+- **Session 200 — selected-contact threshold/prism trace proves frame-16 wall stays on the alternate path:**
+  - Extended [GroundedWallResolutionTrace in PhysicsEngine.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.h), [ResolveGroundedWallContacts(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [EvaluateGroundedWallSelection(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) so the production DLL now records the selected contact’s threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and the direct-pair outcome under both the relaxed and standard `0x633760` thresholds.
+  - Added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs) plus a new packet-backed regression in [UndercityUpperDoorContactTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs).
+  - The new deterministic result tightens the next parity target: once the runtime has already selected WMO wall instance `0x00003B34` on frame 16, the projected `position + requestedMove` point is outside the expanded triangle prism, so that wall stays on the alternate `0x635090` path under both threshold modes. The remaining blocker is therefore earlier in the selector chain (`0x632BA0` / `0x632280`), not a threshold-mode guess inside `0x633760`.
+- **Fresh binary evidence (session 200):**
+  - Added raw captures [0x6351A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6351A0_disasm.txt) and [0x632BA0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632BA0_disasm.txt), and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the five-slot `0x632BA0` candidate-buffer note plus the projected-prism constraint on the frame-16 selected wall.
+- **Test baseline (session 200):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"`
+    - Passed (`8/8`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`7/7`)
 - **Session 195 — shared grounded-wall transaction trace now runs through the production resolver:**
   - Added shared [ResolveGroundedWallContacts(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [GroundedWallResolutionTrace in PhysicsEngine.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.h), then routed the grounded runtime wall lambda through that helper. The native export and the runtime now execute the same selected-contact and branch-resolution codepath.
   - Extended [EvaluateGroundedWallSelection(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) and the matching [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs) interop so deterministic tests can record state before/after, branch kind, merged/final wall normals, and horizontal-vs-final projected moves without a separate native tester project.

@@ -291,6 +291,49 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
     }
 
     [Fact]
+    public void PacketBackedUndercityElevatorUp_Frame16_SelectedContactThresholdGateReportsProjectedPrismDecision()
+    {
+        if (!_fixture.IsInitialized)
+            return;
+
+        var scenario = LoadFrameScenario(16);
+        var (boxMin, boxMax) = BuildMergedQueryBox(scenario);
+        var requestedMove = BuildRequestedMove(scenario);
+        var worldPosition = scenario.WorldPosition;
+
+        bool traced = EvaluateGroundedWallSelection(
+            scenario.Recording.MapId,
+            in boxMin,
+            in boxMax,
+            in worldPosition,
+            in requestedMove,
+            scenario.Radius,
+            scenario.Height,
+            groundedWallFlagBefore: true,
+            out GroundedWallSelectionTrace trace);
+
+        _output.WriteLine(
+            $"frame16 thresholdGate normalZ={trace.SelectedThresholdNormalZ:F6} thresholdPoint={trace.SelectedThresholdPoint} " +
+            $"insideCurrent={trace.SelectedCurrentPositionInsidePrism} insideProjected={trace.SelectedProjectedPositionInsidePrism} " +
+            $"sensitiveStd={trace.SelectedThresholdSensitiveStandard} sensitiveRelaxed={trace.SelectedThresholdSensitiveRelaxed} " +
+            $"directStd={trace.SelectedWouldUseDirectPairStandard} directRelaxed={trace.SelectedWouldUseDirectPairRelaxed}");
+
+        Assert.True(traced);
+        Assert.True(MathF.Abs(trace.SelectedThresholdNormalZ) <= 1e-3f,
+            $"Expected the frame-16 selected wall to stay effectively horizontal at the `0x633760` gate, got normalZ={trace.SelectedThresholdNormalZ:F6}.");
+        Assert.Equal(1u, trace.SelectedThresholdSensitiveStandard);
+        Assert.Equal(1u, trace.SelectedThresholdSensitiveRelaxed);
+        Assert.Equal(0u, trace.SelectedCurrentPositionInsidePrism);
+        Assert.Equal(0u, trace.SelectedProjectedPositionInsidePrism);
+        Assert.Equal(0u, trace.SelectedWouldUseDirectPairStandard);
+        Assert.Equal(0u, trace.SelectedWouldUseDirectPairRelaxed);
+        Assert.Equal(trace.SelectedWouldUseDirectPairStandard, trace.SelectedWouldUseDirectPairRelaxed);
+        Assert.Equal(worldPosition.X + requestedMove.X, trace.SelectedThresholdPoint.X, 4);
+        Assert.Equal(worldPosition.Y + requestedMove.Y, trace.SelectedThresholdPoint.Y, 4);
+        Assert.Equal(worldPosition.Z + requestedMove.Z, trace.SelectedThresholdPoint.Z, 4);
+    }
+
+    [Fact]
     public void PacketBackedUndercityElevatorUp_Frame16_FreshSceneExtract_ReportsSelectedContactMetadata()
     {
         if (!_fixture.IsInitialized)

@@ -92,6 +92,14 @@ struct ExportGroundedWallSelectionTrace
     uint32_t selectedGroupMatchFound;
     uint32_t selectedResolvedModelFlags;
     uint32_t selectedMetadataSource;
+    uint32_t selectedCurrentPositionInsidePrism;
+    uint32_t selectedProjectedPositionInsidePrism;
+    uint32_t selectedThresholdSensitiveStandard;
+    uint32_t selectedThresholdSensitiveRelaxed;
+    uint32_t selectedWouldUseDirectPairStandard;
+    uint32_t selectedWouldUseDirectPairRelaxed;
+    G3D::Vector3 selectedThresholdPoint;
+    float selectedThresholdNormalZ;
 };
 
 static float ComputeHorizontalOpposeScore(const G3D::Vector3& normal, const G3D::Vector3& moveDir2D)
@@ -881,6 +889,14 @@ extern "C"
         outTrace->slopedResolved2D = trace.slopedResolved2D;
         outTrace->finalResolved2D = trace.finalResolved2D;
         outTrace->blockedFraction = trace.blockedFraction;
+        outTrace->selectedCurrentPositionInsidePrism = trace.selectedCurrentPositionInsidePrism;
+        outTrace->selectedProjectedPositionInsidePrism = trace.selectedProjectedPositionInsidePrism;
+        outTrace->selectedThresholdSensitiveStandard = trace.selectedThresholdSensitiveStandard;
+        outTrace->selectedThresholdSensitiveRelaxed = trace.selectedThresholdSensitiveRelaxed;
+        outTrace->selectedWouldUseDirectPairStandard = trace.selectedWouldUseDirectPairStandard;
+        outTrace->selectedWouldUseDirectPairRelaxed = trace.selectedWouldUseDirectPairRelaxed;
+        outTrace->selectedThresholdPoint = trace.selectedThresholdPoint;
+        outTrace->selectedThresholdNormalZ = trace.selectedThresholdNormalZ;
 
         if (trace.selectedContactIndex != 0xFFFFFFFFu && trace.selectedContactIndex < contacts.size())
         {

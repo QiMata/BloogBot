@@ -587,6 +587,14 @@ namespace WoWCollision
         float slopedResolved2D = 0.0f;
         float finalResolved2D = 0.0f;
         float blockedFraction = 1.0f;
+        uint32_t selectedCurrentPositionInsidePrism = 0;
+        uint32_t selectedProjectedPositionInsidePrism = 0;
+        uint32_t selectedThresholdSensitiveStandard = 0;
+        uint32_t selectedThresholdSensitiveRelaxed = 0;
+        uint32_t selectedWouldUseDirectPairStandard = 0;
+        uint32_t selectedWouldUseDirectPairRelaxed = 0;
+        G3D::Vector3 selectedThresholdPoint = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float selectedThresholdNormalZ = 0.0f;
     };
 
     CheckWalkableResult CheckWalkable(const SceneQuery::AABBContact& contact,

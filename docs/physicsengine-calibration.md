@@ -1119,3 +1119,39 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not add a separate native tester binary for scene-cache upgrade coverage; the production DLL + deterministic tests already prove the runtime loader behavior.
 - Recommended next single hypothesis:
   - Extend the native transaction seam into the selected-contact producer chain so deterministic tests can capture the paired `0xC4E544` payload and whether the `0x633720` / `0x635090` path chose the frame-16 blocker for the same reason the binary does.
+
+## 2026-03-26 Selected-contact threshold/prism trace addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - It extended the production-DLL trace around the already-selected contact so the deterministic harness can mirror the binary `0x633760 -> 0x6335D0` gate before changing the runtime branch again.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the newly confirmed `0x632BA0` five-slot candidate loop and the `0x633760` projected-prism interpretation
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - `GroundedWallResolutionTrace` now records the selected-contact threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and whether the chosen contact would stay on the direct paired path under the relaxed or standard `0x633760` thresholds
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - `EvaluateGroundedWallSelection(...)` now exports those new threshold/prism fields from the production resolver trace
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added the matching interop fields
+  - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
+    - added a packet-backed frame-16 regression pinning the projected-prism result
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"`
+    - passed (`8/8`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`7/7`)
+- Frame-pattern note:
+  - The packet-backed frame-16 selected wall has `normal.z ~= -0.000224`, so it is threshold-sensitive under both the relaxed and standard `0x633760` modes.
+  - The projected `position + requestedMove` point is outside the `0x6335D0` expanded prism (`insideProjected = 0`), so once that wall is selected it would stay on the alternate `0x635090` path under both thresholds (`directStd = 0`, `directRelaxed = 0`).
+  - Practical implication: the remaining blocker is even earlier than the threshold split. The next parity pass needs to explain why `0x632BA0` is selecting the WMO wall entry in the first place instead of the stateful elevator-support candidate present elsewhere in the merged query.
+- Do Not Repeat:
+  - Do not assume the frame-16 selected wall is failing because we picked the wrong relaxed-vs-standard threshold inside `0x633760`; the projected-prism trace disproves that shortcut.
+  - Do not spend another pass wiring a threshold-mode guess into runtime grounded resolution before the `0x632BA0` / `0x632280` selection chain is mapped more fully.
+- Recommended next single hypothesis:
+  - Trace the `0x632BA0` write path one level deeper (`0x632280` and its interaction with `0x632700`) so deterministic tests can record why the frame-16 WMO wall survives selection while the stateful elevator-support contact does not.
