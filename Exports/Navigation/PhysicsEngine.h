@@ -724,6 +724,15 @@ namespace WoWCollision
                          G3D::Vector3& outBoundsMin,
                          G3D::Vector3& outBoundsMax);
 
+    void InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane);
+
+    float ClampSelectorReportedBestRatio(float bestRatio);
+
+    bool FinalizeSelectorTriangleSourceWrapper(bool hasOverridePosition,
+                                               bool terrainQuerySucceeded,
+                                               float inputBestRatio,
+                                               float& outReportedBestRatio);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

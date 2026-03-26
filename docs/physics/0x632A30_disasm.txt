@@ -1,0 +1,127 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x632A30
+Date: 2026-03-26
+Notes:
+- This is the small wrapper in front of `0x632280`.
+- It initializes two local selector-plane buffers through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, calls `0x631BE0`, optionally calls `0x631E70`, then zero-clamps the reported scalar against `0x80DFEC`.
+
+0x00632A30: push     ebp
+0x00632A31: mov      ebp, esp
+0x00632A33: sub      esp, 0x1b8
+0x00632A39: push     ebx
+0x00632A3A: push     esi
+0x00632A3B: push     edi
+0x00632A3C: mov      ebx, ecx
+0x00632A3E: mov      dword ptr [ebp - 0x14], 0
+0x00632A45: lea      esi, [ebp - 0x1b8]
+0x00632A4B: mov      edi, 7
+0x00632A50: mov      ecx, esi
+0x00632A52: call     0x6376a0
+0x00632A57: add      esi, 0x10
+0x00632A5A: dec      edi
+0x00632A5B: jne      0x632a50
+0x00632A5D: lea      esi, [ebp - 0x148]
+0x00632A63: mov      edi, 9
+0x00632A68: mov      ecx, esi
+0x00632A6A: call     0x6376a0
+0x00632A6F: add      esi, 0x10
+0x00632A72: dec      edi
+0x00632A73: jne      0x632a68
+0x00632A75: lea      eax, [ebp - 0xb0]
+0x00632A7B: mov      ecx, 9
+0x00632A80: xor      edx, edx
+0x00632A82: mov      dword ptr [eax - 8], edx
+0x00632A85: mov      dword ptr [eax - 4], edx
+0x00632A88: mov      dword ptr [eax], edx
+0x00632A8A: add      eax, 0xc
+0x00632A8D: dec      ecx
+0x00632A8E: jne      0x632a80
+0x00632A90: mov      esi, dword ptr [ebp + 0x10]
+0x00632A93: test     esi, esi
+0x00632A95: mov      eax, esi
+0x00632A97: jne      0x632a9c
+0x00632A99: lea      eax, [ebx + 0x10]
+0x00632A9C: mov      ecx, dword ptr [eax]
+0x00632A9E: mov      edx, dword ptr [eax + 4]
+0x00632AA1: mov      eax, dword ptr [eax + 8]
+0x00632AA4: mov      dword ptr [ebp - 0x2c], ecx
+0x00632AA7: mov      dword ptr [ebp - 0x28], edx
+0x00632AAA: lea      ecx, [ebp - 0x4c]
+0x00632AAD: push     ecx
+0x00632AAE: mov      ecx, dword ptr [ebx + 0xb4]
+0x00632AB4: lea      edx, [ebp - 0xb8]
+0x00632ABA: push     edx
+0x00632ABB: mov      dword ptr [ebp - 0x24], eax
+0x00632ABE: lea      eax, [ebp - 0x148]
+0x00632AC4: push     eax
+0x00632AC5: push     ecx
+0x00632AC6: lea      edx, [ebp - 0x2c]
+0x00632AC9: push     edx
+0x00632ACA: mov      ecx, ebx
+0x00632ACC: mov      dword ptr [ebp - 0x20], 0
+0x00632AD3: mov      dword ptr [ebp - 0x1c], 0
+0x00632ADA: mov      dword ptr [ebp - 0x18], 0xbf800000
+0x00632AE1: mov      dword ptr [ebp - 0xc], 0
+0x00632AE8: mov      dword ptr [ebp - 8], 0
+0x00632AEF: mov      dword ptr [ebp - 4], 0xbf800000
+0x00632AF6: call     0x631be0
+0x00632AFB: test     esi, esi
+0x00632AFD: jne      0x632b2e
+0x00632AFF: mov      ecx, dword ptr [ebp - 0xc]
+0x00632B02: mov      edx, dword ptr [ebp - 8]
+0x00632B05: sub      esp, 0xc
+0x00632B08: mov      eax, esp
+0x00632B0A: mov      dword ptr [eax], ecx
+0x00632B0C: mov      ecx, dword ptr [ebp - 4]
+0x00632B0F: mov      dword ptr [eax + 4], edx
+0x00632B12: mov      dword ptr [eax + 8], ecx
+0x00632B15: mov      ecx, ebx
+0x00632B17: call     0x631e70
+0x00632B1C: test     eax, eax
+0x00632B1E: jne      0x632b2e
+0x00632B20: mov      edx, dword ptr [ebp + 0xc]
+0x00632B23: mov      dword ptr [edx], eax
+0x00632B25: pop      edi
+0x00632B26: pop      esi
+0x00632B27: pop      ebx
+0x00632B28: mov      esp, ebp
+0x00632B2A: pop      ebp
+0x00632B2B: ret      0xc
+0x00632B2E: mov      eax, dword ptr [ebp + 8]
+0x00632B31: mov      ecx, dword ptr [eax + 4]
+0x00632B34: mov      esi, dword ptr [ebp + 0xc]
+0x00632B37: push     esi
+0x00632B38: mov      dword ptr [ebp - 0x10], ecx
+0x00632B3B: lea      edx, [ebp - 0x14]
+0x00632B3E: push     edx
+0x00632B3F: lea      ecx, [ebp - 0x1b8]
+0x00632B45: push     ecx
+0x00632B46: lea      edx, [ebp - 0x10]
+0x00632B49: push     edx
+0x00632B4A: lea      ecx, [ebp - 0x4c]
+0x00632B4D: push     ecx
+0x00632B4E: lea      edx, [ebp - 0xb8]
+0x00632B54: push     edx
+0x00632B55: lea      ecx, [ebp - 0x148]
+0x00632B5B: push     ecx
+0x00632B5C: lea      edx, [ebp - 0xc]
+0x00632B5F: push     edx
+0x00632B60: push     0x3f800000
+0x00632B65: lea      ecx, [ebp - 0x20]
+0x00632B68: push     ecx
+0x00632B69: push     eax
+0x00632B6A: mov      ecx, ebx
+0x00632B6C: call     0x632280
+0x00632B71: fld      dword ptr [esi]
+0x00632B73: fcomp    dword ptr [0x80dfec]
+0x00632B79: fnstsw   ax
+0x00632B7B: test     ah, 5
+0x00632B7E: jp       0x632b86
+0x00632B80: mov      dword ptr [esi], 0
+0x00632B86: pop      edi
+0x00632B87: pop      esi
+0x00632B88: mov      eax, 1
+0x00632B8D: pop      ebx
+0x00632B8E: mov      esp, ebp
+0x00632B90: pop      ebp
+0x00632B91: ret      0xc

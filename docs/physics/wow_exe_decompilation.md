@@ -578,7 +578,7 @@ CollisionStep (0x633840)
     - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
     - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
     - the production DLL now mirrors that second-half 5-direction ranking core through pure `EvaluateSelectorDirectionRanking(...)`: it walks `supportPlanes[0..4]`, builds each surviving quad clip set through `0x632F80`, feeds `0x632700`, applies the same `0x80DFEC` overwrite/append/swap rules, and zero-clamps the reported scalar when the final best ratio falls under the same epsilon
-    - the earlier `0x632A30` / `0x631E70` setup gates are still unresolved and are not yet mirrored by that seam
+    - the earlier `0x632A30` / `0x631E70` setup gates are no longer fully opaque, but they are still only partially mirrored by that seam
     - fresh 2026-03-26 review now adds one concrete `0x631E70` sub-helper on that unresolved path: `0x637350` is a pure inclusive point-vs-AABB test over six floats laid out as `minX,minY,minZ,maxX,maxY,maxZ`, and `0x631E70` uses it to decide whether the cached query bounds at `0xC4E5A0` already contain both the current and projected points before rebuilding the merged query volume
     - the production DLL now mirrors that exact `0x637350` helper through pure `IsPointInsideAabbInclusive(...)` plus a deterministic export/test seam
     - fresh 2026-03-26 review now also pins the query-mask builder `0x6315F0`, which `0x631E70` calls immediately before `0x6721B0`
@@ -597,6 +597,12 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that exact bounds builder through pure `BuildTerrainQueryBounds(...)` plus a deterministic export/test seam
     - fresh 2026-03-26 review also re-closes `0x6373B0` from raw binary evidence as the pure merged-AABB helper used on this path: it returns the componentwise min of both `min{x,y,z}` triplets and the componentwise max of both `max{x,y,z}` triplets, with no collision/query side effects
     - the production DLL now mirrors that helper through pure `MergeAabbBounds(...)` plus a deterministic export/test seam, and `CollisionStepWoW` uses it instead of a local lambda for its merged query volume
+    - fresh raw captures now also live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
+    - `0x632A30` initializes a 7-slot and a 9-slot `0x10`-stride selector-plane buffer through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, and calls `0x631BE0`
+    - only when no override position was provided does `0x632A30` call `0x631E70`; if that call fails it writes `0` to the caller's reported scalar and returns `0`
+    - otherwise it calls `0x632280`, then zero-clamps the caller's reported scalar when `reportedScalar <= 0x80DFEC`
+    - `0x6376A0` itself is a tiny initializer that writes one selector-plane record as `(0, 0, 1, 0)`
+    - the production DLL now mirrors those wrapper-visible behaviors through pure `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, and `FinalizeSelectorTriangleSourceWrapper(...)` helpers plus deterministic export/test seams
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

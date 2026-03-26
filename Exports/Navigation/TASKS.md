@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 214)
+- Last updated: 2026-03-26 (session 215)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 215 still kept runtime grounded behavior unchanged and pinned the explicit visible gates on the `0x632A30` wrapper plus the shared `0x6376A0` selector-plane initializer. `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, and `FinalizeSelectorTriangleSourceWrapper(...)` now mirror the binary `(0,0,1,0)` init, the `0x80DFEC` zero clamp, and the no-override `0x631E70` early-fail path.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperTests.cs` now pins five exact binary-backed behaviors: unit-Z default plane init, clamp at/below `0x80DFEC`, no-override early failure with zeroed scalar, override bypass, and success-path zero clamp.
+  - New raw captures now live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`. Practical implication: the remaining `0x632A30` / `0x631E70` gap is no longer the wrapper-visible gate behavior; it is the full data transaction feeding `0x632280`.
   - Session 214 still kept runtime grounded behavior unchanged and pinned the exact `0x6373B0` merged-AABB helper from fresh binary evidence. `MergeAabbBounds(...)` now mirrors the componentwise min/max union over two `min/max` boxes, and `CollisionStepWoW` uses it directly for the start/end/half-step merged query volume instead of a local lambda.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowAabbMergeTests.cs` now pins two exact binary-backed behaviors: componentwise min/max union and shared-face preservation.
   - New raw capture now lives in `docs/physics/0x6373B0_disasm.txt`. Practical implication: one more piece of the unresolved `0x631E70` cache-miss transaction is closed, but the actual remaining gap is still `0x637300`, `0x6372D0`, `0x61E9C0`, the optional swim-side query, and the `0x632A30` wrapper that decides when to invoke that path.
@@ -470,7 +473,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `@'`nfrom capstone import *`nva=0x632A30`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632C20 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
+- Next command: `@'`nfrom capstone import *`nva=0x632280`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632453 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

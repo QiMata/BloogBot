@@ -654,6 +654,21 @@ public static partial class NavigationInterop
         out Vector3 boundsMin,
         out Vector3 boundsMax);
 
+    [DllImport(NavigationDll, EntryPoint = "InitializeWoWSelectorSupportPlane", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool InitializeWoWSelectorSupportPlane(out SelectorSupportPlane plane);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorReportedBestRatioClamp", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float EvaluateWoWSelectorReportedBestRatioClamp(float bestRatio);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorTriangleSourceWrapperGates", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorTriangleSourceWrapperGates(
+        [MarshalAs(UnmanagedType.I1)] bool hasOverridePosition,
+        [MarshalAs(UnmanagedType.I1)] bool terrainQuerySucceeded,
+        float inputBestRatio,
+        out float reportedBestRatio);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
         in Vector3 position,

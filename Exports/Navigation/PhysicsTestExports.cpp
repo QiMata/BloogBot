@@ -973,6 +973,43 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
+        ExportSelectorSupportPlane* outPlane)
+    {
+        if (!outPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        WoWCollision::InitializeSelectorSupportPlane(plane);
+        outPlane->normal = plane.normal;
+        outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
+    __declspec(dllexport) float EvaluateWoWSelectorReportedBestRatioClamp(
+        float bestRatio)
+    {
+        return WoWCollision::ClampSelectorReportedBestRatio(bestRatio);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorTriangleSourceWrapperGates(
+        bool hasOverridePosition,
+        bool terrainQuerySucceeded,
+        float inputBestRatio,
+        float* outReportedBestRatio)
+    {
+        if (!outReportedBestRatio) {
+            return false;
+        }
+
+        return WoWCollision::FinalizeSelectorTriangleSourceWrapper(
+            hasOverridePosition,
+            terrainQuerySucceeded,
+            inputBestRatio,
+            *outReportedBestRatio);
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

@@ -343,6 +343,31 @@ void WoWCollision::MergeAabbBounds(const G3D::Vector3& boundsMinA,
         std::max(boundsMaxA.z, boundsMaxB.z));
 }
 
+void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
+{
+    outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);
+    outPlane.planeDistance = 0.0f;
+}
+
+float WoWCollision::ClampSelectorReportedBestRatio(float bestRatio)
+{
+    return (bestRatio <= WOW_CORNER_PLANE_EPSILON) ? 0.0f : bestRatio;
+}
+
+bool WoWCollision::FinalizeSelectorTriangleSourceWrapper(bool hasOverridePosition,
+                                                         bool terrainQuerySucceeded,
+                                                         float inputBestRatio,
+                                                         float& outReportedBestRatio)
+{
+    if (!hasOverridePosition && !terrainQuerySucceeded) {
+        outReportedBestRatio = 0.0f;
+        return false;
+    }
+
+    outReportedBestRatio = ClampSelectorReportedBestRatio(inputBestRatio);
+    return true;
+}
+
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                               float verticalOffset,
                                               float horizontalRadius,
@@ -1058,7 +1083,7 @@ bool WoWCollision::EvaluateSelectorDirectionRanking(const SelectorCandidateRecor
         }
         else {
             if (ioCandidateCount >= ioBestCandidates.size()) {
-                outReportedBestRatio = (ioBestRatio <= WOW_CORNER_PLANE_EPSILON) ? 0.0f : ioBestRatio;
+                outReportedBestRatio = ClampSelectorReportedBestRatio(ioBestRatio);
                 trace.outputBestRatio = ioBestRatio;
                 trace.reportedBestRatio = outReportedBestRatio;
                 trace.finalCandidateCount = ioCandidateCount;
@@ -1095,7 +1120,7 @@ bool WoWCollision::EvaluateSelectorDirectionRanking(const SelectorCandidateRecor
         }
     }
 
-    outReportedBestRatio = (ioBestRatio <= WOW_CORNER_PLANE_EPSILON) ? 0.0f : ioBestRatio;
+    outReportedBestRatio = ClampSelectorReportedBestRatio(ioBestRatio);
     trace.outputBestRatio = ioBestRatio;
     trace.reportedBestRatio = outReportedBestRatio;
     trace.finalCandidateCount = ioCandidateCount;

@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 214)`
+- Last updated: `2026-03-26 (session 215)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 215 added `WowSelectorSourceWrapperTests.cs` plus the new interop needed to pin the wrapper-visible `0x632A30` / `0x6376A0` seams through the production DLL. `NavigationInterop.cs` now exposes `InitializeWoWSelectorSupportPlane(...)`, `EvaluateWoWSelectorReportedBestRatioClamp(...)`, and `EvaluateWoWSelectorTriangleSourceWrapperGates(...)`.
+  - The new deterministic coverage now pins five exact binary-backed behaviors: the shared `(0,0,1,0)` selector-plane initializer from `0x6376A0`, the final `0x80DFEC` reported-ratio zero clamp, the no-override early failure path that writes `0`, the override-position bypass, and the success-path zero clamp from `0x632A30`.
+  - Practical implication: this owner no longer has to infer the visible wrapper gates around `0x632280`. The next missing deterministic seams are the full `0x631BE0 -> 0x631E70 -> 0x632280` data flow and the broader `0x6351A0` consumer transaction.
   - Session 214 added `WowAabbMergeTests.cs` plus the new interop needed to pin the pure merged-AABB helper through the production DLL. `NavigationInterop.cs` now exposes `MergeWoWAabbBounds(...)`.
   - The new deterministic coverage now pins two exact binary-backed behaviors from `0x6373B0`: componentwise min/max union across two six-float AABBs and preservation of shared faces when one side already matches the winning bound.
   - Practical implication: this owner no longer has to infer the `0x6373B0` portion of the unresolved `0x631E70` cache-miss transaction. The next missing deterministic seams are still the remaining `0x631E70` cache-miss calls plus the `0x632A30` wrapper that chooses whether to invoke that path.
@@ -210,7 +213,7 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `@'`nfrom capstone import *`nva=0x632A30`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632C20 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
+- Next command: `@'`nfrom capstone import *`nva=0x632280`nsize=1024`nwith open(r'D:/World of Warcraft/WoW.exe','rb') as f:`n    f.seek(va-0x400000)`n    code=f.read(size)`nmd=Cs(CS_ARCH_X86, CS_MODE_32)`nfor i in md.disasm(code, va):`n    print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}')`n    if i.address >= 0x632453 and i.mnemonic in ('ret', 'retn'):`n        break`n'@ | py -`
 - Files changed:
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`

@@ -1629,3 +1629,41 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not spend more time treating `0x6373B0` as a hidden collision or slide helper. The raw binary closes it as a pure AABB merge.
 - Recommended next single hypothesis:
   - Mirror the remaining `0x631E70` / `0x632A30` transaction next, starting with the full `0x632A30` wrapper and the exact `0x631E70 -> 0x632280` call/early-return shape.
+
+## 2026-03-26 Wrapper-gates addendum (`0x632A30`, `0x6376A0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the wrapper-visible gates on `0x632A30` and the shared selector-plane initializer `0x6376A0`, so the remaining unknown is the data transaction feeding `0x632280`, not the wrapper edges around it.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x632A30` / `0x631E70` note now records the explicit no-override `0x631E70` call, the early-fail `*outScalar = 0` path, the final `0x80DFEC` zero clamp, and the `(0,0,1,0)` selector-plane init from `0x6376A0`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `InitializeSelectorSupportPlane(...)`
+    - added pure `ClampSelectorReportedBestRatio(...)`
+    - added pure `FinalizeSelectorTriangleSourceWrapper(...)`
+    - refactored `EvaluateSelectorDirectionRanking(...)` to use the same binary-backed clamp helper
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `InitializeWoWSelectorSupportPlane(...)`
+    - added `EvaluateWoWSelectorReportedBestRatioClamp(...)`
+    - added `EvaluateWoWSelectorTriangleSourceWrapperGates(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new wrapper/init seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperTests.cs`
+    - added deterministic coverage for the init, clamp, early-fail, override bypass, and success-path zero clamp
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSourceWrapperTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests|FullyQualifiedName~WowAabbMergeTests" --logger "console;verbosity=minimal"`
+    - passed (`17/17`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The unresolved `0x632A30` path is narrower again, but still not behavior-complete: the wrapper edges are now closed, while the remaining unknown is the full data transaction through `0x631BE0`, optional `0x631E70`, and `0x632280`.
+- Do Not Repeat:
+  - Do not keep treating the remaining `0x632A30` gap as a generic wrapper mystery. The visible early-return and zero-clamp behavior are closed; only the interior data flow remains.
+- Recommended next single hypothesis:
+  - Mirror the next internal `0x632A30` data seam instead of another wrapper edge, starting with the exact argument flow into `0x632280` and the `0x631BE0` outputs it consumes.

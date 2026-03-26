@@ -283,8 +283,24 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 214)
+- **Last updated:** 2026-03-26 (session 215)
 - **Branch:** `main`
+- **Session 215 — `0x632A30` wrapper gates and `0x6376A0` selector-plane init are now pinned as pure binary seams:**
+  - Added pure [InitializeSelectorSupportPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClampSelectorReportedBestRatio(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [FinalizeSelectorTriangleSourceWrapper(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Refactored [EvaluateSelectorDirectionRanking(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) to use the same binary-backed reported-ratio clamp instead of duplicating the inline `0x80DFEC` zero-clamp logic.
+  - Added deterministic coverage in [WowSelectorSourceWrapperTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperTests.cs), which now pins the `(0,0,1,0)` selector-plane initializer, the exact reported-ratio zero clamp, the no-override early failure path, the override bypass, and the success-path zero clamp from `0x632A30`.
+  - Practical implication: the wrapper around `0x632280` is no longer inferred at its visible edges. The remaining open work there is the full `0x631BE0 -> 0x631E70 -> 0x632280` data transaction, not the wrapper’s early-return or reported-ratio behavior.
+- **Fresh binary evidence (session 215):**
+  - Added raw captures [0x632A30_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632A30_disasm.txt) and [0x6376A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6376A0_disasm.txt), then updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) to record the exact wrapper flow and the selector-plane initializer.
+- **Test baseline (session 215):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSourceWrapperTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests|FullyQualifiedName~WowAabbMergeTests" --logger "console;verbosity=minimal"`
+    - Passed (`17/17`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 214 — `0x6373B0` AABB merge helper is now pinned as a pure binary seam:**
   - Added pure [MergeAabbBounds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), and added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Replaced the local merged-query lambda in [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) with the new binary-backed helper so the start/end/half-step query volume is built through the same named seam the tests pin.

@@ -1,0 +1,24 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x6376A0
+Date: 2026-03-26
+Notes:
+- This helper writes one 16-byte selector plane record.
+- It stores `(0.0f, 0.0f, 1.0f, 0.0f)` into the destination at `ecx`.
+
+0x006376A0: push     ebp
+0x006376A1: mov      ebp, esp
+0x006376A3: sub      esp, 0xc
+0x006376A6: mov      dword ptr [ebp - 0xc], 0
+0x006376AD: mov      edx, dword ptr [ebp - 0xc]
+0x006376B0: mov      eax, ecx
+0x006376B2: mov      dword ptr [eax], edx
+0x006376B4: mov      dword ptr [ebp - 8], 0
+0x006376BB: mov      edx, dword ptr [ebp - 8]
+0x006376BE: mov      dword ptr [eax + 4], edx
+0x006376C1: mov      dword ptr [ebp - 4], 0x3f800000
+0x006376C8: mov      edx, dword ptr [ebp - 4]
+0x006376CB: mov      dword ptr [eax + 8], edx
+0x006376CE: mov      dword ptr [ecx + 0xc], 0
+0x006376D5: mov      esp, ebp
+0x006376D7: pop      ebp
+0x006376D8: ret
