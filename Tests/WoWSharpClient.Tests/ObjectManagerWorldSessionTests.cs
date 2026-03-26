@@ -1010,7 +1010,7 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
-    public void MoveTowardWithFacing_AlreadyMovingForward_SmallFacingChange_NoSetFacingPacket()
+    public void MoveTowardWithFacing_AlreadyMovingForward_SubThresholdFacingChange_NoSetFacingPacket()
     {
         _fixture._woWClient.Reset();
         var sentPackets = new List<(Opcode opcode, byte[] payload)>();
@@ -1035,12 +1035,12 @@ public class ObjectManagerWorldSessionTests
         // Already moving forward
         player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
-        // Small facing change (0.15 rad) — above dampen threshold (0.02) but below
-        // mid-move threshold (0.20). Should update facing but NOT send SET_FACING packet.
-        objectManager.MoveToward(new Position(15f, 20f, 20f), 0.65f);
+        // Small facing change (0.08 rad) stays below the WoW.exe 0.1 rad packet gate.
+        // Local facing should update, but no explicit SET_FACING packet should be sent.
+        objectManager.MoveToward(new Position(15f, 20f, 20f), 0.58f);
 
         Assert.Empty(sentPackets);
-        Assert.Equal(0.65f, player.Facing, 3);
+        Assert.Equal(0.58f, player.Facing, 3);
         Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
     }
 

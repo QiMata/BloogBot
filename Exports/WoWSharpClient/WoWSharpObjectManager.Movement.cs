@@ -36,6 +36,7 @@ namespace WoWSharpClient
 
 
         private bool _isInControl = false;
+        private const float FacingPacketThresholdRadians = 0.1f; // WoW.exe 0x80C408
 
         private bool _isBeingTeleported = true;
 
@@ -644,31 +645,16 @@ namespace WoWSharpClient
             //   - Position update
             //   - Network packet sending (MSG_MOVE_START_FORWARD, heartbeats, etc.)
             //
-            // Dampen facing updates: only apply if the change exceeds a small threshold.
-            // Sub-threshold facing jitter (from waypoint changes each tick) causes the
-            // physics engine to oscillate movement direction → visible bouncing/jitter.
-            const float facingDampenThreshold = 0.02f; // ~1.1deg (tightened from 0.15 to match FG parity)
-            const MovementFlags horizontalMoveMask =
-                MovementFlags.MOVEFLAG_FORWARD |
-                MovementFlags.MOVEFLAG_BACKWARD |
-                MovementFlags.MOVEFLAG_STRAFE_LEFT |
-                MovementFlags.MOVEFLAG_STRAFE_RIGHT;
+            // WoW.exe gates MSG_MOVE_SET_FACING at 0.1 rad in 0x60E1EA.
+            // We still update the local facing immediately so the movement vector stays current.
             var facingDelta = MathF.Abs(facing - player.Facing);
             // Handle wrap-around (e.g. 6.2 → 0.1 = 0.18 rad, not 6.1 rad)
             if (facingDelta > MathF.PI)
                 facingDelta = 2f * MathF.PI - facingDelta;
-            bool wasHorizontallyMoving = (player.MovementFlags & horizontalMoveMask) != MovementFlags.MOVEFLAG_NONE;
-            if (facingDelta > facingDampenThreshold)
+            if (facingDelta > 0.0f)
             {
                 player.Facing = facing;
-                // Send SET_FACING packet when facing changes significantly.
-                // When idle → moving: send on any facing change above dampen threshold (0.02 rad).
-                // When already moving: only send on larger changes (0.10 rad ≈ 5.7°) to avoid
-                // flooding the server with SET_FACING for minor waypoint angle drift each tick.
-                // FG's WoW client includes facing in heartbeats; it only sends explicit SET_FACING
-                // for deliberate course changes, not per-tick steering updates.
-                const float midMoveFacingThreshold = 0.20f; // ~11.5deg — waypoint-following stays below this
-                bool sendFacingPacket = !wasHorizontallyMoving || facingDelta > midMoveFacingThreshold;
+                bool sendFacingPacket = facingDelta > FacingPacketThresholdRadians;
                 if (sendFacingPacket && _movementController != null && _isInControl && !_isBeingTeleported)
                 {
                     _movementController.SendMovementStartFacingUpdate((uint)_worldTimeTracker.NowMS.TotalMilliseconds);

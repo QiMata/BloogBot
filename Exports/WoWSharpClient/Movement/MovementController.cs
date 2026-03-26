@@ -1017,22 +1017,17 @@ namespace WoWSharpClient.Movement
 
         public void SendFacingUpdate(uint gameTimeMs)
         {
-            // WoW.exe sends MSG_MOVE_HEARTBEAT before SET_FACING to sync position.
-            // Without this, the server's position for the player may be stale (from
-            // the last heartbeat), causing the server to compute facing from a
-            // different position than the bot — leading to BADFACING rejections.
-            // The stationary melee case is the one that needs this most: when the
-            // player is already standing still, the regular heartbeat cadence can
-            // stop entirely, but WoW.exe still syncs position before SET_FACING.
-            var heartbeatBuffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeatBuffer).GetAwaiter().GetResult();
+            var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
+            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer).GetAwaiter().GetResult();
+
+            _frameSentOpcode = (uint)Opcode.MSG_MOVE_SET_FACING;
+            _frameSentFlags = (uint)_player.MovementFlags;
+            _frameSentFacing = _player.Facing;
+            _frameSentPending = true;
+
             _lastSentFlags = _player.MovementFlags;
             _lastPacketTime = gameTimeMs;
             _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
-
-            var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer).GetAwaiter().GetResult();
-            _lastPacketTime = gameTimeMs;
             Log.Information("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2} Pos=({X:F1},{Y:F1},{Z:F1})",
                 _player.Facing, _player.Position.X, _player.Position.Y, _player.Position.Z);
         }

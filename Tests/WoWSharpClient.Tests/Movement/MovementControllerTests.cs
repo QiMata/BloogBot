@@ -700,17 +700,16 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void SendFacingUpdate_StandingStillSyncsHeartbeatBeforeSetFacing()
+        public void SendFacingUpdate_StandingStill_SendsSetFacingOnly()
         {
             _controller.SendFacingUpdate(5000);
 
-            Assert.Equal(2, _sentPackets.Count);
-            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
-            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[1].opcode);
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[0].opcode);
         }
 
         [Fact]
-        public void SendFacingUpdate_AfterMovementSyncsHeartbeatBeforeSetFacing()
+        public void SendFacingUpdate_AfterMovement_SendsSetFacingOnly()
         {
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 1000);
@@ -719,9 +718,8 @@ namespace WoWSharpClient.Tests.Movement
             _player.Facing = 2.25f;
             _controller.SendFacingUpdate(1100);
 
-            Assert.Equal(2, _sentPackets.Count);
-            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
-            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[1].opcode);
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_SET_FACING, _sentPackets[0].opcode);
         }
 
         [Fact]

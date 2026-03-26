@@ -283,8 +283,37 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-25 (session 182)
+- **Last updated:** 2026-03-25 (session 188)
 - **Branch:** `main`
+- **Session 188 — managed SET_FACING packet path corrected to match WoW.exe; native collision audit surfaced the next real blocker:**
+  - Re-audited the managed facing send path against `WoW.exe` instead of the older heuristic notes. Binary evidence from `0x60E1EA` shows `MSG_MOVE_SET_FACING` is gated by the float at `0x80C408`, which reads as `0.1f`, and the send path falls directly into the movement send helper without a synthetic `MSG_MOVE_HEARTBEAT` before the facing packet.
+  - Updated [MovementController.cs](/E:/repos/Westworld of Warcraft/Exports/WoWSharpClient/Movement/MovementController.cs) so `SendFacingUpdate(...)` now emits only `MSG_MOVE_SET_FACING`, records the opcode in the frame diagnostics, and keeps `_lastPacketTime` / `_lastPacketPosition` in sync with the actual sent packet.
+  - Updated [WoWSharpObjectManager.Movement.cs](/E:/repos/Westworld of Warcraft/Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs) so local facing still updates on any real delta, but explicit `MSG_MOVE_SET_FACING` sends are now gated by the binary-backed `0.1 rad` threshold instead of the prior `0.02f` / `0.20f` split heuristics.
+  - Tightened deterministic coverage in [MovementControllerTests.cs](/E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs) and [ObjectManagerWorldSessionTests.cs](/E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs) to pin the new semantics: standing and post-move facing updates now send only `MSG_MOVE_SET_FACING`, and a sub-threshold in-motion delta (`0.08 rad`) stays local-only.
+  - The live forced-turn Durotar parity route remains the best proof bundle for this managed slice. `Parity_Durotar_RoadPath_Redirect` passed unchanged, and `Parity_Durotar_RoadPath_TurnStart` passed on rerun with the shared FG/BG `MSG_MOVE_SET_FACING -> MSG_MOVE_START_FORWARD` opening pair intact. The first rerun missed the stop-edge bound by `9ms`, which reinforces that the remaining blocker is native route-grounding drift (`FALLINGFAR` churn / Z bounce), not packet-ordering drift.
+  - Parallel binary audit for the next native slice confirmed the current high-signal blockers: [CollisionStepWoW](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) still only implements the grounded path even though `0x633840` branches falling first, then swimming, then grounded; `0x6334A0` `CheckWalkable` is more complex than the current fixed `normal.z >= 0.6428` gate; and the current `0x636100` driver comment in native code still admits an unsupported `.z > 0.01` equivalence heuristic.
+- **Test baseline (session 188):**
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.SendMovementStartFacingUpdate_SendsSetFacingOnly|FullyQualifiedName~MovementControllerTests.SendFacingUpdate_StandingStill_SendsSetFacingOnly|FullyQualifiedName~MovementControllerTests.SendFacingUpdate_AfterMovement_SendsSetFacingOnly|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_AlreadyMovingForward_SendsSetFacingOnRedirect|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_AlreadyMovingForward_SubThresholdFacingChange_NoSetFacingPacket|FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=minimal"`
+    - Passed (`7/7`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_Redirect" --logger "console;verbosity=minimal"`
+    - Passed (`1/1`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"`
+    - First rerun failed at stop-edge delta `609ms`; immediate rerun passed (`1/1`)
+- **Files changed (session 188):**
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- **Next priorities:** keep the managed facing send path frozen at the binary-backed `0.1 rad` rule, then return to the native parity blocker exposed by the same live route: implement the real `0x633840` top-level branch order and remove the remaining unsupported grounded-helper heuristics around `0x636100` / `0x6334A0`.
+- **Next command:** `py -c "from capstone import *; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(0x633840-0x400000); code=f.read(2048); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') or (i.mnemonic in ('ret','retn') and (_ for _ in ()).throw(SystemExit)) for i in md.disasm(code, 0x633840)]"`
 - **Session 176 — packet-backed controller cadence aligned to FG traces; compact underground/elevator regressions added:**
   - Captured three fresh PacketLogger-backed FG recordings into the canonical repo corpus with the automated recording path: [Urgzuga_Durotar_2026-03-25_03-07-08.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Durotar_2026-03-25_03-07-08.json), [Urgzuga_Undercity_2026-03-25_10-00-52.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Undercity_2026-03-25_10-00-52.json), and [Urgzuga_Undercity_2026-03-25_10-01-09.json](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Recordings/Urgzuga_Undercity_2026-03-25_10-01-09.json) plus `.bin` sidecars. These now provide compact packet-backed proof for flat-ground cadence, underground lower-route seating, and the west Undercity elevator up-ride.
   - Tightened [MovementControllerRecordedFrameTests.cs](/E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs) so packet parity only selects clean grounded forward segments with a real stop frame, adds a synthetic preroll when the capture starts mid-run, and executes the stop transition. The recorded-frame opcode parity harness now selects the straight Durotar packet-backed run and proves `MSG_MOVE_START_FORWARD` / heartbeat / `MSG_MOVE_STOP` distribution against real FG packets instead of deferring for missing data.
