@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 203)
+- Last updated: 2026-03-26 (session 204)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 204 still kept runtime grounded behavior unchanged and exposed the next pure selector-chain body. `EvaluateSelectorPlaneRatio(...)`, `ClipSelectorPointStripAgainstPlane(...)`, `ClipSelectorPointStripExcludingPlane(...)`, and `ValidateSelectorPointStripCandidate(...)` now mirror the binary `0x6329E0` / `0x632830` / `0x632980` / `0x6318C0` chain inside the production DLL.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorCandidateValidationTests.cs` now pins four exact binary-backed behaviors: the `0x6329E0` ratio formula, the `0x6318C0` polygon clipper's intersection/source-index output, the `0x632830` first-pass best-ratio update path, and the strict second-pass rejection path after rebuild.
+  - New raw captures now live in `docs/physics/0x6329E0_disasm.txt`, `docs/physics/0x632830_disasm.txt`, and `docs/physics/0x6318C0_disasm.txt`. Practical implication: the remaining selector gap is no longer inside the strip validator math itself; it is the caller-side candidate-record producer path feeding this now-pinned helper chain.
   - Session 203 kept runtime behavior unchanged and exposed the next pure binary helper behind the selector-builder chain. `BuildSelectorNeighborhood(...)` now mirrors `0x631BE0`, `BuildWoWSelectorNeighborhood(...)` exports it through the production DLL, and `WowSelectorNeighborhoodTests.cs` now pins the exact 9-point layout plus 32-byte selector table.
   - New binary evidence now lives in `docs/physics/0x631BE0_disasm.txt`. The fresh note in `docs/physics/wow_exe_decompilation.md` tightens the pre-`0x632830` builder path again: `0x631BE0` consumes the now-pinned `0x631440` support strip, emits the exact 9-point neighborhood, and writes the selector bytes used by `0x632460` / `0x632F80`.
   - Practical implication: the remaining native selector gap is no longer the input geometry. The next unit has to explain the candidate-validation and rebuild helpers (`0x6329E0` / `0x632830` / `0x6318C0`) on top of those exact binary inputs.
@@ -336,14 +339,16 @@
   - `docs/TASKS.md`
 - Next command: `@'
 from capstone import *
-va=0x632830
-size=0x260
+FUNCS = [(0x632700, 0x260), (0x632460, 0x260), (0x632280, 0x300)]
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
-    f.seek(va-0x400000)
-    code=f.read(size)
-md=Cs(CS_ARCH_X86, CS_MODE_32)
-for insn in md.disasm(code, va):
-    print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    for va, size in FUNCS:
+        f.seek(va - 0x400000)
+        code = f.read(size)
+        print(f'===== 0x{va:08X} =====')
+        for insn in md.disasm(code, va):
+            print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+        print()
 '@ | py -`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.

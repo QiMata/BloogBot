@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 202)`
+- Last updated: `2026-03-26 (session 204)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 204 added `WowSelectorCandidateValidationTests.cs` plus the new low-level interop needed to pin the selector-validator body itself through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorPlaneRatio(...)`, `ClipWoWSelectorPointStripAgainstPlane(...)`, and `EvaluateWoWSelectorCandidateValidation(...)`.
+  - The new deterministic coverage now pins four exact binary-backed behaviors: the `0x6329E0` ratio formula, the `0x6318C0` strip clipper's intersection/source-index output, the `0x632830` first-pass best-ratio update path, and the strict second-pass rejection path after rebuild.
+  - Practical implication: this owner no longer has to infer the selector-validator math from frame traces. The next missing deterministic seam is one level earlier, where `0x632700` / `0x632280` construct and choose the candidate record that is fed into this now-pinned validator.
   - Session 202 added `WowSelectorSupportPlaneTests.cs`, which now pins the pure `0x631440` support-plane strip through the production DLL. `NavigationInterop.cs` exposes `BuildWoWSelectorSupportPlanes(...)`, and the new tests assert the exact axis-plane formulas plus the binary diagonal constants `0x80DFE4` / `0x80DFE0`.
   - Practical implication: this owner now has the real 9-plane strip that sits in front of `0x631BE0` / `0x632830`. The next missing deterministic seam is the 9-point neighborhood builder itself, not the support-strip geometry.
   - Session 201 tightened the packet-backed frame-16 direct-pair scan into a real deterministic regression. `NavigationInterop.cs` now exposes the pure `EvaluateWoWSelectedContactThresholdGate(...)` export, and `UndercityUpperDoorContactTests.cs` now asserts the merged frame-16 query contains zero direct-pair candidates under both threshold modes.
@@ -145,14 +148,16 @@ Known remaining work in this owner: `0` items.
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
 - Next command: `@'
 from capstone import *
-va=0x632280
-size=0x400
+FUNCS = [(0x632700, 0x260), (0x632460, 0x260), (0x632280, 0x300)]
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
-    f.seek(va-0x400000)
-    code=f.read(size)
-md=Cs(CS_ARCH_X86, CS_MODE_32)
-for insn in md.disasm(code, va):
-    print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+    md=Cs(CS_ARCH_X86, CS_MODE_32)
+    for va, size in FUNCS:
+        f.seek(va-0x400000)
+        code=f.read(size)
+        print(f'===== 0x{va:08X} =====')
+        for insn in md.disasm(code, va):
+            print(f'0x{insn.address:08X}: {insn.mnemonic:8s} {insn.op_str}')
+        print()
 '@ | py -`
 - Files changed:
   - `Exports/Navigation/PhysicsTestExports.cpp`

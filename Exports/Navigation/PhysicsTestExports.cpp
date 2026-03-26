@@ -56,6 +56,19 @@ struct ExportSelectorSupportPlane
     float planeDistance;
 };
 
+struct ExportSelectorCandidateValidationTrace
+{
+    float inputBestRatio;
+    float candidateBestRatio;
+    float outputBestRatio;
+    uint32_t firstPassAllBelowLooseThreshold;
+    uint32_t rebuildExecuted;
+    uint32_t rebuildSucceeded;
+    uint32_t secondPassAllBelowStrictThreshold;
+    uint32_t improvedBestRatio;
+    uint32_t finalStripCount;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -878,6 +891,134 @@ extern "C"
         }
         std::memcpy(outSelectorIndices, selectorIndices.data(), selectorIndices.size());
         return true;
+    }
+
+    __declspec(dllexport) float EvaluateWoWSelectorPlaneRatio(
+        const G3D::Vector3* candidatePoint,
+        const ExportSelectorSupportPlane* plane,
+        const G3D::Vector3* testPoint)
+    {
+        if (!candidatePoint || !plane || !testPoint) {
+            return 0.0f;
+        }
+
+        WoWCollision::SelectorSupportPlane selectorPlane{};
+        selectorPlane.normal = plane->normal;
+        selectorPlane.planeDistance = plane->planeDistance;
+        return WoWCollision::EvaluateSelectorPlaneRatio(*candidatePoint, selectorPlane, *testPoint);
+    }
+
+    __declspec(dllexport) bool ClipWoWSelectorPointStripAgainstPlane(
+        const ExportSelectorSupportPlane* plane,
+        uint32_t clipPlaneIndex,
+        G3D::Vector3* ioPoints,
+        uint32_t* ioSourceIndices,
+        int maxCapacity,
+        int* ioCount)
+    {
+        if (!plane || !ioPoints || !ioSourceIndices || !ioCount || maxCapacity < 15) {
+            return false;
+        }
+
+        if (*ioCount < 0 || *ioCount > 15) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane selectorPlane{};
+        selectorPlane.normal = plane->normal;
+        selectorPlane.planeDistance = plane->planeDistance;
+
+        WoWCollision::SelectorPointStrip strip{};
+        strip.count = static_cast<uint32_t>(*ioCount);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            strip.points[i] = ioPoints[i];
+            strip.sourceIndices[i] = ioSourceIndices[i];
+        }
+
+        WoWCollision::ClipSelectorPointStripAgainstPlane(selectorPlane, clipPlaneIndex, strip);
+
+        *ioCount = static_cast<int>(strip.count);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            ioPoints[i] = strip.points[i];
+            ioSourceIndices[i] = strip.sourceIndices[i];
+        }
+
+        return true;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorCandidateValidation(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        int planeIndex,
+        const G3D::Vector3* testPoint,
+        G3D::Vector3* ioPoints,
+        uint32_t* ioSourceIndices,
+        int maxCapacity,
+        int* ioCount,
+        float* inOutBestRatio,
+        ExportSelectorCandidateValidationTrace* outTrace)
+    {
+        if (!planes || planeCount < 9 || planeIndex < 0 || planeIndex >= 9 ||
+            !testPoint || !ioPoints || !ioSourceIndices || maxCapacity < 15 ||
+            !ioCount || !inOutBestRatio) {
+            return false;
+        }
+
+        if (*ioCount < 0 || *ioCount > 15) {
+            return false;
+        }
+
+        std::array<WoWCollision::SelectorSupportPlane, 9> selectorPlanes{};
+        for (int i = 0; i < 9; ++i) {
+            selectorPlanes[static_cast<size_t>(i)].normal = planes[i].normal;
+            selectorPlanes[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        WoWCollision::SelectorPointStrip strip{};
+        strip.count = static_cast<uint32_t>(*ioCount);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            strip.points[i] = ioPoints[i];
+            strip.sourceIndices[i] = ioSourceIndices[i];
+        }
+
+        WoWCollision::SelectorCandidateValidationTrace trace{};
+        const bool result = WoWCollision::ValidateSelectorPointStripCandidate(
+            strip,
+            *testPoint,
+            selectorPlanes,
+            static_cast<uint32_t>(planeIndex),
+            *inOutBestRatio,
+            &trace);
+
+        if (trace.rebuildExecuted != 0u && trace.rebuildSucceeded != 0u) {
+            WoWCollision::SelectorPointStrip rebuiltStrip = strip;
+            if (WoWCollision::ClipSelectorPointStripExcludingPlane(
+                selectorPlanes,
+                static_cast<uint32_t>(planeIndex),
+                rebuiltStrip)) {
+                strip = rebuiltStrip;
+            }
+        }
+
+        *ioCount = static_cast<int>(strip.count);
+        for (uint32_t i = 0; i < strip.count; ++i) {
+            ioPoints[i] = strip.points[i];
+            ioSourceIndices[i] = strip.sourceIndices[i];
+        }
+
+        if (outTrace) {
+            outTrace->inputBestRatio = trace.inputBestRatio;
+            outTrace->candidateBestRatio = trace.candidateBestRatio;
+            outTrace->outputBestRatio = trace.outputBestRatio;
+            outTrace->firstPassAllBelowLooseThreshold = trace.firstPassAllBelowLooseThreshold;
+            outTrace->rebuildExecuted = trace.rebuildExecuted;
+            outTrace->rebuildSucceeded = trace.rebuildSucceeded;
+            outTrace->secondPassAllBelowStrictThreshold = trace.secondPassAllBelowStrictThreshold;
+            outTrace->improvedBestRatio = trace.improvedBestRatio;
+            outTrace->finalStripCount = trace.finalStripCount;
+        }
+
+        return result;
     }
 
     __declspec(dllexport) int QueryTerrainAABBContacts(

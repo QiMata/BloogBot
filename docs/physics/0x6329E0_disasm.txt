@@ -1,0 +1,40 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x6329E0
+Date: 2026-03-26
+Notes:
+- Tiny plane-ratio helper used by `0x632830`.
+- Returns `(dot(candidatePoint, planeNormal) + planeD) / dot(testPoint, planeNormal)` only when `abs(dot(testPoint, planeNormal)) > 0x8029D4`.
+- Otherwise returns `0`.
+
+0x006329E0: push     ebp
+0x006329E1: mov      ebp, esp
+0x006329E3: fld      dword ptr [ecx + 8]
+0x006329E6: mov      eax, dword ptr [ebp + 8]
+0x006329E9: fmul     dword ptr [edx + 8]
+0x006329EC: fld      dword ptr [ecx + 4]
+0x006329EF: fmul     dword ptr [edx + 4]
+0x006329F2: faddp    st(1)
+0x006329F4: fld      dword ptr [ecx]
+0x006329F6: fmul     dword ptr [edx]
+0x006329F8: faddp    st(1)
+0x006329FA: fadd     dword ptr [edx + 0xc]
+0x006329FD: fld      dword ptr [eax + 8]
+0x00632A00: fmul     dword ptr [edx + 8]
+0x00632A03: fld      dword ptr [eax + 4]
+0x00632A06: fmul     dword ptr [edx + 4]
+0x00632A09: faddp    st(1)
+0x00632A0B: fld      dword ptr [edx]
+0x00632A0D: fmul     dword ptr [eax]
+0x00632A0F: faddp    st(1)
+0x00632A11: fld      st(0)
+0x00632A13: fabs
+0x00632A15: fcomp    dword ptr [0x8029d4]
+0x00632A1B: fnstsw   ax
+0x00632A1D: test     ah, 5
+0x00632A20: jp       0x632a28
+0x00632A22: fstp     st(0)
+0x00632A24: pop      ebp
+0x00632A25: ret      4
+0x00632A28: fdivp    st(1)
+0x00632A2A: pop      ebp
+0x00632A2B: ret      4

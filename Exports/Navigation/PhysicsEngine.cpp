@@ -52,6 +52,7 @@
 #include <iomanip>
 #include <cfloat>
 #include <chrono>
+#include <limits>
 #include <set>
 #include <sstream>
 
@@ -125,6 +126,10 @@ namespace
     constexpr float WOW_PLANE_BUILD_EPSILON = 9.54e-7f;                      // 0x8026BC
     constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_X = 0.8796418905258179f;   // 0x80DFE4
     constexpr float WOW_SELECTOR_SUPPORT_DIAGONAL_Z = 0.4756366014480591f;   // 0x80DFE0
+    constexpr float WOW_SELECTOR_CLIP_NEGATIVE_EPSILON = -0.0013888889225199819f; // 0x80DFF0
+    constexpr float WOW_SELECTOR_RATIO_EPSILON = 2.384185791015625e-7f;      // 0x8029D4
+    constexpr float WOW_SELECTOR_LOOSE_RATIO_THRESHOLD = -9.5367431640625e-07f; // 0x80DFF4
+    constexpr float WOW_SELECTOR_STRICT_RATIO_THRESHOLD = -0.02777777798473835f; // 0x7FF9C8
 
     inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
     {
@@ -318,6 +323,218 @@ void WoWCollision::BuildSelectorNeighborhood(const G3D::Vector3& position,
         3u, 4u, 0u, 2u,
         3u, 0u, 4u, 1u
     };
+}
+
+float WoWCollision::EvaluateSelectorPlaneRatio(const G3D::Vector3& candidatePoint,
+                                               const SelectorSupportPlane& plane,
+                                               const G3D::Vector3& testPoint)
+{
+    const float numerator = EvaluatePlane(plane.normal, plane.planeDistance, candidatePoint);
+    const float denominator = plane.normal.dot(testPoint);
+    if (std::fabs(denominator) <= WOW_SELECTOR_RATIO_EPSILON) {
+        return 0.0f;
+    }
+
+    return numerator / denominator;
+}
+
+void WoWCollision::ClipSelectorPointStripAgainstPlane(const SelectorSupportPlane& plane,
+                                                      uint32_t clipPlaneIndex,
+                                                      SelectorPointStrip& ioStrip)
+{
+    if (ioStrip.count == 0 || ioStrip.count > ioStrip.points.size()) {
+        return;
+    }
+
+    std::array<float, 15> signedDistances{};
+    float minSignedDistance = std::numeric_limits<float>::max();
+    float maxSignedDistance = -std::numeric_limits<float>::max();
+
+    for (uint32_t i = 0; i < ioStrip.count; ++i) {
+        const float signedDistance = -EvaluatePlane(plane.normal, plane.planeDistance, ioStrip.points[i]);
+        signedDistances[i] = signedDistance;
+        minSignedDistance = std::min(minSignedDistance, signedDistance);
+        maxSignedDistance = std::max(maxSignedDistance, signedDistance);
+    }
+
+    if (minSignedDistance > WOW_SELECTOR_CLIP_NEGATIVE_EPSILON) {
+        return;
+    }
+
+    if (maxSignedDistance < WOW_CORNER_PLANE_EPSILON) {
+        ioStrip.count = 0;
+        return;
+    }
+
+    const SelectorPointStrip originalStrip = ioStrip;
+    const uint32_t originalCount = originalStrip.count;
+    ioStrip.count = 0;
+
+    auto appendPoint = [&](const G3D::Vector3& point, uint32_t sourceIndex) {
+        if (ioStrip.count >= ioStrip.points.size()) {
+            return;
+        }
+
+        ioStrip.points[ioStrip.count] = point;
+        ioStrip.sourceIndices[ioStrip.count] = sourceIndex;
+        ++ioStrip.count;
+    };
+
+    auto appendIntersection = [&](uint32_t previousIndex, uint32_t currentIndex) {
+        const float previousSignedDistance = signedDistances[previousIndex];
+        const float currentSignedDistance = signedDistances[currentIndex];
+        const G3D::Vector3 delta = originalStrip.points[currentIndex] - originalStrip.points[previousIndex];
+        const float interpolation = previousSignedDistance / (currentSignedDistance - previousSignedDistance);
+        const G3D::Vector3 intersection = originalStrip.points[previousIndex] - (delta * interpolation);
+        appendPoint(intersection, clipPlaneIndex);
+    };
+
+    uint32_t previousIndex = originalCount - 1;
+    for (uint32_t currentIndex = 0; currentIndex < originalCount; ++currentIndex) {
+        const float previousSignedDistance = signedDistances[previousIndex];
+        const float currentSignedDistance = signedDistances[currentIndex];
+        const bool previousInside = previousSignedDistance >= 0.0f;
+        const bool currentInside = currentSignedDistance >= 0.0f;
+
+        if (!previousInside) {
+            if (!currentInside) {
+                previousIndex = currentIndex;
+                continue;
+            }
+
+            if (currentSignedDistance > WOW_CORNER_PLANE_EPSILON) {
+                appendIntersection(previousIndex, currentIndex);
+            }
+
+            appendPoint(originalStrip.points[currentIndex], originalStrip.sourceIndices[currentIndex]);
+            previousIndex = currentIndex;
+            continue;
+        }
+
+        if (currentInside) {
+            appendPoint(originalStrip.points[currentIndex], originalStrip.sourceIndices[currentIndex]);
+            previousIndex = currentIndex;
+            continue;
+        }
+
+        if (previousSignedDistance > WOW_CORNER_PLANE_EPSILON) {
+            appendIntersection(previousIndex, currentIndex);
+        }
+
+        previousIndex = currentIndex;
+    }
+
+    if (ioStrip.count < 3) {
+        ioStrip.count = 0;
+    }
+}
+
+bool WoWCollision::ClipSelectorPointStripExcludingPlane(const std::array<SelectorSupportPlane, 9>& planes,
+                                                        uint32_t excludedPlaneIndex,
+                                                        SelectorPointStrip& ioStrip)
+{
+    for (uint32_t planeIndex = 0; planeIndex < planes.size(); ++planeIndex) {
+        if (planeIndex == excludedPlaneIndex) {
+            continue;
+        }
+
+        ClipSelectorPointStripAgainstPlane(planes[planeIndex], planeIndex, ioStrip);
+        if (ioStrip.count == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool WoWCollision::ValidateSelectorPointStripCandidate(const SelectorPointStrip& strip,
+                                                       const G3D::Vector3& testPoint,
+                                                       const std::array<SelectorSupportPlane, 9>& planes,
+                                                       uint32_t planeIndex,
+                                                       float& inOutBestRatio,
+                                                       SelectorCandidateValidationTrace* outTrace)
+{
+    SelectorCandidateValidationTrace trace{};
+    trace.inputBestRatio = inOutBestRatio;
+    trace.outputBestRatio = inOutBestRatio;
+
+    if (planeIndex >= planes.size() || strip.count > strip.points.size()) {
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return false;
+    }
+
+    const SelectorSupportPlane& selectedPlane = planes[planeIndex];
+    float candidateBestRatio = inOutBestRatio;
+    bool firstPassAllBelowLooseThreshold = true;
+
+    for (uint32_t i = 0; i < strip.count; ++i) {
+        const float ratio = EvaluateSelectorPlaneRatio(strip.points[i], selectedPlane, testPoint);
+        if (ratio < candidateBestRatio) {
+            candidateBestRatio = (ratio > 0.0f) ? ratio : 0.0f;
+        }
+
+        if (ratio > WOW_SELECTOR_LOOSE_RATIO_THRESHOLD) {
+            firstPassAllBelowLooseThreshold = false;
+        }
+    }
+
+    SelectorPointStrip rebuiltStrip = strip;
+    bool rebuildSucceeded = false;
+    bool secondPassAllBelowStrictThreshold = false;
+
+    if (firstPassAllBelowLooseThreshold) {
+        trace.rebuildExecuted = 1;
+        rebuildSucceeded = ClipSelectorPointStripExcludingPlane(planes, planeIndex, rebuiltStrip);
+        trace.rebuildSucceeded = rebuildSucceeded ? 1u : 0u;
+        trace.finalStripCount = rebuiltStrip.count;
+        if (!rebuildSucceeded) {
+            trace.candidateBestRatio = candidateBestRatio;
+            if (outTrace) {
+                *outTrace = trace;
+            }
+            return false;
+        }
+
+        secondPassAllBelowStrictThreshold = true;
+        for (uint32_t i = 0; i < rebuiltStrip.count; ++i) {
+            const float ratio = EvaluateSelectorPlaneRatio(rebuiltStrip.points[i], selectedPlane, testPoint);
+            if (ratio > WOW_SELECTOR_STRICT_RATIO_THRESHOLD) {
+                secondPassAllBelowStrictThreshold = false;
+            }
+        }
+
+        if (secondPassAllBelowStrictThreshold) {
+            trace.candidateBestRatio = candidateBestRatio;
+            trace.firstPassAllBelowLooseThreshold = 1;
+            trace.secondPassAllBelowStrictThreshold = 1;
+            if (outTrace) {
+                *outTrace = trace;
+            }
+            return false;
+        }
+    }
+    else {
+        trace.finalStripCount = strip.count;
+    }
+
+    const bool improvedBestRatio = candidateBestRatio < inOutBestRatio;
+    if (improvedBestRatio) {
+        inOutBestRatio = candidateBestRatio;
+    }
+
+    trace.candidateBestRatio = candidateBestRatio;
+    trace.outputBestRatio = inOutBestRatio;
+    trace.firstPassAllBelowLooseThreshold = firstPassAllBelowLooseThreshold ? 1u : 0u;
+    trace.secondPassAllBelowStrictThreshold = secondPassAllBelowStrictThreshold ? 1u : 0u;
+    trace.improvedBestRatio = improvedBestRatio ? 1u : 0u;
+
+    if (outTrace) {
+        *outTrace = trace;
+    }
+
+    return improvedBestRatio;
 }
 
 namespace

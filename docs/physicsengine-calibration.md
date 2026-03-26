@@ -1253,3 +1253,41 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not substitute an inferred corner order or inferred selector-byte pattern for this stage. The binary now gives the exact 9-point layout and exact 32-byte table.
 - Recommended next single hypothesis:
   - Mirror the first candidate-validation helper (`0x6329E0` / `0x632830`) on top of the now-pinned support planes and selector neighborhood so deterministic tests can explain why a candidate survives or fails before `0x632700` returns.
+
+## 2026-03-26 Selector candidate-validation addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next selector-chain body itself: the ratio helper (`0x6329E0`) plus the in-place strip validation / rebuild path (`0x632830` / `0x632980` / `0x6318C0`).
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x6329E0_disasm.txt`, `docs/physics/0x632830_disasm.txt`, and `docs/physics/0x6318C0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the exact strip-buffer shape, ratio thresholds, and clip/rebuild rules
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `EvaluateSelectorPlaneRatio(...)`
+    - added pure `ClipSelectorPointStripAgainstPlane(...)`
+    - added pure `ClipSelectorPointStripExcludingPlane(...)`
+    - added pure `ValidateSelectorPointStripCandidate(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWSelectorPlaneRatio(...)`
+    - added `ClipWoWSelectorPointStripAgainstPlane(...)`
+    - added `EvaluateWoWSelectorCandidateValidation(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector validator seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidateValidationTests.cs`
+    - added deterministic coverage for ratio math, strip clipping, first-pass best-ratio updates, and strict second-pass rejection
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector-builder path is now pinned through the first candidate-validation gate as pure, deterministic code. The remaining unknown is no longer the strip math itself; it is how `0x632280` / `0x632700` feed concrete runtime candidate records into that validator and how the chosen record reaches `0x633720` / `0x635090`.
+- Do Not Repeat:
+  - Do not re-spend a pass guessing at the `0x632830` thresholds or rebuilding the strip from inferred generic clipping rules. The binary-backed ratio/clip/validation chain is now pinned in the production DLL with deterministic tests.
+- Recommended next single hypothesis:
+  - Trace the caller-side candidate record layout in `0x632700` / `0x632280` so deterministic tests can map one real selected record all the way into the now-pinned `0x632830` validator.

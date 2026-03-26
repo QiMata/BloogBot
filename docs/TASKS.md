@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 203)
+- **Last updated:** 2026-03-26 (session 204)
 - **Branch:** `main`
+- **Session 204 — selector candidate validation is now pinned as a pure binary seam:**
+  - Added pure [EvaluateSelectorPlaneRatio(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClipSelectorPointStripAgainstPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClipSelectorPointStripExcludingPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [ValidateSelectorPointStripCandidate(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorCandidateValidationTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidateValidationTests.cs), which now pins the `0x6329E0` ratio formula, the `0x6318C0` strip clipping output/plane-index tagging, the `0x632830` first-pass best-ratio update path, and the strict second-pass rejection path.
+  - Practical implication: the pure selector chain is now pinned through the validator body itself. The remaining native gap is the caller-side candidate-record producer path (`0x632700` / `0x632280`) and its handoff into `0x633720` / `0x635090`, not the ratio/clip/rebuild math inside `0x632830`.
+- **Fresh binary evidence (session 204):**
+  - Added raw captures [0x6329E0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6329E0_disasm.txt), [0x632830_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632830_disasm.txt), and [0x6318C0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6318C0_disasm.txt), then updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the exact strip-buffer shape and threshold logic.
+- **Test baseline (session 204):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 203 — selector neighborhood/table is now pinned as a pure binary seam:**
   - Added pure [BuildSelectorNeighborhood(...) in PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) plus the production-DLL export [BuildWoWSelectorNeighborhood(...) in PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added new deterministic coverage in [WowSelectorNeighborhoodTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorNeighborhoodTests.cs), which pins the exact 9-point layout and 32-byte selector table emitted by binary helper `0x631BE0`.

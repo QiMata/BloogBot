@@ -1,0 +1,130 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x632830
+Date: 2026-03-26
+Notes:
+- Validates one selected support plane against a `15-point + 15-id + count` strip.
+- First pass walks the current strip with `0x6329E0`, clamps the running best ratio to `0` when the smaller ratio is non-positive, and clears the pass flag if any ratio exceeds `0x80DFF4`.
+- Only if that first pass fully survives does it rebuild the strip through `0x632980`, excluding the selected plane index, and then recheck the rebuilt strip against `0x7FF9C8`.
+- If the rebuilt pass also fully survives, the helper rejects the candidate without updating the caller's best ratio.
+
+0x00632830: push     ebp
+0x00632831: mov      ebp, esp
+0x00632833: sub      esp, 0x10
+0x00632836: mov      eax, dword ptr [ebp + 0x10]
+0x00632839: push     ebx
+0x0063283A: push     esi
+0x0063283B: mov      esi, ecx
+0x0063283D: mov      ecx, dword ptr [eax]
+0x0063283F: mov      eax, dword ptr [esi + 0xf0]
+0x00632845: push     edi
+0x00632846: xor      edi, edi
+0x00632848: test     eax, eax
+0x0063284A: mov      dword ptr [ebp - 0x10], edx
+0x0063284D: mov      dword ptr [ebp - 4], ecx
+0x00632850: mov      dword ptr [ebp - 8], 1
+0x00632857: jbe      0x6328ca
+0x00632859: mov      edx, dword ptr [ebp + 0xc]
+0x0063285C: mov      eax, dword ptr [ebp + 8]
+0x0063285F: shl      edx, 4
+0x00632862: add      edx, eax
+0x00632864: mov      dword ptr [ebp - 0xc], edx
+0x00632867: mov      ebx, esi
+0x00632870: mov      ecx, dword ptr [ebp - 0x10]
+0x00632873: mov      edx, dword ptr [ebp - 0xc]
+0x00632876: push     ecx
+0x00632877: mov      ecx, ebx
+0x00632879: call     0x6329e0
+0x0063287E: fcom     dword ptr [ebp - 4]
+0x00632881: fnstsw   ax
+0x00632883: test     ah, 5
+0x00632886: jp       0x6328a1
+0x00632888: fcom     dword ptr [0x7ffd74]
+0x0063288E: fnstsw   ax
+0x00632890: test     ah, 0x41
+0x00632893: jne      0x63289a
+0x00632895: fst      dword ptr [ebp - 4]
+0x00632898: jmp      0x6328a1
+0x0063289A: mov      dword ptr [ebp - 4], 0
+0x006328A1: fcomp    dword ptr [0x80dff4]
+0x006328A7: fnstsw   ax
+0x006328A9: test     ah, 0x41
+0x006328AC: jne      0x6328b5
+0x006328AE: mov      dword ptr [ebp - 8], 0
+0x006328B5: mov      eax, dword ptr [esi + 0xf0]
+0x006328BB: inc      edi
+0x006328BC: add      ebx, 0xc
+0x006328BF: cmp      edi, eax
+0x006328C1: jb       0x632870
+0x006328C3: mov      eax, dword ptr [ebp - 8]
+0x006328C6: test     eax, eax
+0x006328C8: je       0x632944
+0x006328CA: mov      edi, dword ptr [ebp + 0xc]
+0x006328CD: mov      ecx, dword ptr [ebp + 8]
+0x006328D0: push     esi
+0x006328D1: push     edi
+0x006328D2: mov      edx, 9
+0x006328D7: call     0x632980
+0x006328DC: test     eax, eax
+0x006328DE: jne      0x6328e9
+0x006328E0: pop      edi
+0x006328E1: pop      esi
+0x006328E2: pop      ebx
+0x006328E3: mov      esp, ebp
+0x006328E5: pop      ebp
+0x006328E6: ret      0xc
+0x006328E9: mov      eax, dword ptr [esi + 0xf0]
+0x006328EF: xor      ebx, ebx
+0x006328F1: test     eax, eax
+0x006328F3: jbe      0x632932
+0x006328F5: mov      edx, dword ptr [ebp + 8]
+0x006328F8: shl      edi, 4
+0x006328FB: add      edi, edx
+0x006328FD: mov      dword ptr [ebp - 0xc], edi
+0x00632900: mov      edi, esi
+0x00632902: mov      eax, dword ptr [ebp - 0x10]
+0x00632905: mov      edx, dword ptr [ebp - 0xc]
+0x00632908: push     eax
+0x00632909: mov      ecx, edi
+0x0063290B: call     0x6329e0
+0x00632910: fcomp    dword ptr [0x7ff9c8]
+0x00632916: fnstsw   ax
+0x00632918: test     ah, 0x41
+0x0063291B: jne      0x632924
+0x0063291D: mov      dword ptr [ebp - 8], 0
+0x00632924: mov      eax, dword ptr [esi + 0xf0]
+0x0063292A: inc      ebx
+0x0063292B: add      edi, 0xc
+0x0063292E: cmp      ebx, eax
+0x00632930: jb       0x632902
+0x00632932: mov      eax, dword ptr [ebp - 8]
+0x00632935: test     eax, eax
+0x00632937: je       0x632944
+0x00632939: pop      edi
+0x0063293A: pop      esi
+0x0063293B: xor      eax, eax
+0x0063293D: pop      ebx
+0x0063293E: mov      esp, ebp
+0x00632940: pop      ebp
+0x00632941: ret      0xc
+0x00632944: fld      dword ptr [ebp - 4]
+0x00632947: mov      ecx, dword ptr [ebp + 0x10]
+0x0063294A: fcomp    dword ptr [ecx]
+0x0063294C: fnstsw   ax
+0x0063294E: test     ah, 1
+0x00632951: jne      0x63295e
+0x00632953: pop      edi
+0x00632954: pop      esi
+0x00632955: xor      eax, eax
+0x00632957: pop      ebx
+0x00632958: mov      esp, ebp
+0x0063295A: pop      ebp
+0x0063295B: ret      0xc
+0x0063295E: mov      edx, dword ptr [ebp - 4]
+0x00632961: pop      edi
+0x00632962: pop      esi
+0x00632963: mov      dword ptr [ecx], edx
+0x00632965: mov      eax, 1
+0x0063296A: pop      ebx
+0x0063296B: mov      esp, ebp
+0x0063296D: pop      ebp
+0x0063296E: ret      0xc

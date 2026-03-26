@@ -139,6 +139,20 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorCandidateValidationTrace
+    {
+        public float InputBestRatio;
+        public float CandidateBestRatio;
+        public float OutputBestRatio;
+        public uint FirstPassAllBelowLooseThreshold;
+        public uint RebuildExecuted;
+        public uint RebuildSucceeded;
+        public uint SecondPassAllBelowStrictThreshold;
+        public uint ImprovedBestRatio;
+        public uint FinalStripCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -562,6 +576,36 @@ public static partial class NavigationInterop
         int maxPoints,
         [Out] byte[] outSelectorIndices,
         int maxSelectorIndices);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPlaneRatio", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float EvaluateWoWSelectorPlaneRatio(
+        in Vector3 candidatePoint,
+        in SelectorSupportPlane plane,
+        in Vector3 testPoint);
+
+    [DllImport(NavigationDll, EntryPoint = "ClipWoWSelectorPointStripAgainstPlane", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ClipWoWSelectorPointStripAgainstPlane(
+        in SelectorSupportPlane plane,
+        uint clipPlaneIndex,
+        [In, Out] Vector3[] ioPoints,
+        [In, Out] uint[] ioSourceIndices,
+        int maxCapacity,
+        ref int ioCount);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorCandidateValidation", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorCandidateValidation(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        int planeIndex,
+        in Vector3 testPoint,
+        [In, Out] Vector3[] ioPoints,
+        [In, Out] uint[] ioSourceIndices,
+        int maxCapacity,
+        ref int ioCount,
+        ref float inOutBestRatio,
+        out SelectorCandidateValidationTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
     public static extern int QueryTerrainAABBContacts(

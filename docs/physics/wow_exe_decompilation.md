@@ -616,11 +616,13 @@ CollisionStep (0x633840)
     - fresh raw capture now also lives in `docs/physics/0x631BE0_disasm.txt`
     - `0x631BE0` calls `0x631440`, then emits the exact 9-point selector neighborhood plus the 32-byte selector table consumed by `0x632460` / `0x632F80`
     - the production DLL now mirrors that builder through a pure `BuildSelectorNeighborhood(...)` helper and deterministic export/test seam
-    - `0x632830` walks the generated support planes with `0x6329E0`, tracks the largest non-negative ratio, and clears its success bit if any ratio exceeds the binary threshold at `0x80DFF4`
-    - if that first pass survives, `0x632830` calls `0x632980` to rebuild a 9-entry strip while excluding the current candidate index, then rechecks the rebuilt planes with `0x6329E0` against the stricter scalar at `0x7FF9C8`
-    - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs
-    - `0x6318C0` rebuilds the candidate plane strip and explicitly zeroes `+0xF0` unless at least three outputs survive
+    - fresh raw captures now also live in `docs/physics/0x632830_disasm.txt`, `docs/physics/0x6329E0_disasm.txt`, and `docs/physics/0x6318C0_disasm.txt`
     - `0x6329E0` itself is a tiny plane-ratio helper: it returns `(dot(candidatePoint, planeNormal) + planeD) / dot(testPoint, planeNormal)` only when the denominator magnitude exceeds the tiny constant at `0x8029D4`; otherwise it returns `0`
+    - `0x632830` walks the selected `0x10`-stride plane across the current `15-point + 15-id + count` strip, keeps the smallest positive ratio (clamping to `0` when the smaller ratio is non-positive), and clears its first-pass success bit if any ratio exceeds `0x80DFF4`
+    - only when that first pass fully survives does `0x632830` call `0x632980` to rebuild the strip while excluding the selected plane index; it then rechecks that rebuilt strip with `0x6329E0` against the stricter scalar at `0x7FF9C8`
+    - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs
+    - `0x6318C0` is the in-place strip clipper behind that rebuild: it computes `-(dot(point, planeNormal) + planeD)` for every point, leaves the strip unchanged when the minimum signed distance stays above `-1/720`, zeroes the strip when the maximum signed distance stays below `+1/720`, otherwise clips the polygon and tags new intersection points with the current plane index
+    - the production DLL now mirrors that ratio/clip/validation chain through pure `EvaluateSelectorPlaneRatio(...)`, `ClipSelectorPointStripAgainstPlane(...)`, `ClipSelectorPointStripExcludingPlane(...)`, and `ValidateSelectorPointStripCandidate(...)` helpers plus deterministic export/test seams
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
   - removing those thresholds alone did not fix the packet-backed Undercity frame-15 transport stall, which reinforces that the real blocker is the missing selected-contact state/path rather than the score guards by themselves
 - Practical implication for parity work:
