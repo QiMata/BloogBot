@@ -1291,3 +1291,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not re-spend a pass guessing at the `0x632830` thresholds or rebuilding the strip from inferred generic clipping rules. The binary-backed ratio/clip/validation chain is now pinned in the production DLL with deterministic tests.
 - Recommended next single hypothesis:
   - Trace the caller-side candidate record layout in `0x632700` / `0x632280` so deterministic tests can map one real selected record all the way into the now-pinned `0x632830` validator.
+
+## 2026-03-26 Selector candidate-plane record addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to pin the next pure caller-side helper feeding the already-mirrored strip validator: the four-plane candidate record builder at `0x632460`.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` with the now-confirmed `0x632460` record layout and the `0x637480` normalized plane builder it uses
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildSelectorCandidatePlaneRecord(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWSelectorCandidatePlaneRecord(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector record seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidatePlaneRecordTests.cs`
+    - added deterministic coverage for the three oriented side planes, the translated source-plane anchor, and the degenerate-edge early-fail path
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"`
+    - passed (`11/11`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - passed (`16/16`)
+- Frame-pattern note:
+  - The selector caller chain is now pinned one step deeper: exact support planes, exact neighborhood/table, exact strip validator, and now the exact four-plane candidate record that feeds the first clip/validation pass. The next unknown is no longer the record geometry itself; it is how `0x632700` evaluates one record and how `0x632280` ranks the returned scalar/index set.
+- Do Not Repeat:
+  - Do not infer the `0x632460` record layout from generic extrusion logic or from reordered selector corners. The binary now fixes the cyclic selector order, the opposite-point flip test, and the translated source-plane anchor.
+- Recommended next single hypothesis:
+  - Mirror the `0x632700` single-record evaluator on top of the now-pinned `0x632460` output so deterministic tests can explain one candidate's filter, strip clipping, and selected-ratio result before `0x632280` performs tie ranking.

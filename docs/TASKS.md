@@ -283,8 +283,23 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 204)
+- **Last updated:** 2026-03-26 (session 205)
 - **Branch:** `main`
+- **Session 205 — selector candidate-plane records are now pinned as a pure binary seam:**
+  - Added pure [BuildSelectorCandidatePlaneRecord(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorCandidatePlaneRecordTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidatePlaneRecordTests.cs), which now pins the three oriented side planes emitted from the selector triangle, the translated source-plane anchor in slot 3, and the early-fail path when one side plane degenerates below the binary epsilon.
+  - Practical implication: the selector chain is now pinned through the exact `0x632460` record builder. The remaining native gap is the caller-side evaluator/ranking path (`0x632700` / `0x632280`) and its handoff into `0x633720` / `0x635090`, not the per-record plane geometry itself.
+- **Fresh binary evidence (session 205):**
+  - Added raw captures [0x632460_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x632460_disasm.txt) and [0x637480_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x637480_disasm.txt), then updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) with the exact side-plane build, opposite-point flip, and translated source-plane anchor behavior.
+- **Test baseline (session 205):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"`
+    - Passed (`11/11`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"`
+    - Passed (`16/16`)
 - **Session 204 — selector candidate validation is now pinned as a pure binary seam:**
   - Added pure [EvaluateSelectorPlaneRatio(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClipSelectorPointStripAgainstPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClipSelectorPointStripExcludingPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [ValidateSelectorPointStripCandidate(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorCandidateValidationTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorCandidateValidationTests.cs), which now pins the `0x6329E0` ratio formula, the `0x6318C0` strip clipping output/plane-index tagging, the `0x632830` first-pass best-ratio update path, and the strict second-pass rejection path.

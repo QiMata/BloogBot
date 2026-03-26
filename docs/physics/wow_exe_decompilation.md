@@ -623,6 +623,11 @@ CollisionStep (0x633840)
     - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs
     - `0x6318C0` is the in-place strip clipper behind that rebuild: it computes `-(dot(point, planeNormal) + planeD)` for every point, leaves the strip unchanged when the minimum signed distance stays above `-1/720`, zeroes the strip when the maximum signed distance stays below `+1/720`, otherwise clips the polygon and tags new intersection points with the current plane index
     - the production DLL now mirrors that ratio/clip/validation chain through pure `EvaluateSelectorPlaneRatio(...)`, `ClipSelectorPointStripAgainstPlane(...)`, `ClipSelectorPointStripExcludingPlane(...)`, and `ValidateSelectorPointStripCandidate(...)` helpers plus deterministic export/test seams
+    - fresh raw captures now also live in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`
+    - `0x637480` is the normalized plane-from-three-points helper used by `0x632460`: it builds `normal = normalize((point3 - point1) x (point2 - point1))`, then stores `planeD = -dot(normal, point1)`
+    - `0x632460` consumes one 3-byte selector entry plus the translated 9-point neighborhood, builds three side planes through `0x637480`, flips each plane with `0x637330` when the opposite selector point lands on the positive side, then writes the source plane back at plane slot `3` with a re-anchored `planeD` through the translated first selector point
+    - `0x632460` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
+    - the production DLL now mirrors that four-plane record builder through pure `BuildSelectorCandidatePlaneRecord(...)` plus deterministic export/test seams
   - the local client does not carry our custom grounded blocker thresholds like `opposeScore <= 0.15f` or dominant-axis `> 0.25f`
   - removing those thresholds alone did not fix the packet-backed Undercity frame-15 transport stall, which reinforces that the real blocker is the missing selected-contact state/path rather than the score guards by themselves
 - Practical implication for parity work:

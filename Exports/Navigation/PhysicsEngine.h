@@ -675,6 +675,12 @@ namespace WoWCollision
                                              float& inOutBestRatio,
                                              SelectorCandidateValidationTrace* outTrace = nullptr);
 
+    bool BuildSelectorCandidatePlaneRecord(const std::array<G3D::Vector3, 9>& points,
+                                           const std::array<uint8_t, 3>& selectorIndices,
+                                           const G3D::Vector3& translation,
+                                           const SelectorSupportPlane& sourcePlane,
+                                           std::array<SelectorSupportPlane, 4>& outPlanes);
+
     bool ResolveGroundedWallContacts(const std::vector<SceneQuery::AABBContact>& slideContacts,
                                      const G3D::Vector3& currentPosition,
                                      const G3D::Vector3& requestedMove,

@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 204)`
+- Last updated: `2026-03-26 (session 205)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 205 added `WowSelectorCandidatePlaneRecordTests.cs` plus the new low-level interop needed to pin the `0x632460` caller-side plane-record builder through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWSelectorCandidatePlaneRecord(...)`.
+  - The new deterministic coverage now pins three exact binary-backed behaviors: the oriented side planes produced from the selector triangle, the source-plane re-anchor through the translated first selector point, and the early-fail path when one side-plane normal degenerates below `0x8026BC`.
+  - Practical implication: this owner no longer has to infer the per-record plane geometry feeding the selector validator. The next missing deterministic seam is the `0x632700` single-record evaluator that filters one record, clips its strip, and returns the scalar/index result consumed by `0x632280`.
   - Session 204 added `WowSelectorCandidateValidationTests.cs` plus the new low-level interop needed to pin the selector-validator body itself through the production DLL. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorPlaneRatio(...)`, `ClipWoWSelectorPointStripAgainstPlane(...)`, and `EvaluateWoWSelectorCandidateValidation(...)`.
   - The new deterministic coverage now pins four exact binary-backed behaviors: the `0x6329E0` ratio formula, the `0x6318C0` strip clipper's intersection/source-index output, the `0x632830` first-pass best-ratio update path, and the strict second-pass rejection path after rebuild.
   - Practical implication: this owner no longer has to infer the selector-validator math from frame traces. The next missing deterministic seam is one level earlier, where `0x632700` / `0x632280` construct and choose the candidate record that is fed into this now-pinned validator.
@@ -146,9 +149,13 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds" --logger "console;verbosity=minimal"` -> `1 passed`
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
 - Next command: `@'
 from capstone import *
-FUNCS = [(0x632700, 0x260), (0x632460, 0x260), (0x632280, 0x300)]
+FUNCS = [(0x632700, 0x260), (0x632280, 0x300), (0x632F80, 0x240)]
 with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
     md=Cs(CS_ARCH_X86, CS_MODE_32)
     for va, size in FUNCS:
@@ -160,8 +167,18 @@ with open(r'D:/World of Warcraft/WoW.exe','rb') as f:
         print()
 '@ | py -`
 - Files changed:
+  - `Exports/Navigation/PhysicsEngine.h`
+  - `Exports/Navigation/PhysicsEngine.cpp`
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/WowSelectorCandidatePlaneRecordTests.cs`
+  - `docs/physics/0x632460_disasm.txt`
+  - `docs/physics/0x637480_disasm.txt`
+  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/physicsengine-calibration.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
   - `docs/physics/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`

@@ -537,6 +537,58 @@ bool WoWCollision::ValidateSelectorPointStripCandidate(const SelectorPointStrip&
     return improvedBestRatio;
 }
 
+bool WoWCollision::BuildSelectorCandidatePlaneRecord(const std::array<G3D::Vector3, 9>& points,
+                                                     const std::array<uint8_t, 3>& selectorIndices,
+                                                     const G3D::Vector3& translation,
+                                                     const SelectorSupportPlane& sourcePlane,
+                                                     std::array<SelectorSupportPlane, 4>& outPlanes)
+{
+    auto buildPlaneFromPoints = [](const G3D::Vector3& pointA,
+                                   const G3D::Vector3& pointB,
+                                   const G3D::Vector3& pointC,
+                                   SelectorSupportPlane& outPlane) -> bool
+    {
+        G3D::Vector3 normal = (pointC - pointA).cross(pointB - pointA);
+        const float normalMagnitudeSq = normal.squaredMagnitude();
+        if (normalMagnitudeSq <= WOW_PLANE_BUILD_EPSILON) {
+            return false;
+        }
+
+        normal = normal * (1.0f / std::sqrt(normalMagnitudeSq));
+        outPlane.normal = normal;
+        outPlane.planeDistance = -normal.dot(pointA);
+        return true;
+    };
+
+    constexpr std::array<uint32_t, 3> secondPointOffsets = { 1u, 2u, 0u };
+    constexpr std::array<uint32_t, 3> oppositePointOffsets = { 2u, 0u, 1u };
+
+    for (uint32_t planeIndex = 0; planeIndex < 3; ++planeIndex) {
+        const uint32_t currentSelector = selectorIndices[planeIndex];
+        const uint32_t secondSelector = selectorIndices[secondPointOffsets[planeIndex]];
+        const uint32_t oppositeSelector = selectorIndices[oppositePointOffsets[planeIndex]];
+
+        const G3D::Vector3& pointA = points[currentSelector];
+        const G3D::Vector3& pointB = points[secondSelector];
+        const G3D::Vector3& pointC = points[oppositeSelector];
+        const G3D::Vector3 translatedPoint = pointA + translation;
+
+        if (!buildPlaneFromPoints(pointA, pointB, translatedPoint, outPlanes[planeIndex])) {
+            return false;
+        }
+
+        const float oppositeDot = outPlanes[planeIndex].normal.dot(pointC - pointA);
+        if (oppositeDot > 0.0f) {
+            outPlanes[planeIndex].normal = -outPlanes[planeIndex].normal;
+            outPlanes[planeIndex].planeDistance = -outPlanes[planeIndex].planeDistance;
+        }
+    }
+
+    outPlanes[3].normal = sourcePlane.normal;
+    outPlanes[3].planeDistance = -sourcePlane.normal.dot(points[selectorIndices[0]] + translation);
+    return true;
+}
+
 namespace
 {
     struct GroundedWallCandidate

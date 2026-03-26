@@ -1,0 +1,89 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x637480
+Date: 2026-03-26
+Notes:
+- Normalized plane-from-three-points helper used by `0x632460`.
+- Builds `normal = normalize((point3 - point1) x (point2 - point1))`, then stores `planeD = -dot(normal, point1)`.
+
+0x00637480: push     ebp
+0x00637481: mov      ebp, esp
+0x00637483: sub      esp, 0x18
+0x00637486: mov      eax, dword ptr [ebp + 8]
+0x00637489: mov      edx, dword ptr [ebp + 0x10]
+0x0063748C: fld      dword ptr [edx]
+0x0063748E: push     esi
+0x0063748F: fsub     dword ptr [eax]
+0x00637491: fld      dword ptr [edx + 4]
+0x00637494: fsub     dword ptr [eax + 4]
+0x00637497: fld      dword ptr [edx + 8]
+0x0063749A: mov      edx, dword ptr [ebp + 0xc]
+0x0063749D: fsub     dword ptr [eax + 8]
+0x006374A0: fld      dword ptr [edx]
+0x006374A2: fsub     dword ptr [eax]
+0x006374A4: fstp     dword ptr [ebp - 0xc]
+0x006374A7: fld      dword ptr [edx + 4]
+0x006374AA: fsub     dword ptr [eax + 4]
+0x006374AD: fstp     dword ptr [ebp - 8]
+0x006374B0: fld      dword ptr [edx + 8]
+0x006374B3: mov      edx, ecx
+0x006374B5: fsub     dword ptr [eax + 8]
+0x006374B8: fld      dword ptr [ebp - 8]
+0x006374BB: fmul     st(2)
+0x006374BD: fld      st(1)
+0x006374BF: fmul     st(4)
+0x006374C1: fsubp    st(1)
+0x006374C3: fstp     dword ptr [ebp - 0x18]
+0x006374C6: mov      esi, dword ptr [ebp - 0x18]
+0x006374C9: fmul     st(3)
+0x006374CB: mov      dword ptr [edx], esi
+0x006374CD: fxch     st(1)
+0x006374CF: fmul     dword ptr [ebp - 0xc]
+0x006374D2: fsubp    st(1)
+0x006374D4: fstp     dword ptr [ebp - 0x14]
+0x006374D7: mov      esi, dword ptr [ebp - 0x14]
+0x006374DA: fmul     dword ptr [ebp - 0xc]
+0x006374DD: mov      dword ptr [edx + 4], esi
+0x006374E0: fld      dword ptr [ebp - 8]
+0x006374E3: fmul     st(2)
+0x006374E5: fsubp    st(1)
+0x006374E7: fstp     dword ptr [ebp - 0x10]
+0x006374EA: mov      esi, dword ptr [ebp - 0x10]
+0x006374ED: fstp     st(0)
+0x006374EF: mov      dword ptr [edx + 8], esi
+0x006374F2: fld      dword ptr [ecx + 8]
+0x006374F5: fld      dword ptr [ecx + 4]
+0x006374F8: fld      dword ptr [ecx]
+0x006374FA: fld      st(0)
+0x006374FC: fmul     st(1)
+0x006374FE: fld      st(2)
+0x00637500: fmul     st(3)
+0x00637502: faddp    st(1)
+0x00637504: fld      st(3)
+0x00637506: fmul     st(4)
+0x00637508: faddp    st(1)
+0x0063750A: fsqrt
+0x0063750C: fstp     st(3)
+0x0063750E: fstp     st(0)
+0x00637510: fstp     st(0)
+0x00637512: fdivr    dword ptr [0x7ff9d8]
+0x00637518: fld      st(0)
+0x0063751A: fmul     dword ptr [ecx]
+0x0063751C: fst      dword ptr [ecx]
+0x0063751E: fld      st(1)
+0x00637520: fmul     dword ptr [ecx + 4]
+0x00637523: fst      dword ptr [ecx + 4]
+0x00637526: fxch     st(2)
+0x00637528: fmul     dword ptr [ecx + 8]
+0x0063752B: fst      dword ptr [ecx + 8]
+0x0063752E: fmul     dword ptr [eax + 8]
+0x00637531: fxch     st(2)
+0x00637533: fmul     dword ptr [eax + 4]
+0x00637536: faddp    st(2)
+0x00637538: pop      esi
+0x00637539: fmul     dword ptr [eax]
+0x0063753B: faddp    st(1)
+0x0063753D: fchs
+0x0063753F: fstp     dword ptr [ecx + 0xc]
+0x00637542: mov      esp, ebp
+0x00637544: pop      ebp
+0x00637545: ret      0xc

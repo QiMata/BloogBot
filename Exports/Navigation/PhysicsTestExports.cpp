@@ -1021,6 +1021,51 @@ extern "C"
         return result;
     }
 
+    __declspec(dllexport) bool BuildWoWSelectorCandidatePlaneRecord(
+        const G3D::Vector3* points,
+        int pointCount,
+        const uint8_t* selectorIndices,
+        int selectorIndexCount,
+        const G3D::Vector3* translation,
+        const ExportSelectorSupportPlane* sourcePlane,
+        ExportSelectorSupportPlane* outPlanes,
+        int maxPlanes)
+    {
+        if (!points || pointCount < 9 || !selectorIndices || selectorIndexCount < 3 ||
+            !translation || !sourcePlane || !outPlanes || maxPlanes < 4) {
+            return false;
+        }
+
+        std::array<G3D::Vector3, 9> inputPoints{};
+        for (size_t i = 0; i < inputPoints.size(); ++i) {
+            inputPoints[i] = points[i];
+        }
+
+        std::array<uint8_t, 3> inputSelectorIndices{};
+        std::memcpy(inputSelectorIndices.data(), selectorIndices, inputSelectorIndices.size());
+
+        WoWCollision::SelectorSupportPlane inputSourcePlane{};
+        inputSourcePlane.normal = sourcePlane->normal;
+        inputSourcePlane.planeDistance = sourcePlane->planeDistance;
+
+        std::array<WoWCollision::SelectorSupportPlane, 4> planesOut{};
+        if (!WoWCollision::BuildSelectorCandidatePlaneRecord(
+            inputPoints,
+            inputSelectorIndices,
+            *translation,
+            inputSourcePlane,
+            planesOut)) {
+            return false;
+        }
+
+        for (size_t i = 0; i < planesOut.size(); ++i) {
+            outPlanes[i].normal = planesOut[i].normal;
+            outPlanes[i].planeDistance = planesOut[i].planeDistance;
+        }
+
+        return true;
+    }
+
     __declspec(dllexport) int QueryTerrainAABBContacts(
         uint32_t mapId,
         const G3D::Vector3* boxMin,

@@ -607,6 +607,18 @@ public static partial class NavigationInterop
         ref float inOutBestRatio,
         out SelectorCandidateValidationTrace trace);
 
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorCandidatePlaneRecord", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorCandidatePlaneRecord(
+        [In] Vector3[] points,
+        int pointCount,
+        [In] byte[] selectorIndices,
+        int selectorIndexCount,
+        in Vector3 translation,
+        in SelectorSupportPlane sourcePlane,
+        [Out] SelectorSupportPlane[] outPlanes,
+        int maxPlanes);
+
     [DllImport(NavigationDll, EntryPoint = "QueryTerrainAABBContacts", CallingConvention = CallingConvention.Cdecl)]
     public static extern int QueryTerrainAABBContacts(
         uint mapId,
