@@ -834,6 +834,14 @@ public static partial class NavigationInterop
         float collisionRadius,
         in SelectorSupportPlane selectedPlane);
 
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorPlaneIntersectionPoint", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorPlaneIntersectionPoint(
+        in SelectorSupportPlane selectedPlane,
+        in SelectorSupportPlane firstCandidatePlane,
+        in SelectorSupportPlane secondCandidatePlane,
+        out Vector3 outPoint);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
     public static extern float EvaluateWoWVerticalTravelTimeScalar(
         float verticalDistance,

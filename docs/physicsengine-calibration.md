@@ -309,6 +309,31 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Parity note:
   - The remaining alternate-pair gap is no longer another opaque plane/footprint check.
   - The next native seam is the actual line/intersection math in `0x634FC0` and `0x634DA0`.
+
+## 2026-03-26 Selector Plane-Intersection Addendum
+
+- Scope note:
+  - This pass stayed on the same native selector transaction and still did not change runtime grounded behavior.
+  - The target was the `0x634FC0` three-plane intersection helper inside the unresolved `count == 2` branch of `0x634AE0`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - `BuildSelectorPlaneIntersectionPoint(...)` now mirrors the binary solve over the selected plane plus the two candidate planes.
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exports the helper through `BuildWoWSelectorPlaneIntersectionPoint(...)`.
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - exposes the matching interop.
+  - `Tests/Navigation.Physics.Tests/WowSelectorPlaneIntersectionPointTests.cs`
+    - pins exact orthogonal and scaled-coefficient intersections through the production DLL.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal"`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - passed (`48/48`)
+- Parity note:
+  - The remaining alternate-pair gap is no longer another hidden matrix/intersection helper.
+  - The next native seam is the chooser/ranking logic in `0x634DA0`.
   - `Exports/Navigation/PhysicsEngine.cpp`
     - `CollisionStepWoW` half-step pass now uses `SceneQuery::SweepAABB(...)` from the start box over `speed*dt*0.5` instead of a static half-step `TestTerrainAABB(...)`
     - this keeps the second grounded pass aligned with the client’s `0x633DEB` `Collide` call instead of treating the half-step box as a stationary overlap

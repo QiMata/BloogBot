@@ -1,0 +1,42 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x634FC0
+Date: 2026-03-26
+Notes:
+- This helper is reached from the `count == 2` branch inside `0x634AE0`.
+- Inputs:
+  - `edx`: selected `0xC4E534[index]` plane record
+  - `arg1`: first candidate plane
+  - `arg2`: second candidate plane
+  - `ecx`: output `Vec3`
+- It copies the three plane equations as `{normal.xyz, -planeDistance}` and then solves the 3-plane intersection point.
+- `0x7BE0E0` and `0x7BE2A0` on this path are the matrix/determinant helpers behind that intersection solve.
+- Practical implication: this helper is just the plane-intersection point builder; the remaining unresolved chooser in the `count == 2` path sits later in `0x634DA0`.
+
+0x00634FC0: push     ebp
+0x00634FC1: mov      ebp, esp
+0x00634FC3: sub      esp, 0x54
+0x00634FC6: mov      eax, dword ptr [edx]
+0x00634FC8: fld      dword ptr [edx + 0xc]
+0x00634FCB: mov      dword ptr [ebp - 0x30], eax
+0x00634FCE: fchs
+0x00634FD0: mov      eax, dword ptr [edx + 8]
+...
+0x0063501E: call     0x7be0e0
+0x00635023: push     ecx
+0x00635024: lea      edx, [ebp - 0x54]
+0x00635027: fstp     dword ptr [esp]
+0x0063502A: push     edx
+0x0063502B: lea      ecx, [ebp - 0x30]
+0x0063502E: call     0x7be2a0
+0x00635033: fld      dword ptr [ebp - 0x4c]
+0x00635036: fmul     dword ptr [ebp - 4]
+...
+0x0063504C: fstp     dword ptr [esi]
+...
+0x00635064: fstp     dword ptr [esi + 4]
+...
+0x0063507D: fstp     dword ptr [esi + 8]
+0x00635080: pop      esi
+0x00635081: mov      esp, ebp
+0x00635083: pop      ebp
+0x00635084: ret      8

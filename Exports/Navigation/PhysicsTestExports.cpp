@@ -1346,6 +1346,36 @@ extern "C"
             plane);
     }
 
+    __declspec(dllexport) bool BuildWoWSelectorPlaneIntersectionPoint(
+        const ExportSelectorSupportPlane* selectedPlane,
+        const ExportSelectorSupportPlane* firstCandidatePlane,
+        const ExportSelectorSupportPlane* secondCandidatePlane,
+        G3D::Vector3* outPoint)
+    {
+        if (!selectedPlane || !firstCandidatePlane || !secondCandidatePlane || !outPoint) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane selected{};
+        selected.normal = selectedPlane->normal;
+        selected.planeDistance = selectedPlane->planeDistance;
+
+        WoWCollision::SelectorSupportPlane first{};
+        first.normal = firstCandidatePlane->normal;
+        first.planeDistance = firstCandidatePlane->planeDistance;
+
+        WoWCollision::SelectorSupportPlane second{};
+        second.normal = secondCandidatePlane->normal;
+        second.planeDistance = secondCandidatePlane->planeDistance;
+
+        WoWCollision::BuildSelectorPlaneIntersectionPoint(
+            selected,
+            first,
+            second,
+            *outPoint);
+        return true;
+    }
+
     __declspec(dllexport) float EvaluateWoWVerticalTravelTimeScalar(
         float verticalDistance,
         bool preferEarlierPositiveRoot,

@@ -874,6 +874,11 @@ namespace WoWCollision
                                                 float collisionRadius,
                                                 const SelectorSupportPlane& selectedPlane);
 
+    void BuildSelectorPlaneIntersectionPoint(const SelectorSupportPlane& selectedPlane,
+                                             const SelectorSupportPlane& firstCandidatePlane,
+                                             const SelectorSupportPlane& secondCandidatePlane,
+                                             G3D::Vector3& outPoint);
+
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,
                                                     float horizontalSpeedScale,

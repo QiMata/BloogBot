@@ -683,9 +683,14 @@ CollisionStep (0x633840)
       - `0x634960` samples five footprint points around `this->position` with horizontal offsets `±this->+0xB0` and vertical offset `this->+0xB0 * 1.8493989706` (`0x80C740`)
       - it returns failure as soon as one sample satisfies `abs(dot(samplePoint, selectedPlane.normal) + selectedPlane.planeDistance) > 1/720`
       - the production DLL now mirrors that exact plane/footprint gate through pure `EvaluateSelectorPlaneFootprintMismatch(...)` plus deterministic export/test coverage
+    - fresh raw capture now also lives in `docs/physics/0x634FC0_disasm.txt`
+    - another private helper inside that same `count == 2` body is now closed:
+      - `0x634FC0` copies the selected plane plus the two candidate planes as `{normal.xyz, -planeDistance}` and solves the three-plane intersection point
+      - `0x7BE0E0` / `0x7BE2A0` on this path are the determinant/inverse helpers behind that solve
+      - the production DLL now mirrors that exact helper through pure `BuildSelectorPlaneIntersectionPoint(...)` plus deterministic export/test coverage
     - on failure it negates the incoming vector
     - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
-    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate, the obvious `0x634AE0` count fanout, or the `0x634960` footprint gate. The unresolved body is now the actual `count == 2` line/intersection math (`0x634FC0` / `0x634DA0`) before the final pair math.
+    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate, the obvious `0x634AE0` count fanout, the `0x634960` footprint gate, or the `0x634FC0` plane-intersection point builder. The unresolved body is now the chooser/ranking helper `0x634DA0` on top of those already-pinned inputs before the final pair math.
   - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test

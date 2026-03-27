@@ -992,6 +992,24 @@ bool WoWCollision::EvaluateSelectorPlaneFootprintMismatch(const G3D::Vector3& po
     return false;
 }
 
+void WoWCollision::BuildSelectorPlaneIntersectionPoint(const SelectorSupportPlane& selectedPlane,
+                                                       const SelectorSupportPlane& firstCandidatePlane,
+                                                       const SelectorSupportPlane& secondCandidatePlane,
+                                                       G3D::Vector3& outPoint)
+{
+    const G3D::Vector3 selectedCross = firstCandidatePlane.normal.cross(secondCandidatePlane.normal);
+    const G3D::Vector3 firstCross = secondCandidatePlane.normal.cross(selectedPlane.normal);
+    const G3D::Vector3 secondCross = selectedPlane.normal.cross(firstCandidatePlane.normal);
+    const float determinant = selectedPlane.normal.dot(selectedCross);
+
+    const G3D::Vector3 numerator =
+        (selectedCross * (-selectedPlane.planeDistance)) +
+        (firstCross * (-firstCandidatePlane.planeDistance)) +
+        (secondCross * (-secondCandidatePlane.planeDistance));
+
+    outPoint = numerator * (1.0f / determinant);
+}
+
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                               float elapsedTimeScalar,
                                                               float horizontalSpeedScale,
