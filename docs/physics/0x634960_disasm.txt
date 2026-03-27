@@ -1,0 +1,57 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x634960
+Date: 2026-03-26
+Notes:
+- This helper is reached only from the `count == 2` branch inside `0x634AE0`.
+- `0x602630` on this path is a pure 3-float dot-product helper.
+- `0x634960` builds a five-point collision-footprint sample ring around `this->position` using:
+  - horizontal offsets `±this->+0xB0`
+  - vertical offset `this->+0xB0 * 1.8493989706` (`0x80C740`)
+- It then checks `abs(dot(samplePoint, selectedPlane.normal) + selectedPlane.planeDistance)` against `0x80DFEC = 1/720`.
+- It returns `1` as soon as any sample point exceeds that epsilon; otherwise it returns `0`.
+- The binary-visible sample sequence includes a duplicated `(-radius, +radius, +height)` point.
+
+0x00634960: push     ebp
+0x00634961: mov      ebp, esp
+0x00634963: sub      esp, 0x58
+0x00634966: push     ebx
+0x00634967: push     esi
+0x00634968: push     edi
+0x00634969: mov      edi, ecx
+0x0063496B: fld      dword ptr [edi + 0xb0]
+0x00634971: lea      eax, [ebp - 0x50]
+0x00634974: fmul     dword ptr [0x80c740]
+0x0063497A: mov      ecx, 5
+0x0063497F: xor      ebx, ebx
+0x00634981: fstp     dword ptr [ebp - 4]
+...
+0x00634A97: xor      esi, esi
+0x00634A99: lea      edi, [ebp - 0x58]
+0x00634AA0: mov      edx, edi
+0x00634AA2: mov      ecx, ebx
+0x00634AA4: call     0x602630
+0x00634AA9: fadd     dword ptr [ebx + 0xc]
+0x00634AAC: fabs
+0x00634AAE: fabs
+0x00634AB0: fcomp    dword ptr [0x80dfec]
+0x00634AB6: fnstsw   ax
+0x00634AB8: test     ah, 5
+0x00634ABB: jnp      0x634ad1
+0x00634ABD: inc      esi
+0x00634ABE: add      edi, 0xc
+0x00634AC1: cmp      esi, 5
+0x00634AC4: jb       0x634aa0
+0x00634AC6: pop      edi
+0x00634AC7: pop      esi
+0x00634AC8: xor      eax, eax
+0x00634ACA: pop      ebx
+0x00634ACB: mov      esp, ebp
+0x00634ACD: pop      ebp
+0x00634ACE: ret      4
+0x00634AD1: pop      edi
+0x00634AD2: pop      esi
+0x00634AD3: mov      eax, 1
+0x00634AD8: pop      ebx
+0x00634AD9: mov      esp, ebp
+0x00634ADB: pop      ebp
+0x00634ADC: ret      4

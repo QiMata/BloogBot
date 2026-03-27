@@ -129,6 +129,7 @@ namespace
     constexpr float WOW_SELECTOR_SUPPORT_NEGATIVE_DIAGONAL_Z = -0.4756366014480591f; // 0x80E014
     constexpr float WOW_SELECTOR_CLIP_NEGATIVE_EPSILON = -0.0013888889225199819f; // 0x80DFF0
     constexpr float WOW_SELECTOR_RATIO_EPSILON = 2.384185791015625e-7f;      // 0x8029D4
+    constexpr float WOW_SELECTOR_FOOTPRINT_SAMPLE_HEIGHT_FACTOR = 1.8493989706039429f; // 0x80C740
     constexpr float WOW_SELECTOR_LOOSE_RATIO_THRESHOLD = -9.5367431640625e-07f; // 0x80DFF4
     constexpr float WOW_SELECTOR_STRICT_RATIO_THRESHOLD = -0.02777777798473835f; // 0x7FF9C8
     constexpr float WOW_SELECTOR_RECORD_FILTER_THRESHOLD = -9.999999747378752e-06f; // 0x80C5C4
@@ -966,6 +967,29 @@ WoWCollision::SelectorAlternateWorkingVectorMode WoWCollision::EvaluateSelectorA
     }
 
     return SELECTOR_ALTERNATE_VECTOR_SELECTED_CONTACT_NORMAL;
+}
+
+bool WoWCollision::EvaluateSelectorPlaneFootprintMismatch(const G3D::Vector3& position,
+                                                          float collisionRadius,
+                                                          const SelectorSupportPlane& selectedPlane)
+{
+    const float sampleHeight = collisionRadius * WOW_SELECTOR_FOOTPRINT_SAMPLE_HEIGHT_FACTOR;
+    const std::array<G3D::Vector3, 5> samplePoints{
+        G3D::Vector3(position.x + collisionRadius, position.y + collisionRadius, position.z + sampleHeight),
+        G3D::Vector3(position.x - collisionRadius, position.y + collisionRadius, position.z + sampleHeight),
+        G3D::Vector3(position.x - collisionRadius, position.y + collisionRadius, position.z + sampleHeight),
+        G3D::Vector3(position.x + collisionRadius, position.y - collisionRadius, position.z + sampleHeight),
+        G3D::Vector3(position.x - collisionRadius, position.y - collisionRadius, position.z + sampleHeight),
+    };
+
+    for (const G3D::Vector3& samplePoint : samplePoints) {
+        const float signedDistance = selectedPlane.normal.dot(samplePoint) + selectedPlane.planeDistance;
+        if (std::fabs(signedDistance) > PhysicsConstants::COLLISION_SKIN_EPSILON) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,

@@ -1328,6 +1328,24 @@ extern "C"
                 candidateCount));
     }
 
+    __declspec(dllexport) bool EvaluateWoWSelectorPlaneFootprintMismatch(
+        const G3D::Vector3* position,
+        float collisionRadius,
+        const ExportSelectorSupportPlane* selectedPlane)
+    {
+        if (!position || !selectedPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        plane.normal = selectedPlane->normal;
+        plane.planeDistance = selectedPlane->planeDistance;
+        return WoWCollision::EvaluateSelectorPlaneFootprintMismatch(
+            *position,
+            collisionRadius,
+            plane);
+    }
+
     __declspec(dllexport) float EvaluateWoWVerticalTravelTimeScalar(
         float verticalDistance,
         bool preferEarlierPositiveRoot,

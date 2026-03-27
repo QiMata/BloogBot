@@ -827,6 +827,13 @@ public static partial class NavigationInterop
         float selectedNormalZ,
         uint candidateCount);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPlaneFootprintMismatch", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorPlaneFootprintMismatch(
+        in Vector3 position,
+        float collisionRadius,
+        in SelectorSupportPlane selectedPlane);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
     public static extern float EvaluateWoWVerticalTravelTimeScalar(
         float verticalDistance,

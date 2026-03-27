@@ -870,6 +870,10 @@ namespace WoWCollision
     SelectorAlternateWorkingVectorMode EvaluateSelectorAlternateWorkingVectorMode(float selectedNormalZ,
                                                                                   uint32_t candidateCount);
 
+    bool EvaluateSelectorPlaneFootprintMismatch(const G3D::Vector3& position,
+                                                float collisionRadius,
+                                                const SelectorSupportPlane& selectedPlane);
+
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,
                                                     float horizontalSpeedScale,
