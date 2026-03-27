@@ -669,6 +669,13 @@ public static partial class NavigationInterop
         float inputBestRatio,
         out float reportedBestRatio);
 
+    [DllImport(NavigationDll, EntryPoint = "InitializeWoWSelectorTriangleSourceWrapperSeeds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool InitializeWoWSelectorTriangleSourceWrapperSeeds(
+        out Vector3 testPoint,
+        out Vector3 candidateDirection,
+        out float bestRatio);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
         in Vector3 position,

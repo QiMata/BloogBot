@@ -1667,3 +1667,34 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not keep treating the remaining `0x632A30` gap as a generic wrapper mystery. The visible early-return and zero-clamp behavior are closed; only the interior data flow remains.
 - Recommended next single hypothesis:
   - Mirror the next internal `0x632A30` data seam instead of another wrapper edge, starting with the exact argument flow into `0x632280` and the `0x631BE0` outputs it consumes.
+
+## 2026-03-26 Wrapper-seeds addendum (`0x632A30`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the fixed seed payload that `0x632A30` hands to `0x632280`, so the remaining unknowns are the variable fields rather than the wrapper defaults.
+- Binary/evidence delta shipped:
+  - reused the fresh raw capture in `docs/physics/0x632A30_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632A30` note now records both fixed `(0,0,-1)` vectors and the initial `1.0f` best ratio before the `0x632280` call
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `InitializeSelectorTriangleSourceWrapperSeeds(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `InitializeWoWSelectorTriangleSourceWrapperSeeds(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new seed seam
+  - `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperSeedTests.cs`
+    - added deterministic coverage for the exact `testPoint`, `candidateDirection`, and initial `bestRatio` values
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSourceWrapperSeedTests|FullyQualifiedName~WowSelectorSourceWrapperTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`15/15`)
+- Frame-pattern note:
+  - The unresolved `0x632A30` path is narrower again: the fixed seed state is now closed, and the next unknown is the variable payload that changes with the caller transaction.
+- Do Not Repeat:
+  - Do not spend more time re-proving the fixed `(0,0,-1)` seed vectors or the `1.0f` initial ratio. Those wrapper defaults are now closed.
+- Recommended next single hypothesis:
+  - Mirror the next variable `0x632A30` payload field, starting with the selected-index seed and the exact `0x631BE0` outputs that are passed forward into `0x632280`.

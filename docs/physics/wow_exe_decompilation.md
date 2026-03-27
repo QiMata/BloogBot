@@ -599,10 +599,11 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that helper through pure `MergeAabbBounds(...)` plus a deterministic export/test seam, and `CollisionStepWoW` uses it instead of a local lambda for its merged query volume
     - fresh raw captures now also live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
     - `0x632A30` initializes a 7-slot and a 9-slot `0x10`-stride selector-plane buffer through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, and calls `0x631BE0`
+    - before `0x632280`, `0x632A30` also seeds both local vectors to `(0, 0, -1)` and seeds the initial best ratio as `1.0f`
     - only when no override position was provided does `0x632A30` call `0x631E70`; if that call fails it writes `0` to the caller's reported scalar and returns `0`
     - otherwise it calls `0x632280`, then zero-clamps the caller's reported scalar when `reportedScalar <= 0x80DFEC`
     - `0x6376A0` itself is a tiny initializer that writes one selector-plane record as `(0, 0, 1, 0)`
-    - the production DLL now mirrors those wrapper-visible behaviors through pure `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, and `FinalizeSelectorTriangleSourceWrapper(...)` helpers plus deterministic export/test seams
+    - the production DLL now mirrors those wrapper-visible behaviors through pure `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, `FinalizeSelectorTriangleSourceWrapper(...)`, and `InitializeSelectorTriangleSourceWrapperSeeds(...)` helpers plus deterministic export/test seams
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

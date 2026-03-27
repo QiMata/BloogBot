@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 215)`
+- Last updated: `2026-03-26 (session 216)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 216 added `WowSelectorSourceWrapperSeedTests.cs` plus the new interop needed to pin the fixed `0x632A30` seed payload through the production DLL. `NavigationInterop.cs` now exposes `InitializeWoWSelectorTriangleSourceWrapperSeeds(...)`.
+  - The new deterministic coverage now pins the exact binary seed state that `0x632A30` feeds into `0x632280`: `testPoint = (0,0,-1)`, `candidateDirection = (0,0,-1)`, and `bestRatio = 1.0f`.
+  - Practical implication: this owner no longer has to infer the fixed wrapper seed state. The next missing deterministic seams are the remaining variable `0x632A30 -> 0x632280` payload fields and the broader `0x6351A0` consumer transaction.
   - Session 215 added `WowSelectorSourceWrapperTests.cs` plus the new interop needed to pin the wrapper-visible `0x632A30` / `0x6376A0` seams through the production DLL. `NavigationInterop.cs` now exposes `InitializeWoWSelectorSupportPlane(...)`, `EvaluateWoWSelectorReportedBestRatioClamp(...)`, and `EvaluateWoWSelectorTriangleSourceWrapperGates(...)`.
   - The new deterministic coverage now pins five exact binary-backed behaviors: the shared `(0,0,1,0)` selector-plane initializer from `0x6376A0`, the final `0x80DFEC` reported-ratio zero clamp, the no-override early failure path that writes `0`, the override-position bypass, and the success-path zero clamp from `0x632A30`.
   - Practical implication: this owner no longer has to infer the visible wrapper gates around `0x632280`. The next missing deterministic seams are the full `0x631BE0 -> 0x631E70 -> 0x632280` data flow and the broader `0x6351A0` consumer transaction.

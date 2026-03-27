@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 215)
+- Last updated: 2026-03-26 (session 216)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 216 still kept runtime grounded behavior unchanged and pinned the fixed seed payload that `0x632A30` passes into `0x632280`. `InitializeSelectorTriangleSourceWrapperSeeds(...)` now mirrors the binary `(0,0,-1)` test point, `(0,0,-1)` candidate direction, and initial best ratio `1.0f`.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperSeedTests.cs` now pins that exact fixed payload through the production DLL.
+  - Practical implication: the remaining `0x632A30` / `0x632280` gap is no longer the fixed wrapper seed state; it is the variable payload around the selected-index seed, `0x631BE0` outputs, and the optional `0x631E70` transaction.
   - Session 215 still kept runtime grounded behavior unchanged and pinned the explicit visible gates on the `0x632A30` wrapper plus the shared `0x6376A0` selector-plane initializer. `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, and `FinalizeSelectorTriangleSourceWrapper(...)` now mirror the binary `(0,0,1,0)` init, the `0x80DFEC` zero clamp, and the no-override `0x631E70` early-fail path.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperTests.cs` now pins five exact binary-backed behaviors: unit-Z default plane init, clamp at/below `0x80DFEC`, no-override early failure with zeroed scalar, override bypass, and success-path zero clamp.
   - New raw captures now live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`. Practical implication: the remaining `0x632A30` / `0x631E70` gap is no longer the wrapper-visible gate behavior; it is the full data transaction feeding `0x632280`.

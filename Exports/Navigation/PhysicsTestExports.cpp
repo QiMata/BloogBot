@@ -1010,6 +1010,22 @@ extern "C"
             *outReportedBestRatio);
     }
 
+    __declspec(dllexport) bool InitializeWoWSelectorTriangleSourceWrapperSeeds(
+        G3D::Vector3* outTestPoint,
+        G3D::Vector3* outCandidateDirection,
+        float* outBestRatio)
+    {
+        if (!outTestPoint || !outCandidateDirection || !outBestRatio) {
+            return false;
+        }
+
+        WoWCollision::InitializeSelectorTriangleSourceWrapperSeeds(
+            *outTestPoint,
+            *outCandidateDirection,
+            *outBestRatio);
+        return true;
+    }
+
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
         const ExportSelectorSupportPlane* candidates,
         int candidateCount)

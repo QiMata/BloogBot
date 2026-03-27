@@ -733,6 +733,10 @@ namespace WoWCollision
                                                float inputBestRatio,
                                                float& outReportedBestRatio);
 
+    void InitializeSelectorTriangleSourceWrapperSeeds(G3D::Vector3& outTestPoint,
+                                                      G3D::Vector3& outCandidateDirection,
+                                                      float& outBestRatio);
+
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,
                                     float horizontalRadius,

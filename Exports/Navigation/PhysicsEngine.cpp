@@ -368,6 +368,15 @@ bool WoWCollision::FinalizeSelectorTriangleSourceWrapper(bool hasOverridePositio
     return true;
 }
 
+void WoWCollision::InitializeSelectorTriangleSourceWrapperSeeds(G3D::Vector3& outTestPoint,
+                                                                G3D::Vector3& outCandidateDirection,
+                                                                float& outBestRatio)
+{
+    outTestPoint = G3D::Vector3(0.0f, 0.0f, -1.0f);
+    outCandidateDirection = G3D::Vector3(0.0f, 0.0f, -1.0f);
+    outBestRatio = 1.0f;
+}
+
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                               float verticalOffset,
                                               float horizontalRadius,

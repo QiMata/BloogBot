@@ -283,8 +283,19 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 215)
+- **Last updated:** 2026-03-26 (session 216)
 - **Branch:** `main`
+- **Session 216 — `0x632A30` source-wrapper seeds are now pinned as a pure binary seam:**
+  - Added pure [InitializeSelectorTriangleSourceWrapperSeeds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), and added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorSourceWrapperSeedTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperSeedTests.cs), which now pins the exact `0x632A30` fixed payload into `0x632280`: `testPoint = (0,0,-1)`, `candidateDirection = (0,0,-1)`, and `bestRatio = 1.0f`.
+  - Practical implication: the remaining `0x632A30 -> 0x632280` gap is no longer the fixed seed state. The open work is the variable payload around the selected-index seed, `0x631BE0` outputs, and the optional `0x631E70` transaction.
+- **Test baseline (session 216):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSourceWrapperSeedTests|FullyQualifiedName~WowSelectorSourceWrapperTests|FullyQualifiedName~WowSelectorSourceRankingTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - Passed (`15/15`)
 - **Session 215 — `0x632A30` wrapper gates and `0x6376A0` selector-plane init are now pinned as pure binary seams:**
   - Added pure [InitializeSelectorSupportPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [ClampSelectorReportedBestRatio(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [FinalizeSelectorTriangleSourceWrapper(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Refactored [EvaluateSelectorDirectionRanking(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) to use the same binary-backed reported-ratio clamp instead of duplicating the inline `0x80DFEC` zero-clamp logic.
