@@ -241,6 +241,20 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorAlternatePairTrace
+    {
+        public uint UsedNegatedInputWorkingVector;
+        public uint UsedNegatedFirstCandidate;
+        public uint UsedTwoCandidateBuilder;
+        public uint UsedSelectedContactNormal;
+        public uint NormalizedHorizontal;
+        public float HorizontalMagnitude;
+        public float Denominator;
+        public float Scale;
+        public Vector3 WorkingVector;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct SelectorPair
     {
         public float First;
@@ -887,6 +901,20 @@ public static partial class NavigationInterop
         in SelectorSupportPlane secondCandidatePlane,
         out Vector3 outVector,
         out SelectorTwoCandidateWorkingVectorTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorAlternatePair", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorAlternatePair(
+        in Vector3 position,
+        float collisionRadius,
+        in SelectorCandidateRecord selectedRecord,
+        [In] SelectorSupportPlane[] candidatePlanes,
+        uint candidateCount,
+        in Vector3 inputMove,
+        float windowStartScalar,
+        float windowEndScalar,
+        out SelectorPair outPair,
+        out SelectorAlternatePairTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
     public static extern float EvaluateWoWVerticalTravelTimeScalar(

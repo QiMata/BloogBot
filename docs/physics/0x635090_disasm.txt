@@ -1,3 +1,18 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x635090
+Date: 2026-03-26
+Notes:
+- This is the alternate-pair caller reached from `0x6351A0` after the direct `0xC4E544[index]` path fails.
+- Visible behavior:
+  - first calls `0x6336A0`; on failure it negates the input move vector and uses that as the working 3-vector
+  - on success it calls `0x634AE0` to build the working 3-vector
+  - computes horizontal magnitude from that working vector with `0x454980`
+  - when that horizontal magnitude is `> 0x8029D4`, normalizes the horizontal `{x,y}` pair; otherwise keeps the raw horizontal components
+  - computes the scale numerator as `(-dot(workingVector, inputMove)) * (arg5 - arg4)`
+  - computes the denominator from the working vector's horizontal components against the chosen raw-or-normalized horizontal pair
+  - if `abs(denominator) > 0x8029D4`, divides the numerator by that denominator
+  - writes the final pair as `horizontalPair * scale`
+
 0x00635090: push     ebp
 0x00635091: mov      ebp, esp
 0x00635093: sub      esp, 0x24

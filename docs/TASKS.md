@@ -283,8 +283,22 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 230)
+- **Last updated:** 2026-03-26 (session 231)
 - **Branch:** `main`
+- **Session 231 — the visible `0x635090` alternate-pair caller is now pinned as a pure binary seam:**
+  - Added pure [BuildSelectorAlternatePair(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorAlternatePairTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorAlternatePairTests.cs), which now pins the band-fail negated-input path, the 3-candidate selected-normal path, and the 2-candidate builder path through the production DLL.
+  - Updated [0x635090_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x635090_disasm.txt) and [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the visible caller math is no longer described as opaque.
+  - Practical implication: the visible alternate-pair helper chain is now closed. The next unresolved selector step is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
+- **Test baseline (session 231):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorAlternatePairTests" --logger "console;verbosity=minimal"`
+    - Passed (`3/3`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorAlternatePairTests|FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - Passed (`59/59`)
 - **Session 230 — the full `0x634AE0` two-candidate working-vector body is now pinned as a pure binary seam:**
   - Added pure [BuildSelectorTwoCandidateWorkingVector(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorTwoCandidateWorkingVectorTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorTwoCandidateWorkingVectorTests.cs), which now pins the line-Z selected-normal gate, the `0x634960` footprint-mismatch reject path, and the orientation-negated constructed-vector path through the production DLL.
@@ -321,7 +335,7 @@ if (transportGuid != 0) {
     - Succeeded
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
     - Passed (`48/48`)
-- **Next command:** `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635090; data=code[start-0x400000:start-0x400000+704]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- **Next command:** `rg --line-number "GroundedWallSelectionTrace|selectedContactIndex|outputPair|0xC4E544|0x6351A0" Exports/Navigation/PhysicsEngine.cpp Tests/Navigation.Physics.Tests -S`
 - **Session 227 — the `0x634960` selector footprint-vs-plane gate is now pinned as a pure binary seam:**
   - Added pure [EvaluateSelectorPlaneFootprintMismatch(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorPlaneFootprintMismatchTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorPlaneFootprintMismatchTests.cs), which now pins the binary sample-height constant `0x80C740`, the `1/720` plane-distance epsilon, and the visible horizontal/vertical plane outcomes on the five-point footprint ring.

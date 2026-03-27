@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 230)
+- Last updated: 2026-03-26 (session 231)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 231 still kept runtime grounded behavior unchanged and pinned the visible `0x635090` alternate-pair caller as a pure helper. `BuildSelectorAlternatePair(...)` now mirrors the binary caller-side `0x6336A0` gate, the `0x634AE0` working-vector reuse, the horizontal normalization threshold at `0x8029D4`, the scale numerator/denominator math, and the final two-float pair write.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorAlternatePairTests.cs` now pins the band-fail negated-input path, the `count >= 3` selected-contact-normal path, and the `count == 2` builder path through the production DLL.
+  - `docs/physics/0x635090_disasm.txt` and `docs/physics/wow_exe_decompilation.md` now record that the visible alternate-pair caller math is no longer opaque. Practical implication: the visible alternate-pair helper chain is now closed, and the next missing runtime piece is the grounded producer transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
   - Session 230 still kept runtime grounded behavior unchanged and pinned the full `count == 2` `0x634AE0` body as a pure helper. `BuildSelectorTwoCandidateWorkingVector(...)` now mirrors the binary candidate-line normalization, the line-Z and selected-plane-dot early selected-normal gates, the conditional `0x634960` footprint-mismatch reject, the `0x634FC0` + `0x634DA0` constructed vector path, and the final orientation / `-candidateBuffer[0].normal` fallback tail.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorTwoCandidateWorkingVectorTests.cs` now pins the line-Z selected-normal gate, the footprint-mismatch reject path, and the orientation-negated constructed-vector path through the production DLL.
   - `docs/physics/0x634AE0_disasm.txt` and `docs/physics/wow_exe_decompilation.md` now reflect that the private two-plane body is no longer partially unresolved. Practical implication: the remaining alternate-pair gap is now the caller-side normalization / pair-write math in `0x635090`.
@@ -546,7 +549,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635090; data=code[start-0x400000:start-0x400000+704]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `rg --line-number "GroundedWallSelectionTrace|selectedContactIndex|outputPair|0xC4E544|0x6351A0" Exports/Navigation/PhysicsEngine.cpp Tests/Navigation.Physics.Tests -S`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
   - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

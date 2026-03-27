@@ -662,6 +662,19 @@ namespace WoWCollision
         G3D::Vector3 workingVector = G3D::Vector3(0.0f, 0.0f, 0.0f);
     };
 
+    struct SelectorAlternatePairTrace
+    {
+        uint32_t usedNegatedInputWorkingVector = 0;
+        uint32_t usedNegatedFirstCandidate = 0;
+        uint32_t usedTwoCandidateBuilder = 0;
+        uint32_t usedSelectedContactNormal = 0;
+        uint32_t normalizedHorizontal = 0;
+        float horizontalMagnitude = 0.0f;
+        float denominator = 0.0f;
+        float scale = 0.0f;
+        G3D::Vector3 workingVector = G3D::Vector3(0.0f, 0.0f, 0.0f);
+    };
+
     struct SelectorPair
     {
         float first = 0.0f;
@@ -916,6 +929,17 @@ namespace WoWCollision
                                                 const SelectorSupportPlane& secondCandidatePlane,
                                                 G3D::Vector3& outVector,
                                                 SelectorTwoCandidateWorkingVectorTrace* outTrace = nullptr);
+
+    void BuildSelectorAlternatePair(const G3D::Vector3& position,
+                                    float collisionRadius,
+                                    const SelectorCandidateRecord& selectedRecord,
+                                    const SelectorSupportPlane* candidatePlanes,
+                                    uint32_t candidateCount,
+                                    const G3D::Vector3& inputMove,
+                                    float windowStartScalar,
+                                    float windowEndScalar,
+                                    SelectorPair& outPair,
+                                    SelectorAlternatePairTrace* outTrace = nullptr);
 
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,

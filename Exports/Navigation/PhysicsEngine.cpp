@@ -1155,6 +1155,82 @@ void WoWCollision::BuildSelectorTwoCandidateWorkingVector(const G3D::Vector3& po
     }
 }
 
+void WoWCollision::BuildSelectorAlternatePair(const G3D::Vector3& position,
+                                              float collisionRadius,
+                                              const SelectorCandidateRecord& selectedRecord,
+                                              const SelectorSupportPlane* candidatePlanes,
+                                              uint32_t candidateCount,
+                                              const G3D::Vector3& inputMove,
+                                              float windowStartScalar,
+                                              float windowEndScalar,
+                                              SelectorPair& outPair,
+                                              SelectorAlternatePairTrace* outTrace)
+{
+    SelectorAlternatePairTrace trace{};
+    G3D::Vector3 workingVector(0.0f, 0.0f, 0.0f);
+
+    if (!IsSelectorContactWithinAlternateWorkingVectorBand(selectedRecord.filterPlane.normal.z)) {
+        trace.usedNegatedInputWorkingVector = 1u;
+        workingVector = -inputMove;
+    }
+    else {
+        switch (EvaluateSelectorAlternateWorkingVectorMode(selectedRecord.filterPlane.normal.z, candidateCount)) {
+        case SELECTOR_ALTERNATE_VECTOR_NEGATED_FIRST_CANDIDATE:
+            trace.usedNegatedFirstCandidate = 1u;
+            workingVector = -candidatePlanes[0].normal;
+            break;
+
+        case SELECTOR_ALTERNATE_VECTOR_TWO_CANDIDATE_BUILDER:
+            trace.usedTwoCandidateBuilder = 1u;
+            BuildSelectorTwoCandidateWorkingVector(
+                position,
+                collisionRadius,
+                selectedRecord,
+                candidatePlanes[0],
+                candidatePlanes[1],
+                workingVector);
+            break;
+
+        case SELECTOR_ALTERNATE_VECTOR_SELECTED_CONTACT_NORMAL:
+        default:
+            trace.usedSelectedContactNormal = 1u;
+            workingVector = selectedRecord.filterPlane.normal;
+            break;
+        }
+    }
+
+    trace.workingVector = workingVector;
+
+    float horizontalX = workingVector.x;
+    float horizontalY = workingVector.y;
+    const float horizontalMagnitude = std::sqrt((horizontalX * horizontalX) + (horizontalY * horizontalY));
+    trace.horizontalMagnitude = horizontalMagnitude;
+
+    if (std::fabs(horizontalMagnitude) > WOW_SELECTOR_RATIO_EPSILON) {
+        const float invHorizontalMagnitude = 1.0f / horizontalMagnitude;
+        horizontalX *= invHorizontalMagnitude;
+        horizontalY *= invHorizontalMagnitude;
+        trace.normalizedHorizontal = 1u;
+    }
+
+    const float numerator = (windowEndScalar - windowStartScalar) * (-workingVector.dot(inputMove));
+    const float denominator = (workingVector.x * horizontalX) + (workingVector.y * horizontalY);
+    trace.denominator = denominator;
+
+    float scale = numerator;
+    if (std::fabs(denominator) > WOW_SELECTOR_RATIO_EPSILON) {
+        scale = numerator / denominator;
+    }
+
+    trace.scale = scale;
+    outPair.first = horizontalX * scale;
+    outPair.second = horizontalY * scale;
+
+    if (outTrace) {
+        *outTrace = trace;
+    }
+}
+
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                               float elapsedTimeScalar,
                                                               float horizontalSpeedScale,

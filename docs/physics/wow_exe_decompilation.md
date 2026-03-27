@@ -705,9 +705,17 @@ CollisionStep (0x633840)
       - otherwise it uses `0x634FC0` + `0x634DA0`, crosses the chosen edge direction with the candidate line, normalizes that vector, and flips it when it points with the first candidate normal
       - if that final cross magnitude collapses to `<= 0x8029D4`, it falls back to `-candidateBuffer[0].normal`
       - the production DLL now has deterministic coverage for the line-Z gate, the footprint-mismatch reject, and the orientation-negated constructed-vector path
-    - on failure it negates the incoming vector
-    - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
-    - practical implication: the remaining open portion of `0x635090` is no longer inside `0x634AE0` at all. The next unresolved step is the caller-side normalization / pair-write math in `0x635090` on top of the now-closed working-vector output.
+    - the caller-side pair math is now also mirrored through pure `BuildSelectorAlternatePair(...)`
+      - on `0x6336A0` failure it negates the input move vector and uses that as the working 3-vector
+      - otherwise it uses the now-closed `0x634AE0` working-vector output
+      - it computes horizontal magnitude with `0x454980`
+      - when that horizontal magnitude is `> 0x8029D4`, it normalizes the horizontal `{x,y}` pair; otherwise it keeps the raw horizontal components
+      - it computes the scale numerator as `(-dot(workingVector, inputMove)) * (arg5 - arg4)`
+      - it computes the denominator from the working vector's horizontal components against that chosen raw-or-normalized horizontal pair
+      - when `abs(denominator) > 0x8029D4`, it divides by that denominator
+      - it writes the final pair as `horizontalPair * scale`
+      - the production DLL now has deterministic coverage for the band-fail negated-input path, the 3-candidate selected-normal path, and the 2-candidate builder path
+    - practical implication: the visible alternate-pair helper chain is now closed. The next unresolved selector step is no longer more math inside `0x635090`; it is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
   - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test

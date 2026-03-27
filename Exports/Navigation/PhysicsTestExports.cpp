@@ -151,6 +151,19 @@ struct ExportSelectorTwoCandidateWorkingVectorTrace
     G3D::Vector3 workingVector;
 };
 
+struct ExportSelectorAlternatePairTrace
+{
+    uint32_t usedNegatedInputWorkingVector;
+    uint32_t usedNegatedFirstCandidate;
+    uint32_t usedTwoCandidateBuilder;
+    uint32_t usedSelectedContactNormal;
+    uint32_t normalizedHorizontal;
+    float horizontalMagnitude;
+    float denominator;
+    float scale;
+    G3D::Vector3 workingVector;
+};
+
 struct ExportSelectorPair
 {
     float first;
@@ -1486,6 +1499,67 @@ extern "C"
             outTrace->selectedEdgeIndex = trace.selectedEdgeIndex;
             outTrace->lineDirection = trace.lineDirection;
             outTrace->edgeDirection = trace.edgeDirection;
+            outTrace->workingVector = trace.workingVector;
+        }
+
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorAlternatePair(
+        const G3D::Vector3* position,
+        float collisionRadius,
+        const ExportSelectorCandidateRecord* selectedRecord,
+        const ExportSelectorSupportPlane* candidatePlanes,
+        uint32_t candidateCount,
+        const G3D::Vector3* inputMove,
+        float windowStartScalar,
+        float windowEndScalar,
+        ExportSelectorPair* outPair,
+        ExportSelectorAlternatePairTrace* outTrace)
+    {
+        if (!position || !selectedRecord || (!candidatePlanes && candidateCount != 0u) || !inputMove || !outPair) {
+            return false;
+        }
+
+        WoWCollision::SelectorCandidateRecord selected{};
+        selected.filterPlane.normal = selectedRecord->filterPlane.normal;
+        selected.filterPlane.planeDistance = selectedRecord->filterPlane.planeDistance;
+        selected.points[0] = selectedRecord->point0;
+        selected.points[1] = selectedRecord->point1;
+        selected.points[2] = selectedRecord->point2;
+
+        std::array<WoWCollision::SelectorSupportPlane, 5> candidateBuffer{};
+        for (uint32_t i = 0; i < candidateCount && i < candidateBuffer.size(); ++i) {
+            candidateBuffer[i].normal = candidatePlanes[i].normal;
+            candidateBuffer[i].planeDistance = candidatePlanes[i].planeDistance;
+        }
+
+        WoWCollision::SelectorPair pair{};
+        WoWCollision::SelectorAlternatePairTrace trace{};
+        WoWCollision::BuildSelectorAlternatePair(
+            *position,
+            collisionRadius,
+            selected,
+            candidateBuffer.data(),
+            candidateCount,
+            *inputMove,
+            windowStartScalar,
+            windowEndScalar,
+            pair,
+            &trace);
+
+        outPair->first = pair.first;
+        outPair->second = pair.second;
+
+        if (outTrace) {
+            outTrace->usedNegatedInputWorkingVector = trace.usedNegatedInputWorkingVector;
+            outTrace->usedNegatedFirstCandidate = trace.usedNegatedFirstCandidate;
+            outTrace->usedTwoCandidateBuilder = trace.usedTwoCandidateBuilder;
+            outTrace->usedSelectedContactNormal = trace.usedSelectedContactNormal;
+            outTrace->normalizedHorizontal = trace.normalizedHorizontal;
+            outTrace->horizontalMagnitude = trace.horizontalMagnitude;
+            outTrace->denominator = trace.denominator;
+            outTrace->scale = trace.scale;
             outTrace->workingVector = trace.workingVector;
         }
 

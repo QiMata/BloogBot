@@ -259,6 +259,31 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - A fresh `dumpbin /disasm` spot-check over `CMovement::CollisionStep` (`0x633D1C..0x633DEB`) reconfirmed that vanilla runs a second swept AABB on the half-step branch; our code was still using a static `TestTerrainAABB` overlap there.
 - Behavioral change shipped:
 
+## 2026-03-26 Selector Alternate-Pair Addendum
+
+- Scope note:
+  - This pass stayed in the binary helper-extraction stream and did not change runtime grounded behavior.
+  - The target was the visible `0x635090` alternate-pair caller that sits behind the unresolved grounded `0x6351A0` producer transaction.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - `BuildSelectorAlternatePair(...)` now mirrors the visible `0x6336A0` gate, the `0x634AE0` working-vector reuse, the `0x8029D4` horizontal normalization gate, and the final pair write math in `0x635090`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exports the helper through `BuildWoWSelectorAlternatePair(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - exposes the matching interop and trace struct
+  - `Tests/Navigation.Physics.Tests/WowSelectorAlternatePairTests.cs`
+    - pins the band-fail negated-input path, the selected-contact-normal path, and the two-candidate builder path through the production DLL
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorAlternatePairTests|FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - passed (`59/59`)
+- Practical implication:
+  - The visible alternate-pair helper chain is now closed.
+  - The next native parity unit is the production grounded selector transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
+
 ## 2026-03-26 Selector Alternate Working-Vector Front-End Addendum
 
 - Scope note:
