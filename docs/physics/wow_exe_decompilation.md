@@ -667,9 +667,19 @@ CollisionStep (0x633840)
     - production-DLL packet-backed tracing now adds one more frame-16 constraint on top of that logic: once the runtime has already selected the WMO wall contact (`instance 0x00003B34`, `groupId 3228`), the projected `position + requestedMove` point is outside the `0x6335D0` expanded triangle prism, so the selected wall would stay on the alternate `0x635090` path under both the relaxed and standard thresholds
   - `0x635090`
     - first calls `0x6336A0`
+    - fresh raw capture now lives in `docs/physics/0x6336A0_disasm.txt`
+    - `0x6336A0` reads `normal.z` from `0xC4E534[index]` and only returns success when that selected contact stays inside the non-walkable slope band `[-0.6427876, +0.6427876]`
+    - the production DLL now mirrors that exact gate through pure `IsSelectorContactWithinAlternateWorkingVectorBand(...)` plus deterministic export/test coverage
     - on success it delegates to `0x634AE0` to produce the working 3-vector
+    - fresh raw capture now lives in `docs/physics/0x634AE0_disasm.txt`
+    - the visible `0x634AE0` branch fanout is now closed:
+      - `count <= 1` or `count > 4` => return `-candidateBuffer[0].normal`
+      - `count == 2` => enter the only nontrivial two-plane builder body
+      - `count == 3` or `count == 4` => return `0xC4E534[selectedIndex].normal`
+    - the production DLL now mirrors that exact outer mode selection through pure `EvaluateSelectorAlternateWorkingVectorMode(...)` plus deterministic export/test coverage
     - on failure it negates the incoming vector
     - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
+    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate or the obvious `0x634AE0` count fanout. The unresolved body is the `count == 2` branch inside `0x634AE0` plus its private helpers (`0x634960`, `0x634FC0`, `0x634DA0`) before the final pair math.
   - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test

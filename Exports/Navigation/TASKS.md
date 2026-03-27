@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 225)
+- Last updated: 2026-03-26 (session 226)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 226 still kept runtime grounded behavior unchanged and pinned the visible `0x6336A0 -> 0x634AE0` front-end on the alternate `0x635090` pair path. `IsSelectorContactWithinAlternateWorkingVectorBand(...)` now mirrors the tiny `0x6336A0` selected-contact `normal.z` gate, and `EvaluateSelectorAlternateWorkingVectorMode(...)` now mirrors the visible `0x634AE0` branch fanout: `count <= 1` or `count > 4` => negate `candidateBuffer[0].normal`, `count == 2` => enter the unresolved two-plane builder body, `count == 3/4` => return the selected `0xC4E534[index].normal`.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorAlternateWorkingVectorModeTests.cs` now pins that exact slope-band + count-fanout contract through the production DLL.
+  - New raw captures now live in `docs/physics/0x6336A0_disasm.txt` and `docs/physics/0x634AE0_disasm.txt`. Practical implication: the remaining alternate-pair gap is no longer the front-end gate or the obvious count split. The next missing runtime piece is the `count == 2` body inside `0x634AE0` plus its private helpers `0x634960`, `0x634FC0`, and `0x634DA0`.
   - Session 225 still kept runtime grounded behavior unchanged and pinned the visible `0x7C5F50` + `0x635450` post-selection transaction. `ComputeVerticalTravelTimeScalar(...)` now mirrors the binary gravity/terminal-velocity time solver, including the `MOVEFLAG_SAFE_FALL` terminal-velocity split, positive-speed clamp, stationary sqrt branch, terminal-velocity fallback, and earlier-positive-root toggle. `EvaluateSelectorPairWindowAdjustment(...)` now mirrors the visible `0x635450` caller contract: call `0x635550`, compute the optional scaled horizontal window, call `0x7C5F50`, zero the move vector when the vertical window is already elapsed, clamp to `windowSpanScalar`, and only scale `move.x/y` when the remaining window is strictly shorter than that scaled horizontal window.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowVerticalTravelTimeTests.cs` and `Tests/Navigation.Physics.Tests/WowSelectorPairWindowAdjustmentTests.cs` now pins those exact binary-backed behaviors through the production DLL.
   - New raw captures now live in `docs/physics/0x635450_disasm.txt` and `docs/physics/0x7C5F50_disasm.txt`. Practical implication: the open selector gap is no longer the visible caller-side post-selection scaler. The next missing runtime piece is exposing the selected index plus paired `0xC4E544[index]` payload on the production grounded path so the real state transaction can be fed into grounded wall resolution instead of rebuilding it from merged contacts.
@@ -531,7 +534,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635450; data=code[start-0x400000:start-0x400000+384]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x634960; data=code[start-0x400000:start-0x400000+320]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
   - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

@@ -1312,6 +1312,22 @@ extern "C"
             horizontalSpeedScale);
     }
 
+    __declspec(dllexport) bool EvaluateWoWSelectorContactWithinAlternateWorkingVectorBand(
+        float normalZ)
+    {
+        return WoWCollision::IsSelectorContactWithinAlternateWorkingVectorBand(normalZ);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorAlternateWorkingVectorMode(
+        float selectedNormalZ,
+        uint32_t candidateCount)
+    {
+        return static_cast<uint32_t>(
+            WoWCollision::EvaluateSelectorAlternateWorkingVectorMode(
+                selectedNormalZ,
+                candidateCount));
+    }
+
     __declspec(dllexport) float EvaluateWoWVerticalTravelTimeScalar(
         float verticalDistance,
         bool preferEarlierPositiveRoot,

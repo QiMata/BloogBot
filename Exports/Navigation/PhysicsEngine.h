@@ -664,6 +664,13 @@ namespace WoWCollision
         SelectorPair outputPair{};
     };
 
+    enum SelectorAlternateWorkingVectorMode : uint32_t
+    {
+        SELECTOR_ALTERNATE_VECTOR_NEGATED_FIRST_CANDIDATE = 0,
+        SELECTOR_ALTERNATE_VECTOR_TWO_CANDIDATE_BUILDER = 1,
+        SELECTOR_ALTERNATE_VECTOR_SELECTED_CONTACT_NORMAL = 2,
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -857,6 +864,11 @@ namespace WoWCollision
 
     bool HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSupportPlane* candidates,
                                                    uint32_t candidateCount);
+
+    bool IsSelectorContactWithinAlternateWorkingVectorBand(float normalZ);
+
+    SelectorAlternateWorkingVectorMode EvaluateSelectorAlternateWorkingVectorMode(float selectedNormalZ,
+                                                                                  uint32_t candidateCount);
 
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,

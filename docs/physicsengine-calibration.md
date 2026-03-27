@@ -258,6 +258,32 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass targeted the next grounded runtime mismatch after the static step-up hold removal.
   - A fresh `dumpbin /disasm` spot-check over `CMovement::CollisionStep` (`0x633D1C..0x633DEB`) reconfirmed that vanilla runs a second swept AABB on the half-step branch; our code was still using a static `TestTerrainAABB` overlap there.
 - Behavioral change shipped:
+
+## 2026-03-26 Selector Alternate Working-Vector Front-End Addendum
+
+- Scope note:
+  - This pass stayed on the native selector transaction and did not change runtime grounded behavior.
+  - The target was the front-end of the alternate `0x635090` pair path, not live packet or integration parity.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - `IsSelectorContactWithinAlternateWorkingVectorBand(...)` now mirrors the tiny `0x6336A0` selected-contact `normal.z` gate.
+    - `EvaluateSelectorAlternateWorkingVectorMode(...)` now mirrors the visible `0x634AE0` count fanout around the unresolved two-plane body.
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exports the new pure helpers through `EvaluateWoWSelectorContactWithinAlternateWorkingVectorBand(...)` and `EvaluateWoWSelectorAlternateWorkingVectorMode(...)`.
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - exposes the matching interop and enum.
+  - `Tests/Navigation.Physics.Tests/WowSelectorAlternateWorkingVectorModeTests.cs`
+    - pins the slope-band gate and the visible count fanout through the production DLL.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal"`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - passed (`44/44`)
+- Parity note:
+  - The unresolved part of the alternate selector path is no longer the front-end gate or the obvious count fanout.
+  - The next native seam is the `count == 2` body inside `0x634AE0` plus its private helpers `0x634960`, `0x634FC0`, and `0x634DA0`.
   - `Exports/Navigation/PhysicsEngine.cpp`
     - `CollisionStepWoW` half-step pass now uses `SceneQuery::SweepAABB(...)` from the start box over `speed*dt*0.5` instead of a static half-step `TestTerrainAABB(...)`
     - this keeps the second grounded pass aligned with the client’s `0x633DEB` `Collide` call instead of treating the half-step box as a stationary overlap

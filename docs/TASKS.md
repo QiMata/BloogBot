@@ -283,8 +283,21 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 225)
+- **Last updated:** 2026-03-26 (session 226)
 - **Branch:** `main`
+- **Session 226 — the `0x6336A0 -> 0x634AE0` selector alternate-working-vector front-end is now pinned as a pure binary seam:**
+  - Added pure [IsSelectorContactWithinAlternateWorkingVectorBand(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorAlternateWorkingVectorMode(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorAlternateWorkingVectorModeTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorAlternateWorkingVectorModeTests.cs), which now pins the `0x6336A0` non-walkable slope-band gate plus the visible `0x634AE0` count fanout (`<=1/>4 => negate first candidate`, `2 => two-plane builder`, `3/4 => selected contact normal`).
+  - Added fresh raw captures [0x6336A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6336A0_disasm.txt) and [0x634AE0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x634AE0_disasm.txt), and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the alternate-path front-end is explicit in the binary notes.
+  - Practical implication: the remaining selector gap is no longer the `0x635090` front-end gate or the obvious `0x634AE0` branch split. The next unresolved body is the `count == 2` builder path plus its helpers `0x634960`, `0x634FC0`, and `0x634DA0`.
+- **Test baseline (session 226):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - Passed (`44/44`)
+- **Next command:** `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x634960; data=code[start-0x400000:start-0x400000+320]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - **Session 225 — the visible `0x7C5F50` + `0x635450` selector post-window chain is now pinned as a pure binary seam:**
   - Added pure [ComputeVerticalTravelTimeScalar(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorPairWindowAdjustment(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowVerticalTravelTimeTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowVerticalTravelTimeTests.cs) and [WowSelectorPairWindowAdjustmentTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorPairWindowAdjustmentTests.cs), which now pin the `MOVEFLAG_SAFE_FALL` terminal-velocity split, stationary sqrt branch, earlier-root path, `0x635450` zero/clamp/scale paths, and the alternate-state handoff from `0x635550`.

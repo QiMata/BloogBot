@@ -936,6 +936,38 @@ bool WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSuppo
     return false;
 }
 
+bool WoWCollision::IsSelectorContactWithinAlternateWorkingVectorBand(float normalZ)
+{
+    if (!(normalZ <= WOW_WALKABLE_MIN_NORMAL_Z)) {
+        return false;
+    }
+
+    if (!(normalZ < 0.0f)) {
+        return true;
+    }
+
+    return (-normalZ) <= WOW_WALKABLE_MIN_NORMAL_Z;
+}
+
+WoWCollision::SelectorAlternateWorkingVectorMode WoWCollision::EvaluateSelectorAlternateWorkingVectorMode(
+    float selectedNormalZ,
+    uint32_t candidateCount)
+{
+    if (!IsSelectorContactWithinAlternateWorkingVectorBand(selectedNormalZ)) {
+        return SELECTOR_ALTERNATE_VECTOR_NEGATED_FIRST_CANDIDATE;
+    }
+
+    if (candidateCount == 2u) {
+        return SELECTOR_ALTERNATE_VECTOR_TWO_CANDIDATE_BUILDER;
+    }
+
+    if (candidateCount <= 1u || candidateCount > 4u) {
+        return SELECTOR_ALTERNATE_VECTOR_NEGATED_FIRST_CANDIDATE;
+    }
+
+    return SELECTOR_ALTERNATE_VECTOR_SELECTED_CONTACT_NORMAL;
+}
+
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                               float elapsedTimeScalar,
                                                               float horizontalSpeedScale,

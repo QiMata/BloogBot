@@ -1,0 +1,50 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x6336A0
+Date: 2026-03-26
+Notes:
+- This is the tiny front-end gate that `0x635090` calls before `0x634AE0`.
+- It reads `normal.z` from `0xC4E534[index]`.
+- It returns `1` only when the selected contact stays inside the non-walkable slope band `[-0.6427876, +0.6427876]`.
+- If the selected contact is steeper than that in either direction, it returns `0`.
+
+0x006336A0: push     ebp
+0x006336A1: mov      ebp, esp
+0x006336A3: sub      esp, 0xc
+0x006336A6: mov      eax, dword ptr [ebp + 8]
+0x006336A9: mov      ecx, dword ptr [0xc4e534]
+0x006336AF: imul     eax, eax, 0x34
+0x006336B2: fld      dword ptr [ecx + eax + 8]
+0x006336B6: fcomp    dword ptr [0x80dffc]
+0x006336BC: add      ecx, eax
+0x006336BE: fnstsw   ax
+0x006336C0: test     ah, 0x41
+0x006336C3: jp       0x63370e
+0x006336C5: fld      dword ptr [ecx + 8]
+0x006336C8: fcomp    dword ptr [0x7ffd74]
+0x006336CE: fnstsw   ax
+0x006336D0: test     ah, 1
+0x006336D3: jne      0x6336e0
+0x006336D5: mov      eax, 1
+0x006336DA: mov      esp, ebp
+0x006336DC: pop      ebp
+0x006336DD: ret      4
+0x006336E0: mov      eax, dword ptr [ecx + 4]
+0x006336E3: mov      edx, dword ptr [ecx]
+0x006336E5: mov      ecx, dword ptr [ecx + 8]
+0x006336E8: mov      dword ptr [ebp - 4], ecx
+0x006336EB: fld      dword ptr [ebp - 4]
+0x006336EE: fchs
+0x006336F0: mov      dword ptr [ebp - 8], eax
+0x006336F3: fcomp    dword ptr [0x80dffc]
+0x006336F9: mov      dword ptr [ebp - 0xc], edx
+0x006336FC: fnstsw   ax
+0x006336FE: test     ah, 0x41
+0x00633701: jp       0x63370e
+0x00633703: mov      eax, 1
+0x00633708: mov      esp, ebp
+0x0063370A: pop      ebp
+0x0063370B: ret      4
+0x0063370E: xor      eax, eax
+0x00633710: mov      esp, ebp
+0x00633712: pop      ebp
+0x00633713: ret      4

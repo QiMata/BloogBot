@@ -1,0 +1,75 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x634AE0
+Date: 2026-03-26
+Notes:
+- This is the working-vector builder reached by `0x635090` after the tiny `0x6336A0` slope-band gate succeeds.
+- Arguments:
+  - `arg1`: output `Vec3`
+  - `arg2`: selected index into `0xC4E534`
+  - `arg3`: local selector candidate buffer (`0x10` stride planes)
+  - `arg4`: local selector candidate count
+- Visible branch fanout:
+  - `count <= 1` or `count > 4`: return `-candidateBuffer[0].normal`
+  - `count == 2`: enter the only nontrivial two-plane builder body
+  - `count == 3` or `count == 4`: return `0xC4E534[selectedIndex].normal`
+- Fresh implication for parity work: the only unresolved part of this helper is the `count == 2` builder body; the outer mode selection is no longer opaque.
+
+0x00634AE0: push     ebp
+0x00634AE1: mov      ebp, esp
+0x00634AE3: sub      esp, 0x40
+0x00634AE6: mov      eax, dword ptr [ebp + 0x14]
+0x00634AE9: cmp      eax, 2
+0x00634AEC: push     ebx
+0x00634AED: mov      ebx, dword ptr [ebp + 0xc]
+0x00634AF0: push     esi
+0x00634AF1: push     edi
+0x00634AF2: mov      dword ptr [ebp - 4], ecx
+0x00634AF5: je       0x634b27
+0x00634AF7: jbe      0x634b02
+0x00634AF9: cmp      eax, 4
+0x00634AFC: jbe      0x634d6b
+
+; count <= 1 or count > 4 => negate candidateBuffer[0].normal
+0x00634B02: mov      eax, dword ptr [ebp + 0x10]
+0x00634B05: fld      dword ptr [eax + 8]
+0x00634B08: pop      edi
+0x00634B09: fchs
+0x00634B0B: pop      esi
+0x00634B0C: fld      dword ptr [eax + 4]
+0x00634B0F: pop      ebx
+0x00634B10: fchs
+0x00634B12: fld      dword ptr [eax]
+0x00634B14: mov      eax, dword ptr [ebp + 8]
+0x00634B17: fchs
+0x00634B19: fstp     dword ptr [eax]
+0x00634B1B: fstp     dword ptr [eax + 4]
+0x00634B1E: fstp     dword ptr [eax + 8]
+0x00634B21: mov      esp, ebp
+0x00634B23: pop      ebp
+0x00634B24: ret      0x10
+
+; count == 2 => two-plane builder body begins here
+0x00634B27: mov      esi, dword ptr [ebp + 0x10]
+...
+0x00634C10: mov      ecx, dword ptr [0xc4e534]
+...
+0x00634D68: ret      0x10
+
+; count == 3 or count == 4 => return selected contact normal
+0x00634D6B: mov      eax, dword ptr [0xc4e534]
+0x00634D70: imul     ebx, ebx, 0x34
+0x00634D73: add      ebx, eax
+0x00634D75: mov      edx, dword ptr [ebx]
+0x00634D77: mov      eax, dword ptr [ebp + 8]
+0x00634D7A: mov      ecx, eax
+0x00634D7C: mov      dword ptr [ecx], edx
+0x00634D7E: mov      edx, dword ptr [ebx + 4]
+0x00634D81: pop      edi
+0x00634D82: mov      dword ptr [ecx + 4], edx
+0x00634D85: mov      edx, dword ptr [ebx + 8]
+0x00634D88: pop      esi
+0x00634D89: mov      dword ptr [ecx + 8], edx
+0x00634D8C: pop      ebx
+0x00634D8D: mov      esp, ebp
+0x00634D8F: pop      ebp
+0x00634D90: ret      0x10

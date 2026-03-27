@@ -242,6 +242,13 @@ public static partial class NavigationInterop
         public SelectorPair OutputPair;
     }
 
+    public enum SelectorAlternateWorkingVectorMode : uint
+    {
+        NegatedFirstCandidate = 0,
+        TwoCandidateBuilder = 1,
+        SelectedContactNormal = 2,
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
@@ -809,6 +816,16 @@ public static partial class NavigationInterop
         uint movementFlags,
         float verticalSpeed,
         float horizontalSpeedScale);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorContactWithinAlternateWorkingVectorBand", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorContactWithinAlternateWorkingVectorBand(
+        float normalZ);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorAlternateWorkingVectorMode", CallingConvention = CallingConvention.Cdecl)]
+    public static extern SelectorAlternateWorkingVectorMode EvaluateWoWSelectorAlternateWorkingVectorMode(
+        float selectedNormalZ,
+        uint candidateCount);
 
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
     public static extern float EvaluateWoWVerticalTravelTimeScalar(
