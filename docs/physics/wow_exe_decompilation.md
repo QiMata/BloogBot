@@ -462,7 +462,7 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 1. Compute fall displacement via `ComputeFallDisplacement` (0x7C6140)
 2. Merge the displaced fall box into the current query volume via `0x6373B0`
 3. Slope descent clamp: `displacement.Z *= -tan(50°)`
-4. Epsilon expansion sweep: `0x637300`/`0x6372D0`
+4. Scalar min/max expansion: `0x637300` subtracts epsilon from all three min-corner components and `0x6372D0` adds epsilon to all three max-corner components
 5. Terrain test: `TestTerrain` (0x6721B0)
 
 ### Swimming Path (MOVEFLAG_SWIMMING 0x200000)
@@ -478,7 +478,8 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 | `0x633840` | `CMovement::CollisionStep` | Main collision orchestrator |
 | `0x6373B0` | `AABB::Merge` helper | Unions the current query box with another AABB |
 | `0x6721B0` | `CWorldCollision::TestTerrain` | Static position terrain test |
-| `0x637300` | `CWorldCollision::ExpandAndSweep` | Epsilon-expanded sweep |
+| `0x637300` | `Vec3::SubtractScalar` helper | Subtracts one scalar from `x/y/z` |
+| `0x6372D0` | `Vec3::AddScalar` helper | Adds one scalar to `x/y/z` |
 | `0x637330` | `Vec3Negate` helper | Flips the contact normal vector after `TestTerrain` |
 | `0x4549A0` | `Vec3TransformCoord` | 3x3 matrix × vector |
 | `0x617430` | `CMovement::GetBoundingRadius` | Unit bounding radius |
@@ -604,6 +605,10 @@ CollisionStep (0x633840)
     - otherwise it calls `0x632280`, then zero-clamps the caller's reported scalar when `reportedScalar <= 0x80DFEC`
     - `0x6376A0` itself is a tiny initializer that writes one selector-plane record as `(0, 0, 1, 0)`
     - the production DLL now mirrors those wrapper-visible behaviors through pure `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, `FinalizeSelectorTriangleSourceWrapper(...)`, and `InitializeSelectorTriangleSourceWrapperSeeds(...)` helpers plus deterministic export/test seams
+    - fresh raw captures now also live in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
+    - on the `0x631E70` cache-miss path, `0x637300` subtracts the same scalar from all three min-corner components and `0x6372D0` adds it to all three max-corner components before `0x6373B0`
+    - `0x61E9C0` is a bare no-op `ret` in this client build
+    - the production DLL now mirrors the `0x6372D0` / `0x637300` scalar-offset helpers through pure `AddScalarToVector3(...)` and `SubtractScalarFromVector3(...)` seams plus deterministic export/test coverage
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

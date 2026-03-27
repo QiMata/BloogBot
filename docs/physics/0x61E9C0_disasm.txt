@@ -1,0 +1,7 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x61E9C0
+Date: 2026-03-26
+Notes:
+- This site is a bare no-op `ret` in the vanilla 1.12.1 binary.
+
+0x0061E9C0: ret

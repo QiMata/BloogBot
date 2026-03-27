@@ -1,0 +1,20 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x637300
+Date: 2026-03-26
+Notes:
+- This helper subtracts one scalar from all three components of the vector at `ecx`.
+
+0x00637300: push     ebp
+0x00637301: mov      ebp, esp
+0x00637303: mov      eax, ecx
+0x00637305: fld      dword ptr [eax]
+0x00637307: fsub     dword ptr [ebp + 8]
+0x0063730A: fstp     dword ptr [eax]
+0x0063730C: fld      dword ptr [eax + 4]
+0x0063730F: fsub     dword ptr [ebp + 8]
+0x00637312: fstp     dword ptr [eax + 4]
+0x00637315: fld      dword ptr [eax + 8]
+0x00637318: fsub     dword ptr [ebp + 8]
+0x0063731B: fstp     dword ptr [eax + 8]
+0x0063731E: pop      ebp
+0x0063731F: ret      4

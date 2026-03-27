@@ -1698,3 +1698,36 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not spend more time re-proving the fixed `(0,0,-1)` seed vectors or the `1.0f` initial ratio. Those wrapper defaults are now closed.
 - Recommended next single hypothesis:
   - Mirror the next variable `0x632A30` payload field, starting with the selected-index seed and the exact `0x631BE0` outputs that are passed forward into `0x632280`.
+
+## 2026-03-26 Scalar-offset addendum (`0x6372D0`, `0x637300`, `0x61E9C0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the tiny scalar-offset helpers on the `0x631E70` cache-miss path so the remaining unknown is the higher-level merged transaction rather than the per-vector arithmetic.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the old `ExpandAndSweep` label is replaced with the true helper semantics: subtract scalar from the min vector, add scalar to the max vector, and then merge; `0x61E9C0` is a no-op in this build
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `AddScalarToVector3(...)`
+    - added pure `SubtractScalarFromVector3(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `AddScalarToWoWVector3(...)`
+    - added `SubtractScalarFromWoWVector3(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new scalar-offset seams
+  - `Tests/Navigation.Physics.Tests/WowVectorScalarOffsetTests.cs`
+    - added deterministic coverage for the exact add/subtract-all-components behavior
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowVectorScalarOffsetTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowAabbMergeTests|FullyQualifiedName~WowSelectorSourceWrapperSeedTests" --logger "console;verbosity=minimal"`
+    - passed (`6/6`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again, but this closure is still structural: the scalar offsets are now closed, while the remaining unknown is how the full cache-miss transaction combines them with the merged bounds, query mask, and optional swim-side work.
+- Do Not Repeat:
+  - Do not keep treating `0x637300` as a sweep/collision routine. In this build it is only a three-component scalar subtract helper.
+- Recommended next single hypothesis:
+  - Mirror the next higher-level `0x631E70` cache-miss transaction step, starting with the exact merged-bounds handoff after `0x637300` / `0x6372D0` and the still-variable query call state.

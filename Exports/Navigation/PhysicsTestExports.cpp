@@ -973,6 +973,30 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool AddScalarToWoWVector3(
+        G3D::Vector3* ioVector,
+        float scalar)
+    {
+        if (!ioVector) {
+            return false;
+        }
+
+        WoWCollision::AddScalarToVector3(*ioVector, scalar);
+        return true;
+    }
+
+    __declspec(dllexport) bool SubtractScalarFromWoWVector3(
+        G3D::Vector3* ioVector,
+        float scalar)
+    {
+        if (!ioVector) {
+            return false;
+        }
+
+        WoWCollision::SubtractScalarFromVector3(*ioVector, scalar);
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

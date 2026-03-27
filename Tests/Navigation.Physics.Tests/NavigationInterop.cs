@@ -654,6 +654,14 @@ public static partial class NavigationInterop
         out Vector3 boundsMin,
         out Vector3 boundsMax);
 
+    [DllImport(NavigationDll, EntryPoint = "AddScalarToWoWVector3", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool AddScalarToWoWVector3(ref Vector3 vector, float scalar);
+
+    [DllImport(NavigationDll, EntryPoint = "SubtractScalarFromWoWVector3", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SubtractScalarFromWoWVector3(ref Vector3 vector, float scalar);
+
     [DllImport(NavigationDll, EntryPoint = "InitializeWoWSelectorSupportPlane", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool InitializeWoWSelectorSupportPlane(out SelectorSupportPlane plane);

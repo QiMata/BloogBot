@@ -283,8 +283,21 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 216)
+- **Last updated:** 2026-03-26 (session 217)
 - **Branch:** `main`
+- **Session 217 — `0x6372D0` / `0x637300` scalar offsets are now pinned as pure binary seams:**
+  - Added pure [AddScalarToVector3(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [SubtractScalarFromVector3(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowVectorScalarOffsetTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowVectorScalarOffsetTests.cs), which now pins the exact add-to-all-components and subtract-from-all-components behavior from `0x6372D0` and `0x637300`.
+  - Practical implication: another piece of the `0x631E70` cache-miss builder is no longer inferred. The remaining open work there is the merged transaction around those offsets, not the scalar offset helpers themselves.
+- **Fresh binary evidence (session 217):**
+  - Added raw captures [0x6372D0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6372D0_disasm.txt), [0x637300_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x637300_disasm.txt), and [0x61E9C0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x61E9C0_disasm.txt), then updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) to record the true helper semantics and the fact that `0x61E9C0` is a no-op in this build.
+- **Test baseline (session 217):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowVectorScalarOffsetTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowAabbMergeTests|FullyQualifiedName~WowSelectorSourceWrapperSeedTests" --logger "console;verbosity=minimal"`
+    - Passed (`6/6`)
 - **Session 216 — `0x632A30` source-wrapper seeds are now pinned as a pure binary seam:**
   - Added pure [InitializeSelectorTriangleSourceWrapperSeeds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), and added matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorSourceWrapperSeedTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperSeedTests.cs), which now pins the exact `0x632A30` fixed payload into `0x632280`: `testPoint = (0,0,-1)`, `candidateDirection = (0,0,-1)`, and `bestRatio = 1.0f`.

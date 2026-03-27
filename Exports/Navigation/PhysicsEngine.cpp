@@ -343,6 +343,20 @@ void WoWCollision::MergeAabbBounds(const G3D::Vector3& boundsMinA,
         std::max(boundsMaxA.z, boundsMaxB.z));
 }
 
+void WoWCollision::AddScalarToVector3(G3D::Vector3& ioVector, float scalar)
+{
+    ioVector.x += scalar;
+    ioVector.y += scalar;
+    ioVector.z += scalar;
+}
+
+void WoWCollision::SubtractScalarFromVector3(G3D::Vector3& ioVector, float scalar)
+{
+    ioVector.x -= scalar;
+    ioVector.y -= scalar;
+    ioVector.z -= scalar;
+}
+
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
 {
     outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);

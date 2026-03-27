@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 216)`
+- Last updated: `2026-03-26 (session 217)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 217 added `WowVectorScalarOffsetTests.cs` plus the new interop needed to pin the `0x6372D0` / `0x637300` scalar-offset seams through the production DLL. `NavigationInterop.cs` now exposes `AddScalarToWoWVector3(...)` and `SubtractScalarFromWoWVector3(...)`.
+  - The new deterministic coverage now pins the exact add-to-all-components and subtract-from-all-components behavior on a `Vector3`.
+  - Practical implication: this owner no longer has to infer those scalar offset helpers inside `0x631E70`. The next missing deterministic seams are the higher-level merged cache-miss transaction and the remaining variable `0x632A30 -> 0x632280` payload.
   - Session 216 added `WowSelectorSourceWrapperSeedTests.cs` plus the new interop needed to pin the fixed `0x632A30` seed payload through the production DLL. `NavigationInterop.cs` now exposes `InitializeWoWSelectorTriangleSourceWrapperSeeds(...)`.
   - The new deterministic coverage now pins the exact binary seed state that `0x632A30` feeds into `0x632280`: `testPoint = (0,0,-1)`, `candidateDirection = (0,0,-1)`, and `bestRatio = 1.0f`.
   - Practical implication: this owner no longer has to infer the fixed wrapper seed state. The next missing deterministic seams are the remaining variable `0x632A30 -> 0x632280` payload fields and the broader `0x6351A0` consumer transaction.

@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 216)
+- Last updated: 2026-03-26 (session 217)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 217 still kept runtime grounded behavior unchanged and pinned the `0x6372D0` / `0x637300` scalar-offset helpers that sit on the `0x631E70` cache-miss path. `AddScalarToVector3(...)` now mirrors the add-to-all-components helper, and `SubtractScalarFromVector3(...)` mirrors the subtract-from-all-components helper.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowVectorScalarOffsetTests.cs` now pins both exact binary-backed behaviors.
+  - New raw captures now live in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`. Practical implication: the remaining `0x631E70` gap is now the higher-level merged transaction around those helpers, not the helpers themselves.
   - Session 216 still kept runtime grounded behavior unchanged and pinned the fixed seed payload that `0x632A30` passes into `0x632280`. `InitializeSelectorTriangleSourceWrapperSeeds(...)` now mirrors the binary `(0,0,-1)` test point, `(0,0,-1)` candidate direction, and initial best ratio `1.0f`.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorSourceWrapperSeedTests.cs` now pins that exact fixed payload through the production DLL.
   - Practical implication: the remaining `0x632A30` / `0x632280` gap is no longer the fixed wrapper seed state; it is the variable payload around the selected-index seed, `0x631BE0` outputs, and the optional `0x631E70` transaction.
