@@ -1929,3 +1929,41 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not reintroduce selector fallback heuristics on the alternate path without matching the binary `0x7C5DA0` / `this+0x84` unit-Z gate first.
 - Recommended next single hypothesis:
   - Expose the selected index plus paired `0xC4E544[index]` payload from the production grounded path, then wire that exact transaction into `ResolveGroundedWallContacts(...)` before revisiting live bobbing behavior.
+
+## 2026-03-26 Selector follow-up gate addendum (`0x635550`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the visible pure gate that `0x635450` calls immediately after `0x6351A0`, so the next runtime change can mirror the caller-side selector transaction instead of inferring the post-selection airborne/window checks.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x635550_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x6351A0` note now also records the visible `0x635550` contract:
+    - immediate success when the second `0x6351A0` out-state dword is nonzero
+    - otherwise require `this->+0xA0 < 0`
+    - compute the binary `0x7C5DA0` jump-time scalar
+    - compare that scalar against the window start/end and finally against horizontal move length squared using `this->+0x84`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `ComputeJumpTimeScalar(...)`
+    - added pure `EvaluateSelectorPairFollowupGate(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWJumpTimeScalar(...)`
+    - added `EvaluateWoWSelectorPairFollowupGate(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector follow-up seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorPairFollowupGateTests.cs`
+    - added deterministic coverage for the jump-time helper, alternate-state short-circuit, negative-vertical gate, window-before/window-after outcomes, and the final strict horizontal-length-squared comparison
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`27/27`)
+- Frame-pattern note:
+  - The open selector gap is narrower again. The visible follow-up gate after `0x6351A0` is now closed, so the next unknown is the surrounding `0x635450` transaction that combines the two out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before grounded resolution consumes the selected payload.
+- Do Not Repeat:
+  - Do not treat `0x7C5DA0` as a generic radius or distance helper. The fresh binary capture closes it as a jump-time scalar gated solely by `MOVEFLAG_JUMPING`.
+  - Do not weaken the final `0x635550` comparison to `>=`. The binary uses a strict greater-than check on horizontal allowance squared versus move length squared.
+- Recommended next single hypothesis:
+  - Mirror the visible `0x635450` caller transaction next, including the exact use of the two `0x6351A0` out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before touching runtime grounded resolution again.

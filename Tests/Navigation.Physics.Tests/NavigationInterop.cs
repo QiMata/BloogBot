@@ -793,6 +793,22 @@ public static partial class NavigationInterop
         float horizontalSpeedScale,
         float requestedDistance);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWJumpTimeScalar", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float EvaluateWoWJumpTimeScalar(
+        uint movementFlags,
+        float verticalSpeed);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPairFollowupGate", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorPairFollowupGate(
+        float windowStartScalar,
+        float windowSpanScalar,
+        in Vector3 moveVector,
+        [MarshalAs(UnmanagedType.I1)] bool alternateUnitZState,
+        uint movementFlags,
+        float verticalSpeed,
+        float horizontalSpeedScale);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPairConsumer", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool EvaluateWoWSelectorPairConsumer(

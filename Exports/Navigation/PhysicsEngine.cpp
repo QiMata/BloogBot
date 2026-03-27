@@ -949,6 +949,47 @@ bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTime
     return (remainingWindow * horizontalSpeedScale) >= requestedDistance;
 }
 
+float WoWCollision::ComputeJumpTimeScalar(uint32_t movementFlags,
+                                          float verticalSpeed)
+{
+    if ((movementFlags & MOVEFLAG_JUMPING) == 0u) {
+        return 0.0f;
+    }
+
+    return verticalSpeed * PhysicsConstants::NEG_INV_GRAVITY;
+}
+
+bool WoWCollision::EvaluateSelectorPairFollowupGate(float windowStartScalar,
+                                                    float windowSpanScalar,
+                                                    const G3D::Vector3& moveVector,
+                                                    bool alternateUnitZState,
+                                                    uint32_t movementFlags,
+                                                    float verticalSpeed,
+                                                    float horizontalSpeedScale)
+{
+    if (alternateUnitZState) {
+        return true;
+    }
+
+    if (!(verticalSpeed < 0.0f)) {
+        return false;
+    }
+
+    const float jumpTimeScalar = ComputeJumpTimeScalar(movementFlags, verticalSpeed);
+    if ((windowStartScalar + windowSpanScalar) < jumpTimeScalar) {
+        return true;
+    }
+
+    if (windowStartScalar > jumpTimeScalar) {
+        return false;
+    }
+
+    const float remainingHorizontalAllowance = (jumpTimeScalar - windowStartScalar) * horizontalSpeedScale;
+    const float remainingHorizontalAllowanceSq = remainingHorizontalAllowance * remainingHorizontalAllowance;
+    const float horizontalMoveSq = (moveVector.x * moveVector.x) + (moveVector.y * moveVector.y);
+    return remainingHorizontalAllowanceSq > horizontalMoveSq;
+}
+
 void WoWCollision::EvaluateSelectorPairConsumer(float requestedDistance,
                                                 const G3D::Vector3& inputMove,
                                                 bool directionRankingAccepted,

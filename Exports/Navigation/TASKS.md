@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 223)
+- Last updated: 2026-03-26 (session 224)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 224 still kept runtime grounded behavior unchanged and pinned the visible `0x635550` follow-up gate that `0x635450` calls immediately after `0x6351A0`. `ComputeJumpTimeScalar(...)` now mirrors the binary `0x7C5DA0` helper exactly (`MOVEFLAG_JUMPING` => `verticalSpeed * -1/gravity`, else `0`), and `EvaluateSelectorPairFollowupGate(...)` now mirrors the visible `0x635550` gate: alternate-state short-circuit, reject when `this->+0xA0 >= 0`, early success when the window ends before the jump-time scalar, reject when the window starts after it, and the final strict horizontal-length-squared comparison against `this->+0x84`.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorPairFollowupGateTests.cs` now pins the jump-time helper plus the full visible `0x635550` branch contract through the production DLL.
+  - New raw capture now lives in `docs/physics/0x635550_disasm.txt`. Practical implication: the open selector gap is no longer the visible post-`0x6351A0` follow-up gate. The next missing runtime piece is `0x635450` itself: how it combines the two `0x6351A0` out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before grounded resolution consumes the selected payload.
   - Session 223 still kept runtime grounded behavior unchanged and pinned the visible `0x6351A0` consumer tail. `EvaluateSelectorAlternateUnitZFallbackGate(...)` now mirrors the binary `0x7C5DA0` / `this+0x84` gate on the alternate unit-Z branch, and `EvaluateSelectorPairConsumer(...)` now mirrors the visible `0x6351A0` return contract: zero-distance early return, `0x632BA0` failure returning `2` with a zeroed move vector, direct-pair return, zero-pair direct success, zero-pair unit-Z success, and alternate-pair fallback.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorPairConsumerTests.cs` now pins those exact consumer-tail behaviors through the production DLL alongside the existing selector z-match and direction-ranking seams.
   - New raw capture now lives in `docs/physics/0x635734_callsite_disasm.txt`, which closes one important caller-side detail: `0x6351A0` writes two separate out-state dwords, not one.

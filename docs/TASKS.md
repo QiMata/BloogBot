@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 222)
+- **Last updated:** 2026-03-26 (session 224)
 - **Branch:** `main`
+- **Session 224 — the visible `0x635550` selector follow-up gate is now pinned as a pure binary seam:**
+  - Added pure [ComputeJumpTimeScalar(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorPairFollowupGate(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorPairFollowupGateTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorPairFollowupGateTests.cs), which now pins both exact binary-backed seams: the `MOVEFLAG_JUMPING`-gated `0x7C5DA0` jump-time scalar and the visible `0x635550` follow-up gate after `0x6351A0`.
+  - Added fresh raw capture [0x635550_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x635550_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the visible post-`0x6351A0` window/jump checks are now explicit in the binary notes.
+  - Practical implication: the remaining selector gap is no longer the visible follow-up gate. The next unresolved piece is `0x635450`, which combines the two `0x6351A0` out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before the grounded runtime consumes the selected payload.
+- **Test baseline (session 224):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - Passed (`27/27`)
 - **Session 222 — the outer `0x63214C` transport-local loop/gate is now pinned as a pure binary seam:**
   - Added pure [TransformSelectorCandidateRecordBufferToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Extended [WowTransportLocalTransformTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs) so the production DLL now pins both visible `0x63214C` gates: when `transportGuid == 0` the cached records stay unchanged, and when `transportGuid != 0` the loop rewrites every `0x34`-byte record in-place.

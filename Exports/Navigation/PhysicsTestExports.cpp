@@ -1280,6 +1280,38 @@ extern "C"
             requestedDistance);
     }
 
+    __declspec(dllexport) float EvaluateWoWJumpTimeScalar(
+        uint32_t movementFlags,
+        float verticalSpeed)
+    {
+        return WoWCollision::ComputeJumpTimeScalar(
+            movementFlags,
+            verticalSpeed);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorPairFollowupGate(
+        float windowStartScalar,
+        float windowSpanScalar,
+        const G3D::Vector3* moveVector,
+        bool alternateUnitZState,
+        uint32_t movementFlags,
+        float verticalSpeed,
+        float horizontalSpeedScale)
+    {
+        if (!moveVector) {
+            return false;
+        }
+
+        return WoWCollision::EvaluateSelectorPairFollowupGate(
+            windowStartScalar,
+            windowSpanScalar,
+            *moveVector,
+            alternateUnitZState,
+            movementFlags,
+            verticalSpeed,
+            horizontalSpeedScale);
+    }
+
     __declspec(dllexport) bool EvaluateWoWSelectorPairConsumer(
         float requestedDistance,
         const G3D::Vector3* inputMove,

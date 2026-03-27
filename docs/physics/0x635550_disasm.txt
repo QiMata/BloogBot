@@ -1,0 +1,79 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x635550
+Date: 2026-03-26
+Notes:
+- This is the pure follow-up gate that `0x635450` calls immediately after `0x6351A0`.
+- It short-circuits true when the second `0x6351A0` out-state dword is nonzero.
+- Otherwise it depends on:
+  - `this->+0xA0 < 0`
+  - the `0x7C5DA0` jump-time scalar
+  - the horizontal move length squared from the input vector
+  - the horizontal speed scalar at `this->+0x84`
+
+0x00635550: push     ebp
+0x00635551: mov      ebp, esp
+0x00635553: sub      esp, 8
+0x00635556: mov      eax, dword ptr [ebp + 0x14]
+0x00635559: test     eax, eax
+0x0063555B: push     esi
+0x0063555C: mov      esi, ecx
+0x0063555E: je       0x63556c
+0x00635560: mov      eax, 1
+0x00635565: pop      esi
+0x00635566: mov      esp, ebp
+0x00635568: pop      ebp
+0x00635569: ret      0x10
+0x0063556C: fld      dword ptr [esi + 0xa0]
+0x00635572: fcomp    dword ptr [0x7ffd74]
+0x00635578: fnstsw   ax
+0x0063557A: test     ah, 1
+0x0063557D: je       0x6355f5
+0x0063557F: mov      ecx, esi
+0x00635581: call     0x7c5da0
+0x00635586: fstp     dword ptr [ebp + 0x14]
+0x00635589: fld      dword ptr [ebp + 8]
+0x0063558C: fadd     dword ptr [ebp + 0xc]
+0x0063558F: fcomp    dword ptr [ebp + 0x14]
+0x00635592: fnstsw   ax
+0x00635594: test     ah, 5
+0x00635597: jp       0x6355a5
+0x00635599: mov      eax, 1
+0x0063559E: pop      esi
+0x0063559F: mov      esp, ebp
+0x006355A1: pop      ebp
+0x006355A2: ret      0x10
+0x006355A5: fld      dword ptr [ebp + 8]
+0x006355A8: fcomp    dword ptr [ebp + 0x14]
+0x006355AB: fnstsw   ax
+0x006355AD: test     ah, 0x41
+0x006355B0: je       0x6355f5
+0x006355B2: fld      dword ptr [ebp + 0x14]
+0x006355B5: mov      eax, dword ptr [ebp + 0x10]
+0x006355B8: fsub     dword ptr [ebp + 8]
+0x006355BB: mov      edx, dword ptr [eax + 4]
+0x006355BE: mov      ecx, dword ptr [eax]
+0x006355C0: mov      dword ptr [ebp - 4], edx
+0x006355C3: fmul     dword ptr [esi + 0x84]
+0x006355C9: fld      dword ptr [ebp - 4]
+0x006355CC: mov      dword ptr [ebp - 8], ecx
+0x006355CF: fmul     dword ptr [ebp - 4]
+0x006355D2: fld      dword ptr [ebp - 8]
+0x006355D5: fmul     dword ptr [ebp - 8]
+0x006355D8: faddp    st(1)
+0x006355DA: fld      st(1)
+0x006355DC: fmul     st(2)
+0x006355DE: fcompp
+0x006355E0: fnstsw   ax
+0x006355E2: fstp     st(0)
+0x006355E4: test     ah, 0x41
+0x006355E7: jne      0x6355f5
+0x006355E9: mov      eax, 1
+0x006355EE: pop      esi
+0x006355EF: mov      esp, ebp
+0x006355F1: pop      ebp
+0x006355F2: ret      0x10
+0x006355F5: xor      eax, eax
+0x006355F7: pop      esi
+0x006355F8: mov      esp, ebp
+0x006355FA: pop      ebp
+0x006355FB: ret      0x10

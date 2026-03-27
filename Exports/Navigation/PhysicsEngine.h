@@ -863,6 +863,17 @@ namespace WoWCollision
                                                     float horizontalSpeedScale,
                                                     float requestedDistance);
 
+    float ComputeJumpTimeScalar(uint32_t movementFlags,
+                                float verticalSpeed);
+
+    bool EvaluateSelectorPairFollowupGate(float windowStartScalar,
+                                          float windowSpanScalar,
+                                          const G3D::Vector3& moveVector,
+                                          bool alternateUnitZState,
+                                          uint32_t movementFlags,
+                                          float verticalSpeed,
+                                          float horizontalSpeedScale);
+
     void EvaluateSelectorPairConsumer(float requestedDistance,
                                       const G3D::Vector3& inputMove,
                                       bool directionRankingAccepted,
