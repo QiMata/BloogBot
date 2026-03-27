@@ -534,8 +534,8 @@ CollisionStep (0x633840)
         → TerrainHeightmap test
         → WMO BSP tree intersection
         → M2 doodad collision
-      → Filter: normal.Z >= cos(50°)
-      → Copy to result array (stride 0x34)
+      → Filter: stored normal.Z >= cos(50°)
+      → Copy one `0x34` contact record plus the aligned `0x08` sidecar payload
   → Vec3Negate helper (0x637330)        // Flip contact normals from TestTerrain
 ```
 
@@ -599,6 +599,12 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that exact bounds builder through pure `BuildTerrainQueryBounds(...)` plus a deterministic export/test seam
     - fresh 2026-03-26 review also re-closes `0x6373B0` from raw binary evidence as the pure merged-AABB helper used on this path: it returns the componentwise min of both `min{x,y,z}` triplets and the componentwise max of both `max{x,y,z}` triplets, with no collision/query side effects
     - the production DLL now mirrors that helper through pure `MergeAabbBounds(...)` plus a deterministic export/test seam, and `CollisionStepWoW` uses it instead of a local lambda for its merged query volume
+    - fresh 2026-03-26 review now also closes one more `0x6721B0` container detail:
+      - `0x6721B0` does not just copy a surviving `0x34` contact record
+      - it filters those temp records by stored `normal.z >= 0x80DFFC`
+      - for every surviving record it also appends the aligned `0x08` sidecar payload through `0x673C80`
+      - fresh raw capture now also lives in `docs/physics/0x673C80_disasm.txt`
+    - the production DLL now mirrors that filtered contact-plus-pair copy contract through pure `CopyTerrainQueryWalkableContactsAndPairs(...)` plus deterministic export/test coverage
     - fresh raw captures now also live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
     - `0x632A30` initializes a 7-slot and a 9-slot `0x10`-stride selector-plane buffer through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, and calls `0x631BE0`
     - before `0x632280`, `0x632A30` also seeds both local vectors to `(0, 0, -1)` and seeds the initial best ratio as `1.0f`

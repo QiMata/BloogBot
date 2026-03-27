@@ -132,6 +132,13 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainQueryPairPayload
+    {
+        public float First;
+        public float Second;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct SelectorSupportPlane
     {
         public Vector3 Normal;
@@ -1090,6 +1097,15 @@ public static partial class NavigationInterop
         in Vector3 boxMax,
         [Out] TerrainAabbContact[] contacts,
         int maxContacts);
+
+    [DllImport(NavigationDll, EntryPoint = "CopyWoWTerrainQueryWalkableContactsAndPairs", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int CopyWoWTerrainQueryWalkableContactsAndPairs(
+        [In] TerrainAabbContact[] inputContacts,
+        [In] TerrainQueryPairPayload[] inputPairs,
+        int inputCount,
+        [Out] TerrainAabbContact[] outputContacts,
+        [Out] TerrainQueryPairPayload[] outputPairs,
+        int maxOutputCount);
 
     [DllImport(NavigationDll, EntryPoint = "EvaluateGroundedWallSelection", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

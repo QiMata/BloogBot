@@ -681,6 +681,12 @@ namespace WoWCollision
         float second = 0.0f;
     };
 
+    struct TerrainQueryPairPayload
+    {
+        float first = 0.0f;
+        float second = 0.0f;
+    };
+
     struct SelectorPairConsumerTrace
     {
         float requestedDistance = 0.0f;
@@ -786,6 +792,12 @@ namespace WoWCollision
                                  float boundingHeight,
                                  G3D::Vector3& outBoundsMin,
                                  G3D::Vector3& outBoundsMax);
+
+    uint32_t CopyTerrainQueryWalkableContactsAndPairs(const SceneQuery::AABBContact* inputContacts,
+                                                      const TerrainQueryPairPayload* inputPairs,
+                                                      uint32_t inputCount,
+                                                      std::vector<SceneQuery::AABBContact>& outContacts,
+                                                      std::vector<TerrainQueryPairPayload>& outPairs);
 
     void MergeAabbBounds(const G3D::Vector3& boundsMinA,
                          const G3D::Vector3& boundsMaxA,

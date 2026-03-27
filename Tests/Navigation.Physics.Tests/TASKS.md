@@ -34,9 +34,16 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 231)`
+- Last updated: `2026-03-26 (session 232)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 232 added `WowTerrainQueryWalkableCopyTests.cs` plus the new production-DLL interop needed to pin the visible `0x6721B0` filtered copy contract. `NavigationInterop.cs` now exposes `CopyWoWTerrainQueryWalkableContactsAndPairs(...)`.
+  - The new deterministic coverage now pins two exact binary-backed behaviors: the `normal.z >= 0x80DFFC` filter preserves pair alignment, and an input record exactly at the threshold survives the copy.
+  - Practical implication: this owner no longer has to infer the `0x6721B0` output-side contact/pair filtering. The next missing deterministic seam is the earlier temp contact + sidecar generation path inside `0x6AA8B0` / `0x6AADC0` / `0x6AB530`.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+    - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryWalkableCopyTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
   - Session 231 added `WowSelectorAlternatePairTests.cs` plus the new production-DLL interop needed to pin the visible `0x635090` alternate-pair caller. `NavigationInterop.cs` now exposes `BuildWoWSelectorAlternatePair(...)`.
   - The new deterministic coverage now pins three exact binary-backed behaviors: the band-fail negated-input path, the `count >= 3` selected-contact-normal path, and the `count == 2` working-vector builder path.
   - Practical implication: this owner no longer has to infer the caller-side normalization / pair-write math in `0x635090`. The next missing deterministic seam is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.

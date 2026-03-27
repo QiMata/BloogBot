@@ -124,9 +124,13 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 231)
+- Last updated: 2026-03-26 (session 232)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 232 still kept runtime grounded behavior unchanged and closed one more producer-side `TestTerrain` seam instead of guessing inside grounded wall selection again. `CopyTerrainQueryWalkableContactsAndPairs(...)` now mirrors the visible `0x6721B0` filtered copy contract: keep only temp records whose stored `normal.z` meets the binary `0x80DFFC` threshold, copy the surviving `0x34` contact records verbatim, and preserve the aligned `0x08` sidecar payload order alongside them.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTerrainQueryWalkableCopyTests.cs` now pins two exact binary-backed behaviors through the production DLL: pair alignment survives filtering, and a record exactly at the threshold is kept.
+  - Validation held on the pure helper slice: release native build passed, release `Navigation.Physics.Tests` build passed, and the focused terrain-query helper slice passed `13/13`.
+  - New raw capture now lives in `docs/physics/0x673C80_disasm.txt`, and `docs/physics/0x6721B0_disasm.txt` / `docs/physics/wow_exe_decompilation.md` now record that `0x6721B0` is not an “all contacts” copy loop. Practical implication: the remaining runtime producer gap is no longer this filtered-copy contract itself; it is the earlier temp-record/sidecar generation path inside `0x6AA8B0` / `0x6AADC0` / `0x6AB530`.
   - Session 231 still kept runtime grounded behavior unchanged and pinned the visible `0x635090` alternate-pair caller as a pure helper. `BuildSelectorAlternatePair(...)` now mirrors the binary caller-side `0x6336A0` gate, the `0x634AE0` working-vector reuse, the horizontal normalization threshold at `0x8029D4`, the scale numerator/denominator math, and the final two-float pair write.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorAlternatePairTests.cs` now pins the band-fail negated-input path, the `count >= 3` selected-contact-normal path, and the `count == 2` builder path through the production DLL.
   - `docs/physics/0x635090_disasm.txt` and `docs/physics/wow_exe_decompilation.md` now record that the visible alternate-pair caller math is no longer opaque. Practical implication: the visible alternate-pair helper chain is now closed, and the next missing runtime piece is the grounded producer transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
@@ -549,7 +553,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `rg --line-number "GroundedWallSelectionTrace|selectedContactIndex|outputPair|0xC4E544|0x6351A0" Exports/Navigation/PhysicsEngine.cpp Tests/Navigation.Physics.Tests -S`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x6AAAB0; data=code[start-0x400000:start-0x400000+2048]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
   - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

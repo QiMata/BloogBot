@@ -283,8 +283,15 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 231)
+- **Last updated:** 2026-03-26 (session 232)
 - **Branch:** `main`
+- **Session 232 — `0x6721B0` filtered contact+pair copy contract pinned:**
+  - Added raw capture in [0x673C80_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x673C80_disasm.txt) and tightened [0x6721B0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6721B0_disasm.txt) / [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the `TestTerrain` output contract now explicitly records two facts that were still missing from the repo notes:
+    - `0x6721B0` filters the temp `0x34` records by stored `normal.z >= 0x80DFFC`
+    - for every surviving record it also appends the aligned `0x08` sidecar payload through `0x673C80`
+  - Added a pure native helper/export seam for that structural contract in [PhysicsEngine.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) / [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp), plus deterministic coverage in [WowTerrainQueryWalkableCopyTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTerrainQueryWalkableCopyTests.cs).
+  - Focused native proof held: release native build passed, release physics-test build passed, and the filtered terrain-query slice passed `13/13`.
+  - Practical implication: one more producer-path seam is now closed without changing runtime grounded behavior. The next unresolved native work is earlier in the temp query generation path (`0x6AA8B0` / `0x6AADC0` / `0x6AB530`), not in this filtered output copy itself.
 - **Session 231 — the visible `0x635090` alternate-pair caller is now pinned as a pure binary seam:**
   - Added pure [BuildSelectorAlternatePair(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorAlternatePairTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorAlternatePairTests.cs), which now pins the band-fail negated-input path, the 3-candidate selected-normal path, and the 2-candidate builder path through the production DLL.

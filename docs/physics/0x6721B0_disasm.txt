@@ -36,8 +36,12 @@ Relevant `0x6721B0` excerpt:
 Interpretation:
 - `0x6721B0` calls `0x6AA8B0` to populate a temporary contact buffer.
 - It iterates contacts at stride `0x34`.
+- It checks the stored quick-access `normal.z` at offset `+0x08` against `0x80DFFC`.
+- Only records whose stored `normal.z` is at least `cos(50°)` survive the copy loop.
 - Matching contacts are copied byte-for-byte with `rep movsd` (`13 dwords = 0x34 bytes`) into the output array.
+- For every copied `0x34` record, it also copies the aligned `0x08` sidecar payload from `[0xC7B370 + index*8]` into the output sidecar container at `output + 0x10` via `0x673C80`.
 - This means the signed contact normal stored in the 0x34-byte contact struct is preserved through `TestTerrain`; `0x6721B0` does not rebuild triangle winding normals itself.
+- It also means `TestTerrain` treats the contact record and the paired `0x08` payload as one aligned filtered transaction.
 
 `0x637330` disassembly:
 
@@ -65,3 +69,4 @@ Parity implication for BG:
 - `TestTerrainAABB` contacts must preserve a signed, query-relative contact normal.
 - Upward-normalizing every static AABB contact is not equivalent to the client because it erases the distinction between support below the query box and obstructing geometry above it.
 - `0x6334A0` `CheckWalkable` therefore needs the signed contact normal/plane feed, not the raw triangle winding alone.
+- The `0x6721B0` output contract is narrower than "copy every overlapping contact." The client filters by stored `normal.z >= cos(50°)` before writing the result container and preserves the aligned `0x08` sidecar payload for every surviving record.

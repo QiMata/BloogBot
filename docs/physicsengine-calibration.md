@@ -2161,3 +2161,39 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not relax the `0x635450` horizontal rescale gate to `<=`. The binary only rescales when the remaining window is strictly less than the scaled horizontal window.
 - Recommended next single hypothesis:
   - Extend the production grounded trace/export seam next so deterministic tests can capture the selected index, paired `0xC4E544[index]` payload, and the two post-`0x6351A0` state dwords from the real grounded path before attempting any runtime hookup.
+
+## 2026-03-26 `0x6721B0` filtered-copy addendum
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close one more producer-side `TestTerrain` seam safely before touching `CollisionStepWoW`: the visible filtered copy from the temp `0x34` contact buffer plus its aligned `0x08` sidecar payload.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x673C80_disasm.txt`
+  - tightened `docs/physics/0x6721B0_disasm.txt` and `docs/physics/wow_exe_decompilation.md` so the `TestTerrain` output contract now explicitly records:
+    - filter on stored `normal.z >= 0x80DFFC`
+    - verbatim copy of the surviving `0x34` record
+    - aligned append of the matching `0x08` sidecar payload through `0x673C80`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `TerrainQueryPairPayload`
+    - added pure `CopyTerrainQueryWalkableContactsAndPairs(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `CopyWoWTerrainQueryWalkableContactsAndPairs(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the filtered copy seam
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryWalkableCopyTests.cs`
+    - added deterministic coverage for pair-alignment preservation and exact-threshold inclusion
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryWalkableCopyTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowTerrainQueryMaskTests|FullyQualifiedName~WowAabbContainmentTests" --logger "console;verbosity=minimal"`
+    - passed (`13/13`)
+- Frame-pattern note:
+  - The open producer gap is narrower again. The repo now has deterministic proof for the visible `0x6721B0` filtered output contract, so the next unresolved piece is earlier: where the temp `0x34` records and their aligned `0x08` payloads are generated before that copy loop runs.
+- Do Not Repeat:
+  - Do not keep treating `TestTerrainAABB` as a generic “all overlapping contacts” stand-in when reasoning about the original client's filtered output contract.
+  - Do not collapse the sidecar payload to a selector-only afterthought. The binary preserves it as an aligned per-record payload at `TestTerrain` output time.
+- Recommended next single hypothesis:
+  - Trace `0x6AAAB0` / `0x6AADC0` / `0x6AB530` next so the temp contact record and sidecar-payload generation path can be mirrored before any runtime grounded hookup is attempted again.

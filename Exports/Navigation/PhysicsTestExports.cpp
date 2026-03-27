@@ -170,6 +170,12 @@ struct ExportSelectorPair
     float second;
 };
 
+struct ExportTerrainQueryPairPayload
+{
+    float first;
+    float second;
+};
+
 struct ExportSelectorPairConsumerTrace
 {
     float requestedDistance;
@@ -2306,6 +2312,72 @@ extern "C"
         }
 
         return count;
+    }
+
+    __declspec(dllexport) int CopyWoWTerrainQueryWalkableContactsAndPairs(
+        const ExportAABBContact* inputContacts,
+        const ExportTerrainQueryPairPayload* inputPairs,
+        int inputCount,
+        ExportAABBContact* outputContacts,
+        ExportTerrainQueryPairPayload* outputPairs,
+        int maxOutputCount)
+    {
+        if (!inputContacts || !inputPairs || inputCount < 0 || !outputContacts || !outputPairs || maxOutputCount < 0) {
+            return 0;
+        }
+
+        std::vector<SceneQuery::AABBContact> contacts(static_cast<size_t>(inputCount));
+        std::vector<WoWCollision::TerrainQueryPairPayload> pairs(static_cast<size_t>(inputCount));
+        for (int i = 0; i < inputCount; ++i) {
+            SceneQuery::AABBContact contact{};
+            contact.point = inputContacts[i].point;
+            contact.normal = inputContacts[i].normal;
+            contact.rawNormal = inputContacts[i].rawNormal;
+            contact.triangleA = inputContacts[i].triangleA;
+            contact.triangleB = inputContacts[i].triangleB;
+            contact.triangleC = inputContacts[i].triangleC;
+            contact.planeDistance = inputContacts[i].planeDistance;
+            contact.distance = inputContacts[i].distance;
+            contact.instanceId = inputContacts[i].instanceId;
+            contact.sourceType = inputContacts[i].sourceType;
+            contact.walkable = inputContacts[i].walkable != 0u;
+            contacts[static_cast<size_t>(i)] = contact;
+
+            pairs[static_cast<size_t>(i)] = WoWCollision::TerrainQueryPairPayload{
+                inputPairs[i].first,
+                inputPairs[i].second,
+            };
+        }
+
+        std::vector<SceneQuery::AABBContact> filteredContacts;
+        std::vector<WoWCollision::TerrainQueryPairPayload> filteredPairs;
+        const uint32_t filteredCount = WoWCollision::CopyTerrainQueryWalkableContactsAndPairs(
+            contacts.data(),
+            pairs.data(),
+            static_cast<uint32_t>(inputCount),
+            filteredContacts,
+            filteredPairs);
+
+        const int outputCount = std::min<int>(static_cast<int>(filteredCount), maxOutputCount);
+        for (int i = 0; i < outputCount; ++i) {
+            const auto& contact = filteredContacts[static_cast<size_t>(i)];
+            outputContacts[i].point = contact.point;
+            outputContacts[i].normal = contact.normal;
+            outputContacts[i].rawNormal = contact.rawNormal;
+            outputContacts[i].triangleA = contact.triangleA;
+            outputContacts[i].triangleB = contact.triangleB;
+            outputContacts[i].triangleC = contact.triangleC;
+            outputContacts[i].planeDistance = contact.planeDistance;
+            outputContacts[i].distance = contact.distance;
+            outputContacts[i].instanceId = contact.instanceId;
+            outputContacts[i].sourceType = contact.sourceType;
+            outputContacts[i].walkable = contact.walkable ? 1u : 0u;
+
+            outputPairs[i].first = filteredPairs[static_cast<size_t>(i)].first;
+            outputPairs[i].second = filteredPairs[static_cast<size_t>(i)].second;
+        }
+
+        return outputCount;
     }
 
     __declspec(dllexport) bool EvaluateGroundedWallSelection(

@@ -1,0 +1,42 @@
+WoW.exe 1.12.1 (build 5875)
+Function: 0x673C80
+Purpose: append one `0x08` sidecar payload into the query result container
+Image base: 0x400000
+Capture date: 2026-03-26
+
+Relevant excerpt:
+
+0x00673C80: push     ebp
+0x00673C81: mov      ebp, esp
+0x00673C83: push     ecx
+0x00673C84: push     ebx
+0x00673C85: push     esi
+0x00673C86: mov      esi, ecx
+0x00673C88: mov      ebx, dword ptr [esi + 4]
+0x00673C8B: mov      eax, dword ptr [esi]
+0x00673C8D: inc      ebx
+0x00673C8E: cmp      ebx, eax
+0x00673C91: jbe      0x673d63
+...
+0x00673CFD: test     eax, eax
+0x00673CFF: mov      dword ptr [esi + 8], eax
+0x00673D02: jne      0x673d63
+...
+0x00673D63: mov      ecx, dword ptr [esi + 4]
+0x00673D66: mov      edx, dword ptr [esi + 8]
+0x00673D69: lea      eax, [edx + ecx*8]
+0x00673D6C: inc      ecx
+0x00673D70: mov      dword ptr [esi + 4], ecx
+...
+0x00673D77: mov      ecx, dword ptr [ebp + 8]
+0x00673D7A: mov      edx, dword ptr [ecx]
+0x00673D7C: mov      dword ptr [eax], edx
+0x00673D7E: mov      ecx, dword ptr [ecx + 4]
+0x00673D81: mov      dword ptr [eax + 4], ecx
+0x00673D87: ret      4
+
+Interpretation:
+- The container layout is the standard `{capacity, count, ptr, granularity}` shape used elsewhere in this query stack.
+- This helper grows the destination buffer in `8`-byte units and appends one two-float payload from the caller's pointer.
+- `0x6721B0` calls this on `output + 0x10`, which confirms the `TestTerrain` output object carries a second aligned sidecar array next to the `0x34` contact records.
+- The helper does not transform or reinterpret the payload; it preserves the two input dwords verbatim.

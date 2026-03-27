@@ -328,6 +328,34 @@ void WoWCollision::BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition
     outBoundsMax.z = projectedPosition.z + boundingHeight;
 }
 
+uint32_t WoWCollision::CopyTerrainQueryWalkableContactsAndPairs(const SceneQuery::AABBContact* inputContacts,
+                                                                const TerrainQueryPairPayload* inputPairs,
+                                                                uint32_t inputCount,
+                                                                std::vector<SceneQuery::AABBContact>& outContacts,
+                                                                std::vector<TerrainQueryPairPayload>& outPairs)
+{
+    outContacts.clear();
+    outPairs.clear();
+
+    if ((inputCount != 0u && inputContacts == nullptr) || (inputCount != 0u && inputPairs == nullptr)) {
+        return 0u;
+    }
+
+    outContacts.reserve(inputCount);
+    outPairs.reserve(inputCount);
+
+    for (uint32_t i = 0; i < inputCount; ++i) {
+        if (inputContacts[i].normal.z < WOW_WALKABLE_MIN_NORMAL_Z) {
+            continue;
+        }
+
+        outContacts.push_back(inputContacts[i]);
+        outPairs.push_back(inputPairs[i]);
+    }
+
+    return static_cast<uint32_t>(outContacts.size());
+}
+
 void WoWCollision::MergeAabbBounds(const G3D::Vector3& boundsMinA,
                                    const G3D::Vector3& boundsMaxA,
                                    const G3D::Vector3& boundsMinB,
