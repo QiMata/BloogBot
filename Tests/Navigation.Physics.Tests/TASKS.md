@@ -34,9 +34,16 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 229)`
+- Last updated: `2026-03-26 (session 230)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 230 added `WowSelectorTwoCandidateWorkingVectorTests.cs` plus the new production-DLL interop needed to pin the full `count == 2` `0x634AE0` body. `NavigationInterop.cs` now exposes `BuildWoWSelectorTwoCandidateWorkingVector(...)`.
+  - The new deterministic coverage now pins three exact binary-backed behaviors: the line-Z selected-normal gate, the `0x634960` footprint-mismatch reject path, and the orientation-negated constructed-vector path.
+  - Practical implication: this owner no longer has to infer the `count == 2` `0x634AE0` body. The next missing deterministic seam is the caller-side normalization / pair-write math in `0x635090`.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+    - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"` -> `passed (56/56)`
   - Session 229 added `WowSelectorTriangleEdgeDirectionTests.cs` plus the new production-DLL interop needed to pin the private `0x634DA0` chooser inside the `count == 2` `0x634AE0` branch. `NavigationInterop.cs` now exposes `BuildWoWSelectorTriangleEdgeDirection(...)`.
   - The new deterministic coverage now pins three exact binary-backed behaviors: mixed point-to-line/cross scoring, zero-length edge rejection before ranking the remaining edges, and the all-zero-length default output.
   - Practical implication: this owner no longer has to infer the `0x634DA0` chooser inside the alternate pair builder. The next missing deterministic seam is the full two-candidate working-vector output and caller-side normalization path in `0x634AE0` / `0x635090`.

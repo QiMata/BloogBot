@@ -1065,6 +1065,96 @@ void WoWCollision::BuildSelectorTriangleEdgeDirection(const SelectorCandidateRec
     }
 }
 
+void WoWCollision::BuildSelectorTwoCandidateWorkingVector(const G3D::Vector3& position,
+                                                          float collisionRadius,
+                                                          const SelectorCandidateRecord& selectedRecord,
+                                                          const SelectorSupportPlane& firstCandidatePlane,
+                                                          const SelectorSupportPlane& secondCandidatePlane,
+                                                          G3D::Vector3& outVector,
+                                                          SelectorTwoCandidateWorkingVectorTrace* outTrace)
+{
+    SelectorTwoCandidateWorkingVectorTrace trace{};
+
+    G3D::Vector3 lineDirection = firstCandidatePlane.normal.cross(secondCandidatePlane.normal);
+    const float lineMagnitude = lineDirection.magnitude();
+    lineDirection = lineDirection * (1.0f / lineMagnitude);
+    trace.lineDirection = lineDirection;
+
+    if (std::fabs(lineDirection.z) <= WOW_PLANE_BUILD_EPSILON) {
+        trace.returnedSelectedNormal = 1u;
+        trace.rejectedByLineZGate = 1u;
+        outVector = selectedRecord.filterPlane.normal;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return;
+    }
+
+    if (std::fabs(lineDirection.dot(selectedRecord.filterPlane.normal)) <= WOW_PLANE_BUILD_EPSILON) {
+        trace.returnedSelectedNormal = 1u;
+        trace.rejectedBySelectedPlaneDotGate = 1u;
+        outVector = selectedRecord.filterPlane.normal;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return;
+    }
+
+    if (std::fabs(lineDirection.z - 1.0f) > WOW_PLANE_BUILD_EPSILON &&
+        EvaluateSelectorPlaneFootprintMismatch(position, collisionRadius, selectedRecord.filterPlane)) {
+        trace.returnedSelectedNormal = 1u;
+        trace.rejectedByFootprintMismatch = 1u;
+        outVector = selectedRecord.filterPlane.normal;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return;
+    }
+
+    G3D::Vector3 intersectionPoint(0.0f, 0.0f, 0.0f);
+    BuildSelectorPlaneIntersectionPoint(
+        selectedRecord.filterPlane,
+        firstCandidatePlane,
+        secondCandidatePlane,
+        intersectionPoint);
+
+    SelectorTriangleEdgeDirectionTrace edgeTrace{};
+    G3D::Vector3 edgeDirection(0.0f, 0.0f, 0.0f);
+    BuildSelectorTriangleEdgeDirection(
+        selectedRecord,
+        intersectionPoint,
+        lineDirection,
+        edgeDirection,
+        &edgeTrace);
+
+    trace.selectedEdgeIndex = edgeTrace.selectedEdgeIndex;
+    trace.edgeDirection = edgeDirection;
+
+    G3D::Vector3 workingVector = edgeDirection.cross(lineDirection);
+    const float workingMagnitude = workingVector.magnitude();
+    if (std::fabs(workingMagnitude) <= WOW_SELECTOR_RATIO_EPSILON) {
+        trace.returnedNegatedFirstCandidate = 1u;
+        outVector = -firstCandidatePlane.normal;
+        if (outTrace) {
+            *outTrace = trace;
+        }
+        return;
+    }
+
+    workingVector = workingVector * (1.0f / workingMagnitude);
+    if (workingVector.dot(firstCandidatePlane.normal) > 0.0f) {
+        workingVector = -workingVector;
+        trace.orientationNegated = 1u;
+    }
+
+    trace.returnedConstructedVector = 1u;
+    trace.workingVector = workingVector;
+    outVector = workingVector;
+    if (outTrace) {
+        *outTrace = trace;
+    }
+}
+
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                               float elapsedTimeScalar,
                                                               float horizontalSpeedScale,

@@ -697,9 +697,17 @@ CollisionStep (0x633840)
       - otherwise it scores that edge by squaring the signed plane offset from `cross(edgeDir, lineDir)` between the current point and the intersection point
       - it keeps the strictly lowest score and returns that normalized edge direction
       - the production DLL now mirrors that exact chooser through pure `BuildSelectorTriangleEdgeDirection(...)` plus deterministic export/test coverage
+    - the full private `count == 2` builder body is now also mirrored through pure `BuildSelectorTwoCandidateWorkingVector(...)`
+      - it normalizes the candidate-plane cross
+      - returns the selected normal when `abs(lineDir.z) <= 0x8026BC`
+      - returns the selected normal when `abs(dot(lineDir, selectedNormal)) <= 0x8026BC`
+      - when `abs(lineDir.z - 1.0f) > 0x8026BC`, it rejects to the selected normal if `0x634960` reports a footprint mismatch
+      - otherwise it uses `0x634FC0` + `0x634DA0`, crosses the chosen edge direction with the candidate line, normalizes that vector, and flips it when it points with the first candidate normal
+      - if that final cross magnitude collapses to `<= 0x8029D4`, it falls back to `-candidateBuffer[0].normal`
+      - the production DLL now has deterministic coverage for the line-Z gate, the footprint-mismatch reject, and the orientation-negated constructed-vector path
     - on failure it negates the incoming vector
     - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
-    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate or any private `count == 2` helper inside `0x634AE0`. The next unresolved step is mirroring the full two-candidate working-vector output / caller-side normalization path on top of the now-closed `0x634960`, `0x634FC0`, and `0x634DA0` pieces before the final pair math.
+    - practical implication: the remaining open portion of `0x635090` is no longer inside `0x634AE0` at all. The next unresolved step is the caller-side normalization / pair-write math in `0x635090` on top of the now-closed working-vector output.
   - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test

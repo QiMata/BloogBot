@@ -12,7 +12,7 @@ Notes:
   - `count <= 1` or `count > 4`: return `-candidateBuffer[0].normal`
   - `count == 2`: enter the only nontrivial two-plane builder body
   - `count == 3` or `count == 4`: return `0xC4E534[selectedIndex].normal`
-- Fresh implication for parity work: the only unresolved part of this helper is the `count == 2` builder body; the outer mode selection is no longer opaque.
+- Fresh implication for parity work: the private `count == 2` body is now fully mapped. The next unresolved step is the caller-side `0x635090` normalization / pair-write path on top of this helper's output.
 
 0x00634AE0: push     ebp
 0x00634AE1: mov      ebp, esp

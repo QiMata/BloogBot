@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 229)
+- **Last updated:** 2026-03-26 (session 230)
 - **Branch:** `main`
+- **Session 230 — the full `0x634AE0` two-candidate working-vector body is now pinned as a pure binary seam:**
+  - Added pure [BuildSelectorTwoCandidateWorkingVector(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSelectorTwoCandidateWorkingVectorTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorTwoCandidateWorkingVectorTests.cs), which now pins the line-Z selected-normal gate, the `0x634960` footprint-mismatch reject path, and the orientation-negated constructed-vector path through the production DLL.
+  - Updated [0x634AE0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x634AE0_disasm.txt) and [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the `count == 2` body is no longer described as partially unresolved.
+  - Practical implication: the remaining alternate-pair gap is no longer inside `0x634AE0`; the next unresolved step is the caller-side normalization / pair-write math in `0x635090`.
+- **Test baseline (session 230):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - Passed (`56/56`)
 - **Session 229 — the `0x634DA0` selector edge chooser is now pinned as a pure binary seam:**
   - Added pure [BuildSelectorTriangleEdgeDirection(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorTriangleEdgeDirectionTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorTriangleEdgeDirectionTests.cs), which now pins mixed fast-path/cross-path scoring, zero-length edge rejection, and the all-zero-length default output through the production DLL.

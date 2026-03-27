@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 229)
+- Last updated: 2026-03-26 (session 230)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 230 still kept runtime grounded behavior unchanged and pinned the full `count == 2` `0x634AE0` body as a pure helper. `BuildSelectorTwoCandidateWorkingVector(...)` now mirrors the binary candidate-line normalization, the line-Z and selected-plane-dot early selected-normal gates, the conditional `0x634960` footprint-mismatch reject, the `0x634FC0` + `0x634DA0` constructed vector path, and the final orientation / `-candidateBuffer[0].normal` fallback tail.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorTwoCandidateWorkingVectorTests.cs` now pins the line-Z selected-normal gate, the footprint-mismatch reject path, and the orientation-negated constructed-vector path through the production DLL.
+  - `docs/physics/0x634AE0_disasm.txt` and `docs/physics/wow_exe_decompilation.md` now reflect that the private two-plane body is no longer partially unresolved. Practical implication: the remaining alternate-pair gap is now the caller-side normalization / pair-write math in `0x635090`.
   - Session 229 still kept runtime grounded behavior unchanged and pinned the private `0x634DA0` chooser that sits inside the `count == 2` body of `0x634AE0`. `BuildSelectorTriangleEdgeDirection(...)` now mirrors the binary three-edge loop over the selected `0x34` record, including zero-length rejection, the aligned-edge `0x634F40` point-to-line scorer, and the alternate squared plane-offset scorer.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorTriangleEdgeDirectionTests.cs` now pins mixed fast-path/cross-path scoring, zero-length edge rejection, and the all-zero-length default output through the production DLL.
   - New raw capture now lives in `docs/physics/0x634DA0_disasm.txt`. Practical implication: the remaining alternate-pair gap is no longer any hidden helper inside `0x634AE0`. The next missing runtime piece is the full two-candidate working-vector output and caller-side normalization path in `0x634AE0` / `0x635090`.

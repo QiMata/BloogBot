@@ -361,6 +361,33 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - The next native seam is the full two-candidate working-vector output and caller-side normalization path in `0x634AE0` / `0x635090`.
 - Do Not Repeat:
   - Do not assume the aligned-edge `0x634F40` scorer always wins. The fresh deterministic fixture proves the binary can still choose a later cross-scored edge when its squared plane-offset score is lower.
+
+## 2026-03-26 Selector Two-Candidate Builder Addendum
+
+- Scope note:
+  - This pass stayed on the same native selector transaction and still did not change runtime grounded behavior.
+  - The target was the full private `count == 2` body of `0x634AE0`, now that `0x634960`, `0x634FC0`, and `0x634DA0` were already pinned independently.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - `BuildSelectorTwoCandidateWorkingVector(...)` now mirrors the binary candidate-line normalization, the line-Z and selected-plane-dot early selected-normal gates, the conditional `0x634960` footprint-mismatch reject, the `0x634FC0` + `0x634DA0` constructed-vector path, and the final orientation / `-candidateBuffer[0].normal` fallback tail.
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - exports the helper through `BuildWoWSelectorTwoCandidateWorkingVector(...)`.
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - exposes the matching interop and trace struct.
+  - `Tests/Navigation.Physics.Tests/WowSelectorTwoCandidateWorkingVectorTests.cs`
+    - pins the line-Z selected-normal gate, the `0x634960` footprint-mismatch reject path, and the orientation-negated constructed-vector path.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal"`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests" --logger "console;verbosity=minimal"`
+    - passed (`56/56`)
+- Parity note:
+  - The remaining alternate-pair gap is no longer inside `0x634AE0`.
+  - The next native seam is the caller-side normalization / pair-write math in `0x635090`.
+- Do Not Repeat:
+  - Do not treat the line-Z and selected-plane-dot checks as interchangeable. The binary performs them in that order before the conditional footprint-mismatch gate.
   - `Exports/Navigation/PhysicsEngine.cpp`
     - `CollisionStepWoW` half-step pass now uses `SceneQuery::SweepAABB(...)` from the start box over `speed*dt*0.5` instead of a static half-step `TestTerrainAABB(...)`
     - this keeps the second grounded pass aligned with the client’s `0x633DEB` `Collide` call instead of treating the half-step box as a stationary overlap

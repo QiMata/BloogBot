@@ -647,6 +647,21 @@ namespace WoWCollision
         uint32_t selectedEdgeIndex = 0xFFFFFFFFu;
     };
 
+    struct SelectorTwoCandidateWorkingVectorTrace
+    {
+        uint32_t returnedSelectedNormal = 0;
+        uint32_t returnedNegatedFirstCandidate = 0;
+        uint32_t returnedConstructedVector = 0;
+        uint32_t rejectedByLineZGate = 0;
+        uint32_t rejectedBySelectedPlaneDotGate = 0;
+        uint32_t rejectedByFootprintMismatch = 0;
+        uint32_t orientationNegated = 0;
+        uint32_t selectedEdgeIndex = 0xFFFFFFFFu;
+        G3D::Vector3 lineDirection = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 edgeDirection = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 workingVector = G3D::Vector3(0.0f, 0.0f, 0.0f);
+    };
+
     struct SelectorPair
     {
         float first = 0.0f;
@@ -893,6 +908,14 @@ namespace WoWCollision
                                             const G3D::Vector3& lineDirection,
                                             G3D::Vector3& outDirection,
                                             SelectorTriangleEdgeDirectionTrace* outTrace = nullptr);
+
+    void BuildSelectorTwoCandidateWorkingVector(const G3D::Vector3& position,
+                                                float collisionRadius,
+                                                const SelectorCandidateRecord& selectedRecord,
+                                                const SelectorSupportPlane& firstCandidatePlane,
+                                                const SelectorSupportPlane& secondCandidatePlane,
+                                                G3D::Vector3& outVector,
+                                                SelectorTwoCandidateWorkingVectorTrace* outTrace = nullptr);
 
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,
