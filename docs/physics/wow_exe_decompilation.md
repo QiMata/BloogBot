@@ -810,6 +810,7 @@ Strips: `PENDING_STOP (0x80000)`, `PENDING_STRAFE_STOP (0x100000)`,
 - Fresh transport-helper disassembly now narrows the transform math that the later `0x631E70` contact rewrite uses:
   - `0x7BD700` is the unit-scale inverse RT-frame builder: transpose the upper `3x3`, compute `-R^T * t`, append `(0,0,0,1)`.
   - `0x7BCC60` is the frame-applied point transform: `out = rotation * point + translation`.
+  - `0x63214C..0x632270` then walks the cached `0x34`-byte contact buffer at `0xC4E534`: transform the three points at `+0x10/+0x1C/+0x28`, rotate the normal at `+0x00/+0x04/+0x08`, and recompute `planeD` at `+0x0C` from the transformed first point.
   - Practical implication: the remaining `0x63214C..0x632270` gap is not the point/vector math itself; it is which cached contact fields the loop rewrites with those helpers.
 - No equivalent persisted “static triangle token” path has been identified for ordinary terrain/WMO support.
 - A second spot-check over `0x618C30..0x618D60` and `0x633840..0x6339C0` still only reinforced that same pattern, so support identity should stay coherent only for moving-base metadata and should use the same dynamic runtime ID across AABB and capsule query families.

@@ -1078,6 +1078,38 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool TransformWoWSelectorCandidateRecordToTransportLocal(
+        const ExportSelectorCandidateRecord* worldRecord,
+        const G3D::Vector3* transportPosition,
+        float transportOrientation,
+        ExportSelectorCandidateRecord* outRecord)
+    {
+        if (!worldRecord || !transportPosition || !outRecord) {
+            return false;
+        }
+
+        WoWCollision::SelectorCandidateRecord inputRecord{};
+        inputRecord.filterPlane.normal = worldRecord->filterPlane.normal;
+        inputRecord.filterPlane.planeDistance = worldRecord->filterPlane.planeDistance;
+        inputRecord.points[0] = worldRecord->point0;
+        inputRecord.points[1] = worldRecord->point1;
+        inputRecord.points[2] = worldRecord->point2;
+
+        WoWCollision::SelectorCandidateRecord outputRecord{};
+        WoWCollision::TransformSelectorCandidateRecordToTransportLocal(
+            inputRecord,
+            *transportPosition,
+            transportOrientation,
+            outputRecord);
+
+        outRecord->filterPlane.normal = outputRecord.filterPlane.normal;
+        outRecord->filterPlane.planeDistance = outputRecord.filterPlane.planeDistance;
+        outRecord->point0 = outputRecord.points[0];
+        outRecord->point1 = outputRecord.points[1];
+        outRecord->point2 = outputRecord.points[2];
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

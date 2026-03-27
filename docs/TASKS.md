@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 220)
+- **Last updated:** 2026-03-26 (session 221)
 - **Branch:** `main`
+- **Session 221 — the `0x63214C` cached-contact record rewrite is now pinned as a pure binary seam:**
+  - Added pure [TransformSelectorCandidateRecordToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Extended [WowTransportLocalTransformTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs) so the production DLL now pins the exact `0x34`-byte record transform used by `0x63214C`: inverse-transform the three stored points and rebuild the plane from the rotated normal plus transformed first point.
+  - Added fresh raw capture [0x63214C_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x63214C_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the remaining gap is now the outer count/guid gate and later selector consumption, not the record contents themselves.
+  - Practical implication: the remaining `0x631E70` gap is narrower again. The per-record rewrite body is closed; the next unresolved piece is the batch loop/gating around `0xC4E530` / `0xC4E534` and how that transformed buffer feeds the later selector path.
+- **Test baseline (session 221):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTransportLocalTransformTests|FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
 - **Session 220 — the `0x631E70` transport-local point/plane transform seam is now pinned as a pure binary seam:**
   - Added pure [TransformWorldPointToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [TransformWorldVectorToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [BuildTransportLocalPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowTransportLocalTransformTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs), which now pins the inverse-yaw point transform and the local-plane rebuild that the `0x63214C..0x632270` transport-local contact loop requires.

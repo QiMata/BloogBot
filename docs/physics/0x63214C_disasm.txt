@@ -1,0 +1,65 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function block: 0x63214C..0x632270
+Date: 2026-03-26
+Notes:
+- This is the transport-local cached-contact rewrite loop inside `0x631E70`.
+- It early-outs when `transportGuid == 0` or the cached contact count at `0xC4E530` is zero.
+- Each `0x34`-byte record at `0xC4E534` is rewritten in place:
+  - plane normal at `+0x00/+0x04/+0x08`
+  - plane distance at `+0x0C`
+  - three points at `+0x10/+0x1C/+0x28`
+
+Relevant excerpt:
+0x0063214C: mov      ecx, dword ptr [ebx + 0x38]
+0x0063214F: or       ecx, dword ptr [ebx + 0x3c]
+0x00632152: je       0x632270
+0x00632158: mov      edi, dword ptr [0xc4e530]
+0x0063215E: push     0x3f800000
+0x00632163: lea      edx, [ebp - 0xe0]
+0x00632169: push     edx
+0x0063216A: lea      ecx, [ebp - 0x70]
+0x0063216D: call     0x7bd820
+0x00632172: test     edi, edi
+0x00632174: jbe      0x632270
+0x0063217A: xor      esi, esi
+0x00632180: mov      ecx, dword ptr [0xc4e534]
+0x00632186: lea      eax, [ebp - 0xe0]
+0x0063218C: lea      edx, [esi + ecx + 0x10]
+0x00632190: push     eax
+0x00632191: lea      ecx, [ebp - 0x30]
+0x00632194: call     0x7bcc60
+0x00632199: mov      eax, dword ptr [0xc4e534]
+0x0063219E: lea      edx, [ebp - 0xe0]
+0x006321A4: push     edx
+0x006321A5: lea      edx, [esi + eax + 0x1c]
+0x006321A9: lea      ecx, [ebp - 0xec]
+0x006321AF: call     0x7bcc60
+0x006321B4: mov      edx, dword ptr [0xc4e534]
+0x006321BA: lea      ecx, [ebp - 0xe0]
+0x006321C0: push     ecx
+0x006321C1: lea      edx, [esi + edx + 0x28]
+0x006321C5: lea      ecx, [ebp - 0x7c]
+0x006321C8: call     0x7bcc60
+0x006321CD: fld      dword ptr [ebp - 0xe0]
+0x006321D3: mov      eax, dword ptr [0xc4e534]
+0x006321D8: fmul     dword ptr [eax + esi]
+0x006321DB: add      eax, esi
+0x006321DD: fld      dword ptr [ebp - 0xc0]
+0x006321E3: mov      ecx, eax
+0x006321E5: fmul     dword ptr [eax + 8]
+0x006321E8: add      esi, 0x34
+0x006321EB: dec      edi
+0x006321EC: faddp    st(1)
+0x006321EE: fld      dword ptr [ebp - 0xd0]
+0x006321F4: fmul     dword ptr [eax + 4]
+0x006321F7: faddp    st(1)
+0x006321F9: fstp     dword ptr [ebp + 8]
+0x00632220: fld      dword ptr [ebp - 0xd8]
+0x00632226: fmul     dword ptr [eax]
+0x0063223C: mov      dword ptr [ecx], edx
+0x00632241: mov      dword ptr [ecx + 4], edx
+0x0063224F: mov      dword ptr [ecx + 8], edx
+0x00632252: fmul     dword ptr [eax + 0x18]
+0x00632267: fstp     dword ptr [eax + 0xc]
+0x0063226A: jne      0x632180
+0x00632270: pop      edi

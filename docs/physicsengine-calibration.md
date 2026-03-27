@@ -1826,3 +1826,34 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not re-open the point/vector transform formulas as a heuristic question. The binary now closes the inverse-frame build and point-transform pair the loop depends on.
 - Recommended next single hypothesis:
   - Mirror the `0x63214C..0x632270` per-contact rewrite loop itself, including the exact source/destination fields copied back into the cached contact buffer.
+
+## 2026-03-26 Transport-local record rewrite addendum (`0x63214C`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the actual cached-contact record body that `0x631E70` rewrites after the inverse transport transform is built, so the remaining unknown is the outer loop/gating rather than the `0x34`-byte record contents.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x63214C_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the transport note now records the exact per-record layout: plane at `+0x00..+0x0C`, points at `+0x10/+0x1C/+0x28`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `TransformSelectorCandidateRecordToTransportLocal(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `TransformWoWSelectorCandidateRecordToTransportLocal(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the record-transform seam
+  - `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs`
+    - added deterministic coverage for the full record rewrite
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTransportLocalTransformTests|FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again. The record body is now closed, and the next unknown is the count/guid gate plus array walk around `0xC4E530` / `0xC4E534`.
+- Do Not Repeat:
+  - Do not treat the `0x34`-byte record shape as speculative anymore. The binary loop now closes the plane-plus-three-points layout directly.
+- Recommended next single hypothesis:
+  - Mirror the outer `0x63214C..0x632270` batch loop and gate conditions next, including the `transportGuid == 0` and `count == 0` fast exits.

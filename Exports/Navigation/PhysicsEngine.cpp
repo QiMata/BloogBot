@@ -431,6 +431,34 @@ void WoWCollision::BuildTransportLocalPlane(const G3D::Vector3& worldNormal,
     outPlane.planeDistance = -localNormal.dot(localPoint);
 }
 
+void WoWCollision::TransformSelectorCandidateRecordToTransportLocal(const SelectorCandidateRecord& worldRecord,
+                                                                    const G3D::Vector3& transportPosition,
+                                                                    float transportOrientation,
+                                                                    SelectorCandidateRecord& outLocalRecord)
+{
+    TransformWorldPointToTransportLocal(
+        worldRecord.points[0],
+        transportPosition,
+        transportOrientation,
+        outLocalRecord.points[0]);
+    TransformWorldPointToTransportLocal(
+        worldRecord.points[1],
+        transportPosition,
+        transportOrientation,
+        outLocalRecord.points[1]);
+    TransformWorldPointToTransportLocal(
+        worldRecord.points[2],
+        transportPosition,
+        transportOrientation,
+        outLocalRecord.points[2]);
+    BuildTransportLocalPlane(
+        worldRecord.filterPlane.normal,
+        worldRecord.points[0],
+        transportPosition,
+        transportOrientation,
+        outLocalRecord.filterPlane);
+}
+
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
 {
     outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);
