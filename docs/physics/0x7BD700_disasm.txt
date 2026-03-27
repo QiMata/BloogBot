@@ -1,0 +1,32 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x7BD700
+Date: 2026-03-26
+Notes:
+- This is the scale=1.0 fast path that `0x7BD820` dispatches to.
+- It transposes the upper 3x3 basis, negates the translation, multiplies by the transposed basis, appends `(0,0,0,1)`, and writes the resulting frame through `0x7BDC40`.
+- In effect: this is the inverse RT-frame builder used by the `0x631E70` transport-local contact transform loop.
+
+Relevant excerpt:
+0x007BD700: push     ebp
+0x007BD701: mov      ebp, esp
+0x007BD703: sub      esp, 0x94
+...
+0x007BD730: lea      ecx, [ebp - 0x70]
+0x007BD733: call     0x5f8d20
+...
+0x007BD75C: lea      ecx, [ebp - 0x94]
+0x007BD762: call     0x5f8d20
+0x007BD767: fld      dword ptr [esi + 0x30]
+0x007BD76A: mov      eax, dword ptr [ebp - 0x94]
+0x007BD770: fchs
+...
+0x007BD7F5: lea      eax, [ebp - 0xc]
+0x007BD7F8: push     eax
+0x007BD7F9: lea      ecx, [ebp - 0x4c]
+0x007BD7FC: call     0x7bdc40
+0x007BD801: mov      eax, dword ptr [ebp + 8]
+0x007BD804: mov      ecx, 0x10
+0x007BD809: lea      esi, [ebp - 0x4c]
+0x007BD80C: mov      edi, eax
+0x007BD80E: rep movsd dword ptr es:[edi], dword ptr [esi]
+0x007BD815: ret      4

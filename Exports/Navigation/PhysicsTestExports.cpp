@@ -1037,6 +1037,47 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool TransformWoWWorldPointToTransportLocal(
+        const G3D::Vector3* worldPoint,
+        const G3D::Vector3* transportPosition,
+        float transportOrientation,
+        G3D::Vector3* outLocalPoint)
+    {
+        if (!worldPoint || !transportPosition || !outLocalPoint) {
+            return false;
+        }
+
+        WoWCollision::TransformWorldPointToTransportLocal(
+            *worldPoint,
+            *transportPosition,
+            transportOrientation,
+            *outLocalPoint);
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWTransportLocalPlane(
+        const G3D::Vector3* worldNormal,
+        const G3D::Vector3* worldPoint,
+        const G3D::Vector3* transportPosition,
+        float transportOrientation,
+        ExportSelectorSupportPlane* outPlane)
+    {
+        if (!worldNormal || !worldPoint || !transportPosition || !outPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        WoWCollision::BuildTransportLocalPlane(
+            *worldNormal,
+            *worldPoint,
+            *transportPosition,
+            transportOrientation,
+            plane);
+        outPlane->normal = plane.normal;
+        outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

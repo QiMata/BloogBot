@@ -807,6 +807,10 @@ Strips: `PENDING_STOP (0x80000)`, `PENDING_STRAFE_STOP (0x100000)`,
 ### Support-State Parity Note (2026-03-24)
 - Fresh disassembly of `CMovement::Update` (`0x618C30`) and `CMovement::CollisionStep` (`0x633840`) continues to show explicit transport-local persistence (`transportGuid`, local offset, local orientation) before collision is run in world space.
 - The collision branch rotates transport-local displacement through the transport matrix, then performs world collision queries.
+- Fresh transport-helper disassembly now narrows the transform math that the later `0x631E70` contact rewrite uses:
+  - `0x7BD700` is the unit-scale inverse RT-frame builder: transpose the upper `3x3`, compute `-R^T * t`, append `(0,0,0,1)`.
+  - `0x7BCC60` is the frame-applied point transform: `out = rotation * point + translation`.
+  - Practical implication: the remaining `0x63214C..0x632270` gap is not the point/vector math itself; it is which cached contact fields the loop rewrites with those helpers.
 - No equivalent persisted “static triangle token” path has been identified for ordinary terrain/WMO support.
 - A second spot-check over `0x618C30..0x618D60` and `0x633840..0x6339C0` still only reinforced that same pattern, so support identity should stay coherent only for moving-base metadata and should use the same dynamic runtime ID across AABB and capsule query families.
 - Current parity interpretation:

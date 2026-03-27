@@ -680,6 +680,23 @@ public static partial class NavigationInterop
         float planeDistance,
         out SelectorSupportPlane plane);
 
+    [DllImport(NavigationDll, EntryPoint = "TransformWoWWorldPointToTransportLocal", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool TransformWoWWorldPointToTransportLocal(
+        in Vector3 worldPoint,
+        in Vector3 transportPosition,
+        float transportOrientation,
+        out Vector3 localPoint);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWTransportLocalPlane", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWTransportLocalPlane(
+        in Vector3 worldNormal,
+        in Vector3 worldPoint,
+        in Vector3 transportPosition,
+        float transportOrientation,
+        out SelectorSupportPlane plane);
+
     [DllImport(NavigationDll, EntryPoint = "InitializeWoWSelectorSupportPlane", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool InitializeWoWSelectorSupportPlane(out SelectorSupportPlane plane);

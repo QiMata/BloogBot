@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 219)
+- Last updated: 2026-03-26 (session 220)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 220 still kept runtime grounded behavior unchanged and pinned the transport-local point/vector/plane math that sits inside the `0x63214C..0x632270` rewrite loop on the `0x631E70` path. `TransformWorldPointToTransportLocal(...)`, `TransformWorldVectorToTransportLocal(...)`, and `BuildTransportLocalPlane(...)` now mirror the inverse-yaw translation, inverse-yaw vector rotation, and local-plane rebuild used after the binary inverse-frame setup.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs` now pins both exact binary-backed behaviors: world point -> transport-local point and world plane -> transport-local plane.
+  - New raw captures now live in `docs/physics/0x7BD700_disasm.txt` and `docs/physics/0x7BCC60_disasm.txt`. Practical implication: the remaining `0x631E70` gap is no longer the transform math itself; it is the exact per-contact copy/rewrite loop and later selector consumption.
   - Session 219 still kept runtime grounded behavior unchanged and pinned the swim-side plane flip that sits on the `0x631E70` branch after the `0x30000` query. `NegatePlane(...)` now mirrors the `0x637330` + `0x597AD0` pair: negate the contact normal and negate the plane distance before the rewritten plane is copied back into the contact buffer.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSwimQueryPlaneFlipTests.cs` now pins both exact binary-backed behaviors: one flip negates the plane, and a second flip returns to the original plane.
   - New raw capture now lives in `docs/physics/0x597AD0_disasm.txt`. Practical implication: the remaining `0x631E70` gap is no longer the swim-side plane rewrite itself; it is the surrounding transport-local contact transform loop and later selector consumption.
@@ -512,7 +515,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+320]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+384]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

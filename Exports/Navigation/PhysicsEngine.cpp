@@ -393,6 +393,44 @@ void WoWCollision::NegatePlane(const G3D::Vector3& normal,
     outPlane.planeDistance = -planeDistance;
 }
 
+void WoWCollision::TransformWorldPointToTransportLocal(const G3D::Vector3& worldPoint,
+                                                       const G3D::Vector3& transportPosition,
+                                                       float transportOrientation,
+                                                       G3D::Vector3& outLocalPoint)
+{
+    const float cosO = std::cos(transportOrientation);
+    const float sinO = std::sin(transportOrientation);
+    const G3D::Vector3 delta = worldPoint - transportPosition;
+    outLocalPoint.x = (delta.x * cosO) + (delta.y * sinO);
+    outLocalPoint.y = (-delta.x * sinO) + (delta.y * cosO);
+    outLocalPoint.z = delta.z;
+}
+
+void WoWCollision::TransformWorldVectorToTransportLocal(const G3D::Vector3& worldVector,
+                                                        float transportOrientation,
+                                                        G3D::Vector3& outLocalVector)
+{
+    const float cosO = std::cos(transportOrientation);
+    const float sinO = std::sin(transportOrientation);
+    outLocalVector.x = (worldVector.x * cosO) + (worldVector.y * sinO);
+    outLocalVector.y = (-worldVector.x * sinO) + (worldVector.y * cosO);
+    outLocalVector.z = worldVector.z;
+}
+
+void WoWCollision::BuildTransportLocalPlane(const G3D::Vector3& worldNormal,
+                                            const G3D::Vector3& worldPoint,
+                                            const G3D::Vector3& transportPosition,
+                                            float transportOrientation,
+                                            SelectorSupportPlane& outPlane)
+{
+    G3D::Vector3 localNormal;
+    G3D::Vector3 localPoint;
+    TransformWorldVectorToTransportLocal(worldNormal, transportOrientation, localNormal);
+    TransformWorldPointToTransportLocal(worldPoint, transportPosition, transportOrientation, localPoint);
+    outPlane.normal = localNormal;
+    outPlane.planeDistance = -localNormal.dot(localPoint);
+}
+
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
 {
     outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);

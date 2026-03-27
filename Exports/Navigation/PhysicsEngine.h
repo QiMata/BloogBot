@@ -740,6 +740,21 @@ namespace WoWCollision
                      float planeDistance,
                      SelectorSupportPlane& outPlane);
 
+    void TransformWorldPointToTransportLocal(const G3D::Vector3& worldPoint,
+                                             const G3D::Vector3& transportPosition,
+                                             float transportOrientation,
+                                             G3D::Vector3& outLocalPoint);
+
+    void TransformWorldVectorToTransportLocal(const G3D::Vector3& worldVector,
+                                              float transportOrientation,
+                                              G3D::Vector3& outLocalVector);
+
+    void BuildTransportLocalPlane(const G3D::Vector3& worldNormal,
+                                  const G3D::Vector3& worldPoint,
+                                  const G3D::Vector3& transportPosition,
+                                  float transportOrientation,
+                                  SelectorSupportPlane& outPlane);
+
     void InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane);
 
     float ClampSelectorReportedBestRatio(float bestRatio);

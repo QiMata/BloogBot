@@ -1,0 +1,53 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x7BCC60
+Date: 2026-03-26
+Notes:
+- This helper applies a coordinate frame to a point.
+- It multiplies the input point by the frame basis and adds the frame translation.
+- In effect: `out = rotation * point + translation`.
+
+Relevant excerpt:
+0x007BCC60: push     ebp
+0x007BCC61: mov      ebp, esp
+0x007BCC63: push     esi
+0x007BCC64: mov      esi, dword ptr [ebp + 8]
+0x007BCC67: fld      dword ptr [esi + 0x28]
+0x007BCC6A: mov      eax, ecx
+0x007BCC6C: fmul     dword ptr [edx + 8]
+0x007BCC6F: fld      dword ptr [esi + 8]
+0x007BCC72: fmul     dword ptr [edx]
+0x007BCC74: faddp    st(1)
+0x007BCC76: fld      dword ptr [esi + 0x18]
+0x007BCC79: fmul     dword ptr [edx + 4]
+0x007BCC7C: faddp    st(1)
+0x007BCC7E: fadd     dword ptr [esi + 0x38]
+0x007BCC81: fld      dword ptr [esi + 0x24]
+0x007BCC84: fmul     dword ptr [edx + 8]
+0x007BCC87: fld      dword ptr [esi + 4]
+0x007BCC8A: fmul     dword ptr [edx]
+0x007BCC8C: faddp    st(1)
+0x007BCC8E: fld      dword ptr [esi + 0x14]
+0x007BCC91: fmul     dword ptr [edx + 4]
+0x007BCC94: faddp    st(1)
+0x007BCC96: fadd     dword ptr [esi + 0x34]
+0x007BCC99: fld      dword ptr [esi + 0x20]
+0x007BCC9C: fmul     dword ptr [edx + 8]
+0x007BCC9F: fld      dword ptr [esi + 0x10]
+0x007BCCA2: fmul     dword ptr [edx + 4]
+0x007BCCA5: faddp    st(1)
+0x007BCCA7: fld      dword ptr [edx]
+0x007BCCA9: fmul     dword ptr [esi]
+0x007BCCAB: faddp    st(1)
+0x007BCCAD: fadd     dword ptr [esi + 0x30]
+0x007BCCB0: fstp     dword ptr [edx]
+0x007BCCB2: fstp     dword ptr [edx + 4]
+0x007BCCB5: fstp     dword ptr [edx + 8]
+0x007BCCB8: mov      esi, dword ptr [edx]
+0x007BCCBA: mov      dword ptr [ecx], esi
+0x007BCCBC: mov      esi, dword ptr [edx + 4]
+0x007BCCBF: mov      dword ptr [ecx + 4], esi
+0x007BCCC2: mov      edx, dword ptr [edx + 8]
+0x007BCCC5: mov      dword ptr [ecx + 8], edx
+0x007BCCC8: pop      esi
+0x007BCCC9: pop      ebp
+0x007BCCCA: ret      4

@@ -1792,3 +1792,37 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not keep treating the swim-side branch as “normal-only” negation. The plane distance flips with it.
 - Recommended next single hypothesis:
   - Mirror the `0x63214C..0x632270` transport-local contact transform loop inside `0x631E70`.
+
+## 2026-03-26 Transport-local transform addendum (`0x7BD700`, `0x7BCC60`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the raw point/vector/plane math behind the `0x63214C..0x632270` transport-local contact rewrite, so the remaining unknown is the per-contact loop shape rather than the transform formulas.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x7BD700_disasm.txt` and `docs/physics/0x7BCC60_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the transport note now records the inverse RT-frame build (`0x7BD700`) and the frame-applied point transform (`0x7BCC60`) that the `0x631E70` rewrite loop uses
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `TransformWorldPointToTransportLocal(...)`
+    - added pure `TransformWorldVectorToTransportLocal(...)`
+    - added pure `BuildTransportLocalPlane(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `TransformWoWWorldPointToTransportLocal(...)`
+    - added `BuildWoWTransportLocalPlane(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new transport-local seams
+  - `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs`
+    - added deterministic coverage for the inverse-yaw point transform and local-plane rebuild
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTransportLocalTransformTests|FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests" --logger "console;verbosity=minimal"`
+    - passed (`8/8`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again. The inverse transport-local transform math is now closed, and the next unknown is the exact contact-buffer loop that applies it per cached contact before selector consumption.
+- Do Not Repeat:
+  - Do not re-open the point/vector transform formulas as a heuristic question. The binary now closes the inverse-frame build and point-transform pair the loop depends on.
+- Recommended next single hypothesis:
+  - Mirror the `0x63214C..0x632270` per-contact rewrite loop itself, including the exact source/destination fields copied back into the cached contact buffer.

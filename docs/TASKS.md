@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 219)
+- **Last updated:** 2026-03-26 (session 220)
 - **Branch:** `main`
+- **Session 220 — the `0x631E70` transport-local point/plane transform seam is now pinned as a pure binary seam:**
+  - Added pure [TransformWorldPointToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), [TransformWorldVectorToTransportLocal(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), and [BuildTransportLocalPlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowTransportLocalTransformTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs), which now pins the inverse-yaw point transform and the local-plane rebuild that the `0x63214C..0x632270` transport-local contact loop requires.
+  - Added fresh raw captures [0x7BD700_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x7BD700_disasm.txt) and [0x7BCC60_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x7BCC60_disasm.txt), and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the transport note now records the inverse-RT frame build plus the point transform it feeds.
+  - Practical implication: the remaining `0x631E70` gap is no longer the raw transport-local point/vector/plane math. The next unresolved piece is the actual per-contact rewrite loop at `0x63214C`, including which cached contact fields are transformed and copied back.
+- **Test baseline (session 220):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTransportLocalTransformTests|FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests" --logger "console;verbosity=minimal"`
+    - Passed (`8/8`)
 - **Session 219 — the `0x631E70` swim-side plane flip is now pinned as a pure binary seam:**
   - Added pure [NegatePlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSwimQueryPlaneFlipTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSwimQueryPlaneFlipTests.cs), which now pins the exact `0x637330` + `0x597AD0` result used on the swim-side query path: negate the normal and negate the plane distance.
