@@ -936,12 +936,12 @@ bool WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSuppo
     return false;
 }
 
-bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float boundingRadiusValue,
-                                                              float fallbackLimit,
+bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
+                                                              float elapsedTimeScalar,
                                                               float horizontalSpeedScale,
                                                               float requestedDistance)
 {
-    const float remainingWindow = boundingRadiusValue - fallbackLimit;
+    const float remainingWindow = airborneTimeScalar - elapsedTimeScalar;
     if (remainingWindow < 0.0f) {
         return false;
     }

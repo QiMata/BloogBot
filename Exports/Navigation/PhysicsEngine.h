@@ -858,8 +858,8 @@ namespace WoWCollision
     bool HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSupportPlane* candidates,
                                                    uint32_t candidateCount);
 
-    bool EvaluateSelectorAlternateUnitZFallbackGate(float boundingRadiusValue,
-                                                    float fallbackLimit,
+    bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
+                                                    float elapsedTimeScalar,
                                                     float horizontalSpeedScale,
                                                     float requestedDistance);
 

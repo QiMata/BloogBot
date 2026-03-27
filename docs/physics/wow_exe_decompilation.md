@@ -633,8 +633,9 @@ CollisionStep (0x633840)
     - otherwise it scales the input move vector by `requestedDistance`, then runs the `0x633720` / `0x635410` / `0x7C5DA0` / `0x6353D0` branch tail
     - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly, writes `1` to the first out-state dword, and leaves the second out-state dword at `0`
     - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success and still writes `1` to that first out-state dword
-    - if `0x633720` fails, it zeroes the pair first, then only writes `1` to the second out-state dword when `scaledMove.z < 0`, `(GetBoundingRadius() - arg1) >= 0`, `((GetBoundingRadius() - arg1) * this->+0x84) >= requestedDistance`, and `0x6353D0` finds a unit-Z local candidate; otherwise it falls through `0x635090` and returns that alternate pair
-  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, and `docs/physics/0x635734_callsite_disasm.txt`
+    - if `0x633720` fails, it zeroes the pair first, then only writes `1` to the second out-state dword when `scaledMove.z < 0`, `(0x7C5DA0(this) - arg1) >= 0`, `((0x7C5DA0(this) - arg1) * this->+0x84) >= requestedDistance`, and `0x6353D0` finds a unit-Z local candidate; otherwise it falls through `0x635090` and returns that alternate pair
+  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, `docs/physics/0x635734_callsite_disasm.txt`, and `docs/physics/0x7C5DA0_disasm.txt`
+  - the new `0x7C5DA0` capture closes one detail on that alternate path: it is a tiny airborne time-scalar helper (`this->+0xA0 * -1/gravity` when airborne, else `0`), not a radius helper
   - the production DLL now mirrors that visible `0x6351A0` consumer tail through pure `EvaluateSelectorAlternateUnitZFallbackGate(...)` and `EvaluateSelectorPairConsumer(...)` helpers plus deterministic export/test seams
   - `0x633720`
     - wrapper builds `position + offset`, passes that world point plus the selected index and `this+0x15C` into `0x633760`, then returns the inverse boolean of `0x633760`

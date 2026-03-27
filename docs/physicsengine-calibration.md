@@ -1896,12 +1896,14 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - The goal was to close the visible `0x6351A0` consumer tail so the next runtime change can use the real direct-pair / zero-pair / alternate-pair branch contract instead of the current inferred wall fallback logic.
 - Binary/evidence delta shipped:
   - added raw capture in `docs/physics/0x635734_callsite_disasm.txt`
+  - added raw capture in `docs/physics/0x7C5DA0_disasm.txt`
   - tightened `docs/physics/wow_exe_decompilation.md` so the `0x6351A0` note now records the full visible outcome contract:
     - zero-distance early return with pair-only zero
     - `0x632BA0` failure returning `2` and zeroing the move vector
     - selected-index sentinel return
     - two distinct out-state dwords on the post-`0x633720` tail
     - alternate `0x7C5DA0` / `this+0x84` unit-Z gate before `0x635090`
+  - `0x7C5DA0` is now closed more precisely as a tiny airborne time-scalar helper (`this->+0xA0 * -1/gravity` when airborne, else `0`), not a radius helper
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `EvaluateSelectorAlternateUnitZFallbackGate(...)`

@@ -1268,14 +1268,14 @@ extern "C"
     }
 
     __declspec(dllexport) bool EvaluateWoWSelectorAlternateUnitZFallbackGate(
-        float boundingRadiusValue,
-        float fallbackLimit,
+        float airborneTimeScalar,
+        float elapsedTimeScalar,
         float horizontalSpeedScale,
         float requestedDistance)
     {
         return WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(
-            boundingRadiusValue,
-            fallbackLimit,
+            airborneTimeScalar,
+            elapsedTimeScalar,
             horizontalSpeedScale,
             requestedDistance);
     }

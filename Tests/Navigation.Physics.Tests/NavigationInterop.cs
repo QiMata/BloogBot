@@ -788,8 +788,8 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorAlternateUnitZFallbackGate", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool EvaluateWoWSelectorAlternateUnitZFallbackGate(
-        float boundingRadiusValue,
-        float fallbackLimit,
+        float airborneTimeScalar,
+        float elapsedTimeScalar,
         float horizontalSpeedScale,
         float requestedDistance);
 

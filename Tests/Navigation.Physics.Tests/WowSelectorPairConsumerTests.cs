@@ -10,8 +10,8 @@ public class WowSelectorPairConsumerTests
     public void EvaluateSelectorAlternateUnitZFallbackGate_RejectsWhenFallbackLimitExceedsRadius()
     {
         bool accepted = EvaluateWoWSelectorAlternateUnitZFallbackGate(
-            boundingRadiusValue: 1.0f,
-            fallbackLimit: 1.25f,
+            airborneTimeScalar: 1.0f,
+            elapsedTimeScalar: 1.25f,
             horizontalSpeedScale: 7.0f,
             requestedDistance: 0.5f);
 
@@ -22,8 +22,8 @@ public class WowSelectorPairConsumerTests
     public void EvaluateSelectorAlternateUnitZFallbackGate_RejectsWhenScaledWindowIsShorterThanRequestedDistance()
     {
         bool accepted = EvaluateWoWSelectorAlternateUnitZFallbackGate(
-            boundingRadiusValue: 2.0f,
-            fallbackLimit: 1.5f,
+            airborneTimeScalar: 2.0f,
+            elapsedTimeScalar: 1.5f,
             horizontalSpeedScale: 4.0f,
             requestedDistance: 2.01f);
 
@@ -34,8 +34,8 @@ public class WowSelectorPairConsumerTests
     public void EvaluateSelectorAlternateUnitZFallbackGate_AcceptsAtExactDistanceThreshold()
     {
         bool accepted = EvaluateWoWSelectorAlternateUnitZFallbackGate(
-            boundingRadiusValue: 2.0f,
-            fallbackLimit: 1.5f,
+            airborneTimeScalar: 2.0f,
+            elapsedTimeScalar: 1.5f,
             horizontalSpeedScale: 4.0f,
             requestedDistance: 2.0f);
 
