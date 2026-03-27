@@ -990,6 +990,113 @@ bool WoWCollision::EvaluateSelectorPairFollowupGate(float windowStartScalar,
     return remainingHorizontalAllowanceSq > horizontalMoveSq;
 }
 
+float WoWCollision::ComputeVerticalTravelTimeScalar(float verticalDistance,
+                                                    bool preferEarlierPositiveRoot,
+                                                    uint32_t movementFlags,
+                                                    float verticalSpeed)
+{
+    const float terminalVelocity = (movementFlags & MOVEFLAG_SAFE_FALL) != 0u
+        ? PhysicsConstants::SAFE_FALL_TERMINAL_VELOCITY
+        : PhysicsConstants::TERMINAL_VELOCITY;
+
+    float clampedVerticalSpeed = verticalSpeed;
+    if (clampedVerticalSpeed > terminalVelocity) {
+        clampedVerticalSpeed = terminalVelocity;
+    }
+
+    if (std::fabs(clampedVerticalSpeed) <= WOW_SELECTOR_RATIO_EPSILON) {
+        const float timeToTerminal = terminalVelocity * PhysicsConstants::INV_GRAVITY;
+        const float distanceToTerminal = 0.5f * terminalVelocity * timeToTerminal;
+        if (verticalDistance <= distanceToTerminal) {
+            if (verticalDistance > 0.0f) {
+                return std::sqrt(verticalDistance * (2.0f * PhysicsConstants::INV_GRAVITY));
+            }
+
+            return 0.0f;
+        }
+
+        return ((verticalDistance - distanceToTerminal) / terminalVelocity) + timeToTerminal;
+    }
+
+    const float discriminant = (clampedVerticalSpeed * clampedVerticalSpeed) +
+                               (verticalDistance * PhysicsConstants::DOUBLE_GRAVITY);
+    const float root = discriminant > 0.0f ? std::sqrt(discriminant) : 0.0f;
+    const float earlierIntersection = (-clampedVerticalSpeed - root) * PhysicsConstants::INV_GRAVITY;
+    float laterIntersection = (root - clampedVerticalSpeed) * PhysicsConstants::INV_GRAVITY;
+    const float timeToTerminal = (terminalVelocity - clampedVerticalSpeed) * PhysicsConstants::INV_GRAVITY;
+
+    if (laterIntersection > timeToTerminal) {
+        const float distanceToTerminal = ((timeToTerminal * PhysicsConstants::HALF_GRAVITY) + clampedVerticalSpeed) *
+                                         timeToTerminal;
+        laterIntersection = timeToTerminal + ((verticalDistance - distanceToTerminal) / terminalVelocity);
+    }
+
+    if (preferEarlierPositiveRoot) {
+        return earlierIntersection > 0.0f ? earlierIntersection : 0.0f;
+    }
+
+    return laterIntersection;
+}
+
+float WoWCollision::EvaluateSelectorPairWindowAdjustment(float windowSpanScalar,
+                                                         float windowStartScalar,
+                                                         G3D::Vector3& moveVector,
+                                                         float* outMoveMagnitude,
+                                                         bool alternateUnitZState,
+                                                         float horizontalReferenceMagnitude,
+                                                         uint32_t movementFlags,
+                                                         float verticalSpeed,
+                                                         float horizontalSpeedScale,
+                                                         float referenceZ,
+                                                         float positionZ)
+{
+    const bool followupGateAccepted = EvaluateSelectorPairFollowupGate(
+        windowStartScalar,
+        windowSpanScalar,
+        moveVector,
+        alternateUnitZState,
+        movementFlags,
+        verticalSpeed,
+        horizontalSpeedScale);
+
+    float scaledHorizontalWindow = 0.0f;
+    if (horizontalReferenceMagnitude > WOW_SELECTOR_RATIO_EPSILON) {
+        const float horizontalMoveLength = std::sqrt((moveVector.x * moveVector.x) + (moveVector.y * moveVector.y));
+        scaledHorizontalWindow = (horizontalMoveLength / horizontalReferenceMagnitude) * windowSpanScalar;
+    }
+
+    const float verticalDistance = (referenceZ - positionZ) - moveVector.z;
+    const float verticalTravelTime = ComputeVerticalTravelTimeScalar(
+        verticalDistance,
+        followupGateAccepted,
+        movementFlags,
+        verticalSpeed);
+
+    if (!(verticalTravelTime > windowStartScalar)) {
+        moveVector = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        if (outMoveMagnitude) {
+            *outMoveMagnitude = 0.0f;
+        }
+        return 0.0f;
+    }
+
+    const float remainingWindow = verticalTravelTime - windowStartScalar;
+    if (remainingWindow > windowSpanScalar) {
+        return windowSpanScalar;
+    }
+
+    if (remainingWindow < scaledHorizontalWindow) {
+        const float horizontalScale = remainingWindow / scaledHorizontalWindow;
+        moveVector.x *= horizontalScale;
+        moveVector.y *= horizontalScale;
+        if (outMoveMagnitude) {
+            *outMoveMagnitude = moveVector.magnitude();
+        }
+    }
+
+    return remainingWindow;
+}
+
 void WoWCollision::EvaluateSelectorPairConsumer(float requestedDistance,
                                                 const G3D::Vector3& inputMove,
                                                 bool directionRankingAccepted,

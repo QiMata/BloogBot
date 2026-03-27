@@ -1967,3 +1967,42 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not weaken the final `0x635550` comparison to `>=`. The binary uses a strict greater-than check on horizontal allowance squared versus move length squared.
 - Recommended next single hypothesis:
   - Mirror the visible `0x635450` caller transaction next, including the exact use of the two `0x6351A0` out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before touching runtime grounded resolution again.
+
+## 2026-03-26 Selector post-window addendum (`0x7C5F50` / `0x635450`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the remaining visible post-selection math after `0x6351A0`: the `0x7C5F50` gravity/terminal-velocity time solver and the `0x635450` caller-side window clamp/scaler that sits on top of `0x635550`.
+- Binary/evidence delta shipped:
+  - added raw captures in `docs/physics/0x635450_disasm.txt` and `docs/physics/0x7C5F50_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the selector note now also records:
+    - `0x7C5F50` choosing terminal velocity `7.0f` vs `60.14800262f` from `MOVEFLAG_SAFE_FALL`
+    - its positive-speed clamp, stationary sqrt branch, terminal-velocity fallback, and earlier-positive-root toggle
+    - `0x635450` calling `0x635550`, then `0x7C5F50`, then zeroing/clamping/scaling the move vector based on the remaining vertical window
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `ComputeVerticalTravelTimeScalar(...)`
+    - added pure `EvaluateSelectorPairWindowAdjustment(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWVerticalTravelTimeScalar(...)`
+    - added `EvaluateWoWSelectorPairWindowAdjustment(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector post-window seams
+  - `Tests/Navigation.Physics.Tests/WowVerticalTravelTimeTests.cs`
+    - added deterministic coverage for the stationary sqrt branch, stationary terminal-velocity branch, safe-fall split, earlier-positive-root path, and positive-overspeed clamp
+  - `Tests/Navigation.Physics.Tests/WowSelectorPairWindowAdjustmentTests.cs`
+    - added deterministic coverage for the `0x635450` zero-window path, clamp-to-span path, strict horizontal rescale path, equality no-rescale path, and alternate-state earlier-root handoff
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowVerticalTravelTimeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`38/38`)
+- Frame-pattern note:
+  - The open selector gap is narrower again. The entire visible `0x6351A0 -> 0x635550 -> 0x7C5F50 -> 0x635450` post-selection chain is now pinned as pure binary-backed math. The next unknown is no longer that visible caller math; it is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before grounded runtime consumes it.
+- Do Not Repeat:
+  - Do not treat `0x7C5F50` as a generic distance helper. The fresh binary capture closes it as a gravity/terminal-velocity travel-time solver with a `MOVEFLAG_SAFE_FALL` split and an earlier-root toggle.
+  - Do not relax the `0x635450` horizontal rescale gate to `<=`. The binary only rescales when the remaining window is strictly less than the scaled horizontal window.
+- Recommended next single hypothesis:
+  - Extend the production grounded trace/export seam next so deterministic tests can capture the selected index, paired `0xC4E544[index]` payload, and the two post-`0x6351A0` state dwords from the real grounded path before attempting any runtime hookup.

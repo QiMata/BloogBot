@@ -423,6 +423,7 @@ public static partial class NavigationInterop
         Swimming = 0x00200000,
         Flying = 0x01000000,
         OnTransport = 0x02000000,
+        SafeFall = 0x20000000,
     }
 
     // ==========================================================================
@@ -808,6 +809,27 @@ public static partial class NavigationInterop
         uint movementFlags,
         float verticalSpeed,
         float horizontalSpeedScale);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float EvaluateWoWVerticalTravelTimeScalar(
+        float verticalDistance,
+        [MarshalAs(UnmanagedType.I1)] bool preferEarlierPositiveRoot,
+        uint movementFlags,
+        float verticalSpeed);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPairWindowAdjustment", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float EvaluateWoWSelectorPairWindowAdjustment(
+        float windowSpanScalar,
+        float windowStartScalar,
+        ref Vector3 moveVector,
+        ref float outMoveMagnitude,
+        [MarshalAs(UnmanagedType.I1)] bool alternateUnitZState,
+        float horizontalReferenceMagnitude,
+        uint movementFlags,
+        float verticalSpeed,
+        float horizontalSpeedScale,
+        float referenceZ,
+        float positionZ);
 
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPairConsumer", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

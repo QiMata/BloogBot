@@ -1312,6 +1312,50 @@ extern "C"
             horizontalSpeedScale);
     }
 
+    __declspec(dllexport) float EvaluateWoWVerticalTravelTimeScalar(
+        float verticalDistance,
+        bool preferEarlierPositiveRoot,
+        uint32_t movementFlags,
+        float verticalSpeed)
+    {
+        return WoWCollision::ComputeVerticalTravelTimeScalar(
+            verticalDistance,
+            preferEarlierPositiveRoot,
+            movementFlags,
+            verticalSpeed);
+    }
+
+    __declspec(dllexport) float EvaluateWoWSelectorPairWindowAdjustment(
+        float windowSpanScalar,
+        float windowStartScalar,
+        G3D::Vector3* moveVector,
+        float* outMoveMagnitude,
+        bool alternateUnitZState,
+        float horizontalReferenceMagnitude,
+        uint32_t movementFlags,
+        float verticalSpeed,
+        float horizontalSpeedScale,
+        float referenceZ,
+        float positionZ)
+    {
+        if (!moveVector || !outMoveMagnitude) {
+            return 0.0f;
+        }
+
+        return WoWCollision::EvaluateSelectorPairWindowAdjustment(
+            windowSpanScalar,
+            windowStartScalar,
+            *moveVector,
+            outMoveMagnitude,
+            alternateUnitZState,
+            horizontalReferenceMagnitude,
+            movementFlags,
+            verticalSpeed,
+            horizontalSpeedScale,
+            referenceZ,
+            positionZ);
+    }
+
     __declspec(dllexport) bool EvaluateWoWSelectorPairConsumer(
         float requestedDistance,
         const G3D::Vector3* inputMove,

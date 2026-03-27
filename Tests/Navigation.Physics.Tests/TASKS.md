@@ -34,9 +34,16 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 224)`
+- Last updated: `2026-03-26 (session 225)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 225 added `WowVerticalTravelTimeTests.cs` and `WowSelectorPairWindowAdjustmentTests.cs` plus the new production-DLL interop needed to pin the visible `0x7C5F50` + `0x635450` post-selection transaction. `NavigationInterop.cs` now exposes `EvaluateWoWVerticalTravelTimeScalar(...)` and `EvaluateWoWSelectorPairWindowAdjustment(...)`.
+  - The new deterministic coverage now pins the binary safe-fall terminal-velocity split, stationary sqrt branch, terminal-velocity fallback, earlier-positive-root path, `0x635450` zero-window path, clamp-to-span path, strict horizontal rescale path, and the alternate-state earlier-root handoff.
+  - Practical implication: this owner no longer has to infer the visible post-selection scaler after `0x6351A0`. The next missing deterministic seam is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before grounded runtime consumes it.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+    - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowVerticalTravelTimeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"` -> `passed (38/38)`
   - Session 224 added `WowSelectorPairFollowupGateTests.cs` plus the new production-DLL interop needed to pin the visible `0x635550` follow-up gate. `NavigationInterop.cs` now exposes `EvaluateWoWJumpTimeScalar(...)` and `EvaluateWoWSelectorPairFollowupGate(...)`.
   - The new deterministic coverage now pins the binary jump-time helper and every visible `0x635550` branch outcome: alternate-state short-circuit, nonnegative-vertical reject, window-end-before-jump success, window-start-after-jump reject, and the strict horizontal-length-squared allowance comparison.
   - Practical implication: this owner no longer has to infer the visible `0x635550` gate after `0x6351A0`. The next missing deterministic seam is `0x635450`, which consumes the two `0x6351A0` out-state dwords, the `0x635550` result, and the `0x7C5F50` scalar before the grounded runtime uses the selected payload.

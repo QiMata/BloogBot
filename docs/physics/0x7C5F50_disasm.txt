@@ -1,0 +1,120 @@
+0x007C5F50: push     ebp
+0x007C5F51: mov      ebp, esp
+0x007C5F53: sub      esp, 0x10
+0x007C5F56: mov      edx, dword ptr [ecx + 0x40]
+0x007C5F59: and      edx, 0x20000000
+0x007C5F5F: mov      eax, dword ptr [0x87d898]
+0x007C5F64: jne      0x7c5f6b
+0x007C5F66: mov      eax, dword ptr [0x87d894]
+0x007C5F6B: mov      ecx, dword ptr [ecx + 0xa0]
+0x007C5F71: mov      dword ptr [ebp - 4], ecx
+0x007C5F74: fld      dword ptr [ebp - 4]
+0x007C5F77: mov      dword ptr [ebp - 8], eax
+0x007C5F7A: fcomp    dword ptr [ebp - 8]
+0x007C5F7D: fnstsw   ax
+0x007C5F7F: test     ah, 0x41
+0x007C5F82: jne      0x7c5f8a
+0x007C5F84: mov      eax, dword ptr [ebp - 8]
+0x007C5F87: mov      dword ptr [ebp - 4], eax
+0x007C5F8A: fld      dword ptr [ebp - 4]
+0x007C5F8D: fabs
+0x007C5F8F: fcomp    dword ptr [0x8029d4]
+0x007C5F95: fnstsw   ax
+0x007C5F97: test     ah, 5
+0x007C5F9A: jp       0x7c6014
+0x007C5F9C: test     edx, edx
+0x007C5F9E: je       0x7c5fa8
+0x007C5FA0: fld      dword ptr [0x87d898]
+0x007C5FA6: jmp      0x7c5fae
+0x007C5FA8: fld      dword ptr [0x87d894]
+0x007C5FAE: fld      dword ptr [0x80e020]
+0x007C5FB4: fmul     st(1)
+0x007C5FB6: fld      st(0)
+0x007C5FB8: fmul     st(2)
+0x007C5FBA: fmul     dword ptr [0x7ffa24]
+0x007C5FC0: fld      dword ptr [ebp + 8]
+0x007C5FC3: fcomp    st(1)
+0x007C5FC5: fnstsw   ax
+0x007C5FC7: test     ah, 5
+0x007C5FCA: jp       0x7c5fff
+0x007C5FCC: fstp     st(0)
+0x007C5FCE: fstp     st(0)
+0x007C5FD0: fstp     st(0)
+0x007C5FD2: fld      dword ptr [ebp + 8]
+0x007C5FD5: fcomp    dword ptr [0x7ffd74]
+0x007C5FDB: fnstsw   ax
+0x007C5FDD: test     ah, 0x41
+0x007C5FE0: jne      0x7c5ff3
+0x007C5FE2: fld      dword ptr [ebp + 8]
+0x007C5FE5: fmul     dword ptr [0x81da68]
+0x007C5FEB: fsqrt
+0x007C5FED: mov      esp, ebp
+0x007C5FEF: pop      ebp
+0x007C5FF0: ret      8
+0x007C5FF3: fld      dword ptr [0x7ffd74]
+0x007C5FF9: mov      esp, ebp
+0x007C5FFB: pop      ebp
+0x007C5FFC: ret      8
+0x007C5FFF: fld      dword ptr [ebp + 8]
+0x007C6002: fsub     st(1)
+0x007C6004: fdivrp   st(3)
+0x007C6006: fxch     st(2)
+0x007C6008: fadd     st(1)
+0x007C600A: fstp     st(2)
+0x007C600C: fstp     st(0)
+0x007C600E: mov      esp, ebp
+0x007C6010: pop      ebp
+0x007C6011: ret      8
+0x007C6014: fld      dword ptr [ebp - 4]
+0x007C6017: fmul     dword ptr [ebp - 4]
+0x007C601A: fld      dword ptr [ebp + 8]
+0x007C601D: fmul     dword ptr [0x81da64]
+0x007C6023: faddp    st(1)
+0x007C6025: fcom     dword ptr [0x7ffd74]
+0x007C602B: fnstsw   ax
+0x007C602D: test     ah, 0x41
+0x007C6030: jne      0x7c6036
+0x007C6032: fsqrt
+0x007C6034: jmp      0x7c603e
+0x007C6036: fstp     st(0)
+0x007C6038: fld      dword ptr [0x7ffd74]
+0x007C603E: fld      dword ptr [ebp - 4]
+0x007C6041: fchs
+0x007C6043: fsub     st(1)
+0x007C6045: fmul     dword ptr [0x80e020]
+0x007C604B: fstp     dword ptr [ebp - 0x10]
+0x007C604E: fsub     dword ptr [ebp - 4]
+0x007C6051: fmul     dword ptr [0x80e020]
+0x007C6057: fld      dword ptr [ebp - 8]
+0x007C605A: fsub     dword ptr [ebp - 4]
+0x007C605D: fmul     dword ptr [0x80e020]
+0x007C6063: fstp     dword ptr [ebp - 0xc]
+0x007C6066: fcom     dword ptr [ebp - 0xc]
+0x007C6069: fnstsw   ax
+0x007C606B: test     ah, 0x41
+0x007C606E: jne      0x7c608a
+0x007C6070: fstp     st(0)
+0x007C6072: fld      dword ptr [ebp - 0xc]
+0x007C6075: fmul     dword ptr [0x81da60]
+0x007C607B: fadd     dword ptr [ebp - 4]
+0x007C607E: fmul     dword ptr [ebp - 0xc]
+0x007C6081: fsubr    dword ptr [ebp + 8]
+0x007C6084: fdiv     dword ptr [ebp - 8]
+0x007C6087: fadd     dword ptr [ebp - 0xc]
+0x007C608A: mov      eax, dword ptr [ebp + 0xc]
+0x007C608D: test     eax, eax
+0x007C608F: je       0x7c60b2
+0x007C6091: fstp     st(0)
+0x007C6093: fld      dword ptr [ebp - 0x10]
+0x007C6096: fcomp    dword ptr [0x7ffd74]
+0x007C609C: fnstsw   ax
+0x007C609E: test     ah, 5
+0x007C60A1: jp       0x7c60af
+0x007C60A3: fld      dword ptr [0x7ffd74]
+0x007C60A9: mov      esp, ebp
+0x007C60AB: pop      ebp
+0x007C60AC: ret      8
+0x007C60AF: fld      dword ptr [ebp - 0x10]
+0x007C60B2: mov      esp, ebp
+0x007C60B4: pop      ebp
+0x007C60B5: ret      8

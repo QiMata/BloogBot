@@ -637,13 +637,27 @@ CollisionStep (0x633840)
   - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, `docs/physics/0x635734_callsite_disasm.txt`, and `docs/physics/0x7C5DA0_disasm.txt`
   - the new `0x7C5DA0` capture closes one detail on that alternate path: it is a tiny airborne time-scalar helper (`this->+0xA0 * -1/gravity` when airborne, else `0`), not a radius helper
   - the production DLL now mirrors that visible `0x6351A0` consumer tail through pure `EvaluateSelectorAlternateUnitZFallbackGate(...)` and `EvaluateSelectorPairConsumer(...)` helpers plus deterministic export/test seams
-  - fresh raw capture now also lives in `docs/physics/0x635550_disasm.txt`
+  - fresh raw captures now also live in `docs/physics/0x635550_disasm.txt`, `docs/physics/0x635450_disasm.txt`, and `docs/physics/0x7C5F50_disasm.txt`
   - `0x635550`
     - is the pure follow-up gate that `0x635450` calls immediately after `0x6351A0`
     - returns success immediately when the second `0x6351A0` out-state dword is nonzero
     - otherwise only continues when `this->+0xA0 < 0`
     - then uses the `0x7C5DA0` jump-time scalar, the input `{x,y}` move length squared, and `this->+0x84` to decide whether the gate succeeds
     - the production DLL now mirrors that helper through pure `ComputeJumpTimeScalar(...)` and `EvaluateSelectorPairFollowupGate(...)` helpers plus deterministic export/test seams
+  - `0x7C5F50`
+    - is the vertical travel-time helper that `0x635450` calls after `0x635550`
+    - uses `MOVEFLAG_SAFE_FALL (0x20000000)` to choose terminal velocity `7.0f` vs `60.14800262f`
+    - clamps positive `this->+0xA0` to that terminal velocity, uses the near-zero branch for `fabs(speed) <= 0x8029D4`, and otherwise solves the quadratic travel time with a terminal-velocity fallback when the later root extends past time-to-terminal
+    - when the second argument is nonzero it returns the earlier positive root (`max(lowerRoot, 0)`); otherwise it returns the later/default travel time
+    - the production DLL now mirrors that helper through pure `ComputeVerticalTravelTimeScalar(...)` plus deterministic export/test seams
+  - `0x635450`
+    - is the visible caller-side window clamp/scaler after `0x6351A0`
+    - calls `0x635550(arg2, arg1, move, secondOutState)`
+    - if `arg6 > 0x8026BC`, computes a scaled horizontal window `sqrt(move.x^2 + move.y^2) / arg6 * arg1`
+    - calls `0x7C5F50((this->+0x7C - this->+0x18) - move.z, followupGate)`
+    - if that vertical travel time is not greater than `arg2`, zeroes the move vector, writes `0` to `*arg4`, and returns `0`
+    - otherwise subtracts `arg2`, clamps the return value to `arg1`, and only scales `move.x/y` plus rewrites `*arg4` when the remaining window is strictly less than the scaled horizontal window
+    - the production DLL now mirrors that helper through pure `EvaluateSelectorPairWindowAdjustment(...)` plus deterministic export/test seams
   - `0x633720`
     - wrapper builds `position + offset`, passes that world point plus the selected index and `this+0x15C` into `0x633760`, then returns the inverse boolean of `0x633760`
   - `0x633760`

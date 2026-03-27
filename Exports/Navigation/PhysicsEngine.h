@@ -874,6 +874,23 @@ namespace WoWCollision
                                           float verticalSpeed,
                                           float horizontalSpeedScale);
 
+    float ComputeVerticalTravelTimeScalar(float verticalDistance,
+                                          bool preferEarlierPositiveRoot,
+                                          uint32_t movementFlags,
+                                          float verticalSpeed);
+
+    float EvaluateSelectorPairWindowAdjustment(float windowSpanScalar,
+                                               float windowStartScalar,
+                                               G3D::Vector3& moveVector,
+                                               float* outMoveMagnitude,
+                                               bool alternateUnitZState,
+                                               float horizontalReferenceMagnitude,
+                                               uint32_t movementFlags,
+                                               float verticalSpeed,
+                                               float horizontalSpeedScale,
+                                               float referenceZ,
+                                               float positionZ);
+
     void EvaluateSelectorPairConsumer(float requestedDistance,
                                       const G3D::Vector3& inputMove,
                                       bool directionRankingAccepted,

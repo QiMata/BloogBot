@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 224)
+- **Last updated:** 2026-03-26 (session 225)
 - **Branch:** `main`
+- **Session 225 — the visible `0x7C5F50` + `0x635450` selector post-window chain is now pinned as a pure binary seam:**
+  - Added pure [ComputeVerticalTravelTimeScalar(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorPairWindowAdjustment(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowVerticalTravelTimeTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowVerticalTravelTimeTests.cs) and [WowSelectorPairWindowAdjustmentTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorPairWindowAdjustmentTests.cs), which now pin the `MOVEFLAG_SAFE_FALL` terminal-velocity split, stationary sqrt branch, earlier-root path, `0x635450` zero/clamp/scale paths, and the alternate-state handoff from `0x635550`.
+  - Added fresh raw captures [0x635450_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x635450_disasm.txt) and [0x7C5F50_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x7C5F50_disasm.txt), and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the visible post-`0x6351A0` window solver/scaler is now explicit in the binary notes.
+  - Practical implication: the remaining selector gap is no longer the visible post-selection math. The next unresolved piece is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before runtime grounded wall resolution consumes it.
+- **Test baseline (session 225):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowVerticalTravelTimeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - Passed (`38/38`)
 - **Session 224 — the visible `0x635550` selector follow-up gate is now pinned as a pure binary seam:**
   - Added pure [ComputeJumpTimeScalar(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp) and [EvaluateSelectorPairFollowupGate(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported them through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowSelectorPairFollowupGateTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSelectorPairFollowupGateTests.cs), which now pins both exact binary-backed seams: the `MOVEFLAG_JUMPING`-gated `0x7C5DA0` jump-time scalar and the visible `0x635550` follow-up gate after `0x6351A0`.
