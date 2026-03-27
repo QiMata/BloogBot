@@ -638,6 +638,15 @@ namespace WoWCollision
         uint32_t selectedRecordIndex = 0xFFFFFFFFu;
     };
 
+    struct SelectorTriangleEdgeDirectionTrace
+    {
+        float bestScore = 0.0f;
+        uint32_t zeroLengthRejectedCount = 0;
+        uint32_t pointToLineScoredCount = 0;
+        uint32_t planeScoredCount = 0;
+        uint32_t selectedEdgeIndex = 0xFFFFFFFFu;
+    };
+
     struct SelectorPair
     {
         float first = 0.0f;
@@ -878,6 +887,12 @@ namespace WoWCollision
                                              const SelectorSupportPlane& firstCandidatePlane,
                                              const SelectorSupportPlane& secondCandidatePlane,
                                              G3D::Vector3& outPoint);
+
+    void BuildSelectorTriangleEdgeDirection(const SelectorCandidateRecord& selectedRecord,
+                                            const G3D::Vector3& intersectionPoint,
+                                            const G3D::Vector3& lineDirection,
+                                            G3D::Vector3& outDirection,
+                                            SelectorTriangleEdgeDirectionTrace* outTrace = nullptr);
 
     bool EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                     float elapsedTimeScalar,

@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 228)
+- Last updated: 2026-03-26 (session 229)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 229 still kept runtime grounded behavior unchanged and pinned the private `0x634DA0` chooser that sits inside the `count == 2` body of `0x634AE0`. `BuildSelectorTriangleEdgeDirection(...)` now mirrors the binary three-edge loop over the selected `0x34` record, including zero-length rejection, the aligned-edge `0x634F40` point-to-line scorer, and the alternate squared plane-offset scorer.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorTriangleEdgeDirectionTests.cs` now pins mixed fast-path/cross-path scoring, zero-length edge rejection, and the all-zero-length default output through the production DLL.
+  - New raw capture now lives in `docs/physics/0x634DA0_disasm.txt`. Practical implication: the remaining alternate-pair gap is no longer any hidden helper inside `0x634AE0`. The next missing runtime piece is the full two-candidate working-vector output and caller-side normalization path in `0x634AE0` / `0x635090`.
   - Session 228 still kept runtime grounded behavior unchanged and pinned the private `0x634FC0` three-plane intersection helper that sits inside the unresolved `count == 2` body of `0x634AE0`. `BuildSelectorPlaneIntersectionPoint(...)` now mirrors the binary solve over the selected plane plus the two candidate planes.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorPlaneIntersectionPointTests.cs` now pins the exact intersection result for both orthogonal and scaled-coefficient plane triplets through the production DLL.
   - New raw capture now lives in `docs/physics/0x634FC0_disasm.txt`. Practical implication: the remaining alternate-pair gap is no longer another hidden matrix/inversion helper. The next missing runtime piece is the chooser logic in `0x634DA0`.
@@ -540,7 +543,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x634DA0; data=code[start-0x400000:start-0x400000+544]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635090; data=code[start-0x400000:start-0x400000+704]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
   - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

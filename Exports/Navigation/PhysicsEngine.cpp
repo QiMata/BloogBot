@@ -1010,6 +1010,61 @@ void WoWCollision::BuildSelectorPlaneIntersectionPoint(const SelectorSupportPlan
     outPoint = numerator * (1.0f / determinant);
 }
 
+void WoWCollision::BuildSelectorTriangleEdgeDirection(const SelectorCandidateRecord& selectedRecord,
+                                                      const G3D::Vector3& intersectionPoint,
+                                                      const G3D::Vector3& lineDirection,
+                                                      G3D::Vector3& outDirection,
+                                                      SelectorTriangleEdgeDirectionTrace* outTrace)
+{
+    SelectorTriangleEdgeDirectionTrace trace{};
+    trace.bestScore = std::numeric_limits<float>::max();
+    outDirection = G3D::Vector3(0.0f, 0.0f, 0.0f);
+
+    constexpr std::array<uint32_t, 3> nextPointOffsets = { 1u, 2u, 0u };
+
+    for (uint32_t edgeIndex = 0; edgeIndex < 3u; ++edgeIndex) {
+        const G3D::Vector3& currentPoint = selectedRecord.points[edgeIndex];
+        const G3D::Vector3& nextPoint = selectedRecord.points[nextPointOffsets[edgeIndex]];
+
+        G3D::Vector3 edgeDirection = currentPoint - nextPoint;
+        const float edgeMagnitude = edgeDirection.magnitude();
+        if (std::fabs(edgeMagnitude) <= WOW_SELECTOR_RATIO_EPSILON) {
+            trace.zeroLengthRejectedCount++;
+            continue;
+        }
+
+        edgeDirection = edgeDirection * (1.0f / edgeMagnitude);
+
+        float score = 0.0f;
+        if (std::fabs(edgeDirection.dot(lineDirection) - 1.0f) <= WOW_PLANE_BUILD_EPSILON) {
+            trace.pointToLineScoredCount++;
+
+            const G3D::Vector3 pointOffset = currentPoint - intersectionPoint;
+            const float projectedDistance = pointOffset.dot(lineDirection);
+            const G3D::Vector3 projectedPoint = intersectionPoint + (lineDirection * projectedDistance);
+            const G3D::Vector3 rejection = currentPoint - projectedPoint;
+            score = rejection.squaredMagnitude();
+        }
+        else {
+            trace.planeScoredCount++;
+
+            const G3D::Vector3 planeNormal = edgeDirection.cross(lineDirection);
+            const float signedPlaneOffset = planeNormal.dot(currentPoint) - planeNormal.dot(intersectionPoint);
+            score = signedPlaneOffset * signedPlaneOffset;
+        }
+
+        if (score < trace.bestScore) {
+            trace.bestScore = score;
+            trace.selectedEdgeIndex = edgeIndex;
+            outDirection = edgeDirection;
+        }
+    }
+
+    if (outTrace) {
+        *outTrace = trace;
+    }
+}
+
 bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float airborneTimeScalar,
                                                               float elapsedTimeScalar,
                                                               float horizontalSpeedScale,

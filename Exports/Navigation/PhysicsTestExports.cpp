@@ -127,6 +127,15 @@ struct ExportSelectorDirectionRankingTrace
     uint32_t selectedRecordIndex;
 };
 
+struct ExportSelectorTriangleEdgeDirectionTrace
+{
+    float bestScore;
+    uint32_t zeroLengthRejectedCount;
+    uint32_t pointToLineScoredCount;
+    uint32_t planeScoredCount;
+    uint32_t selectedEdgeIndex;
+};
+
 struct ExportSelectorPair
 {
     float first;
@@ -1373,6 +1382,43 @@ extern "C"
             first,
             second,
             *outPoint);
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorTriangleEdgeDirection(
+        const ExportSelectorCandidateRecord* selectedRecord,
+        const G3D::Vector3* intersectionPoint,
+        const G3D::Vector3* lineDirection,
+        G3D::Vector3* outDirection,
+        ExportSelectorTriangleEdgeDirectionTrace* outTrace)
+    {
+        if (!selectedRecord || !intersectionPoint || !lineDirection || !outDirection) {
+            return false;
+        }
+
+        WoWCollision::SelectorCandidateRecord selected{};
+        selected.filterPlane.normal = selectedRecord->filterPlane.normal;
+        selected.filterPlane.planeDistance = selectedRecord->filterPlane.planeDistance;
+        selected.points[0] = selectedRecord->point0;
+        selected.points[1] = selectedRecord->point1;
+        selected.points[2] = selectedRecord->point2;
+
+        WoWCollision::SelectorTriangleEdgeDirectionTrace trace{};
+        WoWCollision::BuildSelectorTriangleEdgeDirection(
+            selected,
+            *intersectionPoint,
+            *lineDirection,
+            *outDirection,
+            &trace);
+
+        if (outTrace) {
+            outTrace->bestScore = trace.bestScore;
+            outTrace->zeroLengthRejectedCount = trace.zeroLengthRejectedCount;
+            outTrace->pointToLineScoredCount = trace.pointToLineScoredCount;
+            outTrace->planeScoredCount = trace.planeScoredCount;
+            outTrace->selectedEdgeIndex = trace.selectedEdgeIndex;
+        }
+
         return true;
     }
 

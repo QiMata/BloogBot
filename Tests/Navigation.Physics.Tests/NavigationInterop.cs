@@ -215,6 +215,16 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorTriangleEdgeDirectionTrace
+    {
+        public float BestScore;
+        public uint ZeroLengthRejectedCount;
+        public uint PointToLineScoredCount;
+        public uint PlaneScoredCount;
+        public uint SelectedEdgeIndex;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct SelectorPair
     {
         public float First;
@@ -841,6 +851,15 @@ public static partial class NavigationInterop
         in SelectorSupportPlane firstCandidatePlane,
         in SelectorSupportPlane secondCandidatePlane,
         out Vector3 outPoint);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorTriangleEdgeDirection", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorTriangleEdgeDirection(
+        in SelectorCandidateRecord selectedRecord,
+        in Vector3 intersectionPoint,
+        in Vector3 lineDirection,
+        out Vector3 outDirection,
+        out SelectorTriangleEdgeDirectionTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWVerticalTravelTimeScalar", CallingConvention = CallingConvention.Cdecl)]
     public static extern float EvaluateWoWVerticalTravelTimeScalar(

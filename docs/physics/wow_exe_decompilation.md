@@ -688,9 +688,18 @@ CollisionStep (0x633840)
       - `0x634FC0` copies the selected plane plus the two candidate planes as `{normal.xyz, -planeDistance}` and solves the three-plane intersection point
       - `0x7BE0E0` / `0x7BE2A0` on this path are the determinant/inverse helpers behind that solve
       - the production DLL now mirrors that exact helper through pure `BuildSelectorPlaneIntersectionPoint(...)` plus deterministic export/test coverage
+    - fresh raw capture now also lives in `docs/physics/0x634DA0_disasm.txt`
+    - the private chooser inside that same `count == 2` body is now closed:
+      - `0x634DA0` iterates the three selected-triangle edges in order `(p0 -> p1)`, `(p1 -> p2)`, `(p2 -> p0)`
+      - it skips an edge when its magnitude is `<= 0x8029D4`
+      - it normalizes each surviving edge
+      - if `abs(dot(edgeDir, lineDir) - 1.0f) <= 0x8026BC`, it calls `0x634F40`, which returns squared distance from the current point to the line through the `0x634FC0` intersection point in the candidate-line direction
+      - otherwise it scores that edge by squaring the signed plane offset from `cross(edgeDir, lineDir)` between the current point and the intersection point
+      - it keeps the strictly lowest score and returns that normalized edge direction
+      - the production DLL now mirrors that exact chooser through pure `BuildSelectorTriangleEdgeDirection(...)` plus deterministic export/test coverage
     - on failure it negates the incoming vector
     - both paths normalize that 3-vector and then write the final two-float pair result back to the caller
-    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate, the obvious `0x634AE0` count fanout, the `0x634960` footprint gate, or the `0x634FC0` plane-intersection point builder. The unresolved body is now the chooser/ranking helper `0x634DA0` on top of those already-pinned inputs before the final pair math.
+    - practical implication: the remaining open portion of `0x635090` is no longer its front-end gate or any private `count == 2` helper inside `0x634AE0`. The next unresolved step is mirroring the full two-candidate working-vector output / caller-side normalization path on top of the now-closed `0x634960`, `0x634FC0`, and `0x634DA0` pieces before the final pair math.
   - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test
