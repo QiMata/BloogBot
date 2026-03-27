@@ -1761,3 +1761,34 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not keep re-deriving the cache-miss bounds by composing smaller helpers in tests only. That higher-level transaction is now pinned explicitly.
 - Recommended next single hypothesis:
   - Mirror the `0x6320C5..0x63213A` swim-side query path inside `0x631E70`, including the `0x30000` mask and the contact normal/plane flip via `0x637330`.
+
+## 2026-03-26 Swim-side plane-flip addendum (`0x637330`, `0x597AD0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the per-contact plane rewrite on the `0x631E70` swim-side query path so the remaining unknown is the surrounding transform loop rather than the flip itself.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x597AD0_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the swim-path note now records both halves of the rewrite: `0x637330` negates the normal and `0x597AD0` writes the negated `{normal, planeD}` record back
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `NegatePlane(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWNegatedPlane(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new plane-flip seam
+  - `Tests/Navigation.Physics.Tests/WowSwimQueryPlaneFlipTests.cs`
+    - added deterministic coverage for the exact flipped-plane output
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests|FullyQualifiedName~WowTerrainQueryBoundsTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again. The swim-side per-contact rewrite is now closed, and the next unknown is the transport-local contact transform loop starting at `0x63214C`.
+- Do Not Repeat:
+  - Do not keep treating the swim-side branch as “normal-only” negation. The plane distance flips with it.
+- Recommended next single hypothesis:
+  - Mirror the `0x63214C..0x632270` transport-local contact transform loop inside `0x631E70`.

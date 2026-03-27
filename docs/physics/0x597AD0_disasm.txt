@@ -1,0 +1,24 @@
+WoW.exe 1.12.1 raw disassembly capture
+Function: 0x597AD0
+Date: 2026-03-26
+Notes:
+- Tiny plane-record constructor used by the `0x631E70` swim-side query loop after `0x637330`.
+- Copies a 3-float normal from `[arg+8]` into `this`, then writes the stack plane distance at `this+0x0C`.
+
+0x00597AD0: push     ebp
+0x00597AD1: mov      ebp, esp
+0x00597AD3: mov      eax, ecx
+0x00597AD5: mov      ecx, dword ptr [ebp + 8]
+0x00597AD8: push     esi
+0x00597AD9: mov      esi, dword ptr [ecx]
+0x00597ADB: mov      edx, eax
+0x00597ADD: mov      dword ptr [edx], esi
+0x00597ADF: mov      esi, dword ptr [ecx + 4]
+0x00597AE2: mov      dword ptr [edx + 4], esi
+0x00597AE5: mov      ecx, dword ptr [ecx + 8]
+0x00597AE8: mov      dword ptr [edx + 8], ecx
+0x00597AEB: mov      edx, dword ptr [ebp + 0xc]
+0x00597AEE: mov      dword ptr [eax + 0xc], edx
+0x00597AF1: pop      esi
+0x00597AF2: pop      ebp
+0x00597AF3: ret      8

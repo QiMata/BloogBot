@@ -283,8 +283,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-26 (session 218)
+- **Last updated:** 2026-03-26 (session 219)
 - **Branch:** `main`
+- **Session 219 — the `0x631E70` swim-side plane flip is now pinned as a pure binary seam:**
+  - Added pure [NegatePlane(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
+  - Added deterministic coverage in [WowSwimQueryPlaneFlipTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowSwimQueryPlaneFlipTests.cs), which now pins the exact `0x637330` + `0x597AD0` result used on the swim-side query path: negate the normal and negate the plane distance.
+  - Added fresh raw capture [0x597AD0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x597AD0_disasm.txt) and updated [wow_exe_decompilation.md](/E:/repos/Westworld of Warcraft/docs/physics/wow_exe_decompilation.md) so the swim-side `0x30000` query note no longer drops the plane-distance rewrite.
+  - Practical implication: the remaining `0x631E70` gap is no longer the per-contact swim-side plane flip. The next unresolved piece is the post-cache transform loop that rewrites cached contacts when `transportGuid != 0`.
+- **Test baseline (session 219):**
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - Succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests|FullyQualifiedName~WowTerrainQueryBoundsTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
 - **Session 218 — `0x631E70` cache-miss merged bounds are now pinned as a pure binary seam:**
   - Added pure [BuildTerrainQueryCacheMissBounds(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsEngine.cpp), then exported it through [PhysicsTestExports.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/PhysicsTestExports.cpp) with matching interop in [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs).
   - Added deterministic coverage in [WowTerrainQueryCacheMissBoundsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowTerrainQueryCacheMissBoundsTests.cs), which now pins the exact `0x631E70` cache-miss bounds transaction: build projected bounds, expand min/max by binary `1/6`, then merge against cached `0xC4E5A0`.
@@ -677,8 +689,8 @@ if (transportGuid != 0) {
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
-- **Next priorities:** keep the runtime grounded path frozen, then close the remaining `0x631E70` swim-side `0x30000` query / `0x637330` contact-flip transaction before going back to the variable `0x632A30 -> 0x632280` payload.
-- **Next command:** `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x6320C5; data=code[start-0x400000:start-0x400000+192]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- **Next priorities:** keep the runtime grounded path frozen, then close the remaining `0x631E70` transport-local contact transform loop before going back to the variable `0x632A30 -> 0x632280` payload.
+- **Next command:** `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+320]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - **Session 190 — `0x6334A0` `CheckWalkable` semantics captured and locked in deterministic coverage:**
   - Captured fresh binary evidence in [0x6334A0_disasm.txt](/E:/repos/Westworld of Warcraft/docs/physics/0x6334A0_disasm.txt). The new note includes the full `0x6334A0` body plus the two supporting helper findings that matter for parity: `0x6333D0` checks the current contact plane against the four top-footprint corners with `1/720`, and `0x6335D0` accepts the current position only when it sits inside all three triangle edge planes with `1/12`.
   - Extended [SceneQuery.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.h) and [SceneQuery.cpp](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.cpp) so `TestTerrainAABB` contacts now preserve the raw triangle vertices, raw plane normal, and plane distance the binary helper actually reasons about instead of collapsing everything down to a single upward-facing `walkable` bit.

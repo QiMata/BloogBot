@@ -470,7 +470,7 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 2. Build end-position AABB with `collisionSkin * √2` vertical contraction
 3. Merge that displaced swim box into the query volume via `0x6373B0`
 4. `TestTerrain` with flag `0x30000`
-5. For each contact: negate the contact normal via `0x637330`; the actual slide helper remains unresolved in this slice
+5. For each contact: negate the contact normal via `0x637330`, negate the plane distance via `0x597AD0`, then write the flipped plane back into the contact buffer
 
 ### Key Functions
 | Address | Name | Purpose |
@@ -481,6 +481,7 @@ WoW.exe uses a **2-pass swept AABB** for local player collision:
 | `0x637300` | `Vec3::SubtractScalar` helper | Subtracts one scalar from `x/y/z` |
 | `0x6372D0` | `Vec3::AddScalar` helper | Adds one scalar to `x/y/z` |
 | `0x637330` | `Vec3Negate` helper | Flips the contact normal vector after `TestTerrain` |
+| `0x597AD0` | Plane record copy helper | Writes `{normal, planeD}` after the swim-side normal flip |
 | `0x4549A0` | `Vec3TransformCoord` | 3x3 matrix × vector |
 | `0x617430` | `CMovement::GetBoundingRadius` | Unit bounding radius |
 | `0x7C6140` | `CMovement::ComputeFallZ` | Fall displacement from fallTime |

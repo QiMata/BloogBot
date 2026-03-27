@@ -385,6 +385,14 @@ void WoWCollision::BuildTerrainQueryCacheMissBounds(const G3D::Vector3& projecte
         outBoundsMax);
 }
 
+void WoWCollision::NegatePlane(const G3D::Vector3& normal,
+                               float planeDistance,
+                               SelectorSupportPlane& outPlane)
+{
+    outPlane.normal = -normal;
+    outPlane.planeDistance = -planeDistance;
+}
+
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
 {
     outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);

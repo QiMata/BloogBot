@@ -736,6 +736,10 @@ namespace WoWCollision
                                           G3D::Vector3& outBoundsMin,
                                           G3D::Vector3& outBoundsMax);
 
+    void NegatePlane(const G3D::Vector3& normal,
+                     float planeDistance,
+                     SelectorSupportPlane& outPlane);
+
     void InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane);
 
     float ClampSelectorReportedBestRatio(float bestRatio);

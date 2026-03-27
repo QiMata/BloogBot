@@ -1021,6 +1021,22 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool BuildWoWNegatedPlane(
+        const G3D::Vector3* normal,
+        float planeDistance,
+        ExportSelectorSupportPlane* outPlane)
+    {
+        if (!normal || !outPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        WoWCollision::NegatePlane(*normal, planeDistance, plane);
+        outPlane->normal = plane.normal;
+        outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

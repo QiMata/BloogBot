@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 218)`
+- Last updated: `2026-03-26 (session 219)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 219 added `WowSwimQueryPlaneFlipTests.cs` plus the new interop needed to pin the swim-side `0x631E70` plane rewrite through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWNegatedPlane(...)`.
+  - The new deterministic coverage now pins the exact binary result from the `0x637330` + `0x597AD0` call pair: negate the 3-float normal, negate the plane distance, and preserve that involution under a double flip.
+  - Practical implication: this owner no longer has to infer the swim-side plane rewrite on the `0x30000` query path. The next missing deterministic seam is the post-cache transport-local contact transform loop and then the remaining variable `0x632A30 -> 0x632280` payload.
   - Session 218 added `WowTerrainQueryCacheMissBoundsTests.cs` plus the new interop needed to pin the higher-level `0x631E70` cache-miss bounds handoff through the production DLL. `NavigationInterop.cs` now exposes `BuildWoWTerrainQueryCacheMissBounds(...)`.
   - The new deterministic coverage now pins the exact binary transaction after the cache-hit gate fails: build the projected query AABB, expand both corners by binary `1/6`, then merge against cached `0xC4E5A0`.
   - Practical implication: this owner no longer has to infer the merged cache-miss bounds handoff inside `0x631E70`. The next missing deterministic seam is the optional swim-side `0x30000` query / contact-flip path and then the remaining variable `0x632A30 -> 0x632280` payload.
@@ -222,7 +225,7 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x6320C5; data=code[start-0x400000:start-0x400000+192]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+320]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Files changed:
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`
