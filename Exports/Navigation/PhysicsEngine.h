@@ -760,6 +760,13 @@ namespace WoWCollision
                                                           float transportOrientation,
                                                           SelectorCandidateRecord& outLocalRecord);
 
+    void TransformSelectorCandidateRecordBufferToTransportLocal(uint32_t transportGuidLow,
+                                                                uint32_t transportGuidHigh,
+                                                                const G3D::Vector3& transportPosition,
+                                                                float transportOrientation,
+                                                                SelectorCandidateRecord* ioRecords,
+                                                                uint32_t recordCount);
+
     void InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane);
 
     float ClampSelectorReportedBestRatio(float bestRatio);

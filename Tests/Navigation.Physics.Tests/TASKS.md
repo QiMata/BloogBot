@@ -34,9 +34,12 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 221)`
+- Last updated: `2026-03-26 (session 222)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 222 extended `WowTransportLocalTransformTests.cs` plus the production-DLL interop to pin the outer `0x63214C` batch loop. `NavigationInterop.cs` now exposes `TransformWoWSelectorCandidateRecordBufferToTransportLocal(...)`.
+  - The new deterministic coverage now pins both visible loop/gate behaviors: zero transport GUID leaves the record buffer untouched, while a nonzero transport GUID rewrites every record in the supplied buffer.
+  - Practical implication: this owner no longer has to infer the transport-local loop/gate around the cached records. The next missing deterministic seam is now the later selector consumption path.
   - Session 221 extended `WowTransportLocalTransformTests.cs` plus the production-DLL interop to pin the full `0x63214C` record rewrite. `NavigationInterop.cs` now exposes `TransformWoWSelectorCandidateRecordToTransportLocal(...)`.
   - The new deterministic coverage now pins the exact `0x34`-byte cached-contact transform: three stored points are inverse-transformed to transport-local space, the plane normal is rotated into that same space, and `planeD` is rebuilt from the transformed first point.
   - Practical implication: this owner no longer has to infer the record contents of the `0x631E70` transport-local rewrite. The next missing deterministic seam is the outer loop/gating and then the remaining variable `0x632A30 -> 0x632280` payload.
@@ -231,7 +234,7 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x632280; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Files changed:
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`

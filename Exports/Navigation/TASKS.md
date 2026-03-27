@@ -124,9 +124,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 221)
+- Last updated: 2026-03-26 (session 222)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 222 still kept runtime grounded behavior unchanged and pinned the outer `0x63214C` record-buffer loop. `TransformSelectorCandidateRecordBufferToTransportLocal(...)` now mirrors the visible binary gates: no-op when `transportGuidLow | transportGuidHigh == 0`, no-op when `recordCount == 0`, otherwise rewrite every `0x34`-byte record in-place.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs` now pins both loop-visible behaviors through the production DLL: zero-guid no-op and nonzero-guid full-buffer rewrite.
+  - Practical implication: the remaining `0x631E70` gap is no longer the transport-local loop/gate. The next unresolved piece is the selector transaction that consumes the rewritten buffer.
   - Session 221 still kept runtime grounded behavior unchanged and pinned the exact `0x63214C` record rewrite body on the `0x631E70` path. `TransformSelectorCandidateRecordToTransportLocal(...)` now mirrors the binary `0x34`-byte rewrite: inverse-transform points at `+0x10/+0x1C/+0x28`, rotate the plane normal at `+0x00/+0x04/+0x08`, and recompute `planeD` at `+0x0C`.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs` now pins the full record transform through the production DLL instead of only the lower-level point/plane helpers.
   - New raw capture now lives in `docs/physics/0x63214C_disasm.txt`. Practical implication: the remaining `0x631E70` gap is no longer the record contents; it is the surrounding count/guid gate and later selector consumption.
@@ -518,7 +521,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x63214C; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x632280; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
   - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

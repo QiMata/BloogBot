@@ -1857,3 +1857,34 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not treat the `0x34`-byte record shape as speculative anymore. The binary loop now closes the plane-plus-three-points layout directly.
 - Recommended next single hypothesis:
   - Mirror the outer `0x63214C..0x632270` batch loop and gate conditions next, including the `transportGuid == 0` and `count == 0` fast exits.
+
+## 2026-03-26 Transport-local record-buffer loop addendum (`0x63214C`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the visible fast exits and in-place array walk around the already-pinned `0x34`-byte record transform.
+- Binary/evidence delta shipped:
+  - reused the fresh raw capture in `docs/physics/0x63214C_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the same note now records the `transportGuid == 0` and `count == 0` fast exits explicitly
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `TransformSelectorCandidateRecordBufferToTransportLocal(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `TransformWoWSelectorCandidateRecordBufferToTransportLocal(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the record-buffer seam
+  - `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs`
+    - added deterministic coverage for the zero-guid fast exit and nonzero-guid full-buffer rewrite
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTransportLocalTransformTests|FullyQualifiedName~WowSwimQueryPlaneFlipTests|FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests" --logger "console;verbosity=minimal"`
+    - passed (`11/11`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again. The outer transport-local loop is now closed as well, and the next unknown is the later selector path that consumes the rewritten cache.
+- Do Not Repeat:
+  - Do not keep treating the `0x63214C` branch as a transform-math blocker. Both the record body and the fast-exit loop/gates are now pinned.
+- Recommended next single hypothesis:
+  - Return to the later selector handoff that consumes the transformed records, starting at `0x632280`.

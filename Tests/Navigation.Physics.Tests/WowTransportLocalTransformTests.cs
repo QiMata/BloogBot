@@ -86,4 +86,96 @@ public class WowTransportLocalTransformTests
         Assert.Equal(0f, localRecord.FilterPlane.Normal.Z, 5);
         Assert.Equal(-2f, localRecord.FilterPlane.PlaneDistance, 5);
     }
+
+    [Fact]
+    public void TransformSelectorCandidateRecordBufferToTransportLocal_NoTransportGuid_LeavesRecordsUnchanged()
+    {
+        Vector3 transportPosition = new(10f, 20f, 5f);
+        float transportOrientation = MathF.PI * 0.5f;
+        SelectorCandidateRecord[] records =
+        [
+            new SelectorCandidateRecord
+            {
+                FilterPlane = new SelectorSupportPlane
+                {
+                    Normal = new Vector3(0f, 1f, 0f),
+                    PlaneDistance = -22f,
+                },
+                Point0 = new Vector3(10f, 22f, 6f),
+                Point1 = new Vector3(10f, 22f, 7f),
+                Point2 = new Vector3(9f, 22f, 6f),
+            },
+        ];
+
+        bool transformed = TransformWoWSelectorCandidateRecordBufferToTransportLocal(
+            0u,
+            0u,
+            transportPosition,
+            transportOrientation,
+            records,
+            (uint)records.Length);
+
+        Assert.True(transformed);
+        Assert.Equal(10f, records[0].Point0.X, 5);
+        Assert.Equal(22f, records[0].Point0.Y, 5);
+        Assert.Equal(6f, records[0].Point0.Z, 5);
+        Assert.Equal(0f, records[0].FilterPlane.Normal.X, 5);
+        Assert.Equal(1f, records[0].FilterPlane.Normal.Y, 5);
+        Assert.Equal(-22f, records[0].FilterPlane.PlaneDistance, 5);
+    }
+
+    [Fact]
+    public void TransformSelectorCandidateRecordBufferToTransportLocal_WithTransportGuid_RewritesEveryRecord()
+    {
+        Vector3 transportPosition = new(10f, 20f, 5f);
+        float transportOrientation = MathF.PI * 0.5f;
+        SelectorCandidateRecord[] records =
+        [
+            new SelectorCandidateRecord
+            {
+                FilterPlane = new SelectorSupportPlane
+                {
+                    Normal = new Vector3(0f, 1f, 0f),
+                    PlaneDistance = -22f,
+                },
+                Point0 = new Vector3(10f, 22f, 6f),
+                Point1 = new Vector3(10f, 22f, 7f),
+                Point2 = new Vector3(9f, 22f, 6f),
+            },
+            new SelectorCandidateRecord
+            {
+                FilterPlane = new SelectorSupportPlane
+                {
+                    Normal = new Vector3(1f, 0f, 0f),
+                    PlaneDistance = -10f,
+                },
+                Point0 = new Vector3(10f, 20f, 5f),
+                Point1 = new Vector3(10f, 21f, 5f),
+                Point2 = new Vector3(10f, 20f, 6f),
+            },
+        ];
+
+        bool transformed = TransformWoWSelectorCandidateRecordBufferToTransportLocal(
+            0x12345678u,
+            0u,
+            transportPosition,
+            transportOrientation,
+            records,
+            (uint)records.Length);
+
+        Assert.True(transformed);
+        Assert.Equal(2f, records[0].Point0.X, 5);
+        Assert.Equal(0f, records[0].Point0.Y, 5);
+        Assert.Equal(1f, records[0].Point0.Z, 5);
+        Assert.Equal(1f, records[0].FilterPlane.Normal.X, 5);
+        Assert.Equal(0f, records[0].FilterPlane.Normal.Y, 5);
+        Assert.Equal(-2f, records[0].FilterPlane.PlaneDistance, 5);
+        Assert.Equal(0f, records[1].Point0.X, 5);
+        Assert.Equal(0f, records[1].Point0.Y, 5);
+        Assert.Equal(0f, records[1].Point0.Z, 5);
+        Assert.Equal(0f, records[1].FilterPlane.Normal.X, 5);
+        Assert.Equal(-1f, records[1].FilterPlane.Normal.Y, 5);
+        Assert.Equal(0f, records[1].FilterPlane.Normal.Z, 5);
+        Assert.Equal(0f, records[1].FilterPlane.PlaneDistance, 5);
+    }
 }

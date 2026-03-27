@@ -1110,6 +1110,46 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool TransformWoWSelectorCandidateRecordBufferToTransportLocal(
+        uint32_t transportGuidLow,
+        uint32_t transportGuidHigh,
+        const G3D::Vector3* transportPosition,
+        float transportOrientation,
+        ExportSelectorCandidateRecord* ioRecords,
+        uint32_t recordCount)
+    {
+        if (!transportPosition || (!ioRecords && recordCount != 0u)) {
+            return false;
+        }
+
+        std::vector<WoWCollision::SelectorCandidateRecord> recordBuffer(recordCount);
+        for (uint32_t i = 0; i < recordCount; ++i) {
+            recordBuffer[i].filterPlane.normal = ioRecords[i].filterPlane.normal;
+            recordBuffer[i].filterPlane.planeDistance = ioRecords[i].filterPlane.planeDistance;
+            recordBuffer[i].points[0] = ioRecords[i].point0;
+            recordBuffer[i].points[1] = ioRecords[i].point1;
+            recordBuffer[i].points[2] = ioRecords[i].point2;
+        }
+
+        WoWCollision::TransformSelectorCandidateRecordBufferToTransportLocal(
+            transportGuidLow,
+            transportGuidHigh,
+            *transportPosition,
+            transportOrientation,
+            recordBuffer.data(),
+            recordCount);
+
+        for (uint32_t i = 0; i < recordCount; ++i) {
+            ioRecords[i].filterPlane.normal = recordBuffer[i].filterPlane.normal;
+            ioRecords[i].filterPlane.planeDistance = recordBuffer[i].filterPlane.planeDistance;
+            ioRecords[i].point0 = recordBuffer[i].points[0];
+            ioRecords[i].point1 = recordBuffer[i].points[1];
+            ioRecords[i].point2 = recordBuffer[i].points[2];
+        }
+
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

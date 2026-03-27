@@ -459,6 +459,28 @@ void WoWCollision::TransformSelectorCandidateRecordToTransportLocal(const Select
         outLocalRecord.filterPlane);
 }
 
+void WoWCollision::TransformSelectorCandidateRecordBufferToTransportLocal(uint32_t transportGuidLow,
+                                                                          uint32_t transportGuidHigh,
+                                                                          const G3D::Vector3& transportPosition,
+                                                                          float transportOrientation,
+                                                                          SelectorCandidateRecord* ioRecords,
+                                                                          uint32_t recordCount)
+{
+    if ((transportGuidLow | transportGuidHigh) == 0u || ioRecords == nullptr || recordCount == 0u) {
+        return;
+    }
+
+    for (uint32_t recordIndex = 0; recordIndex < recordCount; ++recordIndex) {
+        SelectorCandidateRecord localRecord{};
+        TransformSelectorCandidateRecordToTransportLocal(
+            ioRecords[recordIndex],
+            transportPosition,
+            transportOrientation,
+            localRecord);
+        ioRecords[recordIndex] = localRecord;
+    }
+}
+
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)
 {
     outPlane.normal = G3D::Vector3(0.0f, 0.0f, 1.0f);
