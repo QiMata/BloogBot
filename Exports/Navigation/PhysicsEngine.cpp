@@ -133,6 +133,7 @@ namespace
     constexpr float WOW_SELECTOR_STRICT_RATIO_THRESHOLD = -0.02777777798473835f; // 0x7FF9C8
     constexpr float WOW_SELECTOR_RECORD_FILTER_THRESHOLD = -9.999999747378752e-06f; // 0x80C5C4
     constexpr float WOW_TERRAIN_QUERY_FIELD20_THRESHOLD = -0.6457718014717102f; // 0x80DFE8
+    constexpr float WOW_TERRAIN_QUERY_CACHE_MISS_EXPANSION = 0.1666666716337204f; // 0x3E2AAAAB
     constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_TRUE = 0x00100111u;
     constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_FALSE = 0x00102111u;
     constexpr uint32_t WOW_TERRAIN_QUERY_WATERWALK_AUGMENT = 0x00030000u;
@@ -355,6 +356,33 @@ void WoWCollision::SubtractScalarFromVector3(G3D::Vector3& ioVector, float scala
     ioVector.x -= scalar;
     ioVector.y -= scalar;
     ioVector.z -= scalar;
+}
+
+void WoWCollision::BuildTerrainQueryCacheMissBounds(const G3D::Vector3& projectedPosition,
+                                                    float collisionRadius,
+                                                    float boundingHeight,
+                                                    const G3D::Vector3& cachedBoundsMin,
+                                                    const G3D::Vector3& cachedBoundsMax,
+                                                    G3D::Vector3& outBoundsMin,
+                                                    G3D::Vector3& outBoundsMax)
+{
+    G3D::Vector3 expandedQueryBoundsMin;
+    G3D::Vector3 expandedQueryBoundsMax;
+    BuildTerrainQueryBounds(
+        projectedPosition,
+        collisionRadius,
+        boundingHeight,
+        expandedQueryBoundsMin,
+        expandedQueryBoundsMax);
+    SubtractScalarFromVector3(expandedQueryBoundsMin, WOW_TERRAIN_QUERY_CACHE_MISS_EXPANSION);
+    AddScalarToVector3(expandedQueryBoundsMax, WOW_TERRAIN_QUERY_CACHE_MISS_EXPANSION);
+    MergeAabbBounds(
+        expandedQueryBoundsMin,
+        expandedQueryBoundsMax,
+        cachedBoundsMin,
+        cachedBoundsMax,
+        outBoundsMin,
+        outBoundsMax);
 }
 
 void WoWCollision::InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane)

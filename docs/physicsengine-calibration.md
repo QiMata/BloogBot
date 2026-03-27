@@ -1731,3 +1731,33 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not keep treating `0x637300` as a sweep/collision routine. In this build it is only a three-component scalar subtract helper.
 - Recommended next single hypothesis:
   - Mirror the next higher-level `0x631E70` cache-miss transaction step, starting with the exact merged-bounds handoff after `0x637300` / `0x6372D0` and the still-variable query call state.
+
+## 2026-03-26 Cache-miss bounds addendum (`0x631E70`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the higher-level merged-bounds handoff on the `0x631E70` cache-miss path so the remaining unknown is the optional swim-side query / contact-flip work rather than the AABB transaction itself.
+- Binary/evidence delta shipped:
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x631E70` note now records the exact cache-miss sequence: projected query bounds, binary `1/6` expansion, then merge against cached `0xC4E5A0` through `0x6373B0`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `BuildTerrainQueryCacheMissBounds(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `BuildWoWTerrainQueryCacheMissBounds(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new cache-miss seam
+  - `Tests/Navigation.Physics.Tests/WowTerrainQueryCacheMissBoundsTests.cs`
+    - added deterministic coverage for the exact cache-miss AABB transaction
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowTerrainQueryCacheMissBoundsTests|FullyQualifiedName~WowVectorScalarOffsetTests|FullyQualifiedName~WowTerrainQueryBoundsTests|FullyQualifiedName~WowAabbMergeTests" --logger "console;verbosity=minimal"`
+    - passed (`9/9`)
+- Frame-pattern note:
+  - The unresolved `0x631E70` path is narrower again. The merged cache-miss bounds handoff is now closed, and the next unknown is the optional swim-side `0x30000` query / `0x637330` contact flip before this data feeds the selector path.
+- Do Not Repeat:
+  - Do not keep re-deriving the cache-miss bounds by composing smaller helpers in tests only. That higher-level transaction is now pinned explicitly.
+- Recommended next single hypothesis:
+  - Mirror the `0x6320C5..0x63213A` swim-side query path inside `0x631E70`, including the `0x30000` mask and the contact normal/plane flip via `0x637330`.

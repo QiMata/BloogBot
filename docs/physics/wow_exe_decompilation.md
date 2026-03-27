@@ -608,7 +608,8 @@ CollisionStep (0x633840)
     - fresh raw captures now also live in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
     - on the `0x631E70` cache-miss path, `0x637300` subtracts the same scalar from all three min-corner components and `0x6372D0` adds it to all three max-corner components before `0x6373B0`
     - `0x61E9C0` is a bare no-op `ret` in this client build
-    - the production DLL now mirrors the `0x6372D0` / `0x637300` scalar-offset helpers through pure `AddScalarToVector3(...)` and `SubtractScalarFromVector3(...)` seams plus deterministic export/test coverage
+    - the cache-miss transaction then merges that expanded query box against the cached `0xC4E5A0` bounds through `0x6373B0`, using the exact binary `1/6` scalar `0x3E2AAAAB`
+    - the production DLL now mirrors the `0x6372D0` / `0x637300` scalar-offset helpers through pure `AddScalarToVector3(...)` and `SubtractScalarFromVector3(...)` seams, and mirrors that higher-level cache-miss bounds handoff through pure `BuildTerrainQueryCacheMissBounds(...)`, all with deterministic export/test coverage
   - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`

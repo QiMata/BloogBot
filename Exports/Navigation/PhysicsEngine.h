@@ -728,6 +728,14 @@ namespace WoWCollision
 
     void SubtractScalarFromVector3(G3D::Vector3& ioVector, float scalar);
 
+    void BuildTerrainQueryCacheMissBounds(const G3D::Vector3& projectedPosition,
+                                          float collisionRadius,
+                                          float boundingHeight,
+                                          const G3D::Vector3& cachedBoundsMin,
+                                          const G3D::Vector3& cachedBoundsMax,
+                                          G3D::Vector3& outBoundsMin,
+                                          G3D::Vector3& outBoundsMax);
+
     void InitializeSelectorSupportPlane(SelectorSupportPlane& outPlane);
 
     float ClampSelectorReportedBestRatio(float bestRatio);

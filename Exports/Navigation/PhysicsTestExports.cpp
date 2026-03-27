@@ -997,6 +997,30 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool BuildWoWTerrainQueryCacheMissBounds(
+        const G3D::Vector3* projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        const G3D::Vector3* cachedBoundsMin,
+        const G3D::Vector3* cachedBoundsMax,
+        G3D::Vector3* outBoundsMin,
+        G3D::Vector3* outBoundsMax)
+    {
+        if (!projectedPosition || !cachedBoundsMin || !cachedBoundsMax || !outBoundsMin || !outBoundsMax) {
+            return false;
+        }
+
+        WoWCollision::BuildTerrainQueryCacheMissBounds(
+            *projectedPosition,
+            collisionRadius,
+            boundingHeight,
+            *cachedBoundsMin,
+            *cachedBoundsMax,
+            *outBoundsMin,
+            *outBoundsMax);
+        return true;
+    }
+
     __declspec(dllexport) bool InitializeWoWSelectorSupportPlane(
         ExportSelectorSupportPlane* outPlane)
     {

@@ -662,6 +662,17 @@ public static partial class NavigationInterop
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool SubtractScalarFromWoWVector3(ref Vector3 vector, float scalar);
 
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWTerrainQueryCacheMissBounds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWTerrainQueryCacheMissBounds(
+        in Vector3 projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        in Vector3 cachedBoundsMin,
+        in Vector3 cachedBoundsMax,
+        out Vector3 boundsMin,
+        out Vector3 boundsMax);
+
     [DllImport(NavigationDll, EntryPoint = "InitializeWoWSelectorSupportPlane", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool InitializeWoWSelectorSupportPlane(out SelectorSupportPlane plane);
