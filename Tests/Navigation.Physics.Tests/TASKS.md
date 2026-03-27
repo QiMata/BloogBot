@@ -34,9 +34,16 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-26 (session 222)`
+- Last updated: `2026-03-26 (session 223)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 223 added `WowSelectorPairConsumerTests.cs` plus the new production-DLL interop needed to pin the visible `0x6351A0` consumer tail. `NavigationInterop.cs` now exposes `EvaluateWoWSelectorAlternateUnitZFallbackGate(...)` and `EvaluateWoWSelectorPairConsumer(...)`.
+  - The new deterministic coverage now pins the binary alternate unit-Z gate, zero-distance return, ranking-failure `return 2` path, selected-index sentinel return, direct-pair return, zero-pair direct tail, zero-pair unit-Z tail, and alternate-pair return.
+  - Practical implication: this owner no longer has to infer the visible `0x6351A0` tail. The next missing deterministic seam is the selected index plus paired `0xC4E544[index]` payload that the runtime grounded path actually consumes.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
+    - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
   - Session 222 extended `WowTransportLocalTransformTests.cs` plus the production-DLL interop to pin the outer `0x63214C` batch loop. `NavigationInterop.cs` now exposes `TransformWoWSelectorCandidateRecordBufferToTransportLocal(...)`.
   - The new deterministic coverage now pins both visible loop/gate behaviors: zero transport GUID leaves the record buffer untouched, while a nonzero transport GUID rewrites every record in the supplied buffer.
   - Practical implication: this owner no longer has to infer the transport-local loop/gate around the cached records. The next missing deterministic seam is now the later selector consumption path.
@@ -234,7 +241,7 @@ Known remaining work in this owner: `0` items.
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorSupportPlaneTests|FullyQualifiedName~WowSelectorNeighborhoodTests|FullyQualifiedName~WowSelectorCandidateValidationTests|FullyQualifiedName~WowSelectorCandidatePlaneRecordTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UndercityUpperDoorContactTests|FullyQualifiedName~WowCheckWalkableTests|FullyQualifiedName~TerrainAabbContactOrientationTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x632280; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635450; data=code[start-0x400000:start-0x400000+384]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Files changed:
   - `Exports/Navigation/PhysicsEngine.h`
   - `Exports/Navigation/PhysicsEngine.cpp`

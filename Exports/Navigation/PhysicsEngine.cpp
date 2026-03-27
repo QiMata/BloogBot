@@ -936,6 +936,82 @@ bool WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSuppo
     return false;
 }
 
+bool WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(float boundingRadiusValue,
+                                                              float fallbackLimit,
+                                                              float horizontalSpeedScale,
+                                                              float requestedDistance)
+{
+    const float remainingWindow = boundingRadiusValue - fallbackLimit;
+    if (remainingWindow < 0.0f) {
+        return false;
+    }
+
+    return (remainingWindow * horizontalSpeedScale) >= requestedDistance;
+}
+
+void WoWCollision::EvaluateSelectorPairConsumer(float requestedDistance,
+                                                const G3D::Vector3& inputMove,
+                                                bool directionRankingAccepted,
+                                                int32_t selectedIndex,
+                                                uint32_t selectedCount,
+                                                bool directGateAccepted,
+                                                bool hasNegativeDiagonalCandidate,
+                                                bool alternateUnitZFallbackGateAccepted,
+                                                bool hasUnitZCandidate,
+                                                const SelectorPair& directPair,
+                                                const SelectorPair& alternatePair,
+                                                SelectorPairConsumerTrace& outTrace)
+{
+    outTrace = SelectorPairConsumerTrace{};
+    outTrace.requestedDistance = requestedDistance;
+    outTrace.selectedIndex = selectedIndex;
+    outTrace.selectedCount = selectedCount;
+    outTrace.directionRankingAccepted = directionRankingAccepted ? 1u : 0u;
+    outTrace.directGateAccepted = directGateAccepted ? 1u : 0u;
+    outTrace.inputMove = inputMove;
+    outTrace.outputMove = inputMove;
+
+    if (std::fabs(requestedDistance) <= WOW_SELECTOR_RATIO_EPSILON ||
+        (selectedIndex >= 0 && static_cast<uint32_t>(selectedIndex) == selectedCount)) {
+        outTrace.preservedInputMove = 1u;
+        return;
+    }
+
+    const G3D::Vector3 scaledMove = inputMove * requestedDistance;
+    outTrace.outputMove = scaledMove;
+
+    if (!directionRankingAccepted) {
+        outTrace.outputMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        outTrace.zeroedMoveOnRankingFailure = 1u;
+        outTrace.returnCode = 2;
+        return;
+    }
+
+    outTrace.returnCode = 1;
+    if (directGateAccepted) {
+        outTrace.directGateState = 1u;
+        if (hasNegativeDiagonalCandidate) {
+            outTrace.outputPair = directPair;
+            outTrace.returnedDirectPair = 1u;
+        }
+        else {
+            outTrace.returnedZeroPair = 1u;
+        }
+        return;
+    }
+
+    if (scaledMove.z < 0.0f &&
+        alternateUnitZFallbackGateAccepted &&
+        hasUnitZCandidate) {
+        outTrace.alternateUnitZState = 1u;
+        outTrace.returnedZeroPair = 1u;
+        return;
+    }
+
+    outTrace.outputPair = alternatePair;
+    outTrace.returnedAlternatePair = 1u;
+}
+
 bool WoWCollision::EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
                                                       uint32_t recordCount,
                                                       const G3D::Vector3& testPoint,

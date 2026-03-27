@@ -627,10 +627,15 @@ CollisionStep (0x633840)
     - the production DLL now mirrors those exact post-selector gates through pure `HasSelectorCandidateWithNegativeDiagonalZ(...)` and `HasSelectorCandidateWithUnitZ(...)` helpers plus deterministic export/test seams
   - only after that chain does it hand the `0xC4E544[index]` pair back to its caller
   - fresh 2026-03-26 full-window disassembly adds the branch shape:
-    - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly and marks the state out-param
-    - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success
-    - if `0x633720` fails, it falls through the `0x7C5DA0` / `0x6353D0` gate and then into `0x635090` for the alternate pair result
-  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt` and `docs/physics/0x635090_disasm.txt`
+    - if `fabs(requestedDistance) <= 0x8029D4`, `0x6351A0` returns `0`, zeroes only the output pair, and leaves the move vector untouched
+    - if `0x632BA0` fails, it zeroes the move vector and returns `2`
+    - if the selected index equals `0xC4E530`, it returns `0`, zeroes the output pair, and leaves the move vector untouched
+    - otherwise it scales the input move vector by `requestedDistance`, then runs the `0x633720` / `0x635410` / `0x7C5DA0` / `0x6353D0` branch tail
+    - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly, writes `1` to the first out-state dword, and leaves the second out-state dword at `0`
+    - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success and still writes `1` to that first out-state dword
+    - if `0x633720` fails, it zeroes the pair first, then only writes `1` to the second out-state dword when `scaledMove.z < 0`, `(GetBoundingRadius() - arg1) >= 0`, `((GetBoundingRadius() - arg1) * this->+0x84) >= requestedDistance`, and `0x6353D0` finds a unit-Z local candidate; otherwise it falls through `0x635090` and returns that alternate pair
+  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, and `docs/physics/0x635734_callsite_disasm.txt`
+  - the production DLL now mirrors that visible `0x6351A0` consumer tail through pure `EvaluateSelectorAlternateUnitZFallbackGate(...)` and `EvaluateSelectorPairConsumer(...)` helpers plus deterministic export/test seams
   - `0x633720`
     - wrapper builds `position + offset`, passes that world point plus the selected index and `this+0x15C` into `0x633760`, then returns the inverse boolean of `0x633760`
   - `0x633760`

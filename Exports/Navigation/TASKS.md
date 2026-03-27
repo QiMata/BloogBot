@@ -124,9 +124,13 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-26 (session 222)
+- Last updated: 2026-03-26 (session 223)
 - Active task: `NAV-PAR-001` keep replacing non-binary-backed grounded query/slide heuristics until `CollisionStepWoW` matches the client’s merged-query plus post-`TestTerrain` wall/corner sequence
 - Last delta:
+  - Session 223 still kept runtime grounded behavior unchanged and pinned the visible `0x6351A0` consumer tail. `EvaluateSelectorAlternateUnitZFallbackGate(...)` now mirrors the binary `0x7C5DA0` / `this+0x84` gate on the alternate unit-Z branch, and `EvaluateSelectorPairConsumer(...)` now mirrors the visible `0x6351A0` return contract: zero-distance early return, `0x632BA0` failure returning `2` with a zeroed move vector, direct-pair return, zero-pair direct success, zero-pair unit-Z success, and alternate-pair fallback.
+  - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowSelectorPairConsumerTests.cs` now pins those exact consumer-tail behaviors through the production DLL alongside the existing selector z-match and direction-ranking seams.
+  - New raw capture now lives in `docs/physics/0x635734_callsite_disasm.txt`, which closes one important caller-side detail: `0x6351A0` writes two separate out-state dwords, not one.
+  - Practical implication: the open selector gap is no longer the visible `0x6351A0` tail. The next missing runtime piece is exposing the real selected index plus paired `0xC4E544[index]` payload to grounded resolution instead of reconstructing a blocker from merged contacts.
   - Session 222 still kept runtime grounded behavior unchanged and pinned the outer `0x63214C` record-buffer loop. `TransformSelectorCandidateRecordBufferToTransportLocal(...)` now mirrors the visible binary gates: no-op when `transportGuidLow | transportGuidHigh == 0`, no-op when `recordCount == 0`, otherwise rewrite every `0x34`-byte record in-place.
   - New deterministic coverage in `Tests/Navigation.Physics.Tests/WowTransportLocalTransformTests.cs` now pins both loop-visible behaviors through the production DLL: zero-guid no-op and nonzero-guid full-buffer rewrite.
   - Practical implication: the remaining `0x631E70` gap is no longer the transport-local loop/gate. The next unresolved piece is the selector transaction that consumes the rewritten buffer.
@@ -521,10 +525,10 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x632280; data=code[start-0x400000:start-0x400000+448]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
+- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x635450; data=code[start-0x400000:start-0x400000+384]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start)]"`
 - Blockers:
-  - The production-DLL deterministic harness now exposes grounded blocker selection directly, so the next missing visibility is the paired `0xC4E544` payload and which `0x6351A0` branch produced it.
-  - The next missing visibility is inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.
+  - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
+  - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.
   - The helper body is no longer the immediate blocker. The new frame-15 contact probe proves the missing runtime piece is the binary-selected contact / grounded-wall-state path feeding `0x6334A0`; without that state path, a blanket stateful helper call would also promote many wall contacts in the same merged query.
   - The exact grounded post-`TestTerrain` wall/corner resolution helper is still unresolved in the binary; the current stateless path now uses merged blocker-axis resolution on top of the correct merged query volume, but it still lacks the real `0x6334A0` walkability logic and the remaining `0x636100` return-code / movement-fraction bookkeeping around `0x635C00` / `0x635D80`.
   - Do not route the new `0x6334A0` helper into live grounded resolution again until `TestTerrainAABB` contact orientation and the post-query `0x637330` normal-flip path are parity-safe; the first direct hookup already regressed both live Durotar routes and was reverted.

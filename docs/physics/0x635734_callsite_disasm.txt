@@ -1,0 +1,81 @@
+WoW.exe 1.12.1 raw disassembly capture
+Call site: 0x635734 -> 0x6351A0
+Date: 2026-03-26
+Notes:
+- This is the currently identified caller that feeds `0x6351A0` on the grounded wall path.
+- It proves `0x6351A0` has three separate outputs:
+  - the in-place move vector at `arg2`
+  - the two-float pair at `arg5`
+  - two distinct state dwords at `arg6` and `arg7`
+- The caller checks those two state dwords separately after the `0x6351A0` return.
+
+0x006356D8: fld      dword ptr [0x7ff9d8]
+0x006356DE: mov      eax, dword ptr [ebp + 0xc]
+0x006356E1: fdiv     dword ptr [ebp + 0xc]
+0x006356E4: sub      esp, 0xc
+0x006356E7: lea      ecx, [ebp - 0x94]
+0x006356ED: mov      dword ptr [ebp - 0x30], eax
+0x006356F0: fld      dword ptr [ebp + 0x18]
+0x006356F3: fmul     st(1)
+0x006356F5: fstp     dword ptr [esp + 8]
+0x006356F9: fld      dword ptr [ebp + 0x14]
+0x006356FC: fmul     st(1)
+0x006356FE: fstp     dword ptr [esp + 4]
+0x00635702: fmul     dword ptr [ebp + 0x10]
+0x00635705: fstp     dword ptr [esp]
+0x00635708: call     0x4549a0
+0x0063570D: fld      dword ptr [ebp - 0x74]
+0x00635710: lea      ecx, [ebp - 0x18]
+0x00635713: fadd     dword ptr [ebp - 4]
+0x00635716: push     ecx
+0x00635717: lea      edx, [ebp - 0x68]
+0x0063571A: push     edx
+0x0063571B: lea      eax, [ebp - 0x40]
+0x0063571E: fstp     dword ptr [ebp - 0x54]
+0x00635721: mov      edi, dword ptr [ebp - 0x54]
+0x00635724: push     eax
+0x00635725: lea      ecx, [ebp - 0x48]
+0x00635728: push     ecx
+0x00635729: lea      edx, [ebp - 0x30]
+0x0063572C: push     edx
+0x0063572D: lea      eax, [ebp + 0x10]
+0x00635730: push     eax
+0x00635731: push     edi
+0x00635732: mov      ecx, esi
+0x00635734: call     0x6351a0
+0x00635739: fld      dword ptr [ebp - 8]
+0x0063573C: cmp      eax, 2
+0x0063573F: fsub     dword ptr [ebp - 4]
+0x00635742: je       0x6359ae
+0x00635748: test     eax, eax
+0x0063574A: je       0x635768
+0x0063574C: mov      ecx, dword ptr [ebp - 0x14]
+0x0063574F: mov      edx, dword ptr [ebp - 0x18]
+0x00635752: push     ecx
+0x00635753: push     edx
+0x00635754: lea      eax, [ebp - 0x30]
+0x00635757: push     eax
+0x00635758: lea      ecx, [ebp + 0x10]
+0x0063575B: push     ecx
+0x0063575C: push     edi
+0x0063575D: push     ecx
+0x0063575E: fstp     dword ptr [esp]
+0x00635761: mov      ecx, esi
+0x00635763: call     0x635450
+0x00635768: fld      dword ptr [ebp + 0x10]
+0x0063576B: mov      eax, dword ptr [ebp - 0x18]
+0x0063576E: test     eax, eax
+0x00635770: fadd     dword ptr [esi + 0x10]
+0x00635773: fstp     dword ptr [esi + 0x10]
+0x00635776: fld      dword ptr [ebp + 0x14]
+0x00635779: fadd     dword ptr [esi + 0x14]
+0x0063577C: fstp     dword ptr [esi + 0x14]
+0x0063577F: fld      dword ptr [ebp + 0x18]
+0x00635782: fadd     dword ptr [esi + 0x18]
+0x00635785: fstp     dword ptr [esi + 0x18]
+0x00635788: fld      dword ptr [ebp - 4]
+0x0063578B: fadd     st(1)
+0x0063578D: fstp     dword ptr [ebp - 4]
+0x00635790: jne      0x6359f1
+0x00635796: mov      eax, dword ptr [ebp - 0x68]
+0x00635799: test     eax, eax

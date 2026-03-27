@@ -1888,3 +1888,42 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not keep treating the `0x63214C` branch as a transform-math blocker. Both the record body and the fast-exit loop/gates are now pinned.
 - Recommended next single hypothesis:
   - Return to the later selector handoff that consumes the transformed records, starting at `0x632280`.
+
+## 2026-03-26 Selector-consumer tail addendum (`0x6351A0`)
+
+- Scope note:
+  - This pass still did not change runtime grounded behavior.
+  - The goal was to close the visible `0x6351A0` consumer tail so the next runtime change can use the real direct-pair / zero-pair / alternate-pair branch contract instead of the current inferred wall fallback logic.
+- Binary/evidence delta shipped:
+  - added raw capture in `docs/physics/0x635734_callsite_disasm.txt`
+  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x6351A0` note now records the full visible outcome contract:
+    - zero-distance early return with pair-only zero
+    - `0x632BA0` failure returning `2` and zeroing the move vector
+    - selected-index sentinel return
+    - two distinct out-state dwords on the post-`0x633720` tail
+    - alternate `0x7C5DA0` / `this+0x84` unit-Z gate before `0x635090`
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/PhysicsEngine.h/.cpp`
+    - added pure `EvaluateSelectorAlternateUnitZFallbackGate(...)`
+    - added pure `EvaluateSelectorPairConsumer(...)`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+    - added `EvaluateWoWSelectorAlternateUnitZFallbackGate(...)`
+    - added `EvaluateWoWSelectorPairConsumer(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+    - added matching interop for the new selector-consumer seams
+  - `Tests/Navigation.Physics.Tests/WowSelectorPairConsumerTests.cs`
+    - added deterministic coverage for the alternate unit-Z gate, zero-distance return, ranking failure, selected-index sentinel return, direct-pair return, zero-pair direct tail, unit-Z zero-pair tail, and alternate-pair return
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~WowSelectorCandidateZMatchTests|FullyQualifiedName~WowSelectorDirectionRankingTests" --logger "console;verbosity=minimal"`
+    - passed (`19/19`)
+- Frame-pattern note:
+  - The open selector gap is narrower again. The later consumer tail is now pinned, including the two caller-visible out-state dwords. The next missing runtime piece is feeding the real selected index plus paired `0xC4E544` payload into grounded resolution instead of reconstructing a blocker from merged contacts.
+- Do Not Repeat:
+  - Do not collapse the `0x6351A0` tail into a single generic “state” bit. The caller at `0x635734` reads two distinct out-state dwords after the call.
+  - Do not reintroduce selector fallback heuristics on the alternate path without matching the binary `0x7C5DA0` / `this+0x84` unit-Z gate first.
+- Recommended next single hypothesis:
+  - Expose the selected index plus paired `0xC4E544[index]` payload from the production grounded path, then wire that exact transaction into `ResolveGroundedWallContacts(...)` before revisiting live bobbing behavior.

@@ -215,6 +215,34 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorPair
+    {
+        public float First;
+        public float Second;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorPairConsumerTrace
+    {
+        public float RequestedDistance;
+        public int SelectedIndex;
+        public uint SelectedCount;
+        public uint DirectionRankingAccepted;
+        public uint DirectGateAccepted;
+        public uint DirectGateState;
+        public uint AlternateUnitZState;
+        public uint ReturnedDirectPair;
+        public uint ReturnedAlternatePair;
+        public uint ReturnedZeroPair;
+        public uint PreservedInputMove;
+        public uint ZeroedMoveOnRankingFailure;
+        public int ReturnCode;
+        public Vector3 InputMove;
+        public Vector3 OutputMove;
+        public SelectorPair OutputPair;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct GroundedWallSelectionTrace
     {
         public uint QueryContactCount;
@@ -756,6 +784,30 @@ public static partial class NavigationInterop
     public static extern bool HasWoWSelectorCandidateWithNegativeDiagonalZ(
         [In] SelectorSupportPlane[] candidates,
         int candidateCount);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorAlternateUnitZFallbackGate", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorAlternateUnitZFallbackGate(
+        float boundingRadiusValue,
+        float fallbackLimit,
+        float horizontalSpeedScale,
+        float requestedDistance);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorPairConsumer", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorPairConsumer(
+        float requestedDistance,
+        in Vector3 inputMove,
+        [MarshalAs(UnmanagedType.I1)] bool directionRankingAccepted,
+        int selectedIndex,
+        int selectedCount,
+        [MarshalAs(UnmanagedType.I1)] bool directGateAccepted,
+        [MarshalAs(UnmanagedType.I1)] bool hasNegativeDiagonalCandidate,
+        [MarshalAs(UnmanagedType.I1)] bool alternateUnitZFallbackGateAccepted,
+        [MarshalAs(UnmanagedType.I1)] bool hasUnitZCandidate,
+        in SelectorPair directPair,
+        in SelectorPair alternatePair,
+        out SelectorPairConsumerTrace trace);
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorNeighborhood", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

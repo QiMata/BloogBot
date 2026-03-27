@@ -2176,6 +2176,11 @@ if (transportGuid != 0) {
   - `SceneQuery::EnsureMapLoaded(...)` no longer accepts metadata-less v1 `.scene` files as the steady-state runtime path. If a legacy cache is found, it now rebuilds the same bounds through `SceneCache::Extract(...)`, writes back a v2 cache, and loads the metadata-bearing result.
   - Deterministic proof now covers all three states on the packet-backed Undercity frame-16 blocker: manual legacy v1 load still collapses to parent WMO metadata (`src=1`), fresh extract round-trip resolves the real WMO group (`src=2`, `groupId=3228`, `groupFlags=0x0000AA05`), and the normal `EnsureMapLoaded(...)` path now upgrades the legacy cache and returns that same WMO-group identity.
   - Practical implication: the blocker is no longer in scene extraction or scene autoload. The next native parity unit is the binary-selected contact producer chain (`0x633720` / `0x635090` / paired `0xC4E544`) that feeds the remaining `0x6334A0` / `0x636100` grounded-wall state.
+- **Session 223 — visible `0x6351A0` selector-consumer tail pinned:**
+  - Added binary-backed pure helpers for the alternate unit-Z gate and the visible `0x6351A0` consumer contract: zero-distance return, `0x632BA0` failure returning `2`, direct-pair return, zero-pair direct success, zero-pair unit-Z success, and alternate-pair fallback.
+  - Captured the caller-side proof in `docs/physics/0x635734_callsite_disasm.txt`, which closes one important detail for later runtime hookup: `0x6351A0` writes two separate out-state dwords and the caller consumes them separately.
+  - Added deterministic coverage in `WowSelectorPairConsumerTests.cs`; focused native build + selector slices passed `19/19`.
+  - Practical implication: the next native parity unit is no longer the visible `0x6351A0` tail. It is exposing the selected index plus paired `0xC4E544[index]` payload on the production grounded path and then wiring that exact transaction into runtime wall resolution.
 
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 

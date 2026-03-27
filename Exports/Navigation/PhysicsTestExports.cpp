@@ -127,6 +127,32 @@ struct ExportSelectorDirectionRankingTrace
     uint32_t selectedRecordIndex;
 };
 
+struct ExportSelectorPair
+{
+    float first;
+    float second;
+};
+
+struct ExportSelectorPairConsumerTrace
+{
+    float requestedDistance;
+    int32_t selectedIndex;
+    uint32_t selectedCount;
+    uint32_t directionRankingAccepted;
+    uint32_t directGateAccepted;
+    uint32_t directGateState;
+    uint32_t alternateUnitZState;
+    uint32_t returnedDirectPair;
+    uint32_t returnedAlternatePair;
+    uint32_t returnedZeroPair;
+    uint32_t preservedInputMove;
+    uint32_t zeroedMoveOnRankingFailure;
+    int32_t returnCode;
+    G3D::Vector3 inputMove;
+    G3D::Vector3 outputMove;
+    ExportSelectorPair outputPair;
+};
+
 struct ExportGroundedWallSelectionTrace
 {
     uint32_t queryContactCount;
@@ -1239,6 +1265,81 @@ extern "C"
         return WoWCollision::HasSelectorCandidateWithNegativeDiagonalZ(
             candidateBuffer.data(),
             static_cast<uint32_t>(candidateCount));
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorAlternateUnitZFallbackGate(
+        float boundingRadiusValue,
+        float fallbackLimit,
+        float horizontalSpeedScale,
+        float requestedDistance)
+    {
+        return WoWCollision::EvaluateSelectorAlternateUnitZFallbackGate(
+            boundingRadiusValue,
+            fallbackLimit,
+            horizontalSpeedScale,
+            requestedDistance);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorPairConsumer(
+        float requestedDistance,
+        const G3D::Vector3* inputMove,
+        bool directionRankingAccepted,
+        int selectedIndex,
+        int selectedCount,
+        bool directGateAccepted,
+        bool hasNegativeDiagonalCandidate,
+        bool alternateUnitZFallbackGateAccepted,
+        bool hasUnitZCandidate,
+        const ExportSelectorPair* directPair,
+        const ExportSelectorPair* alternatePair,
+        ExportSelectorPairConsumerTrace* outTrace)
+    {
+        if (!inputMove || !directPair || !alternatePair || !outTrace || selectedCount < 0) {
+            return false;
+        }
+
+        WoWCollision::SelectorPairConsumerTrace trace{};
+        const WoWCollision::SelectorPair directPairValue{
+            directPair->first,
+            directPair->second,
+        };
+        const WoWCollision::SelectorPair alternatePairValue{
+            alternatePair->first,
+            alternatePair->second,
+        };
+
+        WoWCollision::EvaluateSelectorPairConsumer(
+            requestedDistance,
+            *inputMove,
+            directionRankingAccepted,
+            selectedIndex,
+            static_cast<uint32_t>(selectedCount),
+            directGateAccepted,
+            hasNegativeDiagonalCandidate,
+            alternateUnitZFallbackGateAccepted,
+            hasUnitZCandidate,
+            directPairValue,
+            alternatePairValue,
+            trace);
+
+        outTrace->requestedDistance = trace.requestedDistance;
+        outTrace->selectedIndex = trace.selectedIndex;
+        outTrace->selectedCount = trace.selectedCount;
+        outTrace->directionRankingAccepted = trace.directionRankingAccepted;
+        outTrace->directGateAccepted = trace.directGateAccepted;
+        outTrace->directGateState = trace.directGateState;
+        outTrace->alternateUnitZState = trace.alternateUnitZState;
+        outTrace->returnedDirectPair = trace.returnedDirectPair;
+        outTrace->returnedAlternatePair = trace.returnedAlternatePair;
+        outTrace->returnedZeroPair = trace.returnedZeroPair;
+        outTrace->preservedInputMove = trace.preservedInputMove;
+        outTrace->zeroedMoveOnRankingFailure = trace.zeroedMoveOnRankingFailure;
+        outTrace->returnCode = trace.returnCode;
+        outTrace->inputMove = trace.inputMove;
+        outTrace->outputMove = trace.outputMove;
+        outTrace->outputPair.first = trace.outputPair.first;
+        outTrace->outputPair.second = trace.outputPair.second;
+        return true;
     }
 
     __declspec(dllexport) int BuildWoWSelectorSupportPlanes(

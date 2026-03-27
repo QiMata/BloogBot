@@ -638,6 +638,32 @@ namespace WoWCollision
         uint32_t selectedRecordIndex = 0xFFFFFFFFu;
     };
 
+    struct SelectorPair
+    {
+        float first = 0.0f;
+        float second = 0.0f;
+    };
+
+    struct SelectorPairConsumerTrace
+    {
+        float requestedDistance = 0.0f;
+        int32_t selectedIndex = -1;
+        uint32_t selectedCount = 0;
+        uint32_t directionRankingAccepted = 0;
+        uint32_t directGateAccepted = 0;
+        uint32_t directGateState = 0;
+        uint32_t alternateUnitZState = 0;
+        uint32_t returnedDirectPair = 0;
+        uint32_t returnedAlternatePair = 0;
+        uint32_t returnedZeroPair = 0;
+        uint32_t preservedInputMove = 0;
+        uint32_t zeroedMoveOnRankingFailure = 0;
+        int32_t returnCode = 0;
+        G3D::Vector3 inputMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 outputMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        SelectorPair outputPair{};
+    };
+
     enum GroundedWallResolutionBranch : uint32_t
     {
         GROUNDED_WALL_BRANCH_NONE = 0,
@@ -831,6 +857,24 @@ namespace WoWCollision
 
     bool HasSelectorCandidateWithNegativeDiagonalZ(const SelectorSupportPlane* candidates,
                                                    uint32_t candidateCount);
+
+    bool EvaluateSelectorAlternateUnitZFallbackGate(float boundingRadiusValue,
+                                                    float fallbackLimit,
+                                                    float horizontalSpeedScale,
+                                                    float requestedDistance);
+
+    void EvaluateSelectorPairConsumer(float requestedDistance,
+                                      const G3D::Vector3& inputMove,
+                                      bool directionRankingAccepted,
+                                      int32_t selectedIndex,
+                                      uint32_t selectedCount,
+                                      bool directGateAccepted,
+                                      bool hasNegativeDiagonalCandidate,
+                                      bool alternateUnitZFallbackGateAccepted,
+                                      bool hasUnitZCandidate,
+                                      const SelectorPair& directPair,
+                                      const SelectorPair& alternatePair,
+                                      SelectorPairConsumerTrace& outTrace);
 
     bool EvaluateSelectorCandidateRecordSet(const SelectorCandidateRecord* records,
                                             uint32_t recordCount,
