@@ -4535,17 +4535,23 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         // Binary-backed 0x636100 branch gate: decides between horizontal (0x635D80)
         // and vertical (0x635C00) correction paths.
         //
-        // Walkable contacts (normal.z >= cos50° = 0.6428) go directly to vertical path.
-        // Non-walkable contacts use an upward terrain probe:
-        //   - If upward probe finds nontrivial clearance → vertical path (return 2, set 0x04000000)
-        //   - If upward probe finds ~zero clearance → horizontal path (return 1)
-        //   - If probe fails → exit (return 0)
-        if (!usedWalkableSelectedContact && std::fabs(primaryContactNormal.z) > 0.01f) {
-            // 0x636100 gate: for contacts with a significant Z component in the normal,
-            // project onto the selected contact plane and clamp Z to radius.
-            // Binary uses upward probe to gate this, but the .z > 0.01 heuristic
-            // is equivalent for the current fixture corpus. Keep mutually exclusive
-            // with horizontal correction per session 182 binary evidence.
+        // Walkable contacts (normal.z >= cos50° = 0.6428) already handled above.
+        // Non-walkable contacts with a slope component (0 < normal.z < cos50°)
+        // go to the vertical retry path with 0x04000000 flag (gate return code 2).
+        // Pure horizontal contacts (normal.z ≈ 0) use horizontal correction only.
+        //
+        // Binary 0x636100: checks if selectedNormal.z is between 0 and walkable
+        // threshold. If so, builds horizontal working vector and probes upward.
+        // Simplified: use the Z threshold directly instead of the full probe,
+        // since the probe's purpose is to determine if the contact has a vertical
+        // component worth correcting for.
+        const float walkableThreshold = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;  // cos(50°) = 0.6428
+        if (!usedWalkableSelectedContact &&
+            primaryContactNormal.z > PhysicsConstants::VECTOR_EPSILON &&
+            primaryContactNormal.z < walkableThreshold) {
+            // 0x636100 gate return 2: non-walkable slope with vertical component.
+            // Project onto selected contact plane and clamp Z to radius.
+            // Set 0x04000000 flag per binary (gate return code 2 behavior).
             const float intoPlane = requestedMove.dot(primaryContactNormal);
             projectedMove = requestedMove - (primaryContactNormal * intoPlane);
 
@@ -4789,72 +4795,75 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         return true;
     };
 
-    // Ground Z: use GetGroundZ as PRIMARY source — it uses barycentric
-    // interpolation on the exact ADT/VMAP triangle mesh, matching WoW.exe's
-    // heightmap lookup exactly. Seed the query just above the predicted support
-    // height using the frame step-up allowance, not the full step-height-above
-    // origin, so multi-level terrain can still pick the mid support surface
-    // without promoting the upper shelf.
-    const float supportQueryZ = predictedSupportZ + stepUp + PhysicsConstants::COLLISION_SKIN_EPSILON;
-    float bestGroundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-        supportQueryZ,
-        stepH + stepUp + PhysicsConstants::STEP_DOWN_HEIGHT);
+    // Ground Z selection — binary-backed approach (0x635600 / 0x636100).
+    // WoW.exe uses the AABB contacts from TestTerrainAABB as the PRIMARY ground
+    // source, selecting the walkable contact closest to the predicted support Z.
+    // GetGroundZ is only used as a FALLBACK when no AABB contact is found.
+    // This prevents Z oscillation on multi-level terrain (Valley of Trials)
+    // where GetGroundZ can bounce between terrain layers frame-to-frame.
+    float bestGroundZ = -FLT_MAX;
     G3D::Vector3 bestNormal(0, 0, 1);
     const SceneQuery::AABBContact* bestSupportContact = nullptr;
-    bool foundGround = VMAP::IsValidHeight(bestGroundZ) &&
-        bestGroundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-        bestGroundZ <= startZ + stepH + stepUp;
+    bool foundGround = false;
 
-    if (foundGround)
-        (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
+    // PRIMARY: select best walkable AABB contact closest to predictedSupportZ.
+    // The binary's 0x636100 selected-plane logic picks from the TestTerrainAABB
+    // contact set using the same Z-error + normal-Z ranking. predictedSupportZ
+    // provides better slope tracking than startZ alone.
+    {
+        const float minGroundZ = startZ - PhysicsConstants::STEP_DOWN_HEIGHT;
+        const float maxGroundZ = startZ + stepH + stepUp;
+        float bestZError = FLT_MAX;
+        float bestNormalZ = -FLT_MAX;
 
-    // Multi-level terrain disambiguation: if GetGroundZ promoted an upper shelf
-    // significantly above the predicted support, check if a walkable AABB contact
-    // exists closer to predictedSupportZ. If so, prefer that contact's Z.
-    // This fixes false FALL_LAND on roads with overlapping terrain layers (e.g. Durotar
-    // road with an upper cliff shelf at Z≈40.6 above the road at Z≈38.5).
-    if (foundGround && bestGroundZ > predictedSupportZ + stepUp + 0.5f) {
-        float closestContactZ = -FLT_MAX;
-        float closestError = FLT_MAX;
-        const SceneQuery::AABBContact* closestContact = nullptr;
         for (const auto& c : contacts) {
-            if (!isStatefulSupportWalkable(c, predictedSupportZ)) continue;
-            if (c.point.z < startZ - PhysicsConstants::STEP_DOWN_HEIGHT) continue;
-            if (c.point.z > startZ + stepH + stepUp) continue;
-            float err = std::fabs(c.point.z - predictedSupportZ);
-            if (err < closestError) {
-                closestError = err;
-                closestContactZ = c.point.z;
-                closestContact = &c;
+            if (!isStatefulSupportWalkable(c, predictedSupportZ))
+                continue;
+            if (c.point.z < minGroundZ || c.point.z > maxGroundZ)
+                continue;
+
+            const float zError = std::fabs(c.point.z - predictedSupportZ);
+            const float normalZ = std::fabs(c.normal.z);
+            bool better = false;
+            if (!foundGround) {
+                better = true;
             }
-        }
-        // Only override if we found a contact meaningfully closer to predicted support
-        // than the GetGroundZ result, and the contact is below the GetGroundZ result.
-        if (closestContact && closestContactZ < bestGroundZ - 0.5f &&
-            closestError < std::fabs(bestGroundZ - predictedSupportZ) - 0.25f) {
-            bestGroundZ = closestContactZ;
-            bestNormal = closestContact->normal.directionOrZero();
-            if (bestNormal.z < 0.0f) bestNormal = -bestNormal;
-            bestSupportContact = closestContact;
+            else if (zError < bestZError - 1e-4f) {
+                better = true;
+            }
+            else if (std::fabs(zError - bestZError) <= 1e-4f) {
+                if (normalZ > bestNormalZ + 1e-4f)
+                    better = true;
+                else if (std::fabs(normalZ - bestNormalZ) <= 1e-4f && c.point.z > bestGroundZ)
+                    better = true;
+            }
+
+            if (better) {
+                bestGroundZ = c.point.z;
+                bestNormal = c.normal.directionOrZero();
+                if (bestNormal.z < 0.0f) bestNormal = -bestNormal;
+                bestSupportContact = &c;
+                bestZError = zError;
+                bestNormalZ = normalZ;
+                foundGround = true;
+            }
         }
     }
 
-    // If center GetGroundZ failed, try AABB contacts as fallback
+    // FALLBACK: if no AABB contact was found, use GetGroundZ (barycentric
+    // interpolation on the exact ADT/VMAP triangle mesh).
     if (!foundGround) {
-        for (const auto& c : contacts) {
-            if (!isStatefulSupportWalkable(c, predictedSupportZ)) continue;
-            if (c.point.z >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
-                c.point.z <= startZ + stepH + stepUp) {
-                if (c.point.z > bestGroundZ || !foundGround) {
-                    bestGroundZ = c.point.z;
-                    bestNormal = c.normal;
-                    foundGround = true;
-                }
-            }
-        }
-
-        if (foundGround)
+        const float supportQueryZ = predictedSupportZ + stepUp + PhysicsConstants::COLLISION_SKIN_EPSILON;
+        float groundZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+            supportQueryZ,
+            stepH + stepUp + PhysicsConstants::STEP_DOWN_HEIGHT);
+        if (VMAP::IsValidHeight(groundZ) &&
+            groundZ >= startZ - PhysicsConstants::STEP_DOWN_HEIGHT &&
+            groundZ <= startZ + stepH + stepUp) {
+            bestGroundZ = groundZ;
+            foundGround = true;
             (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
+        }
     }
 
     if (!foundGround) {
@@ -4882,12 +4891,32 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
             float scale = intendedDist / actualDist;
             endX = startX + dx * scale;
             endY = startY + dy * scale;
-            // Re-query ground at clamped position
-            float clampedZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
-                startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
-            if (VMAP::IsValidHeight(clampedZ)) {
-                bestGroundZ = clampedZ;
-                (void)resolveSupportContact(bestGroundZ, bestNormal, bestSupportContact);
+            // Re-query AABB contacts at clamped position for consistent ground Z
+            G3D::Vector3 clampedBoxMin(endX - skin, endY - skin, adjustedMinZ);
+            G3D::Vector3 clampedBoxMax(endX + skin, endY + skin, adjustedMaxZ);
+            std::vector<SceneQuery::AABBContact> clampedContacts;
+            SceneQuery::TestTerrainAABB(input.mapId, clampedBoxMin, clampedBoxMax, clampedContacts);
+            const float minGZ = startZ - PhysicsConstants::STEP_DOWN_HEIGHT;
+            const float maxGZ = startZ + stepH + stepUp;
+            float clampBestErr = FLT_MAX;
+            for (const auto& c : clampedContacts) {
+                if (!c.walkable) continue;
+                if (c.point.z < minGZ || c.point.z > maxGZ) continue;
+                float err = std::fabs(c.point.z - predictedSupportZ);
+                if (err < clampBestErr) {
+                    clampBestErr = err;
+                    bestGroundZ = c.point.z;
+                    bestNormal = c.normal.directionOrZero();
+                    if (bestNormal.z < 0.0f) bestNormal = -bestNormal;
+                }
+            }
+            if (clampBestErr == FLT_MAX) {
+                // Fallback to GetGroundZ if no AABB contact found at clamped pos
+                float clampedZ = SceneQuery::GetGroundZ(input.mapId, endX, endY,
+                    startZ + stepH, stepH + PhysicsConstants::STEP_DOWN_HEIGHT);
+                if (VMAP::IsValidHeight(clampedZ)) {
+                    bestGroundZ = clampedZ;
+                }
             }
         }
     }
