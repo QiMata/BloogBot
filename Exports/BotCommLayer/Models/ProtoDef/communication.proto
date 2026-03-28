@@ -110,6 +110,7 @@ enum ActionType {
     START_DUNGEONEERING = 72;
     CONVERT_TO_RAID = 73;
     CHANGE_RAID_SUBGROUP = 74;
+    FOLLOW_TARGET = 75;
 }
 
 message ActionMap {
@@ -195,4 +196,16 @@ message WoWActivitySnapshot {
     BotConnectionState connectionState = 14;    // Deterministic connection lifecycle state
     bool isObjectManagerValid = 15;             // Safe to read game objects / send actions
     bool isMapTransition = 16;                  // Loading screen or cross-map teleport in progress
+    bool isDelta = 17;                          // If true, only populated fields have changed since last full snapshot
+    uint32 snapshotSequence = 18;               // Monotonic sequence number for delta ordering
+    uint32 baseSequence = 19;                   // Sequence number of the full snapshot this delta is based on
+}
+
+// Structured log entry for named pipe IPC (replaces JSON serialization).
+// Used by ForegroundBotRunner → StateManager log pipe.
+message LogEntry {
+    string level = 1;       // Trace, Debug, Information, Warning, Error, Critical
+    string category = 2;    // Logger category name
+    string message = 3;     // Log message text
+    string timestamp = 4;   // ISO 8601 UTC timestamp
 }

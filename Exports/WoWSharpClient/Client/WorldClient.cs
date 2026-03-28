@@ -267,6 +267,7 @@ namespace WoWSharpClient.Client
             // Quests
             BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_COMPLETE, Handlers.QuestHandler.HandleQuestUpdateComplete);
             BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_ADD_KILL, Handlers.QuestHandler.HandleQuestUpdateAddKill);
+            BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_ADD_ITEM, Handlers.QuestHandler.HandleQuestUpdateAddItem);
 
             // Death / corpse
             BridgeToLegacy(Opcode.SMSG_CORPSE_RECLAIM_DELAY, Handlers.DeathHandler.HandleCorpseReclaimDelay);

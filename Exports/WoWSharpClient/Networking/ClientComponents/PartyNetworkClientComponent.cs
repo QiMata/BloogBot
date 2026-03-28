@@ -37,6 +37,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Operation, string Error)> _partyErrors;
         private readonly IObservable<Unit> _readyCheckRequests;
         private readonly IObservable<Unit> _readyCheckResponses;
+        private readonly IObservable<Unit> _readyCheckFinished;
 
         // Self-subscriptions that keep state-tracking .Do() side effects active
         // even when no external code subscribes to the public observables.
@@ -130,6 +131,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Do(_ => _logger.LogDebug("Ready check response received"))
                 .Publish().RefCount();
 
+            _readyCheckFinished = SafeOpcodeStream(Opcode.MSG_RAID_READY_CHECK_FINISHED)
+                .Select(_ => Unit.Default)
+                .Do(_ => _logger.LogInformation("Ready check finished"))
+                .Publish().RefCount();
+
             // Self-subscribe so that the .Do() side effects (HasPendingInvite, IsInGroup, etc.)
             // always fire when packets arrive, even if no external code subscribes.
             _partyInviteSub = _partyInvites.Subscribe(_ => { });
@@ -162,6 +168,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public IObservable<(string Operation, string Error)> PartyErrors => _partyErrors;
         public IObservable<Unit> ReadyCheckRequests => _readyCheckRequests;
         public IObservable<Unit> ReadyCheckResponses => _readyCheckResponses;
+        public IObservable<Unit> ReadyCheckFinished => _readyCheckFinished;
         #endregion
 
         #region Party Invite Operations

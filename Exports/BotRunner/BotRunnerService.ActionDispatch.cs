@@ -51,11 +51,56 @@ namespace BotRunner
                     }
 
                     case CharacterAction.SelectGossip:
-                        builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
+                        // With npcGuid + optionIndex: packet-based via GossipAgent (BG compatible)
+                        // Without: legacy GossipFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var gossipNpcGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var gossipOptionIndex = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Select Gossip Option {gossipOptionIndex} on NPC {gossipNpcGuid:X}", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    factory.GossipAgent.SelectGossipOptionAsync(gossipOptionIndex, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                Log.Warning("[BOT RUNNER] AgentFactory unavailable for SelectGossip packet path");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
 
                     case CharacterAction.SelectTaxiNode:
-                        builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
+                        // With flightMasterGuid + sourceNodeId + destinationNodeId: packet-based (BG compatible)
+                        // Without: legacy TaxiFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 3)
+                        {
+                            var taxiFmGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var taxiSourceNode = (uint)(int)actionEntry.Item2[1];
+                            var taxiDestNode = (uint)(int)actionEntry.Item2[2];
+                            builder.Do($"Activate Taxi {taxiSourceNode}->{taxiDestNode} via FM {taxiFmGuid:X}", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    factory.FlightMasterAgent.ActivateFlightAsync(taxiFmGuid, taxiSourceNode, taxiDestNode, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                Log.Warning("[BOT RUNNER] AgentFactory unavailable for SelectTaxiNode packet path");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
 
                     case CharacterAction.VisitFlightMaster:
@@ -132,10 +177,55 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.TrainSkill:
-                        builder.Splice(BuildTrainSkillSequence((int)actionEntry.Item2[0]));
+                        // With trainerGuid + spellId: packet-based via TrainerAgent (BG compatible)
+                        // Without: legacy TrainerFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var trainSkillGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var trainSpellId = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Train Spell {trainSpellId} from trainer {trainSkillGuid:X}", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    factory.TrainerAgent.LearnSpellAsync(trainSkillGuid, trainSpellId, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                Log.Warning("[BOT RUNNER] AgentFactory unavailable for TrainSkill packet path");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildTrainSkillSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
                     case CharacterAction.TrainTalent:
-                        builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                        // With talentId as sole param AND agentFactory available: packet-based (BG compatible)
+                        // The frame path takes a talentSpellId; the packet path takes a talentId.
+                        // When 2+ params: [0]=talentId — use packet path via TalentAgent
+                        // When 1 param: legacy TalentFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var talentId = (uint)(int)actionEntry.Item2[0];
+                            builder.Do($"Learn Talent {talentId} (packet)", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    factory.TalentAgent.LearnTalentAsync(talentId, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                Log.Warning("[BOT RUNNER] AgentFactory unavailable for TrainTalent packet path");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
 
                     case CharacterAction.VisitTrainer:
@@ -326,7 +416,29 @@ namespace BotRunner
                         }
                         break;
                     case CharacterAction.BuybackItem:
-                        builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        // With vendorGuid + buybackSlot: packet-based via VendorAgent (BG compatible)
+                        // Without: legacy MerchantFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 3)
+                        {
+                            var buybackVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var buybackSlot = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Buyback Item slot {buybackSlot} from vendor {buybackVendorGuid:X}", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    factory.VendorAgent.BuybackItemAsync(buybackVendorGuid, buybackSlot, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                Log.Warning("[BOT RUNNER] AgentFactory unavailable for BuybackItem packet path");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        }
                         break;
                     case CharacterAction.SellItem:
                         // With vendorGuid: [0]=vendorGuid, [1]=bagId, [2]=slotId, [3]=quantity — packet-based
@@ -407,7 +519,27 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.Craft:
-                        builder.Splice(BuildCraftSequence((int)actionEntry.Item2[0]));
+                        // With 2+ params: [0]=spellId, [1]=quantity — packet-based via CastSpell (BG compatible)
+                        // With 1 param: legacy CraftFrame path (FG only) OR packet path if frame is null
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var craftSpellId = (int)actionEntry.Item2[0];
+                            var craftQuantity = (int)actionEntry.Item2[1];
+                            builder.Do($"Craft spell {craftSpellId} x{craftQuantity} (packet)", time =>
+                            {
+                                for (int i = 0; i < craftQuantity; i++)
+                                {
+                                    _objectManager.CastSpell(craftSpellId);
+                                    if (craftQuantity > 1 && i < craftQuantity - 1)
+                                        Thread.Sleep(500);
+                                }
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildCraftSequence((int)actionEntry.Item2[0]));
+                        }
                         break;
 
                     case CharacterAction.Login:
@@ -667,6 +799,16 @@ namespace BotRunner
                             }
                             return BehaviourTreeStatus.Success;
                         });
+                        break;
+                    }
+
+                    case CharacterAction.FollowTarget:
+                    {
+                        // Params: [0] = targetGuid (long)
+                        // [1] = followDistance (float, optional, default 5.0)
+                        var followGuid = UnboxGuid(actionEntry.Item2[0]);
+                        var followDistance = actionEntry.Item2.Count > 1 ? (float)actionEntry.Item2[1] : 5.0f;
+                        builder.Splice(BuildFollowTargetSequence(followGuid, followDistance));
                         break;
                     }
 

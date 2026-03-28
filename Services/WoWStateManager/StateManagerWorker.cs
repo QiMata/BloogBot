@@ -71,11 +71,15 @@ namespace WoWStateManager
                 configuration["MangosSOAP:IpAddress"],
                 _loggerFactory.CreateLogger<MangosSOAPClient>());
 
+            var progressionPlanner = new Progression.ProgressionPlanner(
+                _loggerFactory.CreateLogger<Progression.ProgressionPlanner>());
+
             _activityMemberSocketListener = new CharacterStateSocketListener(
                 StateManagerSettings.Instance.CharacterSettings,
                 configuration["CharacterStateListener:IpAddress"],
                 int.Parse(configuration["CharacterStateListener:Port"]),
                 _mangosSOAPClient,
+                progressionPlanner,
                 _loggerFactory.CreateLogger<CharacterStateSocketListener>()
             );
 
@@ -279,17 +283,17 @@ namespace WoWStateManager
                 {
                     case Settings.BotRunnerType.Foreground:
                         _logger.LogInformation($"Starting Foreground bot worker for {accountName} (DLL injection)");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName);
                         break;
 
                     case Settings.BotRunnerType.Background:
                         _logger.LogInformation($"Starting Background bot worker for {accountName} (headless)");
-                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
+                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName);
                         break;
 
                     default:
                         _logger.LogWarning($"Unknown RunnerType {characterSettings.RunnerType} for {accountName}, defaulting to Foreground");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName);
                         break;
                 }
 

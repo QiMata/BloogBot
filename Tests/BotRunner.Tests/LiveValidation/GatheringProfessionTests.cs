@@ -58,11 +58,10 @@ public class GatheringProfessionTests
     }
 
     // =====================================================================
-    //  MINING TEST
+    //  ROUTE LOADERS
     // =====================================================================
 
-    [SkippableFact]
-    public async Task Mining_GatherCopperVein_SkillIncreases()
+    private async Task<IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>> LoadValleyCopperCandidatesAsync()
     {
         var valleyCandidates = GatheringRouteSelection.SelectValleyCopperVeinCandidates(
             await _bot.QueryGameObjectSpawnsNearAsync(
@@ -73,157 +72,17 @@ public class GatheringProfessionTests
                 GatheringRouteSelection.ValleyCopperSearchRadius,
                 limit: GatheringRouteSelection.ValleyCopperQueryLimit),
             CopperVeinEntry);
-        int valleyCandidateCount = valleyCandidates.Count;
-        int valleyPoolCount = valleyCandidates
-            .Select(candidate => candidate.poolEntry)
-            .Where(poolEntry => poolEntry.HasValue)
-            .Select(poolEntry => poolEntry!.Value)
-            .Distinct()
-            .Count();
-        Assert.True(valleyCandidateCount > 0,
-            "DB must have copper vein spawns near Valley of Trials — no natural Copper Vein route candidates found.");
+        Assert.True(valleyCandidates.Count > 0,
+            "DB must have copper vein spawns near Valley of Trials.");
         _output.WriteLine(
-            $"Selected {valleyCandidateCount} Valley copper-route candidates across {Math.Max(1, valleyPoolCount)} spawn pool(s) from " +
-            $"({GatheringRouteSelection.ValleyCopperRouteStartX:F0}, {GatheringRouteSelection.ValleyCopperRouteStartY:F0}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F0}) " +
+            $"Selected {valleyCandidates.Count} Valley copper-route candidates " +
             $"with nearest route distance {valleyCandidates[0].distance2D:F0}y.");
-        var pooledCandidateSummary = string.Join(", ",
-            valleyCandidates.Select(candidate => candidate.poolEntry)
-                .Where(poolEntry => poolEntry.HasValue)
-                .Select(poolEntry => poolEntry!.Value)
-                .Distinct()
-                .OrderBy(poolEntry => poolEntry));
-        if (!string.IsNullOrWhiteSpace(pooledCandidateSummary))
-            _output.WriteLine($"Loaded Valley copper pool entries: {pooledCandidateSummary}");
-
-        var fgAccountForRoute = _bot.FgAccountName;
-        if (fgAccountForRoute != null && await _bot.CheckFgActionableAsync())
-        {
-            try
-            {
-                var bgParkAccountForRoute = _bot.BgAccountName;
-                if (bgParkAccountForRoute != null)
-                {
-                    _output.WriteLine("[BG] Parking BG bot in Orgrimmar (prevents CombatCoordinator interference)");
-                    await _bot.BotTeleportAsync(bgParkAccountForRoute, OrgrimmarMap, OrgX, OrgY, OrgZ);
-                }
-
-                _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccountForRoute})");
-                await PrepareMining(fgAccountForRoute, "FG");
-
-                await _bot.RefreshSnapshotsAsync();
-                uint fgSkillBeforeForRoute = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-                _output.WriteLine($"FG initial mining skill: {fgSkillBeforeForRoute}");
-
-                await StageAtValleyCopperRouteStartAsync(fgAccountForRoute, "FG");
-                var fgBagBeforeForRoute = CaptureBagItemCounts("FG");
-                var fgDiagStart = DateTime.UtcNow;
-                await _bot.SendActionAndWaitAsync(
-                    fgAccountForRoute,
-                    BuildGatheringRouteAction(MiningGatherSpell, [CopperVeinEntry], valleyCandidates),
-                    delayMs: 500);
-                bool fgGatheredOnRoute = await WaitForGatheringRouteOutcomeAsync(
-                    "FG",
-                    GatheringData.MINING_SKILL_ID,
-                    fgSkillBeforeForRoute,
-                    fgBagBeforeForRoute,
-                    fgDiagStart,
-                    timeout: TimeSpan.FromMinutes(5));
-
-                await _bot.RefreshSnapshotsAsync();
-                uint fgSkillAfterForRoute = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-                _output.WriteLine($"FG Results: gathered={fgGatheredOnRoute}, skill {fgSkillBeforeForRoute} â†’ {fgSkillAfterForRoute}");
-
-                if (!fgGatheredOnRoute)
-                {
-                    _output.WriteLine(
-                        $"FG reference mining did not complete on any of {valleyCandidateCount} Valley copper-route candidates. " +
-                        $"Continuing with BG-authoritative assertions. skill={fgSkillAfterForRoute}.");
-                }
-                else if (fgSkillAfterForRoute <= fgSkillBeforeForRoute)
-                {
-                    _output.WriteLine($"FG: WARNING â€” Mining skill did not increase ({fgSkillBeforeForRoute} â†’ {fgSkillAfterForRoute}). " +
-                        "This can happen due to WoW's RNG skill-up mechanic.");
-                }
-            }
-            catch (Xunit.Sdk.XunitException ex)
-            {
-                _output.WriteLine($"FG reference mining became unstable; continuing with BG-only assertions. Details: {ex.Message}");
-            }
-            finally
-            {
-                await ReturnToSafeZoneAsync(fgAccountForRoute, "FG");
-            }
-        }
-        else
-        {
-            _output.WriteLine("FG bot not available or not actionable â€” skipping FG mining reference path.");
-        }
-
-        var bgAccountForRoute = _bot.BgAccountName!;
-        Assert.NotNull(bgAccountForRoute);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccountForRoute})");
-
-        try
-        {
-            var fgParkAccountForRoute = _bot.FgAccountName;
-            if (fgParkAccountForRoute != null)
-            {
-                _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
-                await _bot.BotTeleportAsync(fgParkAccountForRoute, OrgrimmarMap, OrgX, OrgY, OrgZ);
-            }
-
-            await PrepareMining(bgAccountForRoute, "BG");
-
-            await _bot.RefreshSnapshotsAsync();
-            uint bgSkillBeforeForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"BG initial mining skill: {bgSkillBeforeForRoute}");
-            global::Tests.Infrastructure.Skip.If(bgSkillBeforeForRoute >= 300, $"BG mining skill already capped ({bgSkillBeforeForRoute}); cannot assert further increase.");
-
-            await StageAtValleyCopperRouteStartAsync(bgAccountForRoute, "BG");
-            var bgBagBeforeForRoute = CaptureBagItemCounts("BG");
-            var bgDiagStart = DateTime.UtcNow;
-            await _bot.SendActionAndWaitAsync(
-                bgAccountForRoute,
-                BuildGatheringRouteAction(MiningGatherSpell, [CopperVeinEntry], valleyCandidates),
-                delayMs: 500);
-            bool bgGatheredOnRoute = await WaitForGatheringRouteOutcomeAsync(
-                "BG",
-                GatheringData.MINING_SKILL_ID,
-                bgSkillBeforeForRoute,
-                bgBagBeforeForRoute,
-                bgDiagStart,
-                timeout: TimeSpan.FromMinutes(5));
-
-            await _bot.RefreshSnapshotsAsync();
-            uint bgSkillAfterForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"BG Results: gathered={bgGatheredOnRoute}, skill {bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}");
-
-            // DB confirmed nodes exist (valleyCandidateCount > 0) — if the bot failed to gather,
-            // that's a detection/pathfinding/interaction bug, not a "no nodes spawned" issue.
-            Assert.True(bgGatheredOnRoute,
-                $"BG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidateCount} candidates, confirmed by DB). " +
-                $"Skill={bgSkillAfterForRoute}. This is a bot detection/interaction failure, not a respawn issue.");
-            if (bgSkillAfterForRoute <= bgSkillBeforeForRoute)
-            {
-                _output.WriteLine($"BG: WARNING â€” Mining skill did not increase ({bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}). " +
-                    "This can happen due to WoW's RNG skill-up mechanic.");
-            }
-        }
-        finally
-        {
-            await ReturnToSafeZoneAsync(bgAccountForRoute, "BG");
-        }
+        return valleyCandidates;
     }
 
-    // =====================================================================
-    //  HERBALISM TEST
-    // =====================================================================
-
-    [SkippableFact]
-    public async Task Herbalism_GatherHerb_SkillIncreases()
+    private async Task<IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>> LoadDurotarHerbCandidatesAsync()
     {
         uint[] herbEntries = [PeacebloomEntry, SilverleafEntry, EarthrootEntry];
-
         var herbCandidates = GatheringRouteSelection.SelectDurotarHerbCandidates(
             await _bot.QueryGameObjectSpawnsNearAsync(
                 herbEntries,
@@ -233,145 +92,175 @@ public class GatheringProfessionTests
                 GatheringRouteSelection.DurotarHerbSearchRadius,
                 limit: GatheringRouteSelection.DurotarHerbQueryLimit),
             herbEntries);
-        int herbCandidateCount = herbCandidates.Count;
-        int herbPoolCount = herbCandidates
-            .Select(c => c.poolEntry)
-            .Where(p => p.HasValue)
-            .Select(p => p!.Value)
-            .Distinct()
-            .Count();
-        Assert.True(herbCandidateCount > 0,
+        Assert.True(herbCandidates.Count > 0,
             "DB must have herb spawns near Durotar — no natural herb route candidates found.");
         _output.WriteLine(
-            $"Selected {herbCandidateCount} Durotar herb-route candidates across {Math.Max(1, herbPoolCount)} spawn pool(s) from " +
-            $"({GatheringRouteSelection.DurotarHerbRouteStartX:F0}, {GatheringRouteSelection.DurotarHerbRouteStartY:F0}, {GatheringRouteSelection.DurotarHerbRouteStartZ:F0}) " +
+            $"Selected {herbCandidates.Count} Durotar herb-route candidates " +
             $"with nearest route distance {herbCandidates[0].distance2D:F0}y.");
-        var pooledHerbSummary = string.Join(", ",
-            herbCandidates.Select(c => c.poolEntry)
-                .Where(p => p.HasValue)
-                .Select(p => p!.Value)
-                .Distinct()
-                .OrderBy(p => p));
-        if (!string.IsNullOrWhiteSpace(pooledHerbSummary))
-            _output.WriteLine($"Loaded Durotar herb pool entries: {pooledHerbSummary}");
+        return herbCandidates;
+    }
 
-        // --- FG FIRST: native WoW right-click interaction (gold standard) ---
-        var fgAccount = _bot.FgAccountName;
-        if (fgAccount != null && await _bot.CheckFgActionableAsync())
-        {
-            try
-            {
-                var bgParkAccount = _bot.BgAccountName;
-                if (bgParkAccount != null)
-                {
-                    _output.WriteLine("[BG] Parking BG bot in Orgrimmar (prevents CombatCoordinator interference)");
-                    await _bot.BotTeleportAsync(bgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
-                }
+    // =====================================================================
+    //  SCENARIO RUNNERS
+    // =====================================================================
 
-                _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
-                await PrepareHerbalism(fgAccount, "FG");
+    private async Task<bool> RunMiningScenarioAsync(string account, string label,
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> valleyCandidates)
+    {
+        await PrepareMining(account, label);
 
-                await _bot.RefreshSnapshotsAsync();
-                uint fgSkillBefore = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
-                _output.WriteLine($"FG initial herbalism skill: {fgSkillBefore}");
+        await _bot.RefreshSnapshotsAsync();
+        uint skillBefore = GetSkill(label, GatheringData.MINING_SKILL_ID);
+        _output.WriteLine($"{label} initial mining skill: {skillBefore}");
 
-                await StageAtDurotarHerbRouteStartAsync(fgAccount, "FG");
-                var fgBagBefore = CaptureBagItemCounts("FG");
-                var fgDiagStart = DateTime.UtcNow;
-                await _bot.SendActionAndWaitAsync(
-                    fgAccount,
-                    BuildGatheringRouteAction(HerbalismGatherSpell, herbEntries, herbCandidates),
-                    delayMs: 500);
-                bool fgGathered = await WaitForGatheringRouteOutcomeAsync(
-                    "FG",
-                    GatheringData.HERBALISM_SKILL_ID,
-                    fgSkillBefore,
-                    fgBagBefore,
-                    fgDiagStart,
-                    timeout: TimeSpan.FromMinutes(5));
+        await StageAtValleyCopperRouteStartAsync(account, label);
+        var bagBefore = CaptureBagItemCounts(label);
+        var diagStart = DateTime.UtcNow;
+        await _bot.SendActionAndWaitAsync(
+            account,
+            BuildGatheringRouteAction(MiningGatherSpell, [CopperVeinEntry], valleyCandidates),
+            delayMs: 500);
+        bool gathered = await WaitForGatheringRouteOutcomeAsync(
+            label, GatheringData.MINING_SKILL_ID, skillBefore, bagBefore, diagStart,
+            timeout: TimeSpan.FromMinutes(5));
 
-                await _bot.RefreshSnapshotsAsync();
-                uint fgSkillAfter = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
-                _output.WriteLine($"FG Results: gathered={fgGathered}, skill {fgSkillBefore} → {fgSkillAfter}");
+        await _bot.RefreshSnapshotsAsync();
+        uint skillAfter = GetSkill(label, GatheringData.MINING_SKILL_ID);
+        _output.WriteLine($"{label} Results: gathered={gathered}, skill {skillBefore} -> {skillAfter}");
 
-                if (!fgGathered)
-                {
-                    _output.WriteLine(
-                        $"FG reference herbalism did not complete on any of {herbCandidateCount} Durotar herb-route candidates. " +
-                        $"Continuing with BG-authoritative assertions. skill={fgSkillAfter}.");
-                }
-                else if (fgSkillAfter <= fgSkillBefore)
-                {
-                    _output.WriteLine($"FG: WARNING — Herbalism skill did not increase ({fgSkillBefore} → {fgSkillAfter}). " +
-                        "This can happen due to WoW's RNG skill-up mechanic.");
-                }
-            }
-            catch (Xunit.Sdk.XunitException ex)
-            {
-                _output.WriteLine($"FG reference herbalism became unstable; continuing with BG-only assertions. Details: {ex.Message}");
-            }
-            finally
-            {
-                await ReturnToSafeZoneAsync(fgAccount, "FG");
-            }
-        }
-        else
-        {
-            _output.WriteLine("FG bot not available or not actionable — skipping FG herbalism reference path.");
-        }
+        if (skillAfter <= skillBefore)
+            _output.WriteLine($"{label}: WARNING - Mining skill did not increase. RNG skill-up mechanic.");
 
-        // --- BG: headless protocol emulation ---
+        return gathered;
+    }
+
+    private async Task<bool> RunHerbalismScenarioAsync(string account, string label,
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> herbCandidates)
+    {
+        uint[] herbEntries = [PeacebloomEntry, SilverleafEntry, EarthrootEntry];
+
+        await PrepareHerbalism(account, label);
+
+        await _bot.RefreshSnapshotsAsync();
+        uint skillBefore = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
+        _output.WriteLine($"{label} initial herbalism skill: {skillBefore}");
+
+        await StageAtDurotarHerbRouteStartAsync(account, label);
+        var bagBefore = CaptureBagItemCounts(label);
+        var diagStart = DateTime.UtcNow;
+        await _bot.SendActionAndWaitAsync(
+            account,
+            BuildGatheringRouteAction(HerbalismGatherSpell, herbEntries, herbCandidates),
+            delayMs: 500);
+        bool gathered = await WaitForGatheringRouteOutcomeAsync(
+            label, GatheringData.HERBALISM_SKILL_ID, skillBefore, bagBefore, diagStart,
+            timeout: TimeSpan.FromMinutes(5));
+
+        await _bot.RefreshSnapshotsAsync();
+        uint skillAfter = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
+        _output.WriteLine($"{label} Results: gathered={gathered}, skill {skillBefore} -> {skillAfter}");
+
+        if (skillAfter <= skillBefore)
+            _output.WriteLine($"{label}: WARNING - Herbalism skill did not increase. RNG skill-up mechanic.");
+
+        return gathered;
+    }
+
+    // =====================================================================
+    //  MINING TESTS
+    // =====================================================================
+
+    [SkippableFact]
+    public async Task Mining_BG_GatherCopperVein()
+    {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
+
+        await _bot.RefreshSnapshotsAsync();
+        uint skillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
+        global::Tests.Infrastructure.Skip.If(skillBefore >= 300, $"BG mining skill already capped ({skillBefore}).");
+
+        var valleyCandidates = await LoadValleyCopperCandidatesAsync();
 
         try
         {
-            var fgParkAccount = _bot.FgAccountName;
-            if (fgParkAccount != null)
-            {
-                _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
-                await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
-            }
-
-            await PrepareHerbalism(bgAccount, "BG");
-
-            await _bot.RefreshSnapshotsAsync();
-            uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-            _output.WriteLine($"BG initial herbalism skill: {bgSkillBefore}");
-            global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
-
-            await StageAtDurotarHerbRouteStartAsync(bgAccount, "BG");
-            var bgBagBefore = CaptureBagItemCounts("BG");
-            var bgDiagStart = DateTime.UtcNow;
-            await _bot.SendActionAndWaitAsync(
-                bgAccount,
-                BuildGatheringRouteAction(HerbalismGatherSpell, herbEntries, herbCandidates),
-                delayMs: 500);
-            bool bgGathered = await WaitForGatheringRouteOutcomeAsync(
-                "BG",
-                GatheringData.HERBALISM_SKILL_ID,
-                bgSkillBefore,
-                bgBagBefore,
-                bgDiagStart,
-                timeout: TimeSpan.FromMinutes(5));
-
-            await _bot.RefreshSnapshotsAsync();
-            uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-            _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
-
-            // DB confirmed herb nodes exist (herbCandidateCount > 0) — if the bot failed to gather,
-            // that's a detection/pathfinding/interaction bug, not a "no nodes spawned" issue.
-            Assert.True(bgGathered,
-                $"BG: Failed to gather herb on the Durotar herb route ({herbCandidateCount} candidates, confirmed by DB). " +
-                $"Skill={bgSkillAfter}. This is a bot detection/interaction failure, not a respawn issue.");
-            if (bgSkillAfter <= bgSkillBefore)
-                _output.WriteLine($"BG: WARNING — Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}). " +
-                    "This can happen due to WoW's RNG skill-up mechanic.");
+            bool gathered = await RunMiningScenarioAsync(bgAccount, "BG", valleyCandidates);
+            Assert.True(gathered,
+                $"BG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidates.Count} candidates, confirmed by DB).");
         }
         finally
         {
             await ReturnToSafeZoneAsync(bgAccount, "BG");
+        }
+    }
+
+    [SkippableFact]
+    public async Task Mining_FG_GatherCopperVein()
+    {
+        var fgAccount = _bot.FgAccountName;
+        global::Tests.Infrastructure.Skip.If(fgAccount == null, "FG bot not available.");
+        global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot not actionable.");
+
+        var valleyCandidates = await LoadValleyCopperCandidatesAsync();
+
+        try
+        {
+            bool gathered = await RunMiningScenarioAsync(fgAccount!, "FG", valleyCandidates);
+            Assert.True(gathered,
+                $"FG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidates.Count} candidates, confirmed by DB).");
+        }
+        finally
+        {
+            await ReturnToSafeZoneAsync(fgAccount!, "FG");
+        }
+    }
+
+    // =====================================================================
+    //  HERBALISM TESTS
+    // =====================================================================
+
+    [SkippableFact]
+    public async Task Herbalism_BG_GatherHerb()
+    {
+        var bgAccount = _bot.BgAccountName!;
+        Assert.NotNull(bgAccount);
+
+        await _bot.RefreshSnapshotsAsync();
+        uint skillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
+        global::Tests.Infrastructure.Skip.If(skillBefore >= 300, $"BG herbalism skill already capped ({skillBefore}).");
+
+        var herbCandidates = await LoadDurotarHerbCandidatesAsync();
+
+        try
+        {
+            bool gathered = await RunHerbalismScenarioAsync(bgAccount, "BG", herbCandidates);
+            Assert.True(gathered,
+                $"BG: Failed to gather herb on the Durotar herb route ({herbCandidates.Count} candidates, confirmed by DB).");
+        }
+        finally
+        {
+            await ReturnToSafeZoneAsync(bgAccount, "BG");
+        }
+    }
+
+    [SkippableFact]
+    public async Task Herbalism_FG_GatherHerb()
+    {
+        var fgAccount = _bot.FgAccountName;
+        global::Tests.Infrastructure.Skip.If(fgAccount == null, "FG bot not available.");
+        global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot not actionable.");
+
+        var herbCandidates = await LoadDurotarHerbCandidatesAsync();
+
+        try
+        {
+            bool gathered = await RunHerbalismScenarioAsync(fgAccount!, "FG", herbCandidates);
+            Assert.True(gathered,
+                $"FG: Failed to gather herb on the Durotar herb route ({herbCandidates.Count} candidates, confirmed by DB).");
+        }
+        finally
+        {
+            await ReturnToSafeZoneAsync(fgAccount!, "FG");
         }
     }
 
@@ -413,7 +302,12 @@ public class GatheringProfessionTests
         {
             _output.WriteLine($"[{label}] Adding Mining Pick ({MiningPick})");
             await _bot.BotAddItemAsync(account, MiningPick);
-            await Task.Delay(1000);
+            await _bot.WaitForSnapshotConditionAsync(
+                account,
+                snap => snap?.Player?.BagContents?.Values.Any(v => v == MiningPick) == true,
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 300,
+                progressLabel: $"{label} mining-pick-add");
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -449,7 +343,6 @@ public class GatheringProfessionTests
         {
             var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
             AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300");
-            await Task.Delay(500);
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -602,7 +495,10 @@ public class GatheringProfessionTests
             {
                 _output.WriteLine($"[{label}] Reviving character before setup");
                 await _bot.RevivePlayerAsync(charName);
-                await Task.Delay(1000);
+                await _bot.WaitForSnapshotConditionAsync(
+                    account, LiveBotFixture.IsStrictAlive,
+                    TimeSpan.FromSeconds(5),
+                    progressLabel: $"{label} revive");
                 await _bot.RefreshSnapshotsAsync();
                 snap = GetSnapshot(label);
             }
@@ -632,7 +528,6 @@ public class GatheringProfessionTests
     private async Task EnsureSelfSelectionAsync(string account)
     {
         await _bot.BotSelectSelfAsync(account);
-        await Task.Delay(300);
     }
 
     private int GetBagItemCount(string label)
@@ -690,4 +585,3 @@ public class GatheringProfessionTests
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 }
-

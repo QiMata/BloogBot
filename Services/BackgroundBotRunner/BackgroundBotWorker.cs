@@ -356,20 +356,9 @@ namespace BackgroundBotRunner
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
             var @class = WoWNameGenerator.ResolveClass(accountName);
+            var specOverride = Environment.GetEnvironmentVariable("WWOW_CHARACTER_SPEC");
 
-            BotProfiles.Common.BotBase botProfile = @class switch
-            {
-                Class.Warrior => new WarriorArms.WarriorArms(),
-                Class.Paladin => new PaladinRetribution.PaladinRetribution(),
-                Class.Rogue => new RogueCombat.RogueCombat(),
-                Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
-                Class.Priest => new PriestDiscipline.PriestDiscipline(),
-                Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
-                Class.Mage => new MageArcane.MageArcane(),
-                Class.Warlock => new WarlockAffliction.WarlockAffliction(),
-                Class.Druid => new DruidRestoration.DruidRestoration(),
-                _ => new WarriorArms.WarriorArms()
-            };
+            var botProfile = BotProfiles.Common.BotProfileResolver.Resolve(specOverride, @class);
 
             return new ClassContainer(
                 botProfile.Name,

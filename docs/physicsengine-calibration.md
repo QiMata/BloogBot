@@ -259,6 +259,24 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - A fresh `dumpbin /disasm` spot-check over `CMovement::CollisionStep` (`0x633D1C..0x633DEB`) reconfirmed that vanilla runs a second swept AABB on the half-step branch; our code was still using a static `TestTerrainAABB` overlap there.
 - Behavioral change shipped:
 
+## 2026-03-28 Transport Orientation No-Op Follow-Up
+
+- Scope note:
+  - This pass tested whether the remaining packet-backed Undercity elevator drift was coming from `PhysicsEngine.cpp` building its grounded movement plan from raw transport-local `input.orientation` instead of the already-transformed world `st.orientation`.
+- Behavioral change shipped:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `PhysicsHelpers::BuildMovementPlan(...)` now receives `st.orientation` after the transport-local to world transform instead of raw `input.orientation`.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorRideV2_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~UndercityElevatorReplay_TransportAverageStaysWithinParityTarget|FullyQualifiedName~UndercityElevatorTransportFrame_ReportsDynamicSupportToken|FullyQualifiedName~UndercityElevatorTransportFrame_SweepCapsuleSharesDynamicSupportToken" --logger "console;verbosity=detailed"`
+    - passed (`6/6`)
+    - packet-backed Undercity elevator metrics unchanged: `transport avg=0.4074y`, `max=3.0288y`
+    - Undercity elevator replay metrics unchanged: `transport avg=0.0510y`, `p99=0.3057y`, `max=0.3619y`
+- Outcome:
+  - No measurable effect on the remaining transport drift.
+  - Do not spend another pass on grounded movement-plan basis alone unless a new recording shows non-zero transport yaw and a failing orientation-sensitive slice.
+
 ## 2026-03-26 Selector Alternate-Pair Addendum
 
 - Scope note:
@@ -2197,3 +2215,83 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - Do not collapse the sidecar payload to a selector-only afterthought. The binary preserves it as an aligned per-record payload at `TestTerrain` output time.
 - Recommended next single hypothesis:
   - Trace `0x6AAAB0` / `0x6AADC0` / `0x6AB530` next so the temp contact record and sidecar-payload generation path can be mirrored before any runtime grounded hookup is attempted again.
+
+## 2026-03-27 Grounded Selected-Plane Retry Transaction
+
+- Scope note:
+  - This pass did not change runtime grounded behavior.
+  - The goal was to close one more deterministic caller-side `0x635C00` / `0x636100` seam before touching `CollisionStepWoW` again: the visible vertical retry transaction around the already-pinned distance-pointer scalar helper.
+- Binary/evidence delta shipped:
+  - tightened `docs/physics/wow_exe_decompilation.md` so the grounded notes now explicitly record the visible caller-side vertical retry transaction
+  - the production DLL now mirrors that bounded bookkeeping through `EvaluateGroundedDriverSelectedPlaneRetryTransaction(...)`
+  - the mirrored facts are:
+    - walkable selected contacts bypass `0x636100` and go straight to the vertical retry path
+    - non-walkable `0x636100` return `2` sets `0x04000000` before the same vertical retry path
+    - when the input distance pointer is non-degenerate, remaining distance and sweep fraction rescale by `newSweepDistance / oldSweepDistance`
+    - the flagged negative-scalar path still returns `+boundingRadius` while collapsing the in-flight distance budget to zero
+- Diagnostic/test delta shipped:
+  - `Exports/Navigation/GroundedDriverParity.h/.cpp`
+    - added pure `EvaluateGroundedDriverSelectedPlaneRetryTransaction(...)`
+    - added `GroundedDriverSelectedPlaneRetryTrace`
+  - `Exports/Navigation/GroundedDriverParityTestExports.cpp`
+    - added `EvaluateWoWGroundedDriverSelectedPlaneRetryTransaction(...)`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.GroundedDriver.cs`
+    - added matching interop for the new retry seam
+  - `Tests/Navigation.Physics.Tests/WowGroundedDriverSelectedPlaneRetryTests.cs`
+    - added deterministic coverage for the walkable-selected path, gate-`2` flag-setting path, exact distance/sweep rescale, and flagged negative-scalar zero-budget collapse
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - passed
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --no-dependencies -m:1 -p:UseSharedCompilation=false`
+    - passed
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~WowGroundedDriverSelectedPlaneDistancePointerTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneRetryTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneBranchGateTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneFollowupRerankTests|FullyQualifiedName~WowGroundedDriverSelectedPairCommitBodyTests|FullyQualifiedName~WowGroundedDriverHoverRerankDispatchTests" --logger "console;verbosity=minimal"`
+    - passed (`27/27`)
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`
+    - passed (`535`), skipped (`1`)
+- Frame-pattern note:
+  - The visible caller-side vertical retry bookkeeping is no longer open on the grounded path. The remaining grounded native work is earlier in the selected-plane helper chain: the first-pass vector/scalar setup inside `0x635C00` plus any still-uncaptured tail after the visible `0x636100` follow-up rerank fast return.
+- Do Not Repeat:
+  - Do not reopen the walkable-selected versus gate-`2` caller-side retry split unless a new raw window contradicts the current transaction shape; that visible bookkeeping is now pinned through the production DLL.
+  - Do not treat the flagged negative-scalar path as a generic clamp-to-radius helper. The visible contract is stricter: it returns `+boundingRadius` and zeroes the in-flight remaining-distance budget.
+- Recommended next single hypothesis:
+  - Keep the current grounded retry transaction fixed and isolate the earlier `0x635C00` first-pass vector/scalar setup next, unless the object-consumer lane closes a smaller bounded seam first.
+
+## 2026-03-28 Validation Run
+
+- Context:
+  - This run was taken after deterministic grounded parity work only. The newly landed `0x635600` seams live in `GroundedDriverParity.cpp` export/test helpers and did not intentionally retune the live replay path.
+  - Purpose: confirm the calibration harness still runs cleanly on the current repo state and record a fresh baseline in `logs/`.
+- Command:
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName=PathfindingService.Tests.PhysicsEngineTests.StepPhysics_RecordingReplay_FallFromHeight_FrameByFrameVariance" --logger "console;verbosity=detailed" | Tee-Object logs/physicsengine-variance-20260328-run1.txt`
+- Result:
+  - `logs/physicsengine-variance-20260328-run1.txt`
+  - `simulated=248 airborne=144 skippedDt=0 skippedTeleport=0`
+  - `avg=0.0096 p95=0.0662 p99=0.0820 max=0.0889 (frame=231)`
+- Frame-pattern note:
+  - The dominant error remains a grounded positive-`Z` band late in the replay, not horizontal drift.
+  - The strongest band is `f=207..247`, with worst frames at `231`, `233`, `235`, `237`, `241`, `243`, `245`, and `247`, all showing `dZ` around `+0.071..+0.089`.
+  - There is also a smaller earlier positive band at `f=207..213`, peaking at `f=213` with `dZ=+0.0807`.
+  - Horizontal error stayed `0.0000` on the reported worst frames.
+- Operational note:
+  - `WWOW_DATA_DIR` did not need to be set manually in this environment; the test resolved data from `Bot/Release/net8.0`.
+  - The `dumpbin` warning from the `vcpkg` applocal script did not block the run.
+- Practical implication:
+  - The calibration harness is runnable now and the current repo baseline is measurably worse than the 2026-02-25 best run (`avg=0.0054`, `max=0.0490`), so any later tuning pass should compare against this fresh `2026-03-28` log rather than assuming the older baseline still holds.
+
+## 2026-03-28 Validation Rerun After Final `0x635600` Seam Closure
+
+- Context:
+  - This rerun was taken immediately after closing the last deterministic `0x635600` grounded caller seams in `GroundedDriverParity.cpp`.
+  - No live `PhysicsEngine.cpp` replay-calibration behavior was intentionally retuned in this pass; the goal was to verify that the seam closure did not silently perturb the replay baseline.
+- Command:
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName=PathfindingService.Tests.PhysicsEngineTests.StepPhysics_RecordingReplay_FallFromHeight_FrameByFrameVariance" --logger "console;verbosity=detailed" | Tee-Object logs/physicsengine-variance-20260328-run2.txt`
+- Result:
+  - `logs/physicsengine-variance-20260328-run2.txt`
+  - `simulated=248 airborne=144 skippedDt=0 skippedTeleport=0`
+  - `avg=0.0096 p95=0.0662 p99=0.0820 max=0.0889 (frame=231)`
+- Frame-pattern note:
+  - The replay remained dominated by the same late grounded positive-`Z` band (`f=207..247`) with the same worst frames (`231`, `233`, `235`, `237`, `241`, `243`, `245`, `247`).
+  - Horizontal error on the reported worst frames stayed `0.0000`.
+- Practical implication:
+  - Closing the final split `0x635600` seams did not change the current replay-calibration baseline.
+  - The next actual parity/tuning pass should therefore target the still-open live replay/transport behavior in `PhysicsEngine.cpp`, not revisit `GroundedDriverParity.cpp`.

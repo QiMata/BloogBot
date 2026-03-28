@@ -30,18 +30,23 @@ namespace BotRunner.Combat
             uint available = talentAgent.AvailableTalentPoints;
             if (available == 0) return 0;
 
-            var buildOrder = TalentBuildDefinitions.GetBuildOrder(classSpecName);
+            // WWOW_TALENT_BUILD env var overrides the default class/spec build name.
+            // Set by StateManager from CharacterBuildConfig.TalentBuildName.
+            var effectiveBuildName = TalentBuildResolver.ResolveEffectiveBuildName(classSpecName);
+
+            var buildOrder = TalentBuildDefinitions.GetBuild(effectiveBuildName);
             if (buildOrder == null)
             {
-                Log.Warning("[TALENT] No build definition for class/spec '{ClassSpec}'", classSpecName);
+                Log.Warning("[TALENT] No build definition for '{BuildName}' (classSpec={ClassSpec})",
+                    effectiveBuildName, classSpecName);
                 return 0;
             }
 
             uint spent = talentAgent.TotalTalentPointsSpent;
             int allocated = 0;
 
-            Log.Information("[TALENT] Allocating {Available} points for {ClassSpec} (already spent: {Spent})",
-                available, classSpecName, spent);
+            Log.Information("[TALENT] Allocating {Available} points for {BuildName} (already spent: {Spent})",
+                available, effectiveBuildName, spent);
 
             for (int i = (int)spent; i < buildOrder.Length && allocated < (int)available; i++)
             {
@@ -87,18 +92,22 @@ namespace BotRunner.Combat
             uint available = talentAgent.AvailableTalentPoints;
             if (available == 0) return 0;
 
-            var buildOrder = TalentBuildDefinitions.GetBuildOrder(classSpecName);
+            // WWOW_TALENT_BUILD env var overrides the default class/spec build name.
+            var effectiveBuildName = TalentBuildResolver.ResolveEffectiveBuildName(classSpecName);
+
+            var buildOrder = TalentBuildDefinitions.GetBuild(effectiveBuildName);
             if (buildOrder == null)
             {
-                Log.Warning("[TALENT] No build definition for class/spec '{ClassSpec}'", classSpecName);
+                Log.Warning("[TALENT] No build definition for '{BuildName}' (classSpec={ClassSpec})",
+                    effectiveBuildName, classSpecName);
                 return 0;
             }
 
             uint spent = talentAgent.TotalTalentPointsSpent;
             int allocated = 0;
 
-            Log.Information("[TALENT] Allocating {Available} points for {ClassSpec} (already spent: {Spent})",
-                available, classSpecName, spent);
+            Log.Information("[TALENT] Allocating {Available} points for {BuildName} (already spent: {Spent})",
+                available, effectiveBuildName, spent);
 
             for (int i = (int)spent; i < buildOrder.Length && allocated < (int)available; i++)
             {
@@ -119,6 +128,24 @@ namespace BotRunner.Combat
 
             Log.Information("[TALENT] Allocated {Count} talent points", allocated);
             return allocated;
+        }
+    }
+
+    internal static class TalentBuildResolver
+    {
+        /// <summary>
+        /// Returns the WWOW_TALENT_BUILD env var value if set, otherwise falls back to the provided classSpecName.
+        /// </summary>
+        internal static string ResolveEffectiveBuildName(string classSpecName)
+        {
+            var envOverride = Environment.GetEnvironmentVariable("WWOW_TALENT_BUILD");
+            if (!string.IsNullOrEmpty(envOverride))
+            {
+                Log.Information("[TALENT] Using WWOW_TALENT_BUILD override: '{BuildName}' (default was '{ClassSpec}')",
+                    envOverride, classSpecName);
+                return envOverride;
+            }
+            return classSpecName;
         }
     }
 }

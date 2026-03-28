@@ -33,6 +33,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task BuyItemBySlotAsync(ulong vendorGuid, byte vendorSlot, uint quantity = 1, CancellationToken cancellationToken = default);
         Task BuyItemBulkAsync(ulong vendorGuid, uint itemId, uint totalQuantity, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
         Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, ulong bagGuid, byte slot, byte count = 1, CancellationToken cancellationToken = default);
+        Task BuybackItemAsync(ulong vendorGuid, uint buybackSlot, CancellationToken cancellationToken = default);
         Task SellItemAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default);
         Task<uint> SellAllJunkAsync(ulong vendorGuid, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
         Task<uint> SellItemsAsync(ulong vendorGuid, IEnumerable<JunkItem> junkItems, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);

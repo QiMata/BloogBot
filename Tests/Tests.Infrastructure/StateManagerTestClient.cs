@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using BotCommLayer;
 using Communication;
 using Google.Protobuf;
 
@@ -13,7 +14,8 @@ namespace Tests.Infrastructure;
 /// Test client for communicating with WoWStateManager on port 8088.
 /// Provides snapshot queries, action forwarding, and wait-for-ready helpers.
 ///
-/// Wire protocol: [4-byte int32 LE length][protobuf bytes] in both directions.
+/// Wire protocol: [4-byte int32 LE length][1-byte compression flag][protobuf bytes]
+/// in both directions via <see cref="ProtobufCompression"/>.
 /// Server expects <see cref="AsyncRequest"/>, replies with <see cref="StateChangeResponse"/>.
 /// </summary>
 public class StateManagerTestClient : IDisposable
@@ -173,27 +175,26 @@ public class StateManagerTestClient : IDisposable
 
     private async Task<StateChangeResponse> SendRequestCoreAsync(AsyncRequest request, CancellationToken ct)
     {
-        byte[] requestBytes;
+        byte[] encodedRequest;
         lock (_lock)
         {
-            requestBytes = request.ToByteArray();
+            encodedRequest = ProtobufCompression.Encode(request.ToByteArray());
         }
 
-        var lengthPrefix = BitConverter.GetBytes(requestBytes.Length);
-
-        // Send length + payload
-        await _stream!.WriteAsync(lengthPrefix, ct);
-        await _stream.WriteAsync(requestBytes, ct);
+        // Send length + compressed wire payload.
+        await _stream!.WriteAsync(encodedRequest.AsMemory(0, 4), ct);
+        await _stream.WriteAsync(encodedRequest.AsMemory(4), ct);
         await _stream.FlushAsync(ct);
 
-        // Read response length
+        // Read response length (wire payload includes compression flag).
         var responseLengthBuf = new byte[4];
         await ReadExactAsync(_stream, responseLengthBuf, 4, ct);
         var responseLength = BitConverter.ToInt32(responseLengthBuf, 0);
 
-        // Read response payload
-        var responsePayload = new byte[responseLength];
-        await ReadExactAsync(_stream, responsePayload, responseLength, ct);
+        // Read and decode the wire payload.
+        var wirePayload = new byte[responseLength];
+        await ReadExactAsync(_stream, wirePayload, responseLength, ct);
+        var responsePayload = ProtobufCompression.Decode(wirePayload);
 
         var response = new StateChangeResponse();
         response.MergeFrom(responsePayload);

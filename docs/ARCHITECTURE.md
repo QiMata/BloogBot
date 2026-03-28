@@ -56,26 +56,51 @@ BloogBot is a comprehensive World of Warcraft 1.12.1 automation system with two 
 - **Location**: `Services/PathfindingService/`
 
 ### DecisionEngineService
-- **Purpose**: Rule-based decision engine for dynamic bot behavior
-- **Technology**: .NET 8 with ML.NET integration
+- **Purpose**: ML-powered decision engine for adaptive bot behavior
+- **Technology**: .NET 8 with ML.NET (SDCA Maximum Entropy)
 - **Key Features**:
-  - Dynamic rule definition and execution
-  - PHP code execution for business rules
-  - Artisan command support
-  - Audit logging and execution tracking
+  - Multiclass classification of optimal actions from game state
+  - Trained on ActivitySnapshot protobuf data (binary `.bin` files)
+  - SQLite persistence for trained models and weights
+  - File system watcher for automatic retraining
+  - Health-based healing, threat-based targeting, AoE for groups
 - **Location**: `Services/DecisionEngineService/`
 
+### PromptHandlingService
+- **Purpose**: AI/LLM integration for intelligent decision support
+- **Technology**: .NET 8 with multi-provider support
+- **Key Features**:
+  - Multi-provider: Azure OpenAI, OpenAI, Ollama (local), Fake (testing)
+  - Predefined prompt functions: IntentionParser, GMCommandConstruction, CharacterSkillPrioritization, ConfigEditor
+  - Response caching to reduce API calls
+  - Chat history management across sessions
+- **Location**: `Services/PromptHandlingService/`
+
 ### ForegroundBotRunner
-- **Purpose**: Injected bot logic running inside WoW.exe process
+- **Purpose**: Injected bot logic running inside WoW.exe process (gold standard)
 - **Technology**: .NET 8 (injected via Loader.dll CLR hosting)
 - **Key Features**:
   - Direct memory reading/writing for game state access
-  - Object Manager enumeration (units, players, items, game objects)
-  - GrindBot state machine (Idle → FindTarget → Combat → Loot → Rest → Dead)
-  - Combat rotations for all 9 classes
+  - Object Manager enumeration (units, players, items, game objects, containers)
+  - 14 UI frame handlers (Login, CharSelect, RealmSelect, Gossip, Quest, Loot, Merchant, Craft, Trainer, Talent, Taxi, Trade, QuestGreeting, Dialog)
+  - Signal event hooks (LEARNED_SPELL, CHAT_MSG_SKILL, UI_ERROR, etc.)
+  - Packet capture (send/recv hooks on NetClient::Send/ProcessMessage)
+  - Connection state machine (Disconnected → Authenticating → CharSelect → InWorld → Transferring)
+  - Anti-Warden protection (module/memory scanning hooks)
   - Movement recording system (JSON/protobuf output)
-  - Thread synchronization for safe main-thread execution
+  - Thread synchronization via PostMessage(WM_USER) for safe main-thread execution
 - **Location**: `Services/ForegroundBotRunner/`
+
+### BackgroundBotRunner
+- **Purpose**: Headless bot execution without game client
+- **Technology**: .NET 8 Worker Service using WoWSharpClient
+- **Key Features**:
+  - Pure C# WoW protocol implementation (no WoW.exe needed)
+  - Behavior tree orchestration via BotRunner's IBotTask system
+  - 30 network client components (combat, vendor, quest, guild, party, auction, bank, mail, etc.)
+  - Horizontal scalability (multiple instances for multi-boxing)
+  - State synchronization with StateManager via protobuf snapshots
+- **Location**: `Services/BackgroundBotRunner/`
 
 ## Core Libraries
 
@@ -112,12 +137,16 @@ BloogBot is a comprehensive World of Warcraft 1.12.1 automation system with two 
 - **Location**: `Exports/BotCommLayer/`
 
 ### BotRunner
-- **Purpose**: Core bot execution logic and client integration
+- **Purpose**: Core bot orchestration — behavior trees, action dispatch, task stack
 - **Technology**: Multi-target (.NET 8/.NET Framework 4.8)
 - **Key Features**:
-  - Bot behavior implementations
-  - Client adapter patterns
-  - Activity tracking and monitoring
+  - 75 CharacterAction types dispatched via behavior tree sequences
+  - 26 BotTask implementations (combat, movement, questing, gathering, fishing, dungeoneering, vendor, trainer, etc.)
+  - Behavior tree engine (Xas.FluentBehaviourTree) rebuilt per incoming action
+  - Dual-path sequences: FG (frame-based) with BG (packet-based) fallback
+  - Autonomous death recovery (ReleaseCorpse → RetrieveCorpse)
+  - Deterministic login state machine (Login → RealmSelect → CharSelect → CreateChar → EnterWorld)
+  - Pathfinding client integration with NavigationPath and frame-ahead waypoint acceptance
 - **Location**: `Exports/BotRunner/`
 
 ## Native Components
@@ -143,33 +172,59 @@ BloogBot is a comprehensive World of Warcraft 1.12.1 automation system with two 
 - **Location**: `Exports/Navigation/`
 
 ### FastCall (C++)
-- **Purpose**: Legacy function call support for older WoW clients
-- **Technology**: C++
+- **Purpose**: SEH-protected native WoW function call wrappers
+- **Technology**: C++ (Win32, x86)
 - **Key Features**:
-  - Custom calling conventions
-  - Legacy client compatibility
-  - Performance-optimized function calls
+  - __try/__except wrappers for all WoW internal function calls
+  - SafeCallback1/SafeCallback3 exports for managed→native interop
+  - Prevents AccessViolation crashes from propagating to .NET
+  - Functions: BuyVendorItem, EnumerateVisibleObjects, GetCreatureRank/Type, GetItemCacheEntry, GetObjectPtr, GetPlayerGuid, GetUnitReaction, IsSpellOnCooldown, LootSlot, ReleaseCorpse, RetrieveCorpse, SetTarget, SellItemByGuid, SendMovementUpdate, SetControlBit, SetFacing, UseItem
 - **Location**: `Exports/FastCall/`
+
+## Bot Profiles
+
+### BotProfiles (27 Class/Spec Combinations)
+- **Purpose**: Combat rotation and behavior profiles for all WoW classes
+- **Technology**: .NET 8, extends BotBase abstract factory
+- **Coverage**: All 9 classes × 3 specs = 27 profiles
+  - Warrior (Arms, Fury, Protection), Rogue (Assassination, Combat, Subtlety)
+  - Hunter (BM, MM, Survival), Druid (Balance, Feral, Restoration)
+  - Paladin (Holy, Protection, Retribution), Priest (Discipline, Holy, Shadow)
+  - Shaman (Elemental, Enhancement, Restoration), Mage (Arcane, Fire, Frost)
+  - Warlock (Affliction, Demonology, Destruction)
+- **Each Profile Implements**: RestTask, PullTargetTask, BuffTask, PvERotationTask, PvPRotationTask
+- **Extra Tasks**: HealTask (healers + hybrid DPS), SummonPetTask (hunter/warlock), ConjureItemsTask (mage)
+- **Location**: `BotProfiles/`
 
 ## UI and Management
 
 ### WoWStateManagerUI
 - **Purpose**: WPF-based management interface for WoWStateManager
-- **Technology**: .NET 8 WPF
+- **Technology**: .NET 8 WPF (MVVM)
 - **Key Features**:
-  - Bot status monitoring
-  - Character state display
-  - Configuration management
+  - Real-time bot monitoring dashboard
+  - Character management (add/remove/configure)
+  - Server status dashboard (MaNGOS connectivity)
+  - Big Five personality configuration with decimal precision
 - **Location**: `UI/WoWStateManagerUI/`
+
+### .NET Aspire AppHost
+- **Purpose**: Containerized WoW server orchestration for development
+- **Technology**: .NET 8 Aspire
+- **Key Features**:
+  - Docker container orchestration for MySQL and MaNGOS
+  - Automated port mapping and service discovery
+  - Data persistence via volume management
+- **Location**: `UI/Systems/Systems.AppHost/`
 
 ## Data Flow and Communication
 
 ### Injected Client Flow
-1. **WoWStateManager** launches WoW.exe process
-2. **Loader.dll** injected into WoW process
-3. **Loader** initializes .NET CLR inside WoW, loads ForegroundBotRunner
-4. **ForegroundBotRunner** hooks EndScene, starts ObjectManager polling
-5. **GrindBot** state machine drives gameplay (find target → combat → loot → rest)
+1. **WoWStateManager** launches WoW.exe via CreateProcess
+2. **Loader.dll** injected via VirtualAllocEx + WriteProcessMemory + CreateRemoteThread(LoadLibraryW)
+3. **Loader** bootstraps .NET 8 CLR, loads ForegroundBotRunner.dll
+4. **ForegroundBotRunner** installs hooks (SignalEvent, PacketLogger), starts ObjectManager enumeration
+5. **BotRunner** behavior tree drives gameplay via IPC actions from StateManager
 6. **PathfindingService** provides navigation paths via TCP/protobuf on port 5001
 
 ### Headless Client Flow
@@ -270,10 +325,12 @@ The project includes a comprehensive GitHub Actions workflow that provides:
 5. Update service registration in host
 
 ### Extending Bot Behavior
-1. Create new states implementing `IBotState`
-2. Add state factory methods to dependency container
-3. Implement state transitions in StateManager
-4. Test state isolation and interrupt handling
+1. Add new `CharacterAction` enum value in `GameData.Core/Enums/CharacterAction.cs`
+2. Add matching `ActionType` value in `communication.proto` and regenerate
+3. Map proto→enum in `BotRunnerService.ActionMapping.cs`
+4. Build sequence in `BotRunnerService.ActionDispatch.cs` (support both FG frame + BG packet paths)
+5. If complex, implement as `IBotTask` in `BotRunner/Tasks/`
+6. Add unit tests + LiveValidation integration test
 
 ### Debugging Injection
 1. Build in Debug configuration with x86 platform
@@ -295,8 +352,16 @@ The project includes a comprehensive GitHub Actions workflow that provides:
 - **JSON Config Files**: Hotspot patrol paths, character definitions
 - **Protobuf Messages**: Inter-service communication (BotCommLayer)
 
-### Test Infrastructure
-- **Navigation.Physics.Tests**: Physics engine calibration against recorded movement data (42/43 passing)
-- **WoWSharpClient.Tests**: Protocol packet format validation (937+ tests)
-- **BotRunner.Tests**: Integration tests (login, movement recording, screen detection)
-- **PathfindingService.Tests**: Pathfinding and physics interop tests
+### Test Infrastructure (13 Projects, 280+ Test Files)
+- **BotRunner.Tests**: 80 test files — combat, movement, fishing, gathering, equipment, LiveValidation integration tests
+- **Navigation.Physics.Tests**: 63 test files — physics engine, terrain, collision, swimming, transport, AABB
+- **WoWSharpClient.Tests**: 53 test files — network agents, packet handlers, object updates (937+ tests)
+- **WowSharpClient.NetworkTests**: 8 test files — TCP, auth, packet pipeline, reconnection
+- **RecordedTests.Shared.Tests**: 27 test files — test orchestration, recording, storage (Azure/S3/local)
+- **WWoWBot.AI.Tests**: 12 test files — bot state machine, advisory system, plugin catalog
+- **ForegroundBotRunner.Tests**: 12 test files — injection, memory offsets, packet capture, FG/BG parity
+- **PromptHandlingService.Tests**: 8 test files — AI decision engine, intent parsing, GM commands
+- **PathfindingService.Tests**: 7 test files — socket integration, dynamic objects, diagnostics
+- **RecordedTests.PathingTests.Tests**: 6 test files — recorded path replay, configuration
+- **WoWStateManagerUI.Tests**: 3 test files — WPF converter tests
+- **WoWSimulation.Tests**: 1 test file — mock MaNGOS server

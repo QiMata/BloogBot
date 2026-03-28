@@ -64,28 +64,26 @@ namespace BotCommLayer
             {
                 while (_isRunning && client.Connected)
                 {
-                    // Read incoming message length
+                    // Read incoming message length (includes compression flag)
                     byte[] lengthBuffer = new byte[4];
                     ReadExact(stream, lengthBuffer);
                     int length = BitConverter.ToInt32(lengthBuffer, 0);
 
-                    // Read message payload
-                    byte[] buffer = new byte[length];
-                    ReadExact(stream, buffer);
+                    // Read wire payload (flag + protobuf data)
+                    byte[] wirePayload = new byte[length];
+                    ReadExact(stream, wirePayload);
 
-                    // Deserialize request
+                    // Decode (decompress if needed) and deserialize
+                    byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
                     TRequest request = new();
-                    request.MergeFrom(buffer);
+                    request.MergeFrom(protobufBytes);
 
                     // Handle request -> get response
                     TResponse response = HandleRequest(request);
 
-                    // Serialize response
-                    byte[] responseBytes = response.ToByteArray();
-                    byte[] responseLength = BitConverter.GetBytes(responseBytes.Length);
-
-                    stream.Write(responseLength);
-                    stream.Write(responseBytes);
+                    // Encode response (compress if above threshold)
+                    byte[] encodedResponse = ProtobufCompression.Encode(response.ToByteArray());
+                    stream.Write(encodedResponse, 0, encodedResponse.Length);
                 }
             }
             catch (Exception ex)

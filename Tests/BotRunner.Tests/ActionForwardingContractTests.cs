@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using BotCommLayer;
 using Communication;
 using Game;
 using Google.Protobuf;
@@ -108,6 +109,62 @@ public class ActionForwardingContractTests
         var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
 
         Assert.Equal("", deserialized.ActionForward.AccountName);
+    }
+
+    [Fact]
+    public void AsyncRequest_CompressedWireRoundTrip_PreservesActionForwardPayload()
+    {
+        var request = new AsyncRequest
+        {
+            Id = 42,
+            ActionForward = new ActionForwardRequest
+            {
+                AccountName = "TESTBOT1",
+                Action = new ActionMessage
+                {
+                    ActionType = ActionType.SendChat,
+                    Parameters = { new RequestParameter { StringParam = "/say compressed" } }
+                }
+            }
+        };
+
+        byte[] wireBytes = ProtobufCompression.Encode(request.ToByteArray());
+        int wireLength = BitConverter.ToInt32(wireBytes, 0);
+        byte[] wirePayload = wireBytes.Skip(4).Take(wireLength).ToArray();
+        byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
+        var deserialized = AsyncRequest.Parser.ParseFrom(protobufBytes);
+
+        Assert.Equal(42ul, deserialized.Id);
+        Assert.Equal("TESTBOT1", deserialized.ActionForward.AccountName);
+        Assert.Equal(ActionType.SendChat, deserialized.ActionForward.Action.ActionType);
+        Assert.Equal("/say compressed", deserialized.ActionForward.Action.Parameters[0].StringParam);
+    }
+
+    [Fact]
+    public void StateChangeResponse_CompressedWireRoundTrip_PreservesCompressedSnapshotPayload()
+    {
+        var response = new StateChangeResponse
+        {
+            Response = ResponseResult.Success
+        };
+        response.Snapshots.Add(new WoWActivitySnapshot
+        {
+            AccountName = new string('A', 4096),
+            CharacterName = new string('B', 4096),
+            ScreenState = "InWorld"
+        });
+
+        byte[] wireBytes = ProtobufCompression.Encode(response.ToByteArray());
+        int wireLength = BitConverter.ToInt32(wireBytes, 0);
+        byte[] wirePayload = wireBytes.Skip(4).Take(wireLength).ToArray();
+        byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
+        var deserialized = StateChangeResponse.Parser.ParseFrom(protobufBytes);
+
+        Assert.Equal(ResponseResult.Success, deserialized.Response);
+        Assert.Single(deserialized.Snapshots);
+        Assert.Equal("InWorld", deserialized.Snapshots[0].ScreenState);
+        Assert.Equal(new string('A', 4096), deserialized.Snapshots[0].AccountName);
+        Assert.Equal(new string('B', 4096), deserialized.Snapshots[0].CharacterName);
     }
 
     // ===== Dead/ghost state detection =====
@@ -249,8 +306,10 @@ public class ActionForwardingContractTests
     private static CharacterStateSocketListener CreateListener(params string[] accountNames)
     {
         var settings = accountNames.Select(a => new CharacterSettings { AccountName = a }).ToList();
+        var plannerLogger = NullLoggerFactory.Instance.CreateLogger<WoWStateManager.Progression.ProgressionPlanner>();
+        var planner = new WoWStateManager.Progression.ProgressionPlanner(plannerLogger);
         var logger = NullLoggerFactory.Instance.CreateLogger<CharacterStateSocketListener>();
-        return new CharacterStateSocketListener(settings, "127.0.0.1", 0, null, logger);
+        return new CharacterStateSocketListener(settings, "127.0.0.1", 0, null, planner, logger);
     }
 
     [Fact]

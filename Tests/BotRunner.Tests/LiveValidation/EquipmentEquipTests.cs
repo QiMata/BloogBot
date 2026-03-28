@@ -93,7 +93,13 @@ public class EquipmentEquipTests
         {
             _output.WriteLine($"  [{label}] Clearing mainhand via .reset items before equip test.");
             await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
-            await Task.Delay(1500);
+            // Poll for mainhand to clear instead of fixed delay
+            await _bot.WaitForSnapshotConditionAsync(
+                account,
+                s => !(s?.Player?.Inventory.TryGetValue(MainhandSlot, out ulong g) == true && g != 0),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 300,
+                progressLabel: $"{label} reset-items");
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             playerBefore = snap.Player!;
@@ -181,7 +187,6 @@ public class EquipmentEquipTests
             Parameters = { new RequestParameter { IntParam = (int)LiveBotFixture.TestItems.WornMace } }
         });
         Assert.Equal(ResponseResult.Success, equipResult);
-        await Task.Delay(500);
 
         WoWActivitySnapshot? after = null;
         Game.WoWPlayer? playerAfter = null;

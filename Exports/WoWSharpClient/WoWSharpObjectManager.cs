@@ -351,6 +351,45 @@ namespace WoWSharpClient
 
         public List<Cooldown> Cooldowns { get; internal set; } = [];
 
+        // Quest objective progress tracking (updated from SMSG_QUESTUPDATE_ADD_KILL / ADD_ITEM)
+        private readonly ConcurrentDictionary<(uint QuestId, uint ObjectId), QuestObjectiveProgress> _questObjectives = new();
+
+        /// <summary>
+        /// Real-time quest objective progress, keyed by (QuestId, ObjectId).
+        /// Updated from SMSG_QUESTUPDATE_ADD_KILL and SMSG_QUESTUPDATE_ADD_ITEM packets.
+        /// </summary>
+        public IReadOnlyDictionary<(uint QuestId, uint ObjectId), QuestObjectiveProgress> QuestObjectives => _questObjectives;
+
+        /// <summary>
+        /// Updates kill-type quest objective progress. Called from QuestHandler.
+        /// </summary>
+        public void UpdateQuestKillProgress(uint questId, uint creatureEntry, uint current, uint required)
+        {
+            var key = (questId, creatureEntry);
+            _questObjectives.AddOrUpdate(key,
+                new QuestObjectiveProgress(questId, creatureEntry, current, required, QuestObjectiveTypes.Kill),
+                (_, existing) => existing with { CurrentCount = current, RequiredCount = required });
+
+            WoWSharpEventEmitter.Instance.FireOnQuestProgress();
+
+            if (current >= required)
+                WoWSharpEventEmitter.Instance.FireOnQuestObjectiveComplete();
+        }
+
+        /// <summary>
+        /// Updates item-collection quest objective progress. Called from QuestHandler.
+        /// The ADD_ITEM packet does not include the required count or questId — only itemId and current count.
+        /// </summary>
+        public void UpdateQuestItemProgress(uint itemId, uint current)
+        {
+            // ADD_ITEM has no questId — use 0 as a sentinel; callers should match by itemId
+            var key = (0u, itemId);
+            _questObjectives.AddOrUpdate(key,
+                new QuestObjectiveProgress(0, itemId, current, 0, QuestObjectiveTypes.Collect),
+                (_, existing) => existing with { CurrentCount = current });
+
+            WoWSharpEventEmitter.Instance.FireOnQuestProgress();
+        }
 
         private HighGuid _playerGuid = new(new byte[4], new byte[4]);
 

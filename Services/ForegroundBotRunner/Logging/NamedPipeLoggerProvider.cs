@@ -3,7 +3,8 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
-using System.Text.Json;
+using Communication;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
 #if NET8_0_OR_GREATER
@@ -22,7 +23,6 @@ namespace ForegroundBotRunner.Logging
         private readonly ConcurrentDictionary<string, NamedPipeLogger> _loggers = new(StringComparer.OrdinalIgnoreCase);
 
         private NamedPipeClientStream? _pipe;
-        private StreamWriter? _writer;
         private readonly object _connectLock = new();
         private volatile bool _connected;
         private volatile bool _disposed;
@@ -61,7 +61,7 @@ namespace ForegroundBotRunner.Logging
 
             try
             {
-                var entry = new
+                var entry = new LogEntry
                 {
                     Level = level,
                     Category = category,
@@ -69,13 +69,15 @@ namespace ForegroundBotRunner.Logging
                     Timestamp = DateTime.UtcNow.ToString("o")
                 };
 
-                var json = JsonSerializer.Serialize(entry);
+                var bytes = entry.ToByteArray();
+                var lengthPrefix = BitConverter.GetBytes(bytes.Length);
 
                 lock (_connectLock)
                 {
-                    if (_writer == null || !_connected) return;
-                    _writer.WriteLine(json);
-                    _writer.Flush();
+                    if (_pipe == null || !_connected) return;
+                    _pipe.Write(lengthPrefix, 0, 4);
+                    _pipe.Write(bytes, 0, bytes.Length);
+                    _pipe.Flush();
                 }
             }
             catch (IOException)
@@ -85,7 +87,7 @@ namespace ForegroundBotRunner.Logging
             }
             catch
             {
-                // Swallow — logging must never throw
+                // Swallow ï¿½ logging must never throw
             }
         }
 
@@ -102,20 +104,16 @@ namespace ForegroundBotRunner.Logging
                 try
                 {
                     // Dispose old pipe if any
-                    _writer?.Dispose();
                     _pipe?.Dispose();
 
                     _pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
-                    _pipe.Connect(timeout: 500); // short timeout — don't block the bot
-                    _writer = new StreamWriter(_pipe, Encoding.UTF8, leaveOpen: false) { AutoFlush = false };
+                    _pipe.Connect(timeout: 500); // short timeout â€” don't block the bot
                     _connected = true;
                 }
                 catch
                 {
                     _connected = false;
-                    _writer?.Dispose();
                     _pipe?.Dispose();
-                    _writer = null;
                     _pipe = null;
                 }
             }
@@ -129,7 +127,6 @@ namespace ForegroundBotRunner.Logging
 
             lock (_connectLock)
             {
-                _writer?.Dispose();
                 _pipe?.Dispose();
             }
 

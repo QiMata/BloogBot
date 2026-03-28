@@ -122,5 +122,12 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("CharacterGender", NullValueHandling = NullValueHandling.Ignore)]
         public string? CharacterGender { get; set; }
+
+        /// <summary>
+        /// Optional build configuration: spec selection, talent build, gold target, professions, quests.
+        /// If null/omitted, uses default spec for the character's class.
+        /// </summary>
+        [JsonProperty("BuildConfig", NullValueHandling = NullValueHandling.Ignore)]
+        public CharacterBuildConfig? BuildConfig { get; set; }
     }
 }

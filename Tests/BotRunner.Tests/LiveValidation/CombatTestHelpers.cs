@@ -151,12 +151,13 @@ internal static class CombatTestHelpers
         await bot.SendGmChatCommandAsync(observerAccount, ".group remove");
         await bot.SendGmChatCommandAsync(observerAccount, ".gm on");
 
-        // Teleport FG observer near the mob area. BotTeleportAsync uses .go xyz
-        // via bot chat which works for FG (WoW.exe handles its own collision/Z).
+        // Teleport FG observer near the mob area first, then start following
         await bot.BotTeleportAsync(observerAccount, MapId, MobAreaX - 10f, MobAreaY - 10f, MobAreaZ);
-        await Task.Delay(500);
-        await FaceBotTowardTargetBotAsync(bot, observerAccount, combatAccount);
-        output.WriteLine($"  [FG-OBSERVER] near mob area, GM on.");
+        await bot.WaitForTeleportSettledAsync(observerAccount, MobAreaX - 10f, MobAreaY - 10f);
+
+        // Start FG following the combat bot so it shadows during the fight
+        var followResult = await bot.StartFollowAsync(observerAccount, combatAccount, followDistance: 8.0f);
+        output.WriteLine($"  [FG-OBSERVER] near mob area, GM on, follow={followResult}.");
     }
 
     private static async Task FaceBotTowardTargetBotAsync(

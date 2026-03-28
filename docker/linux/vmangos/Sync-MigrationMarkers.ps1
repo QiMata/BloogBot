@@ -2,11 +2,11 @@ param(
     [string]$VmangosRepoPath = "D:\vmangos",
     [string]$GitRef = "origin/development",
     [ValidateSet("host", "docker")]
-    [string]$DbMode = "host",
-    [string]$DbContainerName = "",
+    [string]$DbMode = "docker",
+    [string]$DbContainerName = "maria-db",
     [string]$DbHost = "127.0.0.1",
     [int]$DbPort = 3306,
-    [string]$MySqlExePath = "D:\MaNGOS\mysql5\bin\mysql.exe",
+    [string]$MySqlExePath = "",
     [string]$DbUser = "root",
     [string]$DbPassword = "root",
     [switch]$FetchOrigin

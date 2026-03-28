@@ -8,44 +8,45 @@ The local Docker engine on this machine is currently running Linux containers, s
 
 ### Scope
 
-- `vmangos-realmd`: auth server container using the local `D:\vmangos-server\realmd.conf` as the source config.
-- `vmangos-mangosd`: world server container using the local `D:\vmangos-server\mangosd.conf` and `D:\MaNGOS\data` extracted client data.
-- Host MySQL: the existing `D:\MaNGOS\mysql5` installation serves the `realmd`, `mangos`, `characters`, and `logs` databases on `127.0.0.1:3306`.
+- `realmd`: auth server container using the local `D:\vmangos-server\realmd.conf` as the source config.
+- `mangosd`: world server container using the local `D:\vmangos-server\mangosd.conf` and `D:\MaNGOS\data` extracted client data.
+- Database: centralized `maria-db` MariaDB 10.11 container (shared across all game servers). Defined in `E:\repos\Final Fantasy XI\Docker\database\docker-compose.yml` and connected via the `gameserver-net` Docker network.
+
+### Prerequisites
+
+The `maria-db` container and `gameserver-net` network must be running before starting the WWoW stack:
+
+```powershell
+cd "E:\repos\Final Fantasy XI\Docker\database"
+docker compose up -d
+```
 
 ### Commands
-
-Start the existing host MySQL install:
-
-```powershell
-Start-Process -FilePath D:\MaNGOS\mysql5\bin\mysqld.exe `
-  -ArgumentList '--console --max_allowed_packet=128M' `
-  -WorkingDirectory D:\MaNGOS\mysql5 `
-  -RedirectStandardOutput .\logs\service-host\vmangos-mysql.stdout.log `
-  -RedirectStandardError .\logs\service-host\vmangos-mysql.stderr.log
-```
-
-If the host DB is behind the current vmangos server image, sync the missing migrations first:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMarkers.ps1 -FetchOrigin
-```
 
 Start the Linux vmangos stack:
 
 ```powershell
-docker compose -f .\docker-compose.vmangos-linux.yml up -d vmangos-realmd vmangos-mangosd
+docker compose -f .\docker-compose.vmangos-linux.yml up -d realmd mangosd
 ```
 
 Follow world-server logs:
 
 ```powershell
-docker compose -f .\docker-compose.vmangos-linux.yml logs -f vmangos-mangosd
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f mangosd
 ```
 
 Stop the Linux vmangos stack:
 
 ```powershell
 docker compose -f .\docker-compose.vmangos-linux.yml down
+```
+
+### Database Migrations
+
+Sync VMaNGOS migrations against the `maria-db` container:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMarkers.ps1 -FetchOrigin
 ```
 
 ### Notes
@@ -56,17 +57,14 @@ docker compose -f .\docker-compose.vmangos-linux.yml down
   - `LogsDir`
   - `HonorDir`
   - `SOAP.IP`
-- The Linux stack now uses the existing host MySQL install at `host.docker.internal:3306` and publishes:
-  - MariaDB on `127.0.0.1:3306`
+- The WWoW stack connects to `maria-db` via the `gameserver-net` Docker network (container-to-container, no host port needed).
+- Published ports:
   - `realmd` on `127.0.0.1:3724`
   - `mangosd` on `127.0.0.1:8085`
   - SOAP on `127.0.0.1:7878`
-- `realmd` and `mangosd` now default `WWOW_VMANGOS_DB_HOST` to `host.docker.internal`, with an explicit `host-gateway` mapping so the Linux containers can reach the host DB.
-- `Sync-MigrationMarkers.ps1` now defaults to the host MySQL install (`D:\MaNGOS\mysql5\bin\mysql.exe`, `127.0.0.1:3306`) and can still target a DB container by passing `-DbMode docker -DbContainerName <name>`.
 - Default host paths are:
   - `D:/vmangos-server`
   - `D:/MaNGOS/data`
-  - `D:/MaNGOS/mysql5`
 - Override them with:
   - `WWOW_VMANGOS_SERVER_CONFIG_DIR`
   - `WWOW_VMANGOS_DATA_DIR`

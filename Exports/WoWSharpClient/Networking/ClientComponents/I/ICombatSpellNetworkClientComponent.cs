@@ -192,6 +192,14 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         void UpdateCurrentPet(ulong? petGuid);
 
         /// <summary>
+        /// Sets the pet's react state (Passive, Defensive, Aggressive).
+        /// Sends CMSG_PET_ACTION with the react state packed via ACT_REACTION.
+        /// </summary>
+        /// <param name="reactState">The desired react state.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        Task SetPetReactStateAsync(PetReactState reactState, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Updates combat state based on server information.
         /// </summary>
         /// <param name="inCombat">Whether the character is in combat.</param>

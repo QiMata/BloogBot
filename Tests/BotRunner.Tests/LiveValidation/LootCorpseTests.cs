@@ -110,7 +110,7 @@ public class LootCorpseTests
         if (mobPos != null)
         {
             await _bot.BotTeleportAsync(account, MapId, mobPos.X + 2f, mobPos.Y, mobPos.Z + 3f);
-            await Task.Delay(1500);
+            await _bot.WaitForTeleportSettledAsync(account, mobPos.X + 2f, mobPos.Y);
         }
 
         // Step 6: Kill the mob with StartMeleeAttack (natural combat, no GM shortcuts)
@@ -156,7 +156,6 @@ public class LootCorpseTests
 
         // Step 7: Loot the corpse
         _output.WriteLine($"  [{label}] Step 7: Loot corpse via ActionType.LootCorpse");
-        await Task.Delay(500);
         var lootResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.LootCorpse,
@@ -164,7 +163,6 @@ public class LootCorpseTests
         });
         _output.WriteLine($"  [{label}] LootCorpse dispatch result: {lootResult}");
         Assert.Equal(ResponseResult.Success, lootResult);
-        await Task.Delay(500); // Wait for loot to process
 
         // Step 8: Verify inventory changed
         _output.WriteLine($"  [{label}] Step 8: Verify inventory changed");

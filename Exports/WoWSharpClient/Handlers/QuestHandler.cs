@@ -47,11 +47,11 @@ public static class QuestHandler
     /// <summary>
     /// Parses SMSG_QUESTUPDATE_ADD_KILL (0x199).
     /// Format: uint32 questId, uint32 creatureEntry, uint32 killCount, uint32 requiredCount, uint64 guid
-    /// Updates kill counters in the player's quest log.
+    /// Updates kill counters in the player's quest log and notifies the ObjectManager.
     /// </summary>
     public static void HandleQuestUpdateAddKill(Opcode opcode, byte[] data)
     {
-        if (data.Length < 16)
+        if (data.Length < 24) // 4+4+4+4+8 = 24 bytes minimum
         {
             Log.Warning("[QuestHandler] Truncated SMSG_QUESTUPDATE_ADD_KILL ({Len} bytes)", data.Length);
             return;
@@ -62,8 +62,34 @@ public static class QuestHandler
         uint creatureEntry = reader.ReadUInt32();
         uint killCount = reader.ReadUInt32();
         uint requiredCount = reader.ReadUInt32();
+        ulong creatureGuid = reader.ReadUInt64(); // packed GUID of killed creature
 
-        Log.Debug("[QuestHandler] SMSG_QUESTUPDATE_ADD_KILL quest={QuestId} creature={Creature} count={Count}/{Required}",
-            questId, creatureEntry, killCount, requiredCount);
+        Log.Information("[QuestHandler] SMSG_QUESTUPDATE_ADD_KILL quest={QuestId} creature={Creature} (guid={Guid:X}) count={Count}/{Required}",
+            questId, creatureEntry, creatureGuid, killCount, requiredCount);
+
+        WoWSharpObjectManager.Instance.UpdateQuestKillProgress(questId, creatureEntry, killCount, requiredCount);
+    }
+
+    /// <summary>
+    /// Parses SMSG_QUESTUPDATE_ADD_ITEM (0x19A).
+    /// Format: uint32 itemId, uint32 itemCount
+    /// Updates item collection progress in the ObjectManager.
+    /// </summary>
+    public static void HandleQuestUpdateAddItem(Opcode opcode, byte[] data)
+    {
+        if (data.Length < 8) // 4+4 = 8 bytes minimum
+        {
+            Log.Warning("[QuestHandler] Truncated SMSG_QUESTUPDATE_ADD_ITEM ({Len} bytes)", data.Length);
+            return;
+        }
+
+        using var reader = new BinaryReader(new MemoryStream(data));
+        uint itemId = reader.ReadUInt32();
+        uint itemCount = reader.ReadUInt32();
+
+        Log.Information("[QuestHandler] SMSG_QUESTUPDATE_ADD_ITEM item={ItemId} count={Count}",
+            itemId, itemCount);
+
+        WoWSharpObjectManager.Instance.UpdateQuestItemProgress(itemId, itemCount);
     }
 }

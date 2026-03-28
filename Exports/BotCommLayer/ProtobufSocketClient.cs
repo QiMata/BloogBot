@@ -259,21 +259,22 @@ namespace BotCommLayer
             if (_stream == null)
                 throw new InvalidOperationException("No active stream.");
 
-            byte[] messageBytes = request.ToByteArray();
-            byte[] length = BitConverter.GetBytes(messageBytes.Length);
+            // Encode with compression (flag + optional GZip)
+            byte[] encoded = ProtobufCompression.Encode(request.ToByteArray());
+            _stream.Write(encoded, 0, encoded.Length);
 
-            _stream.Write(length);
-            _stream.Write(messageBytes);
-
+            // Read response length (includes compression flag)
             byte[] lengthBuffer = new byte[4];
             ReadExact(_stream, lengthBuffer);
             int responseLength = BitConverter.ToInt32(lengthBuffer, 0);
 
-            byte[] buffer = new byte[responseLength];
-            ReadExact(_stream, buffer);
+            // Read wire payload and decode (decompress if needed)
+            byte[] wirePayload = new byte[responseLength];
+            ReadExact(_stream, wirePayload);
+            byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
 
             TResponse response = new();
-            response.MergeFrom(buffer);
+            response.MergeFrom(protobufBytes);
 
             return response;
         }

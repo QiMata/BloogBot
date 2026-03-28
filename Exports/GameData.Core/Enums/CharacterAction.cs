@@ -89,4 +89,5 @@ public enum CharacterAction
     StartDungeoneering, // Queue DungeoneeringTask to navigate dungeon waypoints, pull encounters, and clear the dungeon.
     ConvertToRaid,      // Convert the current party to a raid group (leader only).
     ChangeRaidSubgroup, // Move a player to a specific raid subgroup (0-7). Params: string playerName, int subGroup.
+    FollowTarget,       // Continuously follow another player by GUID, maintaining follow distance. Params: ulong targetGuid, float distance.
 }

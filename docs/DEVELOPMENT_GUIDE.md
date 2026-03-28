@@ -5,9 +5,10 @@ This guide provides developer onboarding information for contributing to the Wes
 ## Prerequisites
 
 ### Required Software
-- **Visual Studio 2022** (Community or higher)
+- **Visual Studio 2025 Community** (or higher)
   - Workloads: .NET Desktop Development, Desktop Development with C++
   - Individual Components: .NET 8.0 SDK, Windows 10/11 SDK
+  - Platform Toolset: v145
 - **Git** for version control
 - **WoW Game Client** (1.12.1, 2.4.3, or 3.3.5a) for testing
 
@@ -22,10 +23,10 @@ This guide provides developer onboarding information for contributing to the Wes
 
 ```powershell
 git clone https://github.com/QiMata/BloogBot.git
-cd BloogBot
+cd "Westworld of Warcraft"
 ```
 
-Open `BloogBot.sln` in Visual Studio 2022.
+Open `WestworldOfWarcraft.sln` in Visual Studio 2025.
 
 ### 2. Restore Dependencies
 
@@ -82,16 +83,23 @@ BloogBot.AI       ? Advanced AI coordination
 
 | When working on... | Look at... |
 |-------------------|------------|
-| Bot behavior/states | `Services/StateManager/` |
-| Bot behavior trees | `Exports/BotRunner/BotRunnerService.cs` |
+| Bot behavior/states | `Services/WoWStateManager/` |
+| Bot behavior trees & action dispatch | `Exports/BotRunner/BotRunnerService.*.cs` |
+| Adding a new action type | `GameData.Core/Enums/CharacterAction.cs` → `BotCommLayer/communication.proto` → `BotRunner/ActionMapping.cs` → `BotRunner/ActionDispatch.cs` |
 | Network protocol (headless) | `Exports/WoWSharpClient/` |
 | Memory access (injected) | `Services/ForegroundBotRunner/Mem/`, `/Statics/` |
+| FG UI frame automation | `Services/ForegroundBotRunner/Frames/` (14 frames) |
+| FG packet hooks | `Services/ForegroundBotRunner/Mem/Hooks/` (PacketLogger, SignalEventManager, ConnectionStateMachine) |
 | Game object models (shared) | `Exports/GameData.Core/` |
-| Pathfinding | `Services/PathfindingService/`, `Exports/Navigation/` |
-| AI decisions | `BloogBot.AI/`, `Services/DecisionEngineService/` |
+| Pathfinding & physics | `Services/PathfindingService/`, `Exports/Navigation/` |
+| AI/ML decisions | `Services/DecisionEngineService/`, `Services/PromptHandlingService/` |
 | IPC messaging | `Exports/BotCommLayer/` |
 | Native injection | `Exports/Loader/`, `Exports/FastCall/` |
 | Headless bot setup | `Services/BackgroundBotRunner/` |
+| Combat profiles (27 specs) | `BotProfiles/` |
+| LiveValidation integration tests | `Tests/BotRunner.Tests/LiveValidation/` |
+| Physics replay tests | `Tests/Navigation.Physics.Tests/` |
+| Docker/server deployment | `docker-compose.vmangos-linux.yml`, `docs/DOCKER_STACK.md` |
 
 > **See [ARCHITECTURE.md](ARCHITECTURE.md#botrunner-architecture) for the BotRunner architecture diagram.**
 

@@ -33,6 +33,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages offering money in the trade.</returns>
         private IBehaviourTreeNode BuildOfferMoneySequence(int copperCount) => new BehaviourTreeBuilder()
             .Sequence("Offer Money Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the bot has a valid trade window open
                 .Condition("Trade Window Valid", time => _objectManager.TradeFrame.IsOpen)
 
@@ -57,6 +64,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages offering the item in the trade.</returns>
         private IBehaviourTreeNode BuildOfferItemSequence(int bagId, int slotId, int quantity, int tradeWindowSlot) => new BehaviourTreeBuilder()
             .Sequence("Offer Item Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the bot has a valid trade window open
                 .Condition("Trade Window Valid", time => _objectManager.TradeFrame.IsOpen)
 
@@ -77,6 +91,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages accepting the trade.</returns>
         private IBehaviourTreeNode AcceptTradeSequence => new BehaviourTreeBuilder()
             .Sequence("Accept Trade Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the bot has a valid trade window open
                 .Condition("Trade Window Valid", time => _objectManager.TradeFrame.IsOpen)
 
@@ -94,6 +115,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages declining the trade.</returns>
         private IBehaviourTreeNode DeclineTradeSequence => new BehaviourTreeBuilder()
             .Sequence("Decline Trade Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the trade window is valid
                 .Condition("Trade Window Valid", time => _objectManager.TradeFrame.IsOpen)
 
@@ -112,11 +140,15 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages offering the enchantment in the trade.</returns>
         private IBehaviourTreeNode BuildOfferEnchantSequence(int enchantId) => new BehaviourTreeBuilder()
             .Sequence("Offer Enchant Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the trade window is valid
                 .Condition("Trade Window Valid", time => _objectManager.TradeFrame.IsOpen)
-
-                //// Ensure the bot has the correct enchantment to offer
-                //.Condition("Has Enchant Available", time => _objectManager.HasEnchantAvailable(enchantId))
 
                 // Offer the enchantment in the trade
                 .Do("Offer Enchant", time =>
@@ -132,6 +164,13 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages offering lockpicking in a trade.</returns>
         private IBehaviourTreeNode OfferLockpickSequence => new BehaviourTreeBuilder()
             .Sequence("Lockpick Trade Sequence")
+                .Condition("TradeFrame Available", time =>
+                {
+                    if (_objectManager.TradeFrame != null) return true;
+                    Log.Warning("[BOT RUNNER] TradeFrame is null — requires FG bot or packet-based trade path");
+                    return false;
+                })
+
                 // Ensure the bot has the ability to lockpick
                 .Condition("Can Lockpick", time => _objectManager.Player.Class == Class.Rogue)
 

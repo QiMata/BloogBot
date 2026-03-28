@@ -15,8 +15,8 @@
 | VMaNGOS server binaries | `C:\Mangos\server\` (mangosd.exe, realmd.exe) |
 | VMaNGOS source (reference) | `C:\Mangos\vmangos-core\` (cloned from github.com/vmangos/core) |
 | MaNGOS data directory | `C:\Mangos\data\` (maps, vmaps, mmaps, dbc) |
-| MaNGOS MySQL | `C:\Mangos\mysql\` (mysqld.exe, data dir) |
-| VMaNGOS DB version | db-097449b (Mar 20, 2026), binary dev-6a82ed9 (Mar 20, 2026) |
+| MariaDB | `maria-db` Docker container (shared, defined in FFXI repo) |
+| VMaNGOS DB version | db-4a0668b (world dump), binary dev-2f1b104 |
 | VMaNGOS databases | mangos (world), characters, realmd, logs |
 | VMaNGOS DB credentials | root:root (localhost:3306) |
 | Server protocol docs | `docs/server-protocol/` (7 docs from Task 21) |
@@ -56,7 +56,7 @@
 # Physics & pathfinding
 .\run-tests.ps1 -Layer 2
 
-# Physics tests (42/43 passing)
+# Physics tests (63 test files, AABB/terrain/collision/swimming/transport)
 dotnet test Tests/Navigation.Physics.Tests --settings Tests/BotRunner.Tests/test.runsettings -v n
 
 # Manual recording test
@@ -116,17 +116,110 @@ dotnet test Tests/BotRunner.Tests --filter "Category=Integration" --settings Tes
 - **StateManager DLL lock race** — StateManager and test can fight over DLLs. Must kill → build → verify → start SM → test. Script `run-swimming-recording-test.ps1` handles this.
 - **Orgrimmar terrain divergence** — `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
 - **Spline data scarcity** — Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
+- **FG-CRASH-001** — WoW.exe crash in ghost form at `0x00619CDF`. Blocks FG death/corpse-run live validation.
+- **BG TradeFrame NullRef** — All 6 trade sequences lack null checks for TradeFrame. BG bot will crash on OfferTrade, OfferGold, OfferItem, AcceptTrade, EnchantTrade, LockpickTrade.
+- **BG MerchantFrame always null** — `WoWSharpObjectManager.MerchantFrame` is never assigned. BG vendor operations must use packet-based paths (vendorGuid parameter).
+- **HandleCharacterLoginFailed stub** — `WorldClient.cs:487` returns Task.CompletedTask. BG bot silently ignores login failures.
+
+---
+
+## FG/BG Feature Parity Summary
+
+### BG-Compatible (Packet Path Available)
+- AcceptQuest (with npcGuid+questId params), CompleteQuest (with params), AbandonQuest
+- BuyItem (with vendorGuid params), SellItem (with params), RepairAllItems (with vendorGuid)
+- All combat actions (attack, cast, stop), movement, inventory management
+- Death/corpse (ReleaseCorpse, RetrieveCorpse via CMSG packets)
+- 115 CMSG opcodes sent, 141 SMSG opcodes handled
+
+### FG-Only (No Packet Fallback)
+- BuybackItem (requires MerchantFrame)
+- Craft (requires CraftFrame)
+- All 6 trade actions (TradeFrame has no null guards — will NullRef on BG)
+- SelectTaxiNode (requires TaxiFrame)
+- TrainSkill via legacy frame path (TrainerFrame required)
+- TrainTalent via legacy frame path (TalentFrame required)
+- SelectGossip via legacy frame path (GossipFrame required)
+
+### Proto/Enum Gaps
+- START_WAND_ATTACK (proto 34) — no CharacterAction mapping
+- START_PHYSICS_RECORDING (proto 70) — no CharacterAction mapping
+- STOP_PHYSICS_RECORDING (proto 71) — no CharacterAction mapping
+
+---
+
+## Scalability Architecture (Target: 3000 Bots)
+
+### Current Bottlenecks
+| Component | Current Limit | Blocker |
+|-----------|--------------|---------|
+| Process model | ~50 bots / machine | 1 OS process per bot (100-500MB each) |
+| WoWSharpObjectManager | 1 per process | Static singleton, static `_objects` list |
+| WoWSharpEventEmitter | 1 per process | Static singleton, cross-bot event interference |
+| SplineController | 1 per process | Static singleton |
+| TCP socket server | ~50 connections | Thread-per-connection (1MB stack each), backlog=50 |
+| PathfindingService | ~64 concurrent | Single process, ThreadPool-bound handlers |
+| BotRunner IPC | 15-65ms blocking | Synchronous `SendMemberStateUpdate()` per tick |
+| Network bandwidth | ~125 MB/s | Uncompressed 500KB snapshots × 3000 bots × 10Hz = 15 GB/s |
+
+---
+
+## Cross-World Travel Planner Architecture
+
+### Existing Infrastructure (DO NOT REWRITE)
+| Component | File | What It Does |
+|-----------|------|-------------|
+| CrossMapRouter | `BotRunner/Movement/CrossMapRouter.cs` | Plans `List<RouteLeg>` with walk/elevator/boat/zeppelin/portal/flight legs |
+| MapTransitionGraph | `BotRunner/Movement/MapTransitionGraph.cs` | 13 transitions: 4 boats, 3 zeppelins, 6 dungeon portals, faction-aware |
+| TransportData | `BotRunner/Movement/TransportData.cs` | 11 transports with stop positions, boarding radii, transit times |
+| TransportWaitingLogic | `BotRunner/Movement/TransportWaitingLogic.cs` | State machine: Approaching→Waiting→Boarding→Riding→Disembarking→Complete |
+| FlightPathData | `BotRunner/Combat/FlightPathData.cs` | 48 taxi nodes (27 EK + 21 Kalimdor) with map/position/faction |
+| FlightMasterNCC | `WoWSharpClient/.../FlightMasterNetworkClientComponent.cs` | Full taxi protocol: discover, activate, express, status |
+| PathfindingClient | `BotRunner/Clients/PathfindingClient.cs` | Single-map A* pathfinding (30s timeout) |
+
+### Travel Objective Flow
+```
+StateManager sets TravelObjective (targetMapId + position)
+  → BotRunner receives via snapshot
+    → TravelTask calls CrossMapRouter.PlanRoute()
+      → Returns RouteLeg[]: Walk, Elevator, FlightPath, Boat, Zeppelin, DungeonPortal, Hearthstone, ClassTeleport
+        → TravelTask pushes sub-tasks in reverse (LIFO stack)
+          → GoToTask (walk to intermediate point)
+          → TakeFlightPathTask (taxi to destination node)
+          → BoardTransportTask (boat/zeppelin with TransportWaitingLogic)
+          → EnterPortalTask (walk into dungeon/instance entrance)
+          → UseHearthstoneTask (10s cast to bind point)
+          → MageTeleportTask (10s cast to capital city)
+```
+
+### Missing Data to Add
+- Deeprun Tram (Ironforge ↔ Stormwind)
+- ~25 dungeon/raid instance portals (query MaNGOS `areatrigger_teleport`)
+- Mage teleport/portal spell IDs (6 teleport + 6 portal spells)
+- Innkeeper locations (~30 major NPCs)
+- Graveyard positions (query MaNGOS `game_graveyard`)
+- Named location resolver (capital cities + quest hubs)
+
+### Target Architecture
+- **N-bots-per-process**: 50-100 `BotContext` instances per process (30-60 processes for 3000 bots)
+- **Async I/O**: `System.IO.Pipelines` replacing thread-per-connection
+- **Delta snapshots**: 1-5KB per tick instead of 100-500KB
+- **Sharded PathfindingService**: K instances (K = cores/4), hash-partitioned by account
+- **Partitioned StateManager**: M instances, zone-sharded
+- **Physics batching**: `StepPhysicsV2Batch()` for amortized P/Invoke cost
+
+---
 
 ### VMaNGOS Server Startup
 
-Server infrastructure lives at `C:\Mangos\`. Start order:
-1. MySQL: `C:\Mangos\scripts\start-mysql.bat`
-2. Realm: `C:\Mangos\scripts\start-realmd.bat`
-3. World: `C:\Mangos\scripts\start-mangosd.bat`
+Server runs in Docker containers (see [DOCKER_STACK.md](DOCKER_STACK.md)):
 
-Start all at once: `C:\Mangos\scripts\start-all.bat`
-Stop all: `C:\Mangos\scripts\stop-all.bat`
+```powershell
+# Start Linux VMaNGOS stack
+docker compose -f .\docker-compose.vmangos-linux.yml up -d realmd mangosd
+```
 
-Config files: `C:\Mangos\server\mangosd.conf`, `C:\Mangos\server\realmd.conf`
+Alternative: local binaries at `D:\vmangos-server\`:
+- Config files: `D:\vmangos-server\mangosd.conf`, `D:\vmangos-server\realmd.conf`
 - SOAP enabled on port 7878 (admin: ADMINISTRATOR/PASSWORD)
 - WowPatch = 10 (1.12 Drums of War)

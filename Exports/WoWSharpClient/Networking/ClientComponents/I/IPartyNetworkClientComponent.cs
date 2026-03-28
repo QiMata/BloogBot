@@ -39,6 +39,8 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         IObservable<Unit> ReadyCheckRequests { get; }
         /// <summary>Stream of ready check confirmations (opaque, emits a Unit per confirmation).</summary>
         IObservable<Unit> ReadyCheckResponses { get; }
+        /// <summary>Stream fired when the server declares a ready check complete.</summary>
+        IObservable<Unit> ReadyCheckFinished { get; }
 
         #region Party Invite Operations
         Task InvitePlayerAsync(string playerName, CancellationToken cancellationToken = default);

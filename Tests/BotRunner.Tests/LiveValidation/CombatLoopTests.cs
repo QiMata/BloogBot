@@ -125,9 +125,7 @@ public class CombatLoopTests
             _output.WriteLine($"  [{label}] Target selection dispatch failed: {selectResult}");
             return false;
         }
-        await Task.Delay(700);
-
-        var selected = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(4));
+        var selected = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(5));
         _output.WriteLine($"  [{label}] Selected target in snapshot: {selected}");
         if (!selected)
         {
@@ -166,7 +164,9 @@ public class CombatLoopTests
             });
             if (reselection != ResponseResult.Success)
                 return false;
-            await Task.Delay(600);
+
+            // Wait for re-selection to propagate
+            await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(3));
 
             var retryTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".damage 5000", captureResponse: true, delayMs: 900);
             AssertCommandSucceeded(retryTrace, label, ".damage retry");

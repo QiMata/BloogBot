@@ -403,9 +403,12 @@ public class DeathCorpseRunTests
     private async Task CleanupAsync(string account, string charName)
     {
         await _bot.RevivePlayerAsync(charName);
-        await Task.Delay(1000);
+        await _bot.WaitForSnapshotConditionAsync(
+            account, LiveBotFixture.IsStrictAlive,
+            TimeSpan.FromSeconds(5),
+            progressLabel: "cleanup-revive");
 
         await _bot.BotTeleportAsync(account, MapId, DeathAreaX, DeathAreaY, DeathAreaZ);
-        await Task.Delay(1000);
+        await _bot.WaitForTeleportSettledAsync(account, DeathAreaX, DeathAreaY);
     }
 }

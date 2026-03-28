@@ -9,6 +9,13 @@ namespace BotRunner.Combat;
 /// </summary>
 public static class TalentBuildDefinitions
 {
+    /// <summary>
+    /// Resolves a talent build by name. This is the primary entry point when
+    /// the build name comes from configuration (e.g., WWOW_TALENT_BUILD env var).
+    /// Falls back to GetBuildOrder for class/spec name matching.
+    /// </summary>
+    public static (uint tab, uint pos)[]? GetBuild(string buildName) => GetBuildOrder(buildName);
+
     public static (uint tab, uint pos)[]? GetBuildOrder(string classSpecName) =>
         classSpecName switch
         {

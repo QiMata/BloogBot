@@ -1130,6 +1130,45 @@ public partial class LiveBotFixture : IAsyncLifetime
     }
 
 
+    /// <summary>
+    /// Makes the FG bot follow the BG bot by dispatching FOLLOW_TARGET with the BG bot's player GUID.
+    /// The FG bot will continuously trail the BG bot at the specified distance.
+    /// Call this once at test start — it runs until a new action is dispatched to the FG bot.
+    /// </summary>
+    public async Task<ResponseResult> StartFgFollowBgAsync(float followDistance = 5.0f)
+    {
+        if (FgAccountName == null || BgAccountName == null)
+            return ResponseResult.Failure;
+        return await StartFollowAsync(FgAccountName, BgAccountName, followDistance);
+    }
+
+    /// <summary>
+    /// Makes followerAccount follow targetAccount by dispatching FOLLOW_TARGET.
+    /// The follower will continuously trail the target at the specified distance.
+    /// </summary>
+    public async Task<ResponseResult> StartFollowAsync(string followerAccount, string targetAccount, float followDistance = 5.0f)
+    {
+        await RefreshSnapshotsAsync();
+        var targetSnap = await GetSnapshotAsync(targetAccount);
+        var targetGuid = targetSnap?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+        if (targetGuid == 0)
+        {
+            _testOutput?.WriteLine($"[FOLLOW] Cannot follow {targetAccount} — player GUID not available.");
+            return ResponseResult.Failure;
+        }
+
+        _testOutput?.WriteLine($"[FOLLOW] {followerAccount} following {targetAccount} (GUID=0x{targetGuid:X}, distance={followDistance:F1}y)");
+        return await SendActionAsync(followerAccount, new ActionMessage
+        {
+            ActionType = ActionType.FollowTarget,
+            Parameters =
+            {
+                new RequestParameter { LongParam = (long)targetGuid },
+                new RequestParameter { FloatParam = followDistance }
+            }
+        });
+    }
+
     public sealed record GmChatCommandTrace(
         int AttemptCount,
         ResponseResult DispatchResult,

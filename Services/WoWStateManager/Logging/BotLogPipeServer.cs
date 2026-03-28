@@ -1,9 +1,9 @@
+using Communication;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
 using System.IO.Pipes;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -55,13 +55,12 @@ namespace WoWStateManager.Logging
                     await pipe.WaitForConnectionAsync(ct);
                     _serverLogger.LogInformation($"Bot log pipe client connected for '{_accountName}'");
 
-                    using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: false);
                     while (!ct.IsCancellationRequested && pipe.IsConnected)
                     {
-                        var line = await reader.ReadLineAsync(ct);
-                        if (line == null) break; // client disconnected
+                        var entry = await ReadProtobufEntryAsync(pipe, ct);
+                        if (entry == null) break; // client disconnected
 
-                        ProcessLogLine(line);
+                        ProcessLogEntry(entry);
                     }
 
                     _serverLogger.LogInformation($"Bot log pipe client disconnected for '{_accountName}'");
@@ -72,7 +71,7 @@ namespace WoWStateManager.Logging
                 }
                 catch (IOException)
                 {
-                    // Pipe broken — client crashed. Loop will re-create the pipe.
+                    // Pipe broken ï¿½ client crashed. Loop will re-create the pipe.
                 }
                 catch (Exception ex)
                 {
@@ -85,31 +84,48 @@ namespace WoWStateManager.Logging
             }
         }
 
-        private void ProcessLogLine(string line)
+        private static async Task<LogEntry?> ReadProtobufEntryAsync(Stream stream, CancellationToken ct)
         {
-            try
+            var lengthBuffer = new byte[4];
+            var totalRead = 0;
+            while (totalRead < 4)
             {
-                var entry = JsonSerializer.Deserialize<PipeLogEntry>(line);
-                if (entry == null) return;
-
-                var logLevel = entry.Level?.ToLowerInvariant() switch
-                {
-                    "trace" => LogLevel.Trace,
-                    "debug" => LogLevel.Debug,
-                    "information" or "info" => LogLevel.Information,
-                    "warning" or "warn" => LogLevel.Warning,
-                    "error" => LogLevel.Error,
-                    "critical" => LogLevel.Critical,
-                    _ => LogLevel.Information,
-                };
-
-                _botLogger.Log(logLevel, "[{Category}] {Message}", entry.Category ?? "", entry.Message ?? "");
+                var bytesRead = await stream.ReadAsync(lengthBuffer.AsMemory(totalRead, 4 - totalRead), ct);
+                if (bytesRead == 0) return null; // client disconnected
+                totalRead += bytesRead;
             }
-            catch
+
+            var length = BitConverter.ToInt32(lengthBuffer, 0);
+            if (length <= 0 || length > 1024 * 1024) return null; // sanity: max 1MB
+
+            var buffer = new byte[length];
+            totalRead = 0;
+            while (totalRead < length)
             {
-                // Malformed line — write it raw so nothing is lost
-                _botLogger.LogInformation(line);
+                var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead, length - totalRead), ct);
+                if (bytesRead == 0) return null;
+                totalRead += bytesRead;
             }
+
+            var entry = new LogEntry();
+            entry.MergeFrom(buffer);
+            return entry;
+        }
+
+        private void ProcessLogEntry(LogEntry entry)
+        {
+            var logLevel = entry.Level?.ToLowerInvariant() switch
+            {
+                "trace" => LogLevel.Trace,
+                "debug" => LogLevel.Debug,
+                "information" or "info" => LogLevel.Information,
+                "warning" or "warn" => LogLevel.Warning,
+                "error" => LogLevel.Error,
+                "critical" => LogLevel.Critical,
+                _ => LogLevel.Information,
+            };
+
+            _botLogger.Log(logLevel, "[{Category}] {Message}", entry.Category ?? "", entry.Message ?? "");
         }
 
         public void Dispose()
@@ -119,17 +135,6 @@ namespace WoWStateManager.Logging
             _cts.Cancel();
             try { _listenTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
             _cts.Dispose();
-        }
-
-        /// <summary>
-        /// JSON schema for a single log line sent by the injected bot.
-        /// </summary>
-        private sealed class PipeLogEntry
-        {
-            public string? Level { get; set; }
-            public string? Message { get; set; }
-            public string? Category { get; set; }
-            public string? Timestamp { get; set; }
         }
     }
 }

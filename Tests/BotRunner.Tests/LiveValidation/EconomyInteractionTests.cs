@@ -158,8 +158,13 @@ public class EconomyInteractionTests
             Assert.True(bgOk, "BG should find/interact with a mailbox and collect mail.");
         }
 
-        // Verify coinage increased
-        await Task.Delay(1000);
+        // Verify coinage increased — poll for the mail to be processed
+        await _bot.WaitForSnapshotConditionAsync(
+            _bot.BgAccountName!,
+            snap => (snap?.Player?.Coinage ?? 0) > bgCoinageBefore,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: "BG mail-coinage-increase");
         await _bot.RefreshSnapshotsAsync();
         var bgSnapAfter = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         var bgCoinageAfter = bgSnapAfter?.Player?.Coinage ?? 0;
@@ -184,7 +189,6 @@ public class EconomyInteractionTests
         {
             _output.WriteLine($"  [{label}] Sending 10000 copper to {charName} via SOAP .send money");
             await _bot.ExecuteGMCommandAsync($".send money {charName} \"Test Gold\" \"Mail collection test\" 10000");
-            await Task.Delay(200);
         }
 
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
@@ -247,7 +251,6 @@ public class EconomyInteractionTests
             ActionType = ActionType.CheckMail,
             Parameters = { new RequestParameter { LongParam = (long)guid } }
         });
-        await Task.Delay(3000); // allow time for mailbox open + collect + close
         _output.WriteLine($"  [{label}] CheckMail sent (result={result})");
         return result == ResponseResult.Success;
     }
@@ -280,7 +283,6 @@ public class EconomyInteractionTests
             ActionType = ActionType.InteractWith,
             Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
         });
-        await Task.Delay(500);
         _output.WriteLine($"  [{label}] Interaction sent (result={result})");
         return result == ResponseResult.Success;
     }

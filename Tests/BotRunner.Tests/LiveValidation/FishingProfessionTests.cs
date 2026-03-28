@@ -112,13 +112,19 @@ public class FishingProfessionTests
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
 
-        // Wait for objects to stream in after teleport, then force pool refresh.
-        // .pool update re-rolls the pool — must happen AFTER teleport so the bots are on
+        // Force pool refresh — must happen AFTER teleport so the bots are on
         // the correct map and the spawned pools will appear in their ObjectManagers.
-        await Task.Delay(3000);
+        // Wait for nearby objects to populate first.
+        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount!, timeoutMs: 5000, progressLabel: "BG post-teleport-stream");
         _output.WriteLine("Forcing pool system refresh via .pool update 2628");
         await _bot.SendGmChatCommandAsync(bgAccount!, ".pool update 2628");
-        await Task.Delay(5000); // Allow pools to spawn and stream into ObjectManager
+        // Poll for game objects to appear after pool refresh
+        await _bot.WaitForSnapshotConditionAsync(
+            bgAccount!,
+            snap => snap?.NearbyObjects?.Any() == true,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 500,
+            progressLabel: "pool-refresh-objects");
 
         // Run both bots fishing simultaneously — they fish side by side at Ratchet.
         var bgTask = RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
@@ -150,7 +156,6 @@ public class FishingProfessionTests
 
         await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, StartingFishingSkill, 300);
         await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
-        await Task.Delay(500);
 
         await _bot.BotAddItemAsync(account, FishingData.FishingPole);
         await _bot.BotAddItemAsync(account, FishingLureItemId);

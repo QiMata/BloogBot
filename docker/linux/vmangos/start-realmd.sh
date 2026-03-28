@@ -17,7 +17,7 @@ attempts=0
 until nc -z "$db_host" "$db_port"; do
   attempts=$((attempts + 1))
   if [ "$attempts" -ge 60 ]; then
-    echo "[vmangos-realmd] Timed out waiting for ${db_host}:${db_port}" >&2
+    echo "[realmd] Timed out waiting for ${db_host}:${db_port}" >&2
     exit 1
   fi
 

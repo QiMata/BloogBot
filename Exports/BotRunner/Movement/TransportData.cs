@@ -194,6 +194,22 @@ public static class TransportData
         VerticalRange: 0f);
 
     // =========================================================================
+    // TRAMS — underground rail transports
+    // =========================================================================
+
+    public static readonly TransportDefinition DeeprunTram = new(
+        GameObjectEntry: 176085,
+        DisplayId: 1560,
+        Name: "Deeprun Tram: Ironforge ↔ Stormwind",
+        Type: TransportType.Boat, // Re-uses Boat type (scheduled transport with stops)
+        Stops:
+        [
+            new("Ironforge Tram Station", 369, new Position(69.0f, 11.0f, -4.3f), BoardingRadius: 10f),
+            new("Stormwind Tram Station", 369, new Position(2489.0f, 18.0f, -4.3f), BoardingRadius: 10f),
+        ],
+        VerticalRange: 0f);
+
+    // =========================================================================
     // ALL TRANSPORTS — master list
     // =========================================================================
 
@@ -213,6 +229,8 @@ public static class TransportData
         ZeppelinUndercityOrgrimmar,
         ZeppelinUndercityGromgol,
         ZeppelinOrgrimmarGromgol,
+        // Trams
+        DeeprunTram,
     ];
 
     // =========================================================================

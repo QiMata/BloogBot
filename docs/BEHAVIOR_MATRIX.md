@@ -73,9 +73,53 @@
 3. Add new behavior rows immediately when new functionality gaps are discovered.
 4. Resume protocol: execute the prior `Session Handoff -> Next command` before any broader scan, then record one concrete delta in the active local `TASKS.md`.
 
+## Feature Gap Summary (2026-03-27)
+
+### Completed Systems
+- Combat rotations (27 specs), movement/pathfinding, fishing, gathering, equipment, death/corpse-run
+- BG/FG protocol parity (movement, combat, inventory, spells) — 115 CMSG, 141 SMSG
+- Physics engine (WoW.exe exact binary parity), AABB collision, swimming
+
+### Critical Gaps (P8)
+- **PARITY-TRADE-001**: 6 trade sequences NullRef on BG — no null guards
+- **PARITY-MERCHANT-001**: BG BuybackItem has no packet fallback
+- 6 more FG-only sequences need BG packet paths (taxi, trainer, talent, gossip, craft)
+
+### Character Progression Planner (P22 — 33 tasks)
+- **Goal-driven behavior**: Each bot has explicit long-term objectives in JSON config — target spec, BiS gear set, reputation standings, rare items, mount, gold target, skill priorities, quest chains
+- **ProgressionPlanner**: StateManager evaluates all goals, picks highest-priority activity: survival > training > gear > attunement > rep > mount > gold > profession > default grind
+- **Configurable spec**: Spec per bot from config (replaces hardcoded class→spec mapping)
+- **BiS gear sets**: Pre-built lists per spec (27 sets), gear gap evaluation drives dungeon farming
+- **Pre-built templates**: ~15 archetypes (FuryWarriorPreRaid, HolyPriestMCReady, FrostMageAoEFarmer, etc.)
+- **Rare item farming**: Baron Rivendare mount, Ironfoe, Eye of Sulfuras — repeated dungeon runs with instance reset
+
+### Cross-World Travel Planner (P21 — 30 tasks)
+- **TravelObjective system**: StateManager sets destination → BotRunner decomposes into multi-leg route → executes sequentially
+- **Existing foundation**: CrossMapRouter (multi-leg planner), MapTransitionGraph (13 transitions), TransportData (11 transports), FlightPathData (48 nodes), TransportWaitingLogic (boarding state machine)
+- **New tasks**: TravelTask, TakeFlightPathTask, UseHearthstoneTask, SetBindPointTask, MageTeleportTask, WarlockSummonTask
+- **Missing data**: Deeprun Tram, ~25 dungeon/raid portals, mage spell IDs, innkeeper locations, graveyard positions
+- **Route optimization**: Hearthstone strategy, class teleport integration, re-planning on failure
+
+### Missing Gameplay Systems
+- **P10 Battlegrounds**: 27 opcodes defined, ZERO handlers — no BG queue/join/objectives/honor
+- **P11 40-Man Raids**: Basic party works, missing ready check, encounter mechanics, master loot
+- **P12 World PvP**: No hostile player detection or PvP engagement
+- **P13 Questing**: Accept/complete works, kill/item objective tracking not parsed
+- **P14 Pets**: Call/dismiss works, no feeding/training/stance/ability management
+- **P15 Channels**: No ChannelNetworkClientComponent — can't join/leave channels
+- **P16 Crafting**: Framework exists, no batch crafting or profession automation
+- **P17 Progression**: No talent auto-allocation, trainer scheduling, zone routing
+- **P18 Economy**: AH/bank/mail infrastructure exists, no posting strategy or automation
+- **P19 Travel**: No hearthstone auto-use, spirit healer navigation, mount usage
+
+### Scalability (P9) — Architecture Redesign Required
+- Current: 1 process per bot, max ~50 bots
+- Target: 3000 concurrent bots
+- Blockers: 3 static singletons, thread-per-connection sockets, blocking IPC, single PathfindingService
+- Plan: 28 tasks across singleton removal, async I/O, sharding, load testing
+
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active queue item: `MASTER-SUB-041` -> `WWoWBot.AI/TASKS.md` (`AiAbilityAndWorldInteractionParity`).
-- Last delta: added explicit resume protocol so behavior-matrix passes follow the same one-by-one continuity model as `docs/TASKS.md` and local `TASKS.md` files.
-- Pass result: `delta shipped`
-- Next command: `Get-Content -Path 'docs/TASKS.md' -TotalCount 420`
+- Last updated: 2026-03-27
+- Active queue items: P8 (FG/BG parity), P9 (scalability), P10-P20 (gameplay systems)
+- Last delta: Full codebase analysis → 130+ new tasks written with detailed specs for agent parallelization
+- Next command: Start with P8.1 (trade sequence null guards) — smallest blast radius, immediate BG stability fix

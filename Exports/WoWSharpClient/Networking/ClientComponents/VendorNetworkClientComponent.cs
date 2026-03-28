@@ -329,6 +329,33 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        public async Task BuybackItemAsync(ulong vendorGuid, uint buybackSlot, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                SetOperationInProgress(true);
+                _logger.LogDebug("Buying back item from slot {BuybackSlot} at vendor: {VendorGuid:X}", buybackSlot, vendorGuid);
+
+                // CMSG_BUYBACK_ITEM (1.12.1): ObjectGuid vendorGuid (8) + uint32 slot (4) = 12 bytes
+                var payload = new byte[12];
+                BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
+                BitConverter.GetBytes(buybackSlot).CopyTo(payload, 8);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUYBACK_ITEM, payload, cancellationToken);
+
+                _logger.LogInformation("Buyback request sent for slot {BuybackSlot} at vendor: {VendorGuid:X}", buybackSlot, vendorGuid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to buyback item from slot {BuybackSlot} at vendor: {VendorGuid:X}", buybackSlot, vendorGuid);
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
         public async Task SellItemAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             // Legacy bag/slot overload - callers should prefer SellItemByGuidAsync when item GUID is known

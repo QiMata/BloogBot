@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using WoWStateManager.Clients;
 using WoWStateManager.Coordination;
+using WoWStateManager.Progression;
 using WoWStateManager.Settings;
 
 namespace WoWStateManager.Listeners
@@ -45,6 +46,7 @@ namespace WoWStateManager.Listeners
 
         private readonly List<CharacterSettings> _characterSettings;
         private readonly MangosSOAPClient? _soapClient;
+        private readonly ProgressionPlanner _progressionPlanner;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
 
@@ -55,10 +57,11 @@ namespace WoWStateManager.Listeners
         private static bool IsCoordinatorDisabled =>
             Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
 
-        public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
+        public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ProgressionPlanner progressionPlanner, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
             _soapClient = soapClient;
+            _progressionPlanner = progressionPlanner;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
             if (IsCoordinatorDisabled)
                 logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1 (at startup)");
@@ -304,6 +307,20 @@ namespace WoWStateManager.Listeners
             else
             {
                 InjectCombatActions(accountName, response);
+            }
+
+            // Progression planning — lowest priority, only if no combat/dungeon action was injected
+            if (response.CurrentAction == null)
+            {
+                var charSettings = _characterSettings.Find(cs => cs.AccountName == accountName);
+                var buildConfig = charSettings?.BuildConfig;
+                var progressionAction = _progressionPlanner.GetNextAction(response, buildConfig);
+                if (progressionAction != null)
+                {
+                    response.CurrentAction = progressionAction;
+                    _logger.LogInformation("PROGRESSION: Injecting {ActionType} for '{Account}'",
+                        progressionAction.ActionType, accountName);
+                }
             }
         }
 

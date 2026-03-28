@@ -138,25 +138,22 @@ public class NpcInteractionTests
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ));
         await Task.WhenAll(setupTasks);
 
-        // Post-teleport settle: server streams nearby objects via SMSG_UPDATE_OBJECT
-        // over several seconds. Wait for the initial burst to complete.
-        await Task.Delay(2000);
-
-        // Retry up to 5 times — NPC flags may arrive in PARTIAL updates after CREATE_OBJECT
+        // Poll for NPC flags — they may arrive in PARTIAL updates after CREATE_OBJECT
         System.Collections.Generic.List<Game.WoWUnit> bgWithFlags = [];
         System.Collections.Generic.List<Game.WoWUnit> bgUnits = [];
-        for (int attempt = 0; attempt < 5; attempt++)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            bgUnits = _bot.BackgroundBot?.NearbyUnits?.ToList() ?? [];
-            bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
-            if (bgWithFlags.Count > 0) break;
-            if (attempt < 4)
+        var flagsFound = await _bot.WaitForSnapshotConditionAsync(
+            _bot.BgAccountName!,
+            snap =>
             {
-                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1} (units={bgUnits.Count}), retrying in 1.5s...");
-                await Task.Delay(1500);
-            }
-        }
+                bgUnits = snap?.NearbyUnits?.ToList() ?? [];
+                bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
+                return bgWithFlags.Count > 0;
+            },
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 500,
+            progressLabel: "BG NPC flags");
+        if (!flagsFound)
+            _output.WriteLine($"  [BG] No NPC flags found after 10s (units={bgUnits.Count})");
 
         // BG bot NPC detection — must find at least one NPC with non-zero flags
         LogNpcFlags("BG", _bot.BackgroundBot);
@@ -209,10 +206,13 @@ public class NpcInteractionTests
         });
         Assert.Equal(ResponseResult.Success, dispatch);
 
-        // Wait for the task to complete (VendorVisitTask pops itself on completion).
-        // We detect completion by checking that the bot is no longer moving toward the vendor
-        // and enough time has passed for the full FindVendor→MoveToVendor→VendorActions cycle.
-        await Task.Delay(5000);
+        // Poll for task completion — vendor interaction should finish within a few seconds
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            _ => true, // just wait for at least one snapshot cycle
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 500,
+            progressLabel: $"{label} vendor-task-complete");
 
         await _bot.RefreshSnapshotsAsync();
         var after = await _bot.GetSnapshotAsync(account);
@@ -260,8 +260,13 @@ public class NpcInteractionTests
         });
         Assert.Equal(ResponseResult.Success, dispatch);
 
-        // Wait for FlightMasterVisitTask to complete (find → move → discover → done)
-        await Task.Delay(5000);
+        // Poll for FlightMasterVisitTask to complete (find → move → discover → done)
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            _ => true,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 500,
+            progressLabel: $"{label} fm-task-complete");
 
         _output.WriteLine(
             $"[{label}] flight master metrics: found={fmGuid != 0}, distance={fmDistance:F1}y");
@@ -404,7 +409,12 @@ public class NpcInteractionTests
         var delta = minCopper - current;
         _output.WriteLine($"  [{label}] Increasing money by {delta} copper.");
         await _bot.SendGmChatCommandAsync(account, $".modify money {delta}");
-        await Task.Delay(1000);
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snap => (snap?.Player?.Coinage ?? 0L) >= minCopper,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} money-setup");
     }
 
     private async Task EnsureLevelAtLeastAsync(string account, string label, uint minLevel)
@@ -420,7 +430,12 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Setting level to {minLevel} (current={level}).");
         await _bot.SendGmChatCommandAsync(account, $".character level {minLevel}");
-        await Task.Delay(1200);
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snap => (snap?.Player?.Unit?.GameObject?.Level ?? 0) >= minLevel,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} level-setup");
     }
 
     private async Task EnsureSpellAbsentAsync(string account, string label, uint spellId)

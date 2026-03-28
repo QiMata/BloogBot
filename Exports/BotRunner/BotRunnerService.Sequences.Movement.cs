@@ -121,6 +121,81 @@ namespace BotRunner
             return currentPosition.DistanceTo2D(target) < tolerance;
         }
         /// <summary>
+        /// Sequence to continuously follow another player by GUID, staying within followDistance.
+        /// Used to make the FG bot shadow the BG bot during tests.
+        /// Returns Running indefinitely — caller must cancel via new action dispatch.
+        /// </summary>
+        private IBehaviourTreeNode BuildFollowTargetSequence(ulong targetGuid, float followDistance)
+        {
+            NavigationPath? navPath = null;
+
+            return new BehaviourTreeBuilder()
+            .Sequence("Follow Target Sequence")
+                .Do("Follow Player", time =>
+                {
+                    if (_objectManager.Player?.Position == null)
+                        return BehaviourTreeStatus.Running;
+
+                    // Find the target unit by GUID
+                    var target = _objectManager.Units
+                        .FirstOrDefault(u => u.Guid == targetGuid);
+                    if (target?.Position == null)
+                        return BehaviourTreeStatus.Running;
+
+                    var dist = _objectManager.Player.Position.DistanceTo2D(target.Position);
+
+                    // Already close enough — stop and wait
+                    if (dist <= followDistance)
+                    {
+                        _objectManager.StopAllMovement();
+                        navPath?.Clear();
+                        return BehaviourTreeStatus.Running; // keep running to re-evaluate
+                    }
+
+                    // Too far — move toward target
+                    if (navPath == null)
+                    {
+                        var (radius, height) = GameData.Core.Constants.RaceDimensions.GetCapsuleForRace(
+                            _objectManager.Player.Race, _objectManager.Player.Gender);
+                        var pfClient = _container.PathfindingClient;
+                        navPath = new NavigationPath(pfClient,
+                            capsuleRadius: radius,
+                            capsuleHeight: height,
+                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                            race: _objectManager.Player.Race,
+                            gender: _objectManager.Player.Gender);
+                    }
+
+                    if (_objectManager.Player.RunSpeed > 0)
+                        navPath.UpdateCharacterSpeed(_objectManager.Player.RunSpeed);
+
+                    try
+                    {
+                        var waypoint = navPath.GetNextWaypoint(
+                            _objectManager.Player.Position,
+                            target.Position,
+                            _objectManager.Player.MapId,
+                            allowDirectFallback: true);
+                        if (waypoint != null)
+                        {
+                            var dx = waypoint.X - _objectManager.Player.Position.X;
+                            var dy = waypoint.Y - _objectManager.Player.Position.Y;
+                            var facing = MathF.Atan2(dy, dx);
+                            _objectManager.MoveToward(waypoint, facing);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Path failure — stay running, try again next tick
+                    }
+
+                    return BehaviourTreeStatus.Running;
+                })
+            .End()
+            .Build();
+        }
+
+        /// <summary>
         /// Sequence to interact with a specific target based on its GUID.
         /// </summary>
         /// <param name="guid">The GUID of the target to interact with.</param>

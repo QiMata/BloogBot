@@ -72,15 +72,9 @@ namespace BotCommLayer
                 try
                 {
                     NetworkStream stream = client.GetStream();
-                    // Serialize the response
-                    byte[] responseBytes = ouboundMessage.ToByteArray();
-                    byte[] responseLength = BitConverter.GetBytes(responseBytes.Length);
-
-                    // Send the length of the response message
-                    stream.Write(responseLength, 0, responseLength.Length);
-
-                    // Send the response message
-                    stream.Write(responseBytes, 0, responseBytes.Length);
+                    // Encode with compression (flag + optional GZip)
+                    byte[] encoded = ProtobufCompression.Encode(ouboundMessage.ToByteArray());
+                    stream.Write(encoded, 0, encoded.Length);
                 }
                 catch (Exception ex)
                 {
@@ -114,13 +108,14 @@ namespace BotCommLayer
                         break;
                     }
 
-                    // Read the message itself (must read all `length` bytes)
-                    byte[] buffer = new byte[length];
-                    ReadExact(stream, buffer, length);
+                    // Read wire payload (flag + protobuf data)
+                    byte[] wirePayload = new byte[length];
+                    ReadExact(stream, wirePayload, length);
 
-                    // Deserialize the request
+                    // Decode (decompress if needed) and deserialize
+                    byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
                     AsyncRequest request = new();
-                    request.MergeFrom(buffer);
+                    request.MergeFrom(protobufBytes);
 
                     // Map this request's ID to the connection so SendMessageToClient
                     // can route the response back. Overwrites are fine — same client.

@@ -430,6 +430,48 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Sets the pet's react state (Passive, Defensive, Aggressive).
+        /// Sends CMSG_PET_ACTION with ACT_REACTION packed data.
+        /// </summary>
+        public async Task SetPetReactStateAsync(PetReactState reactState, CancellationToken cancellationToken = default)
+        {
+            if (!_currentPetGuid.HasValue)
+            {
+                throw new InvalidOperationException("No active pet to command");
+            }
+
+            try
+            {
+                _logger.LogDebug("Setting pet {PetGuid:X} react state to {ReactState}", _currentPetGuid.Value, reactState);
+
+                var payload = CreatePetReactStatePayload(_currentPetGuid.Value, reactState);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_PET_ACTION, payload, cancellationToken);
+
+                _logger.LogInformation("Pet react state set to {ReactState}", reactState);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to set pet react state to {ReactState}", reactState);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Creates CMSG_PET_ACTION payload for pet react state (Passive/Defensive/Aggressive).
+        /// MaNGOS format: petGuid(8) + packedData(4) + targetGuid(8) = 20 bytes always.
+        /// packedData = MAKE_UNIT_ACTION_BUTTON(reactState, ACT_REACTION).
+        /// </summary>
+        public static byte[] CreatePetReactStatePayload(ulong petGuid, PetReactState reactState)
+        {
+            var payload = new byte[20];
+            BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
+            uint packedData = PetActionType.Pack((uint)reactState, PetActionType.ACT_REACTION);
+            BitConverter.GetBytes(packedData).CopyTo(payload, 8);
+            // targetGuid = 0 (not applicable for stance changes)
+            return payload;
+        }
+
         #endregion
 
         #region Aura/Buff Tracking (Enhanced Implementation)

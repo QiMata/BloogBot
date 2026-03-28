@@ -1,6 +1,9 @@
+name: wwow
+
 services:
-  vmangos-realmd:
+  realmd:
     image: ghcr.io/mserajnik/vmangos-server:5875
+    container_name: realmd
     restart: unless-stopped
     command: ["/bin/sh", "/wwow-docker/start-realmd.sh"]
     healthcheck:
@@ -10,13 +13,13 @@ services:
       retries: 5
       start_period: 2m
     environment:
-      WWOW_VMANGOS_DB_HOST: ${WWOW_VMANGOS_DB_HOST:-host.docker.internal}
+      WWOW_VMANGOS_DB_HOST: ${WWOW_VMANGOS_DB_HOST:-maria-db}
       WWOW_VMANGOS_DB_PORT: ${WWOW_VMANGOS_DB_PORT:-3306}
       WWOW_VMANGOS_DB_USER: ${WWOW_VMANGOS_DB_ROOT_USER:-root}
       WWOW_VMANGOS_DB_PASSWORD: ${WWOW_VMANGOS_DB_ROOT_PASSWORD:-root}
       WWOW_VMANGOS_REALMD_PORT: ${WWOW_VMANGOS_REALMD_PORT:-3724}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - gameserver-net
     ports:
       - "${WWOW_VMANGOS_REALMD_PUBLISHED_PORT:-3724}:3724"
     volumes:
@@ -24,12 +27,13 @@ services:
       - ./docker/linux/vmangos:/wwow-docker:ro
       - ./docker/linux/vmangos/storage/realmd/logs:/opt/vmangos/storage/logs
 
-  vmangos-mangosd:
+  mangosd:
     image: ghcr.io/mserajnik/vmangos-server:5875
+    container_name: mangosd
     restart: unless-stopped
     command: ["/bin/sh", "/wwow-docker/start-mangosd.sh"]
     depends_on:
-      vmangos-realmd:
+      realmd:
         condition: service_started
     tty: true
     stdin_open: true
@@ -41,14 +45,14 @@ services:
       retries: 5
       start_period: 10m
     environment:
-      WWOW_VMANGOS_DB_HOST: ${WWOW_VMANGOS_DB_HOST:-host.docker.internal}
+      WWOW_VMANGOS_DB_HOST: ${WWOW_VMANGOS_DB_HOST:-maria-db}
       WWOW_VMANGOS_DB_PORT: ${WWOW_VMANGOS_DB_PORT:-3306}
       WWOW_VMANGOS_DB_USER: ${WWOW_VMANGOS_DB_ROOT_USER:-root}
       WWOW_VMANGOS_DB_PASSWORD: ${WWOW_VMANGOS_DB_ROOT_PASSWORD:-root}
       WWOW_VMANGOS_WORLD_PORT: ${WWOW_VMANGOS_WORLD_PORT:-8085}
       WWOW_VMANGOS_SOAP_PORT: ${WWOW_VMANGOS_SOAP_PORT:-7878}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - gameserver-net
     ports:
       - "${WWOW_VMANGOS_WORLD_PUBLISHED_PORT:-8085}:8085"
       - "${WWOW_VMANGOS_SOAP_PUBLISHED_PORT:-7878}:7878"
@@ -58,3 +62,7 @@ services:
       - ./docker/linux/vmangos:/wwow-docker:ro
       - ./docker/linux/vmangos/storage/mangosd/logs:/opt/vmangos/storage/logs
       - ./docker/linux/vmangos/storage/mangosd/honor:/opt/vmangos/storage/honor
+
+networks:
+  gameserver-net:
+    external: true
