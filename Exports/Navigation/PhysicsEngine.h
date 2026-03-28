@@ -588,6 +588,16 @@ namespace WoWCollision
         std::array<G3D::Vector3, 3> points{};
     };
 
+    struct SelectorSourceScanWindow
+    {
+        int32_t rowMin = 0;
+        int32_t columnMin = 0;
+        int32_t rowMax = -1;
+        int32_t columnMax = -1;
+        int32_t pointStartIndex = 0;
+        int32_t rowAdvancePointCount = 0;
+    };
+
     struct SelectorRecordEvaluationTrace
     {
         float inputBestRatio = 0.0f;
@@ -687,6 +697,57 @@ namespace WoWCollision
         float second = 0.0f;
     };
 
+    struct TerrainQueryChunkSpan
+    {
+        int32_t cellMinX = 0;
+        int32_t cellMaxX = 0;
+        int32_t cellMinY = 0;
+        int32_t cellMaxY = 0;
+        int32_t chunkMinX = 0;
+        int32_t chunkMaxX = 0;
+        int32_t chunkMinY = 0;
+        int32_t chunkMaxY = 0;
+    };
+
+    struct TerrainQueryChunkCoordinate
+    {
+        int32_t primary = 0;
+        int32_t secondary = 0;
+    };
+
+    struct TerrainQueryMergedQueryTrace
+    {
+        G3D::Vector3 queryBoundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 queryBoundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 mergedBoundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 mergedBoundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        uint32_t cacheContainsBoundsMin = 0u;
+        uint32_t cacheContainsBoundsMax = 0u;
+        uint32_t reusedCachedQuery = 0u;
+        uint32_t builtMergedBounds = 0u;
+        uint32_t builtQueryMask = 0u;
+        uint32_t queryInvoked = 0u;
+        uint32_t queryDispatchSucceeded = 0u;
+        uint32_t returnedSuccess = 0u;
+        uint32_t queryMask = 0u;
+    };
+
+    struct TerrainQuerySelectedContactContainerTrace
+    {
+        TerrainQueryMergedQueryTrace mergedQuery{};
+        uint32_t reusedExistingContainer = 0u;
+        uint32_t copiedQueryResults = 0u;
+        uint32_t returnedSuccess = 0u;
+        uint32_t outputContactCount = 0u;
+    };
+
+    enum TerrainQueryEntryDispatchAction : uint32_t
+    {
+        TERRAIN_QUERY_ENTRY_SKIP = 0,
+        TERRAIN_QUERY_ENTRY_DISPATCH = 1,
+        TERRAIN_QUERY_ENTRY_ABORT = 2,
+    };
+
     struct SelectorPairConsumerTrace
     {
         float requestedDistance = 0.0f;
@@ -705,6 +766,137 @@ namespace WoWCollision
         G3D::Vector3 inputMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
         G3D::Vector3 outputMove = G3D::Vector3(0.0f, 0.0f, 0.0f);
         SelectorPair outputPair{};
+    };
+
+    struct SelectorTriangleSourceWrapperTrace
+    {
+        uint32_t supportPlaneInitCount = 0u;
+        uint32_t validationPlaneInitCount = 0u;
+        uint32_t scratchPointZeroCount = 0u;
+        uint32_t usedOverridePosition = 0u;
+        uint32_t terrainQueryInvoked = 0u;
+        uint32_t terrainQuerySucceeded = 0u;
+        uint32_t returnedSuccess = 0u;
+        uint32_t queryFailureZeroedOutput = 0u;
+        G3D::Vector3 selectedPosition = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 testPoint = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 candidateDirection = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float initialBestRatio = 0.0f;
+        float inputBestRatio = 0.0f;
+        float reportedBestRatio = 0.0f;
+    };
+
+    struct SelectorTriangleSourceVariableTransactionTrace
+    {
+        uint32_t supportPlaneInitCount = 0u;
+        uint32_t validationPlaneInitCount = 0u;
+        uint32_t scratchPointZeroCount = 0u;
+        uint32_t usedOverridePosition = 0u;
+        uint32_t terrainQueryInvoked = 0u;
+        uint32_t terrainQuerySucceeded = 0u;
+        uint32_t terrainQueryReusedCachedQuery = 0u;
+        uint32_t terrainQueryBuiltMergedBounds = 0u;
+        uint32_t terrainQueryBuiltQueryMask = 0u;
+        uint32_t rankingInvoked = 0u;
+        uint32_t rankingAccepted = 0u;
+        uint32_t zeroClampedOutput = 0u;
+        uint32_t returnedSuccess = 0u;
+        uint32_t queryFailureZeroedOutput = 0u;
+        G3D::Vector3 selectedPosition = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 projectedPosition = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 testPoint = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 candidateDirection = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        float initialBestRatio = 0.0f;
+        float rankingReportedBestRatio = 0.0f;
+        float outputReportedBestRatio = 0.0f;
+        uint32_t rankingCandidateCount = 0u;
+        int32_t rankingSelectedRecordIndex = -1;
+        uint32_t terrainQueryMask = 0u;
+    };
+
+    struct SelectorBvhNodeRecord
+    {
+        uint16_t controlWord = 0;
+        uint16_t lowChildIndex = 0xFFFFu;
+        uint16_t highChildIndex = 0xFFFFu;
+        uint16_t leafTriangleCount = 0;
+        uint32_t leafTriangleStartIndex = 0;
+        float splitCoordinate = 0.0f;
+    };
+
+    struct SelectorBvhChildTraversal
+    {
+        uint32_t axis = 0u;
+        float splitCoordinate = 0.0f;
+        uint32_t lowChildIndex = 0xFFFFFFFFu;
+        uint32_t highChildIndex = 0xFFFFFFFFu;
+        uint32_t visitLow = 0u;
+        uint32_t visitHigh = 0u;
+        G3D::Vector3 lowBoundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 lowBoundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 highBoundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 highBoundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+    };
+
+    struct SelectorObjectRouterEntryRecord
+    {
+        G3D::Vector3 boundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 boundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        uint64_t nodeToken = 0u;
+        uint32_t nodeEnabled = 0u;
+        uint32_t callbackReturn = 0u;
+    };
+
+    struct SelectorObjectRouterTrace
+    {
+        uint32_t overlapRejectedCount = 0u;
+        uint32_t nodeRejectedCount = 0u;
+        uint32_t dispatchedCount = 0u;
+        uint32_t accumulatorUpdatedCount = 0u;
+        uint32_t result = 0u;
+    };
+
+    struct SelectorObjectNoCallbackState
+    {
+        uint32_t hitResult = 0u;
+        uint32_t recordCount = 0u;
+        uint32_t outputFlags = 0u;
+    };
+
+    struct SelectorLeafQueueMutationTrace
+    {
+        uint32_t skippedByMask = 0u;
+        uint32_t overflowed = 0u;
+        uint32_t pendingEnqueued = 0u;
+        uint32_t visitedBitSet = 0u;
+        uint32_t predicateRejected = 0u;
+        uint32_t acceptedEnqueued = 0u;
+        uint32_t stateByteBefore = 0u;
+        uint32_t stateByteAfter = 0u;
+        uint32_t pendingCountAfter = 0u;
+        uint32_t acceptedCountAfter = 0u;
+    };
+
+    struct SelectorNodeTraversalRecord
+    {
+        uint64_t traversalBaseToken = 0u;
+        uint64_t extraNodeToken = 0u;
+        uint64_t stateBytesToken = 0u;
+        uint64_t vertexBufferToken = 0u;
+        uint64_t triangleIndexToken = 0u;
+    };
+
+    struct SelectorNodeTraversalPayload
+    {
+        G3D::Vector3 queryBoundsMin = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        G3D::Vector3 queryBoundsMax = G3D::Vector3(0.0f, 0.0f, 0.0f);
+        uint32_t callbackMaskWord = 0u;
+        uint32_t acceptedCount = 0u;
+        uint64_t traversalBaseToken = 0u;
+        uint64_t extraNodeToken = 0u;
+        uint64_t stateBytesToken = 0u;
+        uint64_t vertexBufferToken = 0u;
+        uint64_t triangleIndexToken = 0u;
     };
 
     enum SelectorAlternateWorkingVectorMode : uint32_t
@@ -781,11 +973,75 @@ namespace WoWCollision
                                     const G3D::Vector3& boundsMax,
                                     const G3D::Vector3& point);
 
+    bool DoAabbsOverlapInclusive(const G3D::Vector3& boundsMinA,
+                                 const G3D::Vector3& boundsMaxA,
+                                 const G3D::Vector3& boundsMinB,
+                                 const G3D::Vector3& boundsMaxB);
+
+    uint32_t BuildAabbOutcode(const G3D::Vector3& point,
+                              const G3D::Vector3& boundsMin,
+                              const G3D::Vector3& boundsMax);
+
+    bool TriangleSharesAabbOutcodeReject(uint32_t firstOutcode,
+                                         uint32_t secondOutcode,
+                                         uint32_t thirdOutcode);
+
+    bool TriangleSharesSelectorPlaneOutcodeReject(uint32_t firstOutcode,
+                                                  uint32_t secondOutcode,
+                                                  uint32_t thirdOutcode);
+
+    uint32_t CountTrianglesPassingAabbOutcodeReject(const uint16_t* triangleIndices,
+                                                    uint32_t triangleCount,
+                                                    const uint32_t* vertexOutcodes,
+                                                    uint32_t vertexOutcodeCount);
+
     uint32_t BuildTerrainQueryMask(bool modelPropertyFlagSet,
                                    uint32_t movementFlags,
                                    float field20Value,
                                    bool rootTreeFlagSet,
                                    bool childTreeFlagSet);
+
+    bool IsTerrainQueryPayloadEnabled(uint32_t movementFlags,
+                                      const TerrainQueryPairPayload& payload);
+
+    bool ShouldRunDynamicCallbackProducer(bool callbackPresent,
+                                          uint32_t movementFlags);
+
+    bool ShouldVisitTerrainQueryStampedEntry(uint32_t entryVisitStamp,
+                                             uint32_t currentVisitStamp);
+
+    uint32_t BeginTerrainQueryProducerPass(uint32_t currentVisitStamp,
+                                           std::vector<SelectorCandidateRecord>& ioRecords);
+
+    void BuildTerrainQueryChunkSpan(const G3D::Vector3& worldBoundsMin,
+                                    const G3D::Vector3& worldBoundsMax,
+                                    TerrainQueryChunkSpan& outSpan);
+
+    uint32_t EnumerateTerrainQueryChunkCoordinates(const TerrainQueryChunkSpan& span,
+                                                   std::vector<TerrainQueryChunkCoordinate>& outCoordinates);
+
+    uint32_t BuildOptionalSelectorChildDispatchMask(const uint32_t* childPresenceFlags,
+                                                    uint32_t childCount,
+                                                    uint32_t movementFlags);
+
+    TerrainQueryEntryDispatchAction EvaluateTerrainQueryEntryDispatch(bool entryFlagMaskedOut,
+                                                                     bool alreadyVisited,
+                                                                     bool hasSourceGeometry,
+                                                                     uint32_t movementFlags,
+                                                                     const TerrainQueryPairPayload& payload,
+                                                                     bool traversalAllowsDispatch,
+                                                                     const G3D::Vector3& entryBoundsMin,
+                                                                     const G3D::Vector3& entryBoundsMax,
+                                                                     const G3D::Vector3& queryBoundsMin,
+                                                                     const G3D::Vector3& queryBoundsMax);
+
+    bool ShouldDispatchDynamicTerrainQueryEntry(bool entryFlagEnabled,
+                                                bool alreadyVisited,
+                                                bool callbackSucceeded,
+                                                const G3D::Vector3& entryBoundsMin,
+                                                const G3D::Vector3& entryBoundsMax,
+                                                const G3D::Vector3& queryBoundsMin,
+                                                const G3D::Vector3& queryBoundsMax);
 
     void BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition,
                                  float collisionRadius,
@@ -798,6 +1054,15 @@ namespace WoWCollision
                                                       uint32_t inputCount,
                                                       std::vector<SceneQuery::AABBContact>& outContacts,
                                                       std::vector<TerrainQueryPairPayload>& outPairs);
+
+    void AppendTerrainQueryPairPayloadRange(uint32_t previousRecordCount,
+                                            uint32_t currentRecordCount,
+                                            const TerrainQueryPairPayload& payload,
+                                            std::vector<TerrainQueryPairPayload>& ioPairs);
+
+    void ZeroTerrainQueryPairPayloadRange(uint32_t previousRecordCount,
+                                          uint32_t currentRecordCount,
+                                          std::vector<TerrainQueryPairPayload>& ioPairs);
 
     void MergeAabbBounds(const G3D::Vector3& boundsMinA,
                          const G3D::Vector3& boundsMaxA,
@@ -818,9 +1083,262 @@ namespace WoWCollision
                                           G3D::Vector3& outBoundsMin,
                                           G3D::Vector3& outBoundsMax);
 
+    bool EvaluateTerrainQueryMergedQueryTransaction(const G3D::Vector3& projectedPosition,
+                                                    float collisionRadius,
+                                                    float boundingHeight,
+                                                    const G3D::Vector3& cachedBoundsMin,
+                                                    const G3D::Vector3& cachedBoundsMax,
+                                                    bool modelPropertyFlagSet,
+                                                    uint32_t movementFlags,
+                                                    float field20Value,
+                                                    bool rootTreeFlagSet,
+                                                    bool childTreeFlagSet,
+                                                    bool queryDispatchSucceeded,
+                                                    TerrainQueryMergedQueryTrace& outTrace);
+
+    bool EvaluateTerrainQuerySelectedContactContainerTransaction(
+        const G3D::Vector3& projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        const G3D::Vector3& cachedBoundsMin,
+        const G3D::Vector3& cachedBoundsMax,
+        bool modelPropertyFlagSet,
+        uint32_t movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet,
+        const SceneQuery::AABBContact* existingContacts,
+        const TerrainQueryPairPayload* existingPairs,
+        uint32_t existingCount,
+        const SceneQuery::AABBContact* queryContacts,
+        const TerrainQueryPairPayload* queryPairs,
+        uint32_t queryCount,
+        bool queryDispatchSucceeded,
+        std::vector<SceneQuery::AABBContact>& outContacts,
+        std::vector<TerrainQueryPairPayload>& outPairs,
+        TerrainQuerySelectedContactContainerTrace& outTrace);
+
     void NegatePlane(const G3D::Vector3& normal,
                      float planeDistance,
                      SelectorSupportPlane& outPlane);
+
+    void BuildPlaneFromNormalAndPoint(const G3D::Vector3& normal,
+                                      const G3D::Vector3& point,
+                                      SelectorSupportPlane& outPlane);
+
+    void BuildObjectLocalQueryBounds(const G3D::Vector3& worldBoundsMin,
+                                     const G3D::Vector3& worldBoundsMax,
+                                     const G3D::Vector3& objectPosition,
+                                     G3D::Vector3& outLocalBoundsMin,
+                                     G3D::Vector3& outLocalBoundsMax);
+
+    bool BuildPlaneFromTrianglePoints(const G3D::Vector3& point0,
+                                      const G3D::Vector3& point1,
+                                      const G3D::Vector3& point2,
+                                      SelectorSupportPlane& outPlane);
+
+    bool BuildSelectorHullSourceGeometry(const G3D::Vector3* supportPoints,
+                                         uint32_t supportPointCount,
+                                         SelectorSupportPlane* outPlanes,
+                                         uint32_t planeCount,
+                                         G3D::Vector3* outPoints,
+                                         uint32_t outPointCount,
+                                         G3D::Vector3* outAnchorPoint0,
+                                         G3D::Vector3* outAnchorPoint1);
+
+    bool TransformSelectorSupportPointBuffer(const G3D::Vector3* inputPoints,
+                                             uint32_t pointCount,
+                                             const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                             const G3D::Vector3& translation,
+                                             G3D::Vector3* outPoints,
+                                             uint32_t outPointCount);
+
+    uint32_t BuildSelectorObjectCallbackMask(uint32_t movementFlags);
+
+    bool ShouldResolveSelectorObjectNode(bool selectorEnabled,
+                                         bool nodeEnabled,
+                                         bool allowInactiveNode);
+
+    const void* ResolveSelectorObjectNodePointer(bool selectorEnabled,
+                                                 const void* nodePointer,
+                                                 bool nodeEnabled,
+                                                 bool allowInactiveNode);
+
+    uint32_t EvaluateSelectorObjectRouterEntries(const SelectorObjectRouterEntryRecord* entries,
+                                                 uint32_t entryCount,
+                                                 bool selectorEnabled,
+                                                 const G3D::Vector3& queryBoundsMin,
+                                                 const G3D::Vector3& queryBoundsMax,
+                                                 SelectorObjectRouterTrace* outTrace);
+
+    bool ShouldUseSelectorObjectCallback(uint64_t callbackToken);
+
+    void FinalizeSelectorObjectNoCallbackState(uint32_t inputHitResult,
+                                               uint32_t inputRecordCount,
+                                               uint32_t inputOutputFlags,
+                                               SelectorObjectNoCallbackState& outState);
+
+    uint32_t EvaluateSelectorLeafQueueMutation(uint32_t triangleIndex,
+                                               uint32_t stateMaskByte,
+                                               bool predicateRejected,
+                                               uint32_t& ioOverflowFlags,
+                                               uint16_t* pendingIds,
+                                               uint32_t pendingIdCapacity,
+                                               uint32_t& ioPendingCount,
+                                               uint16_t* acceptedIds,
+                                               uint32_t acceptedIdCapacity,
+                                               uint32_t& ioAcceptedCount,
+                                               uint8_t* stateBytes,
+                                               uint32_t stateByteCount,
+                                               SelectorLeafQueueMutationTrace* outTrace);
+
+    bool BuildSelectorNodeTraversalPayload(const SelectorNodeTraversalRecord& node,
+                                           const G3D::Vector3* querySupportPoints,
+                                           uint32_t supportPointCount,
+                                           uint32_t callbackMask,
+                                           SelectorNodeTraversalPayload& outPayload);
+
+    void BuildSelectorSupportPointBounds(const G3D::Vector3* points,
+                                         uint32_t pointCount,
+                                         G3D::Vector3& outBoundsMin,
+                                         G3D::Vector3& outBoundsMax);
+
+    bool BuildSelectorDynamicObjectHullSourceGeometry(const SelectorSupportPlane* sourcePlanes,
+                                                      uint32_t planeCount,
+                                                      const G3D::Vector3& objectBoundsMin,
+                                                      const G3D::Vector3& objectBoundsMax,
+                                                      const G3D::Vector3* localSupportPoints,
+                                                      uint32_t supportPointCount,
+                                                      const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                      const G3D::Vector3& translation,
+                                                      SelectorSupportPlane* outPlanes,
+                                                      uint32_t outPlaneCount,
+                                                      G3D::Vector3* outPoints,
+                                                      uint32_t outPointCount,
+                                                      G3D::Vector3* outAnchorPoint0,
+                                                      G3D::Vector3* outAnchorPoint1);
+
+    bool BuildSelectorBvhChildTraversal(const SelectorBvhNodeRecord& node,
+                                        const G3D::Vector3& boundsMin,
+                                        const G3D::Vector3& boundsMax,
+                                        SelectorBvhChildTraversal& outTraversal);
+
+    void TranslateSelectorSourceGeometry(const G3D::Vector3& translation,
+                                         SelectorSupportPlane* ioPlanes,
+                                         uint32_t planeCount,
+                                         G3D::Vector3* ioPoints,
+                                         uint32_t pointCount,
+                                         G3D::Vector3* ioAnchorPoint0,
+                                         G3D::Vector3* ioAnchorPoint1);
+
+    uint32_t BuildSelectorSourcePlaneOutcode(const SelectorSupportPlane* planes,
+                                             uint32_t planeCount,
+                                             const G3D::Vector3& point);
+
+    uint32_t EvaluateSelectorSourceAabbCull(const SelectorSupportPlane* planes,
+                                            uint32_t planeCount,
+                                            const G3D::Vector3& boundsMin,
+                                            const G3D::Vector3& boundsMax);
+
+    uint32_t EvaluateSelectorHullTransformedBoundsCull(const SelectorSupportPlane* planes,
+                                                       uint32_t planeCount,
+                                                       const G3D::Vector3& localBoundsMin,
+                                                       const G3D::Vector3& localBoundsMax,
+                                                       const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                       const G3D::Vector3& translation);
+
+    uint32_t EvaluateSelectorHullPointWithMargin(const SelectorSupportPlane* planes,
+                                                 uint32_t planeCount,
+                                                 const G3D::Vector3& point,
+                                                 float margin);
+
+    uint32_t EvaluateSelectorHullPointEpsilon(const SelectorSupportPlane* planes,
+                                              uint32_t planeCount,
+                                              const G3D::Vector3& point);
+
+    uint32_t CountSelectorSourceTrianglesPassingPlaneOutcodes(const SelectorSupportPlane* planes,
+                                                              uint32_t planeCount,
+                                                              const G3D::Vector3* samplePoints,
+                                                              uint32_t samplePointCount);
+
+    bool BuildSelectorSourceScanWindow(int32_t cellRowIndex,
+                                       int32_t cellColumnIndex,
+                                       int32_t queryRowMin,
+                                       int32_t queryColumnMin,
+                                       int32_t queryRowMax,
+                                       int32_t queryColumnMax,
+                                       SelectorSourceScanWindow& outWindow);
+
+    uint32_t BuildLocalBoundsAabbOutcode(const G3D::Vector3& localBoundsMin,
+                                         const G3D::Vector3& localBoundsMax,
+                                         const G3D::Vector3& point);
+
+    bool EvaluateTriangleLocalBoundsAabbReject(const G3D::Vector3& localBoundsMin,
+                                               const G3D::Vector3& localBoundsMax,
+                                               const G3D::Vector3& point0,
+                                               const G3D::Vector3& point1,
+                                               const G3D::Vector3& point2);
+
+    uint32_t BuildSelectorSourceSubcellMask(uint32_t rowIndex,
+                                            uint32_t columnIndex);
+
+    bool IsSelectorSourceSubcellMaskedOut(uint32_t rowIndex,
+                                          uint32_t columnIndex,
+                                          uint32_t cellMaskFlags);
+
+    void BuildTranslatedTriangleSelectorRecord(const G3D::Vector3& localPoint0,
+                                               const G3D::Vector3& localPoint1,
+                                               const G3D::Vector3& localPoint2,
+                                               const G3D::Vector3& translation,
+                                               bool useApproximatePlaneBuildPath,
+                                               SelectorCandidateRecord& outRecord);
+
+    uint32_t AppendSelectorSourceTriangleCandidateRecords(const SelectorSupportPlane* planes,
+                                                          uint32_t planeCount,
+                                                          const G3D::Vector3* samplePoints,
+                                                          uint32_t samplePointCount,
+                                                          const G3D::Vector3& translation,
+                                                          bool useApproximatePlaneBuildPath,
+                                                          std::vector<SelectorCandidateRecord>& ioRecords);
+
+    uint32_t AppendSelectorSourceScanWindowCandidateRecords(const SelectorSupportPlane* planes,
+                                                            uint32_t planeCount,
+                                                            const G3D::Vector3* pointGrid,
+                                                            uint32_t pointGridPointCount,
+                                                            const SelectorSourceScanWindow& scanWindow,
+                                                            uint32_t cellMaskFlags,
+                                                            const G3D::Vector3& translation,
+                                                            bool useApproximatePlaneBuildPath,
+                                                            std::vector<SelectorCandidateRecord>& ioRecords);
+
+    uint32_t AppendLocalBoundsScanWindowTriangleCandidateRecords(const G3D::Vector3& localBoundsMin,
+                                                                 const G3D::Vector3& localBoundsMax,
+                                                                 const G3D::Vector3* pointGrid,
+                                                                 uint32_t pointGridPointCount,
+                                                                 const SelectorSourceScanWindow& scanWindow,
+                                                                 uint32_t cellMaskFlags,
+                                                                 const G3D::Vector3& translation,
+                                                                 bool useApproximatePlaneBuildPath,
+                                                                 std::vector<SelectorCandidateRecord>& ioRecords);
+
+    void AppendSelectorQuadRecordPair(const G3D::Vector3& basePoint,
+                                      const G3D::Vector3& firstEdge,
+                                      const G3D::Vector3& secondEdge,
+                                      const G3D::Vector3& normal,
+                                      std::vector<SelectorCandidateRecord>& ioRecords);
+
+    uint32_t BuildAabbBoundarySelectorCandidateRecords(const G3D::Vector3& boundaryMin,
+                                                       const G3D::Vector3& boundaryMax,
+                                                       const G3D::Vector3& queryBoundsMin,
+                                                       const G3D::Vector3& queryBoundsMax,
+                                                       std::vector<SelectorCandidateRecord>& outRecords);
+
+    void BuildTransformedTriangleSelectorRecord(const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                const G3D::Vector3& localNormal,
+                                                const G3D::Vector3& point0,
+                                                const G3D::Vector3& point1,
+                                                const G3D::Vector3& point2,
+                                                SelectorCandidateRecord& outRecord);
 
     void TransformWorldPointToTransportLocal(const G3D::Vector3& worldPoint,
                                              const G3D::Vector3& transportPosition,
@@ -861,6 +1379,37 @@ namespace WoWCollision
     void InitializeSelectorTriangleSourceWrapperSeeds(G3D::Vector3& outTestPoint,
                                                       G3D::Vector3& outCandidateDirection,
                                                       float& outBestRatio);
+
+    bool EvaluateSelectorTriangleSourceWrapperTransaction(const G3D::Vector3& defaultPosition,
+                                                          const G3D::Vector3* overridePosition,
+                                                          bool terrainQuerySucceeded,
+                                                          float inputBestRatio,
+                                                          SelectorTriangleSourceWrapperTrace& outTrace);
+
+    bool EvaluateSelectorTriangleSourceVariableTransaction(const G3D::Vector3& defaultPosition,
+                                                           const G3D::Vector3* overridePosition,
+                                                           const G3D::Vector3& projectedPosition,
+                                                           uint32_t supportPlaneInitCount,
+                                                           uint32_t validationPlaneInitCount,
+                                                           uint32_t scratchPointZeroCount,
+                                                           const G3D::Vector3& testPoint,
+                                                           const G3D::Vector3& candidateDirection,
+                                                           float initialBestRatio,
+                                                           float collisionRadius,
+                                                           float boundingHeight,
+                                                           const G3D::Vector3& cachedBoundsMin,
+                                                           const G3D::Vector3& cachedBoundsMax,
+                                                           bool modelPropertyFlagSet,
+                                                           uint32_t movementFlags,
+                                                           float field20Value,
+                                                           bool rootTreeFlagSet,
+                                                           bool childTreeFlagSet,
+                                                           bool queryDispatchSucceeded,
+                                                           bool rankingAccepted,
+                                                           uint32_t rankingCandidateCount,
+                                                           int32_t rankingSelectedRecordIndex,
+                                                           float rankingReportedBestRatio,
+                                                           SelectorTriangleSourceVariableTransactionTrace& outTrace);
 
     void BuildSelectorSupportPlanes(const G3D::Vector3& position,
                                     float verticalOffset,

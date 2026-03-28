@@ -1,0 +1,246 @@
+0x00617170: push     ebp
+0x00617171: mov      ebp, esp
+0x00617173: sub      esp, 0x84
+0x00617179: push     ebx
+0x0061717A: mov      ebx, dword ptr [ebp + 8]
+0x0061717D: push     esi
+0x0061717E: mov      esi, ecx
+0x00617180: cmp      ebx, dword ptr [esi + 0x38]
+0x00617183: push     edi
+0x00617184: mov      edi, dword ptr [ebp + 0xc]
+0x00617187: jne      0x617192
+0x00617189: cmp      edi, dword ptr [esi + 0x3c]
+0x0061718C: je       0x6173a1
+0x00617192: mov      eax, ebx
+0x00617194: or       eax, edi
+0x00617196: je       0x6171a7
+0x00617198: push     edi
+0x00617199: push     ebx
+0x0061719A: call     0x630a80
+0x0061719F: test     eax, eax
+0x006171A1: je       0x6173a1
+0x006171A7: mov      ecx, dword ptr [esi + 0x38]
+0x006171AA: or       ecx, dword ptr [esi + 0x3c]
+0x006171AD: mov      dword ptr [ebp - 0x44], 0x3f800000
+0x006171B4: mov      dword ptr [ebp - 0x40], 0
+0x006171BB: mov      dword ptr [ebp - 0x3c], 0
+0x006171C2: mov      dword ptr [ebp - 0x38], 0
+0x006171C9: mov      dword ptr [ebp - 0x34], 0
+0x006171D0: mov      dword ptr [ebp - 0x30], 0x3f800000
+0x006171D7: mov      dword ptr [ebp - 0x2c], 0
+0x006171DE: mov      dword ptr [ebp - 0x28], 0
+0x006171E5: mov      dword ptr [ebp - 0x24], 0
+0x006171EC: mov      dword ptr [ebp - 0x20], 0
+0x006171F3: mov      dword ptr [ebp - 0x1c], 0x3f800000
+0x006171FA: mov      dword ptr [ebp - 0x18], 0
+0x00617201: mov      dword ptr [ebp - 0x14], 0
+0x00617208: mov      dword ptr [ebp - 0x10], 0
+0x0061720F: mov      dword ptr [ebp - 0xc], 0
+0x00617216: mov      dword ptr [ebp - 8], 0x3f800000
+0x0061721D: je       0x617288
+0x0061721F: lea      edx, [ebp - 0x44]
+0x00617222: push     edx
+0x00617223: mov      ecx, esi
+0x00617225: call     0x7c6790
+0x0061722A: fstp     dword ptr [ebp - 4]
+0x0061722D: mov      eax, dword ptr [esi + 0x15c]
+0x00617233: mov      ecx, dword ptr [eax + 0xdc]
+0x00617239: test     ecx, ecx
+0x0061723B: jne      0x617247
+0x0061723D: mov      ecx, dword ptr [eax + 0xd8]
+0x00617243: test     ecx, ecx
+0x00617245: je       0x61725e
+0x00617247: mov      ecx, dword ptr [eax + 0xdc]
+0x0061724D: test     ecx, ecx
+0x0061724F: jne      0x617257
+0x00617251: mov      ecx, dword ptr [eax + 0xd8]
+0x00617257: push     0
+0x00617259: call     0x718910
+0x0061725E: mov      edi, dword ptr [ebp - 4]
+0x00617261: mov      ecx, dword ptr [esi + 0x15c]
+0x00617267: push     edi
+0x00617268: call     0x601050
+0x0061726D: mov      ecx, dword ptr [esi + 0x15c]
+0x00617273: push     edi
+0x00617274: lea      eax, [ebp - 0x44]
+0x00617277: push     eax
+0x00617278: call     0x6115e0
+0x0061727D: push     edi
+0x0061727E: mov      ecx, esi
+0x00617280: call     0x617080
+0x00617285: mov      edi, dword ptr [ebp + 0xc]
+0x00617288: mov      ecx, ebx
+0x0061728A: or       ecx, edi
+0x0061728C: je       0x61737c
+0x00617292: lea      edx, [ebp - 0x44]
+0x00617295: push     edx
+0x00617296: lea      eax, [ebp - 0x84]
+0x0061729C: push     eax
+0x0061729D: push     edi
+0x0061729E: push     ebx
+0x0061729F: mov      ecx, esi
+0x006172A1: mov      dword ptr [ebp - 0x84], 0x3f800000
+0x006172AB: mov      dword ptr [ebp - 0x80], 0
+0x006172B2: mov      dword ptr [ebp - 0x7c], 0
+0x006172B9: mov      dword ptr [ebp - 0x78], 0
+0x006172C0: mov      dword ptr [ebp - 0x74], 0
+0x006172C7: mov      dword ptr [ebp - 0x70], 0x3f800000
+0x006172CE: mov      dword ptr [ebp - 0x6c], 0
+0x006172D5: mov      dword ptr [ebp - 0x68], 0
+0x006172DC: mov      dword ptr [ebp - 0x64], 0
+0x006172E3: mov      dword ptr [ebp - 0x60], 0
+0x006172EA: mov      dword ptr [ebp - 0x5c], 0x3f800000
+0x006172F1: mov      dword ptr [ebp - 0x58], 0
+0x006172F8: mov      dword ptr [ebp - 0x54], 0
+0x006172FF: mov      dword ptr [ebp - 0x50], 0
+0x00617306: mov      dword ptr [ebp - 0x4c], 0
+0x0061730D: mov      dword ptr [ebp - 0x48], 0x3f800000
+0x00617314: call     0x7c6840
+0x00617319: fstp     dword ptr [ebp - 4]
+0x0061731C: mov      eax, dword ptr [esi + 0x15c]
+0x00617322: mov      ecx, dword ptr [eax + 0xdc]
+0x00617328: test     ecx, ecx
+0x0061732A: jne      0x617336
+0x0061732C: mov      ecx, dword ptr [eax + 0xd8]
+0x00617332: test     ecx, ecx
+0x00617334: je       0x61734f
+0x00617336: mov      ecx, dword ptr [eax + 0xdc]
+0x0061733C: test     ecx, ecx
+0x0061733E: jne      0x617346
+0x00617340: mov      ecx, dword ptr [eax + 0xd8]
+0x00617346: lea      edx, [ebp - 0x44]
+0x00617349: push     edx
+0x0061734A: call     0x718910
+0x0061734F: mov      edi, dword ptr [ebp - 4]
+0x00617352: mov      ecx, dword ptr [esi + 0x15c]
+0x00617358: push     edi
+0x00617359: call     0x601050
+0x0061735E: mov      ecx, dword ptr [esi + 0x15c]
+0x00617364: push     edi
+0x00617365: lea      eax, [ebp - 0x84]
+0x0061736B: push     eax
+0x0061736C: call     0x6115e0
+0x00617371: push     edi
+0x00617372: mov      ecx, esi
+0x00617374: call     0x617080
+0x00617379: mov      edi, dword ptr [ebp + 0xc]
+0x0061737C: mov      ecx, dword ptr [esi + 0x30]
+0x0061737F: push     edi
+0x00617380: mov      dword ptr [esi + 0x38], ebx
+0x00617383: mov      dword ptr [esi + 0x3c], edi
+0x00617386: mov      edx, dword ptr [ecx + 4]
+0x00617389: mov      eax, dword ptr [ecx]
+0x0061738B: push     ebx
+0x0061738C: push     edx
+0x0061738D: push     eax
+0x0061738E: call     0x6309f0
+0x00617393: pop      edi
+0x00617394: pop      esi
+0x00617395: mov      eax, 1
+0x0061739A: pop      ebx
+0x0061739B: mov      esp, ebp
+0x0061739D: pop      ebp
+0x0061739E: ret      8
+0x006173A1: pop      edi
+0x006173A2: pop      esi
+0x006173A3: xor      eax, eax
+0x006173A5: pop      ebx
+0x006173A6: mov      esp, ebp
+0x006173A8: pop      ebp
+0x006173A9: ret      8
+0x006173AC: nop      
+0x006173AD: nop      
+0x006173AE: nop      
+0x006173AF: nop      
+0x006173B0: push     ebp
+0x006173B1: mov      ebp, esp
+0x006173B3: push     ebx
+0x006173B4: mov      ebx, dword ptr [ebp + 0xc]
+0x006173B7: push     esi
+0x006173B8: push     edi
+0x006173B9: mov      edi, dword ptr [ebp + 8]
+0x006173BC: mov      eax, edi
+0x006173BE: or       eax, ebx
+0x006173C0: mov      esi, ecx
+0x006173C2: jne      0x6173de
+0x006173C4: mov      eax, dword ptr [esi + 0x38]
+0x006173C7: mov      edx, dword ptr [esi + 0x3c]
+0x006173CA: mov      ecx, eax
+0x006173CC: or       ecx, edx
+0x006173CE: je       0x6173de
+0x006173D0: push     edx
+0x006173D1: lea      ecx, [esi + 0x10]
+0x006173D4: push     eax
+0x006173D5: call     0x630ba0
+0x006173DA: test     eax, eax
+0x006173DC: jne      0x61741c
+0x006173DE: mov      edx, dword ptr [esi + 0x15c]
+0x006173E4: mov      eax, dword ptr [edx + 8]
+0x006173E7: mov      ecx, dword ptr [eax]
+0x006173E9: cmp      ecx, dword ptr [0xc4da98]
+0x006173EF: jne      0x61741c
+0x006173F1: mov      edx, dword ptr [eax + 4]
+0x006173F4: cmp      edx, dword ptr [0xc4da9c]
+0x006173FA: jne      0x61741c
+0x006173FC: mov      eax, dword ptr [esi + 0xa4]
+0x00617402: test     eax, eax
+0x00617404: je       0x61740c
+0x00617406: test     byte ptr [eax + 0x18], 4
+0x0061740A: je       0x61741c
+0x0061740C: push     ebx
+0x0061740D: push     edi
+0x0061740E: mov      ecx, esi
+0x00617410: call     0x617170
+0x00617415: pop      edi
+0x00617416: pop      esi
+0x00617417: pop      ebx
+0x00617418: pop      ebp
+0x00617419: ret      8
+0x0061741C: pop      edi
+0x0061741D: pop      esi
+0x0061741E: xor      eax, eax
+0x00617420: pop      ebx
+0x00617421: pop      ebp
+0x00617422: ret      8
+0x00617425: nop      
+0x00617426: nop      
+0x00617427: nop      
+0x00617428: nop      
+0x00617429: nop      
+0x0061742A: nop      
+0x0061742B: nop      
+0x0061742C: nop      
+0x0061742D: nop      
+0x0061742E: nop      
+0x0061742F: nop      
+0x00617430: push     esi
+0x00617431: mov      esi, ecx
+0x00617433: mov      ecx, dword ptr [esi + 0x15c]
+0x00617439: call     0x5fa550
+0x0061743E: test     al, al
+0x00617440: jne      0x61744a
+0x00617442: fld      dword ptr [0x801628]
+0x00617448: pop      esi
+0x00617449: ret      
+0x0061744A: fld      dword ptr [esi + 0xb8]
+0x00617450: pop      esi
+0x00617451: ret      
+0x00617452: nop      
+0x00617453: nop      
+0x00617454: nop      
+0x00617455: nop      
+0x00617456: nop      
+0x00617457: nop      
+0x00617458: nop      
+0x00617459: nop      
+0x0061745A: nop      
+0x0061745B: nop      
+0x0061745C: nop      
+0x0061745D: nop      
+0x0061745E: nop      
+0x0061745F: nop      
+0x00617460: push     ebp
+0x00617461: mov      ebp, esp
+0x00617463: fld      dword ptr [ebp + 8]
+0x00617466: fmul     dword ptr [ebp + 0x10]
+0x00617469: fmul     dword ptr [0x7ffa24]

@@ -551,15 +551,136 @@ CollisionStep (0x633840)
     - computes the horizontal correction vector from the selected contact plane
     - normalizes the plane’s horizontal component, applies the movement-direction dot product and step distance, then adds the `0.001f` epsilon at `0x801360`
     - returns `XY` only (`Z = 0`)
+    - the production DLL now mirrors that bounded helper through pure `EvaluateGroundedDriverHorizontalCorrection(...)`
+      - degenerate vertical-only normals return zero correction
+      - accepted paths project against the selected plane, zero `Z`, normalize the horizontal plane normal, and apply the same `+0.001f` pushout
   - `0x635C00`
     - computes the vertical correction from the selected contact plane
     - returns `Z` only (`X = Y = 0`)
     - can also mutate the in-flight movement fraction / distance pointer before the correction is returned
   - `0x636100`
     - remains partially unresolved, but it gates whether the grounded path takes the `0x635D80` horizontal-correction branch or the alternate `0x635C00` retry branch with `this->flags |= 0x04000000`
+  - the production DLL now mirrors the first visible `0x6367B0` call-site dispatcher/bookkeeper through pure `EvaluateGroundedDriverFirstDispatch(...)`
+    - walkable selected contact bypasses `0x636100` and goes straight to the vertical `0x635C00` path
+    - non-walkable `0x636100` return `0` exits immediately
+    - non-walkable return `2` sets `0x04000000`, takes the vertical `0x635C00` path, and rescales remaining-distance bookkeeping by `newSweepDistance / oldSweepDistance`
+    - every other nonzero return falls into the horizontal `0x635D80` path without the remaining-distance rescale
+  - the production DLL now also mirrors the next selected-contact / grounded-runtime handoff through pure `EvaluateGroundedDriverSelectedContactDispatch(...)`
+    - when `0x6334A0` reports walkable success, the chosen contact bypasses the non-walkable lattice, goes straight to the selected-contact vertical path, and rescales remaining-distance bookkeeping by `newSweepDistance / oldSweepDistance`
+    - when `0x6334A0` is non-walkable and its consumed-state out-param stays `0`, the path delegates unchanged into the already-pinned first `0x636100` dispatch lattice
+    - when `0x6334A0` is non-walkable and its consumed-state out-param becomes nonzero, the path drops the chosen pair and starts fall with zero velocity: clear `0x04000000` and `0x00200000`, set `MOVEFLAG_JUMPING`, zero `+0x78`, copy `+0x18 -> +0x7C`, and zero `+0xA0`
+  - the production DLL now also mirrors the common post-helper resweep bookkeeper through pure `EvaluateGroundedDriverResweepBookkeeping(...)`
+    - combine the helper correction with the in-flight sweep vector as `combined = correction + direction * sweepScalar`
+    - if `|combined| <= 0x801360`, set the local finalize flag immediately
+    - otherwise normalize the full 3D direction back into the in-flight vector, derive the horizontal pair from `combined.x/y`, normalize that pair only when `combinedXY > 0x8029D4`, subtract `combinedXY` from the remaining horizontal budget, and set the local finalize flag when the updated budget is exhausted under `0x8026BC`
+  - the production DLL now also mirrors the positive-`Z` `0x04000000` cap block through pure `EvaluateGroundedDriverVerticalCap(...)`
+    - when `0x04000000` is clear, or the recombined `moveZ` is not positive, or `currentZ + moveZ` is already under `GetBoundingRadius() + this->+0x80`, the block is a no-op
+    - otherwise it clamps the in-flight sweep scalar by `(capAbsoluteZ - currentZ) / moveZ`
+    - when the clamp materially shortens the upward `Z` by more than `0x8026BC`, it sets the local finalize flag at `[ebp-0x20]`
+    - when the adjusted sweep falls below `0x801360`, it sets the tiny-sweep flag at `[ebp-0x30]`
+  - the production DLL now also mirrors the fast selected-pair commit/fallback tail through pure `EvaluateGroundedDriverSelectedPairCommitTail(...)`
+    - when `selectedIndex >= selectedCount` or the consumed-state flag is nonzero, it takes the same `StartFall(0)` fallback: snapshot movement cache, clear `0x04000000`/`0x00200000`, set `MOVEFLAG_JUMPING`, zero `+0x78`, copy `+0x18 -> +0x7C`, and zero `+0xA0`
+    - when the snapshot-before-commit flag is nonzero, it snapshots the movement cache through the visible `0x7C5CD0(0)` contract and forwards the cached pair
+    - when that snapshot flag is zero and `0x40000000` is clear, it forwards the cached pair without the snapshot
+    - when `0x40000000` is set, it defers into the larger rerank/hover branch under `0x636FA1`
+  - the production DLL now also mirrors the visible `0x6173B0` pre-`0x617170` guard lattice through pure `EvaluateGroundedDriverSelectedPairCommitGuard(...)`
+    - when the incoming pair is zero but the stored pair is nonzero, the visible unload probe can reject immediately and return `0`
+    - the current context must match the same global `0xC4DA98/0xC4DA9C` pair or the guard returns `0`
+    - when `this->+0xA4` is non-null, bit `0x04` at `byte[this->+0xA4+0x18]` must be set or the guard returns `0`
+    - only after those visible guards does the path enter the selected-pair consumer body at `0x617170`
+  - the production DLL now also mirrors the visible `0x617170` selected-pair consumer body through pure `EvaluateGroundedDriverSelectedPairCommitBody(...)`
+    - unchanged `(incoming == stored)` pair bits reject before any transform/attachment work
+    - nonzero incoming pairs call the visible `0x630A80` validator and reject on failure
+    - stored nonzero pairs run the first transform path: `0x7C6790` phase scalar, optional `0x718910(0)` attachment bridge, then `0x601050`, `0x6115E0`, and `0x617080`
+    - incoming nonzero pairs run the second transform path: `0x7C6840` phase scalar, optional `0x718910(&storedTransform)` attachment bridge, then the same `0x601050`, `0x6115E0`, and `0x617080` sequence
+    - on success the body writes `this->+0x38/+0x3C = incomingPair`, calls `0x6309F0`, and returns `1`
+  - the production DLL now also mirrors the visible `0x636FA1` hover/rerank wrapper through pure `EvaluateGroundedDriverHoverRerankDispatch(...)`
+    - if the first `0x632BA0` rerank fails, the wrapper returns without committing a pair
+    - if the reranked index is in range and `selectedNormal.z <= threshold`, it takes the same `StartFall(0)` path
+    - otherwise it loads `0xC4E544[index]` when the index is in range, forwards directly when `windowSpanScalar > 1.0f`, or computes the bounded follow-up scalar for the second rerank
+    - the second rerank path zeroes negative follow-up scalars, clamps overlong ones to `1.0f - windowSpanScalar`, and only advances `this->+0x18` plus forwards the pair when the second rerank succeeds
+  - the production DLL now also mirrors one more visible `0x636100` follow-up rerank tail through pure `EvaluateGroundedDriverSelectedPlaneFollowupRerank(...)`
+    - after the first rerank succeeds, out-of-range selected indices or selected-record normal mismatches reload the original packed pair before the second rerank, while exact record matches retain the reranked packed pair
+    - the second rerank always uses the fixed unit-`Z` working vector
+    - second-rerank failure returns `0` immediately
+    - second-rerank success with `fabs(contactNormal.z) <= 0x8029D4` returns `1` immediately
+  - the production DLL now also mirrors the visible caller-side `0x635C00` / `0x636100` vertical retry transaction through pure `EvaluateGroundedDriverSelectedPlaneRetryTransaction(...)`
+    - walkable selected contacts bypass the `0x636100` gate and go straight to the vertical retry path without setting `0x04000000`
+    - non-walkable `0x636100` return `2` sets `0x04000000` before taking the same vertical retry path
+    - the vertical retry path feeds through the already-pinned selected-plane distance-pointer scalar helper and rescales remaining distance plus sweep fraction by `newSweepDistance / oldSweepDistance` when the input distance pointer is non-degenerate
+    - the flagged negative-scalar path still returns `+boundingRadius` while collapsing the in-flight distance budget to zero
+  - the production DLL now also mirrors the bounded `0x635C00` correction wrapper itself through pure `EvaluateGroundedDriverSelectedPlaneCorrectionTransaction(...)`
+    - it preserves the direct scalar, positive clamp, negative clamp, and flagged-negative zero-distance outcomes from the already-pinned selected-plane distance-pointer scalar helper
+    - it always writes the same Z-only correction vector from that inner helper
+    - it rescales remaining distance plus sweep fraction only when the input distance pointer is non-degenerate
+  - the production DLL now also mirrors the visible `0x636100` first-pass scalar/vector setup through pure `EvaluateGroundedDriverSelectedPlaneFirstPassSetup(...)`
+    - it seeds the first-pass scalar as `max(this->+0xB0 + 0x80DFEC, GetBoundingRadius() * 0x80E008)`
+    - it only enters the first rerank when `0.0f <= contactNormal.z <= 0x80DFFC`
+    - that first rerank uses the negative normalized horizontal contact normal as its working vector
+    - first-rerank failure returns `0` immediately, while success falls through to the already-pinned selected-record reload / follow-up rerank tail
+  - the production DLL now also mirrors the visible post-fast-return `0x636100` tail composition through pure `EvaluateGroundedDriverSelectedPlanePostFastReturnTailTransaction(...)`
+    - it always runs the already-pinned third-pass setup first
+    - third-pass failure exits before any blend/correction work
+    - third-pass success forwards deterministically into the already-pinned horizontal-fallback vs selected-plane-blend helper
+  - the production DLL now also mirrors one more bounded `0x636100` tail-preparation seam through pure `EvaluateGroundedDriverSelectedPlaneTailPreThirdPassSetup(...)`
+    - it seeds the fallback horizontal move through the already-pinned `0x635D80` helper
+    - on the stateful path it reuses the already-pinned `0x635C00` correction transaction
+    - it makes the projected tail-rerank working vector/distance explicit above the already-pinned later helpers
+    - it rejects non-finite or tiny transformed magnitudes before emitting projected tail-rerank inputs
+  - the production DLL now also mirrors the next bounded `0x636100` composition seam through pure `EvaluateGroundedDriverSelectedPlaneTailProjectedBlendTransaction(...)`
+    - it feeds the real outputs from `EvaluateGroundedDriverSelectedPlaneTailPreThirdPassSetup(...)` into the already-pinned post-fast-return blend helper instead of injecting fallback projected-move inputs at that boundary
+    - it makes the `UseHorizontalFallbackInputs` vs `UseProjectedTailRerankInputs` branch explicit in the nested trace before the later post-fast-return dispatch
+    - it preserves the later exit/horizontal/selected-plane blend dispatch from the already-pinned helper stack
+  - the production DLL now also mirrors the visible pre-chooser writeback/state-mutation block through pure `EvaluateGroundedDriverSelectedPlaneTailWriteback(...)`
+    - third-pass success always applies the packed-pair XY writeback through `packedPair.xy * followupScalar`
+    - the projected-tail branch only adds XYZ writeback, resolved-distance growth, and `normal.z` growth when the scalar delta exceeds epsilon, the walkable gate survives, and the projected-tail rerank succeeds
+    - strengthened tail-return tests now also prove the non-walkable final-selection path skips `0x635F80` and that `0x04000000` suppresses the later `field80` writeback on the selected-plane return path
+  - the production DLL now also mirrors the final visible `0x635F80` caller contract through pure `EvaluateGroundedDriverSelectedPlaneTailChooserContract(...)`
+    - it surfaces the chooser input packed-pair vector, chooser input projected move, chooser input scalar, and the post-call projected-move buffer
+    - it makes the walkable call gate and the return-`1` vs return-`2` split explicit above the still-opaque chooser internals
+    - it also surfaces whether the chooser mutated the projected-move buffer in place before the later `field80` suppression/writeback logic
+  - fresh 2026-03-28 review now splits more of the previously opaque chooser internals under `0x635F80`
+    - the production DLL now mirrors the visible `0x635600` reroute candidate body through pure `EvaluateGroundedDriverSelectedPlaneTailProbeRerouteCandidate(...)`
+    - that seam pins candidate build from `normalizedInputDirection * remainingMagnitude + lateralOffset.xy`, the later-attempt drift/abort gate, the accepted XY writeback into `field68/6c/84`, the `field5c/60/64` direction-vector write, and the next-input magnitude rebuild
+    - the production DLL now also mirrors the visible `0x635600` vertical-only fallback through pure `EvaluateGroundedDriverSelectedPlaneTailProbeVerticalFallback(...)`
+    - that seam pins the `field84 = 0` clear, XY zeroing, retained `normalizedInputDirection.z * remainingMagnitude`, and `abs(z)` next-input magnitude rebuild
+    - the production DLL now also mirrors the visible `0x635EA0` / `0x635F10` snapshot wrappers through pure `CaptureGroundedDriverSelectedPlaneTailProbeStateSnapshot(...)` and `RestoreGroundedDriverSelectedPlaneTailProbeStateSnapshot(...)`
+    - the production DLL now also mirrors the isolated `0x635A08..0x635A30` elapsed-seconds to rounded-milliseconds quantizer through pure `EvaluateGroundedDriverSelectedPlaneTailElapsedMilliseconds(...)`
+    - the production DLL now also mirrors the visible caller-side `0x635734..0x6357D4` shell through pure `EvaluateGroundedDriverSelectedPlaneTailPostForwarding(...)`
+    - that seam pins the post-`0x6351A0` dispatch, shared move/writeback join, elapsed accumulation, and direct-vs-alternate state-handler routing
+    - the production DLL now also mirrors the bounded `0x6359AE..0x6359EC` return-`2` late branch through pure `EvaluateGroundedDriverSelectedPlaneTailReturn2LateBranch(...)`
+    - the production DLL now also mirrors the visible `0x635A37..0x635AED` notifier/state-commit tail through pure `EvaluateGroundedDriverSelectedPlaneTailLateNotifier(...)`
 - Practical implication for native parity work:
-  - the remaining stateless mismatch is no longer the merged blocker selector or the horizontal epsilon nudge
-  - the open work is the selected-plane `Z` correction and distance bookkeeping that still happens around `0x635C00` / `0x636100`
+  - the remaining stateless mismatch is no longer the merged blocker selector, the horizontal epsilon nudge, or the bounded `0x635D80` helper itself
+  - fresh raw captures now also live in `docs/physics/0x617170_disasm.txt`, `docs/physics/0x636FA1_disasm.txt`, `docs/physics/0x6BC7E0_disasm.txt`, `docs/physics/0x6B9430_disasm.txt`, `docs/physics/0x6B8E50_disasm.txt`, and `docs/physics/0x6BB6B0_disasm.txt`
+  - the remaining object-side workload is now fully bounded locally rather than estimated from prefix windows:
+    - `0x6BC7E0` is one medium recursive BVH body (`0x006BC7E0..0x006BC98E`) with only four call targets total: `0x6B8C50`, `0x6BC9A0`, self-recursive `0x6BC7E0`, and already-closed `0x6B8C00` through the leaf wrapper
+    - its leaf arm is exact: after `0x6B8C50` survives it iterates the node-owned leaf-id span and calls `0x6BC9A0` once per leaf id
+    - its non-leaf arm is exact too: it clips the selected split axis against the incoming min/max bounds, rewrites up to three stack-local `6`-float bound boxes, then recurses low-first and high-second into child ids from `node+2` / `node+4` only when each clipped box survives the split tests
+    - the production DLL now mirrors that visible recursive body through pure `EvaluateSelectorBvhRecursiveTraversal(...)` plus deterministic export/test coverage for low/high ordering, leaf-span iteration, and queue/overflow propagation
+    - `0x6B9430` is one small post-recursion wrapper tail: after the already-pinned payload build and `0x6BC7E0(rootIndex = 0)` call it always dispatches into `0x6B8E50`, conditionally dispatches into `0x6BB6B0` when `arg4 & 0x000F0000 != 0`, clears the transient `0x80` visited bit for every queued id in `0xCE26E0/0xCE26E8`, zeroes `0xCE26E0` and `0xCE66FC`, and returns whether `0xC5A474` changed during the pass
+    - the production DLL now mirrors that visible tail through pure `EvaluateSelectorObjectConsumerDispatch(...)` plus deterministic export/test coverage
+    - `0x6B8E50` is one medium accepted-list consumer (`0x006B8E50..0x006B91AF`): two counted preprocess loops, fixed helper fan-out only to `0x6ACDD0`, `0x7BCA80`, `0x6BCE50`, and `0x6A98E0`, then one global queue/sidecar reserve-and-write tail against `0xC63258`, `0xC5A474`, `0xC7B378`, and `0xC63260` with independent triangle-word and accepted-id reservation checks
+    - the production DLL now mirrors the visible counted preprocess wrapper above that tail through pure `EvaluateSelectorAcceptedListConsumerPreprocessLoop(...)`: pending-vs-accepted source selection, optional pending-gate bypass, full loop iteration counts, aggregated `0x6ACDD0` / `0x7BCA80 x3` / `0x6BCE50` / `0x6A98E0` call counts, and buffered per-iteration reuse of the already-pinned `EvaluateSelectorAcceptedListConsumerPreprocessIteration(...)` token/index/slot choreography
+    - the production DLL now also mirrors the bounded post-reservation record materialization tail through `EvaluateSelectorAcceptedListConsumerRecordWrite(...)`: pre-reserve record index capture, fixed `+0x94` owner payload token, `d0/d4` token writes, independent triangle-word and accepted-id buffer tokens, `0x14/0x16` count fields, and `0x18/0x1A` min/max derived from the reserved source words rather than the truncated test output buffer
+    - the production DLL now also mirrors one bounded preprocess-iteration seam through `EvaluateSelectorAcceptedListConsumerPreprocessIteration(...)`: pending iterations use debug color `0x7FFF0000` with local stack slot order `[-0x1C, -0x28, -0x34]`, accepted iterations use `0x7F00FF00` with `[-0x34, -0x28, -0x1C]`, both consume the triangle-word triplet in `2,1,0` order, both use `owner + 0x94` as the fixed payload pointer, and both end in the same `0x6BCE50 -> 0x6A98E0(edx = 0)` helper tail
+    - the live split consumer body now composes its preprocess counts through that same helper instead of maintaining a separate hand-counted prefix, so the remaining object-side gap is no longer `0x6B8E50` itself
+    - `0x6BB6B0` is one large raster/consumer body (`0x006BB6B0..0x006BBCAA`): copy/translate through `0x686820`, support-point reduction through `0x7C1450`, four-step quantization through repeated `0x73FF3F` / `0x40A2B0`, clip-window build through `0x6ADBF0`, scratch allocation through `0x40A280`, nested raster/outcode loops through `0x686C20`, and final append/failure cleanup through `0x513570` / `0x4044B0`
+    - the production DLL now also mirrors the bounded prepass outcode loop through pure `EvaluateSelectorObjectRasterPrepassOutcodeLoop(...)`: point-grid index walk, point-outcode writes, out-of-range zeroing, output-buffer truncation, and null-buffer tracing
+    - the production DLL now also mirrors the translated-payload + prepass composition above that loop through pure `EvaluateSelectorObjectRasterPrepassComposition(...)`: rebuild translated anchors / first-plane distance from `prefix.appliedTranslation`, then delegate into the already-pinned inner prepass helper
+    - the production DLL now also mirrors one explicit `0x6BB6B0` raster-cell body through pure `EvaluateSelectorObjectRasterCellIteration(...)`
+    - the production DLL now also mirrors the outer cell-loop / final queue-link aggregation through pure `EvaluateSelectorObjectRasterCellLoopAggregation(...)`: accumulate per-cell accept/reject counts and queue/scratch overflow bits, surface appended word/triangle totals, and make the deferred cleanup splice explicit above the already-pinned per-cell helper
+    - that seam now pins cell-mode `0xF` skip, cell-mode mask skip, per-triangle accept/reject masks, queue/scratch overflow shape, and scratch-word append order through the production DLL instead of only proxy-covering them via the outer consumer body
+  - fresh 2026-03-28 shell audit now closes the old grounded caller shell entirely:
+    - the helper-shaped remainder above is now closed by `CaptureGroundedDriverSelectedPlaneTailProbeStateSnapshot(...)`, `RestoreGroundedDriverSelectedPlaneTailProbeStateSnapshot(...)`, `EvaluateGroundedDriverSelectedPlaneTailElapsedMilliseconds(...)`, `EvaluateGroundedDriverSelectedPlaneTailPostForwarding(...)`, `EvaluateGroundedDriverSelectedPlaneTailReturn2LateBranch(...)`, and `EvaluateGroundedDriverSelectedPlaneTailLateNotifier(...)`
+    - the production DLL now also mirrors the visible `0x635600..0x6356D2` entry/setup shell through pure `EvaluateGroundedDriverSelectedPlaneTailEntrySetup(...)`: millisecond-to-seconds scaling, zeroed local state, snapshot capture, 3D/2D magnitude build, and the normalized-input handoff into the chooser path
+    - the production DLL now also mirrors the bounded `0x6357DA..0x6359A9` retry controller through pure `EvaluateGroundedDriverSelectedPlaneTailRerouteLoopController(...)`: optional attempt-budget advance, attempt-limit vertical fallback, and reset-vs-loopback dispatch above the already-pinned reroute-candidate / vertical-fallback leaves
+    - `EvaluateGroundedDriverSelectedPlaneTailChooserContract(...)` now also surfaces the positive projected-move mutation path instead of only the unchanged-buffer case
+    - `docs/physics/0x635600_disasm.txt` still carries the full shell capture, but no caller-side `0x635600` seam remains open backlog on the split grounded path
+  - current 2026-03-28 practical implication update: the old grounded caller shell is no longer an open deterministic native gap on the collision/movement-controller path
+  - current 2026-03-28 practical implication update: the remaining work has moved back to live replay calibration / transport parity in `PhysicsEngine.cpp` and the external live-fixture proof lane, not another missing `GroundedDriverParity` seam
+  - on the current collision/movement-controller scope, the remaining grounded gap is no longer “internal `0x635F80` semantics” as one opaque helper
+  - it is now bounded to the still-open `0x635600` orchestration shell around `0x6351A0` / `0x635450`, elapsed/budget bookkeeping, and the notifier tail, plus the trivial snapshot/restore wrappers `0x635EA0` / `0x635F10`
 
 ### Selected-contact container (`0xC4E52C` / `0xC4E534` / `0xC4E544`)
 
@@ -580,6 +701,7 @@ CollisionStep (0x633840)
     - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
     - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
     - the production DLL now mirrors that second-half 5-direction ranking core through pure `EvaluateSelectorDirectionRanking(...)`: it walks `supportPlanes[0..4]`, builds each surviving quad clip set through `0x632F80`, feeds `0x632700`, applies the same `0x80DFEC` overwrite/append/swap rules, and zero-clamps the reported scalar when the final best ratio falls under the same epsilon
+    - the production DLL now also mirrors the next visible entry/setup wrapper above that core through pure `EvaluateSelectorChosenIndexPairDirectionSetupTransaction(...)`: near-zero `fabs(requestedDistance) <= 0x8026BC` early success, override-vs-default position choice, optional swim-side vertical-offset scale branch, requested-distance clamp before scaling the candidate direction, local support-plane/neighborhood setup, and the handoff into `EvaluateSelectorDirectionRanking(...)`
     - the earlier `0x632A30` / `0x631E70` setup gates are no longer fully opaque, but they are still only partially mirrored by that seam
     - fresh 2026-03-26 review now adds one concrete `0x631E70` sub-helper on that unresolved path: `0x637350` is a pure inclusive point-vs-AABB test over six floats laid out as `minX,minY,minZ,maxX,maxY,maxZ`, and `0x631E70` uses it to decide whether the cached query bounds at `0xC4E5A0` already contain both the current and projected points before rebuilding the merged query volume
     - the production DLL now mirrors that exact `0x637350` helper through pure `IsPointInsideAabbInclusive(...)` plus a deterministic export/test seam
@@ -605,6 +727,65 @@ CollisionStep (0x633840)
       - for every surviving record it also appends the aligned `0x08` sidecar payload through `0x673C80`
       - fresh raw capture now also lives in `docs/physics/0x673C80_disasm.txt`
     - the production DLL now mirrors that filtered contact-plus-pair copy contract through pure `CopyTerrainQueryWalkableContactsAndPairs(...)` plus deterministic export/test coverage
+    - fresh 2026-03-26 review now also pins one primitive writer on the still-unresolved `0x6AB530` temp-record path
+      - fresh raw capture now lives in `docs/physics/0x6ACDE0_disasm.txt`
+      - `0x6ACDE0` writes one plane record as `{ normal.x, normal.y, normal.z, -(normal dot point) }`
+      - it copies the incoming normal verbatim and performs no normalization or epsilon guard
+    - the production DLL now mirrors that exact primitive through pure `BuildPlaneFromNormalAndPoint(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes the visible `0x6AB530` / `0x6ABA30` boundary writer around that primitive
+      - `0x6AB530` checks the query footprint against the boundary min/max `x/y` faces with inclusive `<=` / `>=` comparisons
+      - each crossed face is emitted as one vertical quad split into two `0x34` records
+      - the shared base point always sits on the crossed boundary face at `z = boundaryMin.z`
+      - the vertical edge uses the fixed binary constant `0x46FA0000 = 32000.0f`
+      - `0x6ABA30` is the shared two-record writer: both records reuse the same plane from `normal + basePoint`, then write `(base, base+edge1, base+edge1+edge2)` and `(base, base+edge2, base+edge2+edge1)`
+    - the production DLL now mirrors that visible producer seam through pure `AppendSelectorQuadRecordPair(...)` and `BuildAabbBoundarySelectorCandidateRecords(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes the visible sidecar-fill tail that follows both object-append paths
+      - after `0x7137C0` / `0x6ABFB0` append `0x34` records, `0x6ABD90` snapshots the previous record count, grows aligned `0x08` pair storage to the current record count, and fills only the newly appended slots
+      - the `0x6ABD90` caller copies the same payload from object fields `+0x180/+0x184` into each new slot
+      - the sibling `0x6ABFB0` path reuses the same tail pattern, but copies the caller-provided pair instead of the object payload
+    - the production DLL now mirrors that structural tail through pure `AppendTerrainQueryPairPayloadRange(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also pins one visible inner reject gate inside `0x7137C0`
+      - after the world-space vertex transform, each candidate vertex gets a 6-bit inclusive AABB outcode: `0x01 x<min`, `0x02 x>max`, `0x04 y<min`, `0x08 y>max`, `0x10 z<min`, `0x20 z>max`
+      - a triangle is skipped when the three vertex outcodes share any outside bit
+    - the production DLL now mirrors that visible gate through pure `BuildAabbOutcode(...)` and `TriangleSharesAabbOutcodeReject(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes the visible surviving-triangle pre-count that sits between that reject gate and the append loop
+      - `0x713A5D` scans the triangle index triplets, counts only triangles whose three vertex outcodes do not share any outside bit, then adds that count to the current output size before reserve growth
+    - the production DLL now mirrors that pre-count through pure `CountTrianglesPassingAabbOutcodeReject(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes one accepted-triangle write on the same `0x7137C0` path
+      - the caller copies the incoming 3x3 transform basis and normalizes each row independently whenever its magnitude meets the binary `0x8029D4` epsilon
+      - for every accepted triangle, it copies the three transformed world-space vertices into one `0x34` record
+      - it then transforms the stored local triangle normal through those normalized basis rows and writes `planeDistance = -(worldNormal dot point0)`
+    - the production DLL now mirrors that accepted-record write through pure `BuildTransformedTriangleSelectorRecord(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes the visible fixed-table setup and append loop inside the sibling `0x6AC1E0` producer path
+      - `0x686820` translates the copied source payload by the negated object translation: add that vector to the copied points/anchors and re-anchor each copied plane with `planeDistance -= dot(normal, translation)`
+      - `0x686C20` builds a six-bit source-plane outcode and sets bit `i` only when `dot(point, plane.normal) + planeDistance < -0.01944444328546524`
+      - `0x6AC245..0x6AC3BF` subtracts `cellIndex * 8`, clamps the local scan window to `[0, 7]`, starts the 17-wide point walk at `rowMin * 17 + columnMin`, and advances each row by `17 - width`
+      - `0x6AC3E0..0x6AC3F7` gates each 2x2 subcell through `0x8103F8 = { 1, 2, 4, ..., 0x8000 }`, indexed as `((row >> 1) * 4) + (column >> 1)`
+      - `0x6AC402..0x6AC428` only samples point indices `{ 0, 9, 17, 1, 18 }`
+      - `0x6AC430..0x6AC457` only emits triangle triplets `{ 17, 9, 0 }`, `{ 9, 1, 0 }`, `{ 9, 17, 18 }`, and `{ 9, 18, 1 }`, skipping a triplet only when all three sampled outcodes share one outside bit
+      - `0x6AC45D..0x6AC625` appends surviving triangles in that fixed order, translates each local point by the object translation, and rebuilds the plane either through the fast `rsqrtss` cross-product path when `0xC9E388 != 0` or through the shared `0x637480` fallback
+    - the production DLL now mirrors those visible `0x6AC1E0` seams through pure `TranslateSelectorSourceGeometry(...)`, `BuildSelectorSourcePlaneOutcode(...)`, `CountSelectorSourceTrianglesPassingPlaneOutcodes(...)`, `BuildSelectorSourceScanWindow(...)`, `BuildSelectorSourceSubcellMask(...)`, `BuildTranslatedTriangleSelectorRecord(...)`, `AppendSelectorSourceTriangleCandidateRecords(...)`, and the composed row/column walk `AppendSelectorSourceScanWindowCandidateRecords(...)` plus deterministic export/test coverage
+    - fresh 2026-03-27 review now also closes more of the visible caller transaction that surrounds that inner producer
+      - `0x6AB3F7..0x6AB432` only dispatches optional child producers when the child pointer is non-null and the matching bit `1 << (childIndex + 16)` is present in the movement/query flags
+      - `0x6AB43B..0x6AB48C` preserves existing `0x08` pair sidecar slots and zero-fills only the newly grown range after earlier producer appends
+      - `0x6ABC40` skips a static entry when its mask byte is set, its visit stamp already matches the current query stamp, or its geometry pointer is null; it routes zero-payload entries through low movement bits `0x0000000F`, any raw payload bit through high bits `0x00F00000`, aborts if the traversal state disallows dispatch, and otherwise appends only on inclusive AABB overlap
+      - `0x6ABE60` only reaches the dynamic callback path when the global callback pointer is non-null and `flags & 0x00F00000` is set; per entry it requires `byte[entry+0x90] & 0x04`, skips already-stamped entries, appends only on callback success plus inclusive overlap, and still writes the current visit stamp back after first consideration
+      - `0x6AC060` increments the global visit stamp, clears the current temp-record count, quantizes world-space XY bounds with `(17066.666 - coord) * 0.24 - 0.5`, derives inclusive chunk spans with `>> 3`, and then enumerates every outer chunk pair that feeds `0x6AC1E0`
+      - `0x686940` is the first visible object-path cull inside `0x6AC860`: for each of six source planes, choose the AABB support corner from the sign bits of the plane normal and fail as soon as `dot(supportCorner, normal) + planeDistance < -0.01944444328546524`
+      - `0x7BCA80` is the next visible object-path transform under `0x6AC860`: it rewrites one support point as `point * basisRows + translation` using the object's `3x4` row-major transform, and `0x6AC8F7..0x6AC927` applies that exact helper to all eight query support points before the local hull build
+      - `0x686500` initializes the local hull-source payload by filling all six planes with `(0, 0, 1, 0)`, zeroing the eight copied support-point slots plus both anchor vectors, copying the eight transformed support points into the payload, and then calling `0x686640`
+      - `0x686640` builds the six local hull planes from those copied support points in fixed order: `plane0 = normalize((p6 - p1) x (p5 - p1)) through p1`, `plane1 = normalize((p7 - p0) x (p4 - p0)) through p0`, `plane2 = normalize((p4 - p0) x (p5 - p0)) through p0`, `plane3 = normalize((p6 - p3) x (p7 - p3)) through p3`, `plane4 = normalize((p4 - p5) x (p6 - p5)) through p5`, and `plane5 = -plane4.normal through p2`
+      - `0x6869C0` transforms each world-space cull plane normal into object-local space as `worldNormal * basisRows`, chooses the local AABB support corner from those sign bits, transforms that support corner back out as `localPoint * basisRows + translation`, and then applies the same `-0.01944444328546524` reject threshold against the original world plane
+      - `0x6A4A00` is the object-node fetch gate: it first requires `byte[this+0x1D4] != 0`, then fetches `node = *(this + 0x1F4 + index*4)`, then returns that pointer only when `byte[node+0x164] != 0` or `allowInactiveNode != 0`; on the `0x6A3DC0` path the third argument is always `0`, so inactive nodes do not pass
+      - `0x6B8C00` is a pure selector-plane triangle reject: compute the three 6-plane point outcodes through `0x686C20` and reject only when `outcode0 & outcode1 & outcode2 != 0`
+      - `0x6B8B70` is the sibling local-bounds broad-phase reject: compute the three local AABB outcodes with the same `0.01944444328546524` epsilon and reject only when the three outcodes share one outside bit
+      - `0x6AC860` branches on `dword[node+0x118]`; when that callback pointer is null the no-callback/simple-six-plane arm only destroys its stack-local temporaries and advances to the next intrusive-list entry, leaving the caller result count, hit byte, and optional out-flags unchanged
+      - after the already-pinned prep helpers, `0x6A3DC0` is a deterministic counted `0x20`-stride entry loop: for each entry it first applies inclusive AABB overlap, then calls `0x6A4A00(index, 0)`, skips null returns, dispatches only to `0x6B9430`, and accumulates `al` back into the caller byte with `result |= callbackReturn` and no early-out
+      - `0x6BC9A0` and sibling `0x6BCA50` share the same stateful leaf body: first skip when `stateBytes[triangleIndex*2] & maskByte != 0`, then overflow-check the global pending queue against `0x2000`, then append the triangle id to the pending queue, set `stateBytes[triangleIndex*2] |= 0x80`, run the predicate (`0x6B8C00` vs `0x6B8B70`), and append to the accepted queue only when the predicate survives
+      - on the `0x6BC9A0` / `0x6BCA50` overflow path, `*context[0] |= 1` is the only mutation; no queue append, no visited-bit write, and no predicate call happen after that
+      - `0x6B9430` is the deterministic wrapper above `0x6BC7E0`: it builds query bounds from the eight support points at `arg2+0x60`, forces `callbackMask | 0x80` into a 16-bit field, zeroes the local accepted-count, packages node-owned pointers `{+0x44, +0x90, +0xC4, +0xC8, +0xD0}`, then calls `0x6BC7E0(rootIndex = 0)` before the unresolved post-traversal consumers
+      - the production DLL now also mirrors one low/high recursion step from a prebuilt split record through pure `EvaluateSelectorBvhRecursionStep(...)`: low child is always consumed before high child, and each entered child ORs its result while adding pending/accepted deltas and overflow flags into the running traversal state
+    - the production DLL now mirrors those additional caller/object-path seams through pure `DoAabbsOverlapInclusive(...)`, `IsTerrainQueryPayloadEnabled(...)`, `BuildOptionalSelectorChildDispatchMask(...)`, `ZeroTerrainQueryPairPayloadRange(...)`, `EvaluateTerrainQueryEntryDispatch(...)`, `ShouldDispatchDynamicTerrainQueryEntry(...)`, `BeginTerrainQueryProducerPass(...)`, `BuildTerrainQueryChunkSpan(...)`, `EnumerateTerrainQueryChunkCoordinates(...)`, `EvaluateSelectorSourceAabbCull(...)`, `TransformSelectorSupportPointBuffer(...)`, `BuildSelectorHullSourceGeometry(...)`, and `EvaluateSelectorHullTransformedBoundsCull(...)` plus deterministic export/test coverage
     - fresh raw captures now also live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
     - `0x632A30` initializes a 7-slot and a 9-slot `0x10`-stride selector-plane buffer through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, and calls `0x631BE0`
     - before `0x632280`, `0x632A30` also seeds both local vectors to `(0, 0, -1)` and seeds the initial best ratio as `1.0f`
@@ -612,6 +793,10 @@ CollisionStep (0x633840)
     - otherwise it calls `0x632280`, then zero-clamps the caller's reported scalar when `reportedScalar <= 0x80DFEC`
     - `0x6376A0` itself is a tiny initializer that writes one selector-plane record as `(0, 0, 1, 0)`
     - the production DLL now mirrors those wrapper-visible behaviors through pure `InitializeSelectorSupportPlane(...)`, `ClampSelectorReportedBestRatio(...)`, `FinalizeSelectorTriangleSourceWrapper(...)`, and `InitializeSelectorTriangleSourceWrapperSeeds(...)` helpers plus deterministic export/test seams
+    - it now also mirrors the bounded caller-side wrapper transaction around the already-pinned variable helper through pure `EvaluateSelectorChosenIndexPairCallerTransaction(...)`: fixed `7/9/9` init counts, override-vs-default position choice, fixed `(0,0,-1)` test/candidate seeds with initial ratio `1.0f`, and the post-`0x631BE0` optional `0x631E70` gate that zeroes the caller-reported scalar on failure before the later ranking handoff
+    - it now also mirrors the next bounded producer composition above the earlier injected bridge seam through pure `EvaluateSelectorChosenIndexPairDirectionSetupProducerTransaction(...)`: run the existing variable helper, derive the chosen index plus candidate-plane buffer through `EvaluateSelectorChosenIndexPairDirectionSetupTransaction(...)`, then feed those real direction-setup outputs into the selected-contact container + bridge path instead of injecting `0x632BA0` outputs by hand
+    - it now also mirrors the lower variable-plus-selected-contact-container handoff inside that lane through pure `EvaluateSelectorChosenIndexPairVariableContainerTransaction(...)`: the existing variable helper feeds the selected-contact-container helper directly while preserving reported best ratio, ambient cached-container reuse on override, cached-query reuse, and walkable query-result copies
+    - practical implication: the producer lane is no longer blocked on the later direction-setup -> bridge composition or the lower `0x631E70` variable/container handoff; the remaining grounded front on this path is the still-uncaptured `0x636100` tail-local projected-rerank/state-writeback block above the now-pinned helper leaves, with `0x635F80` still bounded only by its chooser-bool outcome
     - fresh raw captures now also live in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
     - on the `0x631E70` cache-miss path, `0x637300` subtracts the same scalar from all three min-corner components and `0x6372D0` adds it to all three max-corner components before `0x6373B0`
     - `0x61E9C0` is a bare no-op `ret` in this client build
@@ -643,6 +828,12 @@ CollisionStep (0x633840)
   - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, `docs/physics/0x635734_callsite_disasm.txt`, and `docs/physics/0x7C5DA0_disasm.txt`
   - the new `0x7C5DA0` capture closes one detail on that alternate path: it is a tiny airborne time-scalar helper (`this->+0xA0 * -1/gravity` when airborne, else `0`), not a radius helper
   - the production DLL now mirrors that visible `0x6351A0` consumer tail through pure `EvaluateSelectorAlternateUnitZFallbackGate(...)` and `EvaluateSelectorPairConsumer(...)` helpers plus deterministic export/test seams
+  - it now also mirrors the visible selected-index direct-load classifier just above that tail through pure `EvaluateSelectorChosenIndexPairSelectedRecordLoadTransaction(...)`
+    - `selectedIndex < 0` is explicit unset
+    - `selectedIndex == selectedContactCount` is the visible sentinel path
+    - in-range indices load `0xC4E534[index]` plus `0xC4E544[index]`
+    - indices past `selectedContactCount` stay a distinct mismatch state instead of being collapsed into the sentinel/unset cases
+  - it now also mirrors the next one-step chosen-contact bridge above that tail through pure `EvaluateSelectorChosenPairForwarding(...)`: start from an already chosen contact/index, scale the move by `requestedDistance`, run the `0x633720` direct gate via the selected-contact threshold/prism helper, then expose whether the branch returned the direct pair, a zero pair, the alternate unit-Z zero-pair state, or the alternate-pair fallback
   - fresh raw captures now also live in `docs/physics/0x635550_disasm.txt`, `docs/physics/0x635450_disasm.txt`, and `docs/physics/0x7C5F50_disasm.txt`
   - `0x635550`
     - is the pure follow-up gate that `0x635450` calls immediately after `0x6351A0`
@@ -664,6 +855,20 @@ CollisionStep (0x633840)
     - if that vertical travel time is not greater than `arg2`, zeroes the move vector, writes `0` to `*arg4`, and returns `0`
     - otherwise subtracts `arg2`, clamps the return value to `arg1`, and only scales `move.x/y` plus rewrites `*arg4` when the remaining window is strictly less than the scaled horizontal window
     - the production DLL now mirrors that helper through pure `EvaluateSelectorPairWindowAdjustment(...)` plus deterministic export/test seams
+    - it now also mirrors the tiny caller-side handoff immediately above that helper through pure `EvaluateSelectorPairPostForwardingDispatch(...)`: `0x6351A0` return code `2` takes the separate failure branch, return code `0` skips `0x635450` and keeps the precomputed `windowSpanScalar`, return code `1` runs `EvaluateSelectorPairWindowAdjustment(...)`, and after that the alternate-unit-Z state bit wins over the direct-state bit when choosing the next dispatch arm
+  - fresh raw captures now also close the two post-dispatch state handlers
+  - `0x633220`
+    - is the alternate-unit-Z state writer
+    - zeroes `this->+0xA0`
+    - zeroes `this->+0x78`
+    - copies `this->+0x18` into `this->+0x7C`
+    - ORs `MOVEFLAG_FALLINGFAR (0x4000)` into `this->+0x40`
+    - the production DLL now mirrors that exact state write through pure `EvaluateSelectorAlternateUnitZStateHandler(...)` plus deterministic export/test coverage
+  - `0x7C6290`
+    - is the direct-state wrapper
+    - when `MOVEFLAG_JUMPING` is absent it returns without mutating cached movement state
+    - when `MOVEFLAG_JUMPING` is present it clears that bit, snapshots `this->+0x10/+0x14/+0x18` into `+0x44/+0x48/+0x4C`, snapshots `this->+0x1C/+0x20` into `+0x50/+0x54`, zeroes `+0x58`, and then writes the recomputed inner `+0x84` scalar from the visible `0x7C5C20(0)` / `0x7C4C90(0)` chain
+    - the production DLL now mirrors that visible wrapper through pure `EvaluateSelectorDirectStateHandler(...)`, taking the inner `+0x84` result as an explicit input so the still-open speed-selection helper can stay isolated
   - `0x633720`
     - wrapper builds `position + offset`, passes that world point plus the selected index and `this+0x15C` into `0x633760`, then returns the inverse boolean of `0x633760`
   - `0x633760`
@@ -750,6 +955,7 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that ratio/clip/validation chain through pure `EvaluateSelectorPlaneRatio(...)`, `ClipSelectorPointStripAgainstPlane(...)`, `ClipSelectorPointStripExcludingPlane(...)`, and `ValidateSelectorPointStripCandidate(...)` helpers plus deterministic export/test seams
     - fresh raw captures now also live in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`
     - `0x637480` is the normalized plane-from-three-points helper used by `0x632460`: it builds `normal = normalize((point3 - point1) x (point2 - point1))`, then stores `planeD = -dot(normal, point1)`
+    - the production DLL now also mirrors that primitive directly through pure `BuildPlaneFromTrianglePoints(...)` plus deterministic export/test coverage
     - `0x632460` consumes one 3-byte selector entry plus the translated 9-point neighborhood, builds three side planes through `0x637480`, flips each plane with `0x637330` when the opposite selector point lands on the positive side, then writes the source plane back at plane slot `3` with a re-anchored `planeD` through the translated first selector point
     - `0x632460` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
     - the production DLL now mirrors that four-plane record builder through pure `BuildSelectorCandidatePlaneRecord(...)` plus deterministic export/test seams

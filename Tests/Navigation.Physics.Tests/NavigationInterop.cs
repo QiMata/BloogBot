@@ -2,7 +2,9 @@
 // This provides direct access to the C++ physics engine for testing.
 
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Reflection;
 
 namespace Navigation.Physics.Tests;
 
@@ -13,6 +15,27 @@ namespace Navigation.Physics.Tests;
 public static partial class NavigationInterop
 {
     private const string NavigationDll = "Navigation.dll";
+
+    static NavigationInterop()
+    {
+        NativeLibrary.SetDllImportResolver(typeof(NavigationInterop).Assembly, ResolveNavigationLibrary);
+    }
+
+    private static IntPtr ResolveNavigationLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (!string.Equals(libraryName, NavigationDll, StringComparison.OrdinalIgnoreCase))
+        {
+            return IntPtr.Zero;
+        }
+
+        string preferredPath = Path.Combine(AppContext.BaseDirectory, NavigationDll);
+        if (File.Exists(preferredPath))
+        {
+            return NativeLibrary.Load(preferredPath);
+        }
+
+        return IntPtr.Zero;
+    }
 
     // ==========================================================================
     // VECTOR3 STRUCTURE (matches G3D::Vector3)
@@ -139,6 +162,54 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainQueryChunkSpan
+    {
+        public int CellMinX;
+        public int CellMaxX;
+        public int CellMinY;
+        public int CellMaxY;
+        public int ChunkMinX;
+        public int ChunkMaxX;
+        public int ChunkMinY;
+        public int ChunkMaxY;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainQueryChunkCoordinate
+    {
+        public int Primary;
+        public int Secondary;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainQueryMergedQueryTrace
+    {
+        public Vector3 QueryBoundsMin;
+        public Vector3 QueryBoundsMax;
+        public Vector3 MergedBoundsMin;
+        public Vector3 MergedBoundsMax;
+        public uint CacheContainsBoundsMin;
+        public uint CacheContainsBoundsMax;
+        public uint ReusedCachedQuery;
+        public uint BuiltMergedBounds;
+        public uint BuiltQueryMask;
+        public uint QueryInvoked;
+        public uint QueryDispatchSucceeded;
+        public uint ReturnedSuccess;
+        public uint QueryMask;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TerrainQuerySelectedContactContainerTrace
+    {
+        public TerrainQueryMergedQueryTrace MergedQuery;
+        public uint ReusedExistingContainer;
+        public uint CopiedQueryResults;
+        public uint ReturnedSuccess;
+        public uint OutputContactCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct SelectorSupportPlane
     {
         public Vector3 Normal;
@@ -166,6 +237,110 @@ public static partial class NavigationInterop
         public Vector3 Point0;
         public Vector3 Point1;
         public Vector3 Point2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorSourceScanWindow
+    {
+        public int RowMin;
+        public int ColumnMin;
+        public int RowMax;
+        public int ColumnMax;
+        public int PointStartIndex;
+        public int RowAdvancePointCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorBvhNodeRecord
+    {
+        public ushort ControlWord;
+        public ushort LowChildIndex;
+        public ushort HighChildIndex;
+        public ushort LeafTriangleCount;
+        public uint LeafTriangleStartIndex;
+        public float SplitCoordinate;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorBvhChildTraversal
+    {
+        public uint Axis;
+        public float SplitCoordinate;
+        public uint LowChildIndex;
+        public uint HighChildIndex;
+        public uint VisitLow;
+        public uint VisitHigh;
+        public Vector3 LowBoundsMin;
+        public Vector3 LowBoundsMax;
+        public Vector3 HighBoundsMin;
+        public Vector3 HighBoundsMax;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorObjectRouterEntryRecord
+    {
+        public Vector3 BoundsMin;
+        public Vector3 BoundsMax;
+        public ulong NodeToken;
+        public uint NodeEnabled;
+        public uint CallbackReturn;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorObjectRouterTrace
+    {
+        public uint OverlapRejectedCount;
+        public uint NodeRejectedCount;
+        public uint DispatchedCount;
+        public uint AccumulatorUpdatedCount;
+        public uint Result;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorObjectNoCallbackState
+    {
+        public uint HitResult;
+        public uint RecordCount;
+        public uint OutputFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorLeafQueueMutationTrace
+    {
+        public uint SkippedByMask;
+        public uint Overflowed;
+        public uint PendingEnqueued;
+        public uint VisitedBitSet;
+        public uint PredicateRejected;
+        public uint AcceptedEnqueued;
+        public uint StateByteBefore;
+        public uint StateByteAfter;
+        public uint PendingCountAfter;
+        public uint AcceptedCountAfter;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorNodeTraversalRecord
+    {
+        public ulong TraversalBaseToken;
+        public ulong ExtraNodeToken;
+        public ulong StateBytesToken;
+        public ulong VertexBufferToken;
+        public ulong TriangleIndexToken;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorNodeTraversalPayload
+    {
+        public Vector3 QueryBoundsMin;
+        public Vector3 QueryBoundsMax;
+        public uint CallbackMaskWord;
+        public uint AcceptedCount;
+        public ulong TraversalBaseToken;
+        public ulong ExtraNodeToken;
+        public ulong StateBytesToken;
+        public ulong VertexBufferToken;
+        public ulong TriangleIndexToken;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -287,6 +462,54 @@ public static partial class NavigationInterop
         public Vector3 InputMove;
         public Vector3 OutputMove;
         public SelectorPair OutputPair;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorTriangleSourceWrapperTrace
+    {
+        public uint SupportPlaneInitCount;
+        public uint ValidationPlaneInitCount;
+        public uint ScratchPointZeroCount;
+        public uint UsedOverridePosition;
+        public uint TerrainQueryInvoked;
+        public uint TerrainQuerySucceeded;
+        public uint ReturnedSuccess;
+        public uint QueryFailureZeroedOutput;
+        public Vector3 SelectedPosition;
+        public Vector3 TestPoint;
+        public Vector3 CandidateDirection;
+        public float InitialBestRatio;
+        public float InputBestRatio;
+        public float ReportedBestRatio;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SelectorTriangleSourceVariableTransactionTrace
+    {
+        public uint SupportPlaneInitCount;
+        public uint ValidationPlaneInitCount;
+        public uint ScratchPointZeroCount;
+        public uint UsedOverridePosition;
+        public uint TerrainQueryInvoked;
+        public uint TerrainQuerySucceeded;
+        public uint TerrainQueryReusedCachedQuery;
+        public uint TerrainQueryBuiltMergedBounds;
+        public uint TerrainQueryBuiltQueryMask;
+        public uint RankingInvoked;
+        public uint RankingAccepted;
+        public uint ZeroClampedOutput;
+        public uint ReturnedSuccess;
+        public uint QueryFailureZeroedOutput;
+        public Vector3 SelectedPosition;
+        public Vector3 ProjectedPosition;
+        public Vector3 TestPoint;
+        public Vector3 CandidateDirection;
+        public float InitialBestRatio;
+        public float RankingReportedBestRatio;
+        public float OutputReportedBestRatio;
+        public uint RankingCandidateCount;
+        public int RankingSelectedRecordIndex;
+        public uint TerrainQueryMask;
     }
 
     public enum SelectorAlternateWorkingVectorMode : uint
@@ -477,7 +700,9 @@ public static partial class NavigationInterop
         Swimming = 0x00200000,
         Flying = 0x01000000,
         OnTransport = 0x02000000,
+        SplineElevation = 0x04000000,
         SafeFall = 0x20000000,
+        Hover = 0x40000000,
     }
 
     // ==========================================================================
@@ -710,6 +935,41 @@ public static partial class NavigationInterop
         in Vector3 boundsMax,
         in Vector3 point);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWAabbOverlapInclusive", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWAabbOverlapInclusive(
+        in Vector3 boundsMinA,
+        in Vector3 boundsMaxA,
+        in Vector3 boundsMinB,
+        in Vector3 boundsMaxB);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWAabbOutcode", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWAabbOutcode(
+        in Vector3 point,
+        in Vector3 boundsMin,
+        in Vector3 boundsMax);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTriangleAabbOutcodeReject", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWTriangleAabbOutcodeReject(
+        uint firstOutcode,
+        uint secondOutcode,
+        uint thirdOutcode);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorTrianglePlaneOutcodeReject", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorTrianglePlaneOutcodeReject(
+        uint firstOutcode,
+        uint secondOutcode,
+        uint thirdOutcode);
+
+    [DllImport(NavigationDll, EntryPoint = "CountWoWTrianglesPassingAabbOutcodeReject", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint CountWoWTrianglesPassingAabbOutcodeReject(
+        [In] ushort[] triangleIndices,
+        int triangleIndexCount,
+        [In] uint[] vertexOutcodes,
+        int vertexOutcodeCount);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTerrainQueryMask", CallingConvention = CallingConvention.Cdecl)]
     public static extern uint EvaluateWoWTerrainQueryMask(
         [MarshalAs(UnmanagedType.I1)] bool modelPropertyFlagSet,
@@ -717,6 +977,73 @@ public static partial class NavigationInterop
         float field20Value,
         [MarshalAs(UnmanagedType.I1)] bool rootTreeFlagSet,
         [MarshalAs(UnmanagedType.I1)] bool childTreeFlagSet);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTerrainQueryPayloadEnabled", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWTerrainQueryPayloadEnabled(
+        uint movementFlags,
+        in TerrainQueryPairPayload payload);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWShouldRunDynamicCallbackProducer", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWShouldRunDynamicCallbackProducer(
+        [MarshalAs(UnmanagedType.I1)] bool callbackPresent,
+        uint movementFlags);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWShouldVisitTerrainQueryStampedEntry", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWShouldVisitTerrainQueryStampedEntry(
+        uint entryVisitStamp,
+        uint currentVisitStamp);
+
+    [DllImport(NavigationDll, EntryPoint = "BeginWoWTerrainQueryProducerPass", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BeginWoWTerrainQueryProducerPass(
+        uint currentVisitStamp,
+        int inputRecordCount,
+        out uint nextVisitStamp);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWTerrainQueryChunkSpan", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWTerrainQueryChunkSpan(
+        in Vector3 worldBoundsMin,
+        in Vector3 worldBoundsMax,
+        out TerrainQueryChunkSpan span);
+
+    [DllImport(NavigationDll, EntryPoint = "EnumerateWoWTerrainQueryChunkCoordinates", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EnumerateWoWTerrainQueryChunkCoordinates(
+        in TerrainQueryChunkSpan span,
+        [Out] TerrainQueryChunkCoordinate[] outCoordinates,
+        int maxOutputCount);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWOptionalSelectorChildDispatchMask", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWOptionalSelectorChildDispatchMask(
+        [In] uint[] childPresenceFlags,
+        int childCount,
+        uint movementFlags);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTerrainQueryEntryDispatch", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWTerrainQueryEntryDispatch(
+        [MarshalAs(UnmanagedType.I1)] bool entryFlagMaskedOut,
+        [MarshalAs(UnmanagedType.I1)] bool alreadyVisited,
+        [MarshalAs(UnmanagedType.I1)] bool hasSourceGeometry,
+        uint movementFlags,
+        in TerrainQueryPairPayload payload,
+        [MarshalAs(UnmanagedType.I1)] bool traversalAllowsDispatch,
+        in Vector3 entryBoundsMin,
+        in Vector3 entryBoundsMax,
+        in Vector3 queryBoundsMin,
+        in Vector3 queryBoundsMax);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWDynamicTerrainQueryEntryDispatch", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWDynamicTerrainQueryEntryDispatch(
+        [MarshalAs(UnmanagedType.I1)] bool entryFlagEnabled,
+        [MarshalAs(UnmanagedType.I1)] bool alreadyVisited,
+        [MarshalAs(UnmanagedType.I1)] bool callbackSucceeded,
+        in Vector3 entryBoundsMin,
+        in Vector3 entryBoundsMax,
+        in Vector3 queryBoundsMin,
+        in Vector3 queryBoundsMax);
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWTerrainQueryBounds", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
@@ -756,12 +1083,360 @@ public static partial class NavigationInterop
         out Vector3 boundsMin,
         out Vector3 boundsMax);
 
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTerrainQueryMergedQueryTransaction", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWTerrainQueryMergedQueryTransaction(
+        in Vector3 projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        in Vector3 cachedBoundsMin,
+        in Vector3 cachedBoundsMax,
+        [MarshalAs(UnmanagedType.I1)] bool modelPropertyFlagSet,
+        uint movementFlags,
+        float field20Value,
+        [MarshalAs(UnmanagedType.I1)] bool rootTreeFlagSet,
+        [MarshalAs(UnmanagedType.I1)] bool childTreeFlagSet,
+        [MarshalAs(UnmanagedType.I1)] bool queryDispatchSucceeded,
+        out TerrainQueryMergedQueryTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTerrainQuerySelectedContactContainerTransaction", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EvaluateWoWTerrainQuerySelectedContactContainerTransaction(
+        in Vector3 projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        in Vector3 cachedBoundsMin,
+        in Vector3 cachedBoundsMax,
+        [MarshalAs(UnmanagedType.I1)] bool modelPropertyFlagSet,
+        uint movementFlags,
+        float field20Value,
+        [MarshalAs(UnmanagedType.I1)] bool rootTreeFlagSet,
+        [MarshalAs(UnmanagedType.I1)] bool childTreeFlagSet,
+        [In] TerrainAabbContact[] existingContacts,
+        [In] TerrainQueryPairPayload[] existingPairs,
+        int existingCount,
+        [In] TerrainAabbContact[] queryContacts,
+        [In] TerrainQueryPairPayload[] queryPairs,
+        int queryCount,
+        [MarshalAs(UnmanagedType.I1)] bool queryDispatchSucceeded,
+        [Out] TerrainAabbContact[] outContacts,
+        [Out] TerrainQueryPairPayload[] outPairs,
+        int maxOutputCount,
+        out TerrainQuerySelectedContactContainerTrace trace);
+
     [DllImport(NavigationDll, EntryPoint = "BuildWoWNegatedPlane", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool BuildWoWNegatedPlane(
         in Vector3 normal,
         float planeDistance,
         out SelectorSupportPlane plane);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWPlaneFromNormalAndPoint", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWPlaneFromNormalAndPoint(
+        in Vector3 normal,
+        in Vector3 point,
+        out SelectorSupportPlane plane);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWPlaneFromTrianglePoints", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWPlaneFromTrianglePoints(
+        in Vector3 point0,
+        in Vector3 point1,
+        in Vector3 point2,
+        out SelectorSupportPlane plane);
+
+    [DllImport(NavigationDll, EntryPoint = "TranslateWoWSelectorSourceGeometry", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool TranslateWoWSelectorSourceGeometry(
+        in Vector3 translation,
+        [In, Out] SelectorSupportPlane[] ioPlanes,
+        int planeCount,
+        [In, Out] Vector3[] ioPoints,
+        int pointCount,
+        ref Vector3 ioAnchorPoint0,
+        ref Vector3 ioAnchorPoint1);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorHullSourceGeometry", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorHullSourceGeometry(
+        [In] Vector3[] supportPoints,
+        int supportPointCount,
+        [Out] SelectorSupportPlane[] outPlanes,
+        int planeCount,
+        [Out] Vector3[] outPoints,
+        int outPointCount,
+        out Vector3 outAnchorPoint0,
+        out Vector3 outAnchorPoint1);
+
+    [DllImport(NavigationDll, EntryPoint = "TransformWoWSelectorSupportPointBuffer", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool TransformWoWSelectorSupportPointBuffer(
+        [In] Vector3[] inputPoints,
+        int pointCount,
+        in Vector3 basisRow0,
+        in Vector3 basisRow1,
+        in Vector3 basisRow2,
+        in Vector3 translation,
+        [Out] Vector3[] outPoints,
+        int outPointCount);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorObjectCallbackMask", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWSelectorObjectCallbackMask(
+        uint movementFlags);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWShouldResolveSelectorObjectNode", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWShouldResolveSelectorObjectNode(
+        [MarshalAs(UnmanagedType.I1)] bool selectorEnabled,
+        [MarshalAs(UnmanagedType.I1)] bool nodeEnabled,
+        [MarshalAs(UnmanagedType.I1)] bool allowInactiveNode);
+
+    [DllImport(NavigationDll, EntryPoint = "ResolveWoWSelectorObjectNodePointer", CallingConvention = CallingConvention.Cdecl)]
+    public static extern IntPtr ResolveWoWSelectorObjectNodePointer(
+        [MarshalAs(UnmanagedType.I1)] bool selectorEnabled,
+        IntPtr nodePointer,
+        [MarshalAs(UnmanagedType.I1)] bool nodeEnabled,
+        [MarshalAs(UnmanagedType.I1)] bool allowInactiveNode);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorObjectRouterEntries", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorObjectRouterEntries(
+        [In] SelectorObjectRouterEntryRecord[] entries,
+        int entryCount,
+        [MarshalAs(UnmanagedType.I1)] bool selectorEnabled,
+        in Vector3 queryBoundsMin,
+        in Vector3 queryBoundsMax,
+        out SelectorObjectRouterTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWShouldUseSelectorObjectCallback", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWShouldUseSelectorObjectCallback(
+        ulong callbackToken);
+
+    [DllImport(NavigationDll, EntryPoint = "FinalizeWoWSelectorObjectNoCallbackState", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool FinalizeWoWSelectorObjectNoCallbackState(
+        uint inputHitResult,
+        uint inputRecordCount,
+        uint inputOutputFlags,
+        out SelectorObjectNoCallbackState state);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorLeafQueueMutation", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorLeafQueueMutation(
+        uint triangleIndex,
+        uint stateMaskByte,
+        [MarshalAs(UnmanagedType.I1)] bool predicateRejected,
+        uint inputOverflowFlags,
+        [In] ushort[] inputPendingIds,
+        int pendingIdCapacity,
+        uint inputPendingCount,
+        [In] ushort[] inputAcceptedIds,
+        int acceptedIdCapacity,
+        uint inputAcceptedCount,
+        [In] byte[] inputStateBytes,
+        int stateByteCount,
+        out uint outputOverflowFlags,
+        [Out] ushort[] outputPendingIds,
+        int outputPendingIdCapacity,
+        out uint outputPendingCount,
+        [Out] ushort[] outputAcceptedIds,
+        int outputAcceptedIdCapacity,
+        out uint outputAcceptedCount,
+        [Out] byte[] outputStateBytes,
+        int outputStateByteCount,
+        out SelectorLeafQueueMutationTrace trace);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorNodeTraversalPayload", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorNodeTraversalPayload(
+        in SelectorNodeTraversalRecord node,
+        [In] Vector3[] querySupportPoints,
+        int supportPointCount,
+        uint callbackMask,
+        out SelectorNodeTraversalPayload payload);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPointBounds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorSupportPointBounds(
+        [In] Vector3[] points,
+        int pointCount,
+        out Vector3 outBoundsMin,
+        out Vector3 outBoundsMax);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorDynamicObjectHullSourceGeometry", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorDynamicObjectHullSourceGeometry(
+        [In] SelectorSupportPlane[] sourcePlanes,
+        int planeCount,
+        in Vector3 objectBoundsMin,
+        in Vector3 objectBoundsMax,
+        [In] Vector3[] localSupportPoints,
+        int supportPointCount,
+        in Vector3 basisRow0,
+        in Vector3 basisRow1,
+        in Vector3 basisRow2,
+        in Vector3 translation,
+        [Out] SelectorSupportPlane[] outPlanes,
+        int outPlaneCount,
+        [Out] Vector3[] outPoints,
+        int outPointCount,
+        out Vector3 outAnchorPoint0,
+        out Vector3 outAnchorPoint1);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorBvhChildTraversal", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorBvhChildTraversal(
+        in SelectorBvhNodeRecord node,
+        in Vector3 boundsMin,
+        in Vector3 boundsMax,
+        out SelectorBvhChildTraversal traversal);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSourcePlaneOutcode", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWSelectorSourcePlaneOutcode(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        in Vector3 point);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorSourceAabbCull", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorSourceAabbCull(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        in Vector3 boundsMin,
+        in Vector3 boundsMax);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorHullTransformedBoundsCull", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorHullTransformedBoundsCull(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        in Vector3 localBoundsMin,
+        in Vector3 localBoundsMax,
+        in Vector3 basisRow0,
+        in Vector3 basisRow1,
+        in Vector3 basisRow2,
+        in Vector3 translation);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorHullPointWithMargin", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorHullPointWithMargin(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        in Vector3 point,
+        float margin);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorHullPointEpsilon", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint EvaluateWoWSelectorHullPointEpsilon(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        in Vector3 point);
+
+    [DllImport(NavigationDll, EntryPoint = "CountWoWSelectorSourceTrianglesPassingPlaneOutcodes", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint CountWoWSelectorSourceTrianglesPassingPlaneOutcodes(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        [In] Vector3[] samplePoints,
+        int samplePointCount);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSourceScanWindow", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWSelectorSourceScanWindow(
+        int cellRowIndex,
+        int cellColumnIndex,
+        int queryRowMin,
+        int queryColumnMin,
+        int queryRowMax,
+        int queryColumnMax,
+        out SelectorSourceScanWindow window);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWObjectLocalQueryBounds", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWObjectLocalQueryBounds(
+        in Vector3 worldBoundsMin,
+        in Vector3 worldBoundsMax,
+        in Vector3 objectPosition,
+        out Vector3 localBoundsMin,
+        out Vector3 localBoundsMax);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWLocalBoundsAabbOutcode", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWLocalBoundsAabbOutcode(
+        in Vector3 localBoundsMin,
+        in Vector3 localBoundsMax,
+        in Vector3 point);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWTriangleLocalBoundsAabbReject", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWTriangleLocalBoundsAabbReject(
+        in Vector3 localBoundsMin,
+        in Vector3 localBoundsMax,
+        in Vector3 point0,
+        in Vector3 point1,
+        in Vector3 point2);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSourceScanWindowCandidateRecords", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int BuildWoWSelectorSourceScanWindowCandidateRecords(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        [In] Vector3[] pointGrid,
+        int pointGridPointCount,
+        in SelectorSourceScanWindow scanWindow,
+        uint cellMaskFlags,
+        in Vector3 translation,
+        [MarshalAs(UnmanagedType.I1)] bool useApproximatePlaneBuildPath,
+        [Out] SelectorCandidateRecord[] outRecords,
+        int maxRecords);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWLocalBoundsScanWindowCandidateRecords", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int BuildWoWLocalBoundsScanWindowCandidateRecords(
+        in Vector3 localBoundsMin,
+        in Vector3 localBoundsMax,
+        [In] Vector3[] pointGrid,
+        int pointGridPointCount,
+        in SelectorSourceScanWindow scanWindow,
+        uint cellMaskFlags,
+        in Vector3 translation,
+        [MarshalAs(UnmanagedType.I1)] bool useApproximatePlaneBuildPath,
+        [Out] SelectorCandidateRecord[] outRecords,
+        int maxRecords);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSourceSubcellMask", CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint BuildWoWSelectorSourceSubcellMask(
+        uint rowIndex,
+        uint columnIndex);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorSourceSubcellMask", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool EvaluateWoWSelectorSourceSubcellMask(
+        uint rowIndex,
+        uint columnIndex,
+        uint cellMaskFlags);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSourceTriangleCandidateRecords", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int BuildWoWSelectorSourceTriangleCandidateRecords(
+        [In] SelectorSupportPlane[] planes,
+        int planeCount,
+        [In] Vector3[] samplePoints,
+        int samplePointCount,
+        in Vector3 translation,
+        [MarshalAs(UnmanagedType.I1)] bool useApproximatePlaneBuildPath,
+        [Out] SelectorCandidateRecord[] outRecords,
+        int maxRecords);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWAabbBoundarySelectorCandidateRecords", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int BuildWoWAabbBoundarySelectorCandidateRecords(
+        in Vector3 boundaryMin,
+        in Vector3 boundaryMax,
+        in Vector3 queryBoundsMin,
+        in Vector3 queryBoundsMax,
+        [Out] SelectorCandidateRecord[] outRecords,
+        int maxRecords);
+
+    [DllImport(NavigationDll, EntryPoint = "BuildWoWTransformedTriangleSelectorRecord", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool BuildWoWTransformedTriangleSelectorRecord(
+        [In] Vector3[] transformBasisRows,
+        int transformBasisRowCount,
+        in Vector3 localNormal,
+        in Vector3 point0,
+        in Vector3 point1,
+        in Vector3 point2,
+        out SelectorCandidateRecord outRecord);
 
     [DllImport(NavigationDll, EntryPoint = "TransformWoWWorldPointToTransportLocal", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
@@ -819,6 +1494,145 @@ public static partial class NavigationInterop
         out Vector3 testPoint,
         out Vector3 candidateDirection,
         out float bestRatio);
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorTriangleSourceWrapperTransaction", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool EvaluateWoWSelectorTriangleSourceWrapperTransactionNative(
+        in Vector3 defaultPosition,
+        IntPtr overridePosition,
+        [MarshalAs(UnmanagedType.I1)] bool terrainQuerySucceeded,
+        float inputBestRatio,
+        out SelectorTriangleSourceWrapperTrace trace);
+
+    public static bool EvaluateWoWSelectorTriangleSourceWrapperTransaction(
+        in Vector3 defaultPosition,
+        Vector3? overridePosition,
+        bool terrainQuerySucceeded,
+        float inputBestRatio,
+        out SelectorTriangleSourceWrapperTrace trace)
+    {
+        IntPtr overridePositionPtr = IntPtr.Zero;
+        try
+        {
+            if (overridePosition.HasValue)
+            {
+                overridePositionPtr = Marshal.AllocHGlobal(Marshal.SizeOf<Vector3>());
+                Marshal.StructureToPtr(overridePosition.Value, overridePositionPtr, false);
+            }
+
+            return EvaluateWoWSelectorTriangleSourceWrapperTransactionNative(
+                in defaultPosition,
+                overridePositionPtr,
+                terrainQuerySucceeded,
+                inputBestRatio,
+                out trace);
+        }
+        finally
+        {
+            if (overridePositionPtr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(overridePositionPtr);
+            }
+        }
+    }
+
+    [DllImport(NavigationDll, EntryPoint = "EvaluateWoWSelectorTriangleSourceVariableTransaction", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool EvaluateWoWSelectorTriangleSourceVariableTransactionNative(
+        in Vector3 defaultPosition,
+        IntPtr overridePosition,
+        in Vector3 projectedPosition,
+        uint supportPlaneInitCount,
+        uint validationPlaneInitCount,
+        uint scratchPointZeroCount,
+        in Vector3 testPoint,
+        in Vector3 candidateDirection,
+        float initialBestRatio,
+        float collisionRadius,
+        float boundingHeight,
+        in Vector3 cachedBoundsMin,
+        in Vector3 cachedBoundsMax,
+        [MarshalAs(UnmanagedType.I1)] bool modelPropertyFlagSet,
+        uint movementFlags,
+        float field20Value,
+        [MarshalAs(UnmanagedType.I1)] bool rootTreeFlagSet,
+        [MarshalAs(UnmanagedType.I1)] bool childTreeFlagSet,
+        [MarshalAs(UnmanagedType.I1)] bool queryDispatchSucceeded,
+        [MarshalAs(UnmanagedType.I1)] bool rankingAccepted,
+        uint rankingCandidateCount,
+        int rankingSelectedRecordIndex,
+        float rankingReportedBestRatio,
+        out SelectorTriangleSourceVariableTransactionTrace trace);
+
+    public static bool EvaluateWoWSelectorTriangleSourceVariableTransaction(
+        in Vector3 defaultPosition,
+        Vector3? overridePosition,
+        in Vector3 projectedPosition,
+        uint supportPlaneInitCount,
+        uint validationPlaneInitCount,
+        uint scratchPointZeroCount,
+        in Vector3 testPoint,
+        in Vector3 candidateDirection,
+        float initialBestRatio,
+        float collisionRadius,
+        float boundingHeight,
+        in Vector3 cachedBoundsMin,
+        in Vector3 cachedBoundsMax,
+        bool modelPropertyFlagSet,
+        uint movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet,
+        bool queryDispatchSucceeded,
+        bool rankingAccepted,
+        uint rankingCandidateCount,
+        int rankingSelectedRecordIndex,
+        float rankingReportedBestRatio,
+        out SelectorTriangleSourceVariableTransactionTrace trace)
+    {
+        IntPtr overridePositionPtr = IntPtr.Zero;
+        try
+        {
+            if (overridePosition.HasValue)
+            {
+                overridePositionPtr = Marshal.AllocHGlobal(Marshal.SizeOf<Vector3>());
+                Marshal.StructureToPtr(overridePosition.Value, overridePositionPtr, false);
+            }
+
+            return EvaluateWoWSelectorTriangleSourceVariableTransactionNative(
+                in defaultPosition,
+                overridePositionPtr,
+                in projectedPosition,
+                supportPlaneInitCount,
+                validationPlaneInitCount,
+                scratchPointZeroCount,
+                in testPoint,
+                in candidateDirection,
+                initialBestRatio,
+                collisionRadius,
+                boundingHeight,
+                in cachedBoundsMin,
+                in cachedBoundsMax,
+                modelPropertyFlagSet,
+                movementFlags,
+                field20Value,
+                rootTreeFlagSet,
+                childTreeFlagSet,
+                queryDispatchSucceeded,
+                rankingAccepted,
+                rankingCandidateCount,
+                rankingSelectedRecordIndex,
+                rankingReportedBestRatio,
+                out trace);
+        }
+        finally
+        {
+            if (overridePositionPtr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(overridePositionPtr);
+            }
+        }
+    }
 
     [DllImport(NavigationDll, EntryPoint = "BuildWoWSelectorSupportPlanes", CallingConvention = CallingConvention.Cdecl)]
     public static extern int BuildWoWSelectorSupportPlanes(
@@ -1107,6 +1921,25 @@ public static partial class NavigationInterop
         [Out] TerrainQueryPairPayload[] outputPairs,
         int maxOutputCount);
 
+    [DllImport(NavigationDll, EntryPoint = "AppendWoWTerrainQueryPairPayloadRange", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int AppendWoWTerrainQueryPairPayloadRange(
+        [In] TerrainQueryPairPayload[] inputPairs,
+        int inputPairCount,
+        uint previousRecordCount,
+        uint currentRecordCount,
+        in TerrainQueryPairPayload payload,
+        [Out] TerrainQueryPairPayload[] outputPairs,
+        int maxOutputCount);
+
+    [DllImport(NavigationDll, EntryPoint = "ZeroWoWTerrainQueryPairPayloadRange", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int ZeroWoWTerrainQueryPairPayloadRange(
+        [In] TerrainQueryPairPayload[] inputPairs,
+        int inputPairCount,
+        uint previousRecordCount,
+        uint currentRecordCount,
+        [Out] TerrainQueryPairPayload[] outputPairs,
+        int maxOutputCount);
+
     [DllImport(NavigationDll, EntryPoint = "EvaluateGroundedWallSelection", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool EvaluateGroundedWallSelection(
@@ -1164,7 +1997,7 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "UpdateDynamicObjectPosition", CallingConvention = CallingConvention.Cdecl)]
     public static extern void UpdateDynamicObjectPosition(
-        ulong guid, float x, float y, float z, float orientation);
+        ulong guid, float x, float y, float z, float orientation, uint goState);
 
     /// <summary>
     /// Removes a single dynamic object by GUID.

@@ -38,6 +38,8 @@
 #include "PhysicsShapeHelpers.h"
 #include "PhysicsSelectHelpers.h"
 #include "SceneQuery.h"
+
+#include <xmmintrin.h>
 #include "PhysicsTolerances.h"
 #include "DynamicObjectRegistry.h"
 
@@ -47,6 +49,7 @@
 #include "PhysicsMovement.h"
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <iomanip>
@@ -135,6 +138,26 @@ namespace
     constexpr float WOW_SELECTOR_RECORD_FILTER_THRESHOLD = -9.999999747378752e-06f; // 0x80C5C4
     constexpr float WOW_TERRAIN_QUERY_FIELD20_THRESHOLD = -0.6457718014717102f; // 0x80DFE8
     constexpr float WOW_TERRAIN_QUERY_CACHE_MISS_EXPANSION = 0.1666666716337204f; // 0x3E2AAAAB
+    constexpr float WOW_SELECTOR_SOURCE_OUTCODE_THRESHOLD = -0.01944444328546524f; // 0x8101B4
+    constexpr float WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON = 0.01944444328546524f; // 0x8101B8
+    constexpr float WOW_SELECTOR_RECORD_VERTICAL_EXTRUSION = 32000.0f; // 0x46FA0000
+    constexpr float WOW_TERRAIN_QUERY_GRID_CENTER = 17066.666015625f; // 0x7FFAB4
+    constexpr float WOW_TERRAIN_QUERY_GRID_SCALE = 0.23999999463558197f; // 0x810AE4
+    constexpr float WOW_TERRAIN_QUERY_GRID_BIAS = 0.5f; // 0x86AA2C
+    constexpr uint32_t WOW_AABB_OUTCODE_MIN_X = 0x01u;
+    constexpr uint32_t WOW_AABB_OUTCODE_MAX_X = 0x02u;
+    constexpr uint32_t WOW_AABB_OUTCODE_MIN_Y = 0x04u;
+    constexpr uint32_t WOW_AABB_OUTCODE_MAX_Y = 0x08u;
+    constexpr uint32_t WOW_AABB_OUTCODE_MIN_Z = 0x10u;
+    constexpr uint32_t WOW_AABB_OUTCODE_MAX_Z = 0x20u;
+    constexpr std::array<uint32_t, 5> WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES = { 0u, 9u, 17u, 1u, 18u };
+    constexpr std::array<uint16_t, 12> WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES =
+    {
+        17u, 9u, 0u,
+        9u, 1u, 0u,
+        9u, 17u, 18u,
+        9u, 18u, 1u,
+    };
     constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_TRUE = 0x00100111u;
     constexpr uint32_t WOW_TERRAIN_QUERY_BASE_MASK_MODEL_FALSE = 0x00102111u;
     constexpr uint32_t WOW_TERRAIN_QUERY_WATERWALK_AUGMENT = 0x00030000u;
@@ -143,6 +166,47 @@ namespace
     inline float EvaluatePlane(const G3D::Vector3& normal, float planeDistance, const G3D::Vector3& point)
     {
         return normal.dot(point) + planeDistance;
+    }
+
+    inline float ComputeBinaryRsqrt(float value)
+    {
+        return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(value)));
+    }
+
+    inline bool HasAnyTerrainQueryPayloadBitsSet(const WoWCollision::TerrainQueryPairPayload& payload)
+    {
+        uint32_t firstBits = 0u;
+        uint32_t secondBits = 0u;
+        std::memcpy(&firstBits, &payload.first, sizeof(firstBits));
+        std::memcpy(&secondBits, &payload.second, sizeof(secondBits));
+        return (firstBits | secondBits) != 0u;
+    }
+
+    inline int32_t QuantizeTerrainQueryGridAxis(float worldCoordinate)
+    {
+        return static_cast<int32_t>(std::floor(((WOW_TERRAIN_QUERY_GRID_CENTER - worldCoordinate) * WOW_TERRAIN_QUERY_GRID_SCALE) - WOW_TERRAIN_QUERY_GRID_BIAS));
+    }
+
+    inline G3D::Vector3 TransformSelectorLocalPointToWorld(const std::array<G3D::Vector3, 3>& basisRows,
+                                                           const G3D::Vector3& localPoint)
+    {
+        return (basisRows[0] * localPoint.x) +
+               (basisRows[1] * localPoint.y) +
+               (basisRows[2] * localPoint.z);
+    }
+
+    inline G3D::Vector3 TransformSelectorWorldNormalToLocal(const std::array<G3D::Vector3, 3>& basisRows,
+                                                            const G3D::Vector3& worldNormal)
+    {
+        return G3D::Vector3(
+            (worldNormal.x * basisRows[0].x) + (worldNormal.y * basisRows[1].x) + (worldNormal.z * basisRows[2].x),
+            (worldNormal.x * basisRows[0].y) + (worldNormal.y * basisRows[1].y) + (worldNormal.z * basisRows[2].y),
+            (worldNormal.x * basisRows[0].z) + (worldNormal.y * basisRows[1].z) + (worldNormal.z * basisRows[2].z));
+    }
+
+    inline G3D::Vector3 NormalizeSelectorPlaneNormalBinary(const G3D::Vector3& normal)
+    {
+        return normal * (1.0f / normal.magnitude());
     }
 
     bool PlaneTouchesTopFootprintCorner(const SceneQuery::AABBContact& contact,
@@ -290,6 +354,90 @@ bool WoWCollision::IsPointInsideAabbInclusive(const G3D::Vector3& boundsMin,
     return true;
 }
 
+bool WoWCollision::DoAabbsOverlapInclusive(const G3D::Vector3& boundsMinA,
+                                           const G3D::Vector3& boundsMaxA,
+                                           const G3D::Vector3& boundsMinB,
+                                           const G3D::Vector3& boundsMaxB)
+{
+    return !(boundsMinA.x > boundsMaxB.x ||
+             boundsMinA.y > boundsMaxB.y ||
+             boundsMinA.z > boundsMaxB.z ||
+             boundsMaxA.x < boundsMinB.x ||
+             boundsMaxA.y < boundsMinB.y ||
+             boundsMaxA.z < boundsMinB.z);
+}
+
+uint32_t WoWCollision::BuildAabbOutcode(const G3D::Vector3& point,
+                                        const G3D::Vector3& boundsMin,
+                                        const G3D::Vector3& boundsMax)
+{
+    uint32_t outcode = 0u;
+
+    if (point.x < boundsMin.x) {
+        outcode |= WOW_AABB_OUTCODE_MIN_X;
+    } else if (point.x > boundsMax.x) {
+        outcode |= WOW_AABB_OUTCODE_MAX_X;
+    }
+
+    if (point.y < boundsMin.y) {
+        outcode |= WOW_AABB_OUTCODE_MIN_Y;
+    } else if (point.y > boundsMax.y) {
+        outcode |= WOW_AABB_OUTCODE_MAX_Y;
+    }
+
+    if (point.z < boundsMin.z) {
+        outcode |= WOW_AABB_OUTCODE_MIN_Z;
+    } else if (point.z > boundsMax.z) {
+        outcode |= WOW_AABB_OUTCODE_MAX_Z;
+    }
+
+    return outcode;
+}
+
+bool WoWCollision::TriangleSharesAabbOutcodeReject(uint32_t firstOutcode,
+                                                   uint32_t secondOutcode,
+                                                   uint32_t thirdOutcode)
+{
+    return (firstOutcode & secondOutcode & thirdOutcode) != 0u;
+}
+
+bool WoWCollision::TriangleSharesSelectorPlaneOutcodeReject(uint32_t firstOutcode,
+                                                            uint32_t secondOutcode,
+                                                            uint32_t thirdOutcode)
+{
+    return (firstOutcode & secondOutcode & thirdOutcode) != 0u;
+}
+
+uint32_t WoWCollision::CountTrianglesPassingAabbOutcodeReject(const uint16_t* triangleIndices,
+                                                              uint32_t triangleCount,
+                                                              const uint32_t* vertexOutcodes,
+                                                              uint32_t vertexOutcodeCount)
+{
+    if ((triangleCount != 0u && triangleIndices == nullptr) || (vertexOutcodeCount != 0u && vertexOutcodes == nullptr)) {
+        return 0u;
+    }
+
+    uint32_t acceptedCount = 0u;
+    for (uint32_t triangleIndex = 0; triangleIndex < triangleCount; ++triangleIndex) {
+        const uint32_t baseIndex = triangleIndex * 3u;
+        const uint32_t index0 = triangleIndices[baseIndex + 0u];
+        const uint32_t index1 = triangleIndices[baseIndex + 1u];
+        const uint32_t index2 = triangleIndices[baseIndex + 2u];
+        if (index0 >= vertexOutcodeCount || index1 >= vertexOutcodeCount || index2 >= vertexOutcodeCount) {
+            continue;
+        }
+
+        if (!TriangleSharesAabbOutcodeReject(
+                vertexOutcodes[index0],
+                vertexOutcodes[index1],
+                vertexOutcodes[index2])) {
+            ++acceptedCount;
+        }
+    }
+
+    return acceptedCount;
+}
+
 uint32_t WoWCollision::BuildTerrainQueryMask(bool modelPropertyFlagSet,
                                              uint32_t movementFlags,
                                              float field20Value,
@@ -311,6 +459,129 @@ uint32_t WoWCollision::BuildTerrainQueryMask(bool modelPropertyFlagSet,
     }
 
     return queryMask;
+}
+
+bool WoWCollision::IsTerrainQueryPayloadEnabled(uint32_t movementFlags,
+                                                const TerrainQueryPairPayload& payload)
+{
+    if (HasAnyTerrainQueryPayloadBitsSet(payload)) {
+        return (movementFlags & 0x00F00000u) != 0u;
+    }
+
+    return (movementFlags & 0x0000000Fu) != 0u;
+}
+
+bool WoWCollision::ShouldRunDynamicCallbackProducer(bool callbackPresent,
+                                                    uint32_t movementFlags)
+{
+    return callbackPresent && ((movementFlags & 0x00F00000u) != 0u);
+}
+
+bool WoWCollision::ShouldVisitTerrainQueryStampedEntry(uint32_t entryVisitStamp,
+                                                       uint32_t currentVisitStamp)
+{
+    return entryVisitStamp != currentVisitStamp;
+}
+
+uint32_t WoWCollision::BeginTerrainQueryProducerPass(uint32_t currentVisitStamp,
+                                                     std::vector<SelectorCandidateRecord>& ioRecords)
+{
+    ioRecords.clear();
+    return currentVisitStamp + 1u;
+}
+
+void WoWCollision::BuildTerrainQueryChunkSpan(const G3D::Vector3& worldBoundsMin,
+                                              const G3D::Vector3& worldBoundsMax,
+                                              TerrainQueryChunkSpan& outSpan)
+{
+    outSpan.cellMinX = QuantizeTerrainQueryGridAxis(worldBoundsMax.x);
+    outSpan.cellMaxX = QuantizeTerrainQueryGridAxis(worldBoundsMin.x);
+    outSpan.cellMinY = QuantizeTerrainQueryGridAxis(worldBoundsMax.y);
+    outSpan.cellMaxY = QuantizeTerrainQueryGridAxis(worldBoundsMin.y);
+    outSpan.chunkMinX = outSpan.cellMinX >> 3;
+    outSpan.chunkMaxX = outSpan.cellMaxX >> 3;
+    outSpan.chunkMinY = outSpan.cellMinY >> 3;
+    outSpan.chunkMaxY = outSpan.cellMaxY >> 3;
+}
+
+uint32_t WoWCollision::EnumerateTerrainQueryChunkCoordinates(const TerrainQueryChunkSpan& span,
+                                                             std::vector<TerrainQueryChunkCoordinate>& outCoordinates)
+{
+    outCoordinates.clear();
+    for (int32_t primary = span.chunkMinX; primary <= span.chunkMaxX; ++primary) {
+        for (int32_t secondary = span.chunkMinY; secondary <= span.chunkMaxY; ++secondary) {
+            outCoordinates.push_back(TerrainQueryChunkCoordinate{ primary, secondary });
+        }
+    }
+
+    return static_cast<uint32_t>(outCoordinates.size());
+}
+
+uint32_t WoWCollision::BuildOptionalSelectorChildDispatchMask(const uint32_t* childPresenceFlags,
+                                                              uint32_t childCount,
+                                                              uint32_t movementFlags)
+{
+    if (childCount != 0u && childPresenceFlags == nullptr) {
+        return 0u;
+    }
+
+    uint32_t dispatchMask = 0u;
+    for (uint32_t childIndex = 0; childIndex < childCount; ++childIndex) {
+        if (childPresenceFlags[childIndex] == 0u) {
+            continue;
+        }
+
+        const uint32_t flagBit = (1u << (childIndex + 16u));
+        if ((movementFlags & flagBit) != 0u) {
+            dispatchMask |= flagBit;
+        }
+    }
+
+    return dispatchMask;
+}
+
+WoWCollision::TerrainQueryEntryDispatchAction WoWCollision::EvaluateTerrainQueryEntryDispatch(bool entryFlagMaskedOut,
+                                                                                               bool alreadyVisited,
+                                                                                               bool hasSourceGeometry,
+                                                                                               uint32_t movementFlags,
+                                                                                               const TerrainQueryPairPayload& payload,
+                                                                                               bool traversalAllowsDispatch,
+                                                                                               const G3D::Vector3& entryBoundsMin,
+                                                                                               const G3D::Vector3& entryBoundsMax,
+                                                                                               const G3D::Vector3& queryBoundsMin,
+                                                                                               const G3D::Vector3& queryBoundsMax)
+{
+    if (entryFlagMaskedOut || alreadyVisited || !hasSourceGeometry) {
+        return TERRAIN_QUERY_ENTRY_SKIP;
+    }
+
+    if (!IsTerrainQueryPayloadEnabled(movementFlags, payload)) {
+        return TERRAIN_QUERY_ENTRY_SKIP;
+    }
+
+    if (!traversalAllowsDispatch) {
+        return TERRAIN_QUERY_ENTRY_ABORT;
+    }
+
+    if (!DoAabbsOverlapInclusive(entryBoundsMin, entryBoundsMax, queryBoundsMin, queryBoundsMax)) {
+        return TERRAIN_QUERY_ENTRY_SKIP;
+    }
+
+    return TERRAIN_QUERY_ENTRY_DISPATCH;
+}
+
+bool WoWCollision::ShouldDispatchDynamicTerrainQueryEntry(bool entryFlagEnabled,
+                                                          bool alreadyVisited,
+                                                          bool callbackSucceeded,
+                                                          const G3D::Vector3& entryBoundsMin,
+                                                          const G3D::Vector3& entryBoundsMax,
+                                                          const G3D::Vector3& queryBoundsMin,
+                                                          const G3D::Vector3& queryBoundsMax)
+{
+    return entryFlagEnabled &&
+           !alreadyVisited &&
+           callbackSucceeded &&
+           DoAabbsOverlapInclusive(entryBoundsMin, entryBoundsMax, queryBoundsMin, queryBoundsMax);
 }
 
 void WoWCollision::BuildTerrainQueryBounds(const G3D::Vector3& projectedPosition,
@@ -354,6 +625,37 @@ uint32_t WoWCollision::CopyTerrainQueryWalkableContactsAndPairs(const SceneQuery
     }
 
     return static_cast<uint32_t>(outContacts.size());
+}
+
+void WoWCollision::AppendTerrainQueryPairPayloadRange(uint32_t previousRecordCount,
+                                                      uint32_t currentRecordCount,
+                                                      const TerrainQueryPairPayload& payload,
+                                                      std::vector<TerrainQueryPairPayload>& ioPairs)
+{
+    const uint32_t preservedCount = std::min(previousRecordCount, currentRecordCount);
+    if (ioPairs.size() < preservedCount) {
+        ioPairs.resize(preservedCount);
+    }
+
+    ioPairs.resize(currentRecordCount);
+    for (uint32_t i = preservedCount; i < currentRecordCount; ++i) {
+        ioPairs[static_cast<size_t>(i)] = payload;
+    }
+}
+
+void WoWCollision::ZeroTerrainQueryPairPayloadRange(uint32_t previousRecordCount,
+                                                    uint32_t currentRecordCount,
+                                                    std::vector<TerrainQueryPairPayload>& ioPairs)
+{
+    const uint32_t preservedCount = std::min(previousRecordCount, currentRecordCount);
+    if (ioPairs.size() < preservedCount) {
+        ioPairs.resize(preservedCount);
+    }
+
+    ioPairs.resize(currentRecordCount);
+    for (uint32_t i = preservedCount; i < currentRecordCount; ++i) {
+        ioPairs[static_cast<size_t>(i)] = TerrainQueryPairPayload{};
+    }
 }
 
 void WoWCollision::MergeAabbBounds(const G3D::Vector3& boundsMinA,
@@ -414,12 +716,1154 @@ void WoWCollision::BuildTerrainQueryCacheMissBounds(const G3D::Vector3& projecte
         outBoundsMax);
 }
 
+bool WoWCollision::EvaluateTerrainQueryMergedQueryTransaction(const G3D::Vector3& projectedPosition,
+                                                              float collisionRadius,
+                                                              float boundingHeight,
+                                                              const G3D::Vector3& cachedBoundsMin,
+                                                              const G3D::Vector3& cachedBoundsMax,
+                                                              bool modelPropertyFlagSet,
+                                                              uint32_t movementFlags,
+                                                              float field20Value,
+                                                              bool rootTreeFlagSet,
+                                                              bool childTreeFlagSet,
+                                                              bool queryDispatchSucceeded,
+                                                              TerrainQueryMergedQueryTrace& outTrace)
+{
+    outTrace = TerrainQueryMergedQueryTrace{};
+    BuildTerrainQueryBounds(
+        projectedPosition,
+        collisionRadius,
+        boundingHeight,
+        outTrace.queryBoundsMin,
+        outTrace.queryBoundsMax);
+
+    outTrace.cacheContainsBoundsMin = IsPointInsideAabbInclusive(
+        cachedBoundsMin,
+        cachedBoundsMax,
+        outTrace.queryBoundsMin) ? 1u : 0u;
+    outTrace.cacheContainsBoundsMax = IsPointInsideAabbInclusive(
+        cachedBoundsMin,
+        cachedBoundsMax,
+        outTrace.queryBoundsMax) ? 1u : 0u;
+
+    if (outTrace.cacheContainsBoundsMin != 0u && outTrace.cacheContainsBoundsMax != 0u) {
+        outTrace.reusedCachedQuery = 1u;
+        outTrace.returnedSuccess = 1u;
+        return true;
+    }
+
+    BuildTerrainQueryCacheMissBounds(
+        projectedPosition,
+        collisionRadius,
+        boundingHeight,
+        cachedBoundsMin,
+        cachedBoundsMax,
+        outTrace.mergedBoundsMin,
+        outTrace.mergedBoundsMax);
+    outTrace.builtMergedBounds = 1u;
+
+    outTrace.queryMask = BuildTerrainQueryMask(
+        modelPropertyFlagSet,
+        movementFlags,
+        field20Value,
+        rootTreeFlagSet,
+        childTreeFlagSet);
+    outTrace.builtQueryMask = 1u;
+    outTrace.queryInvoked = 1u;
+    outTrace.queryDispatchSucceeded = queryDispatchSucceeded ? 1u : 0u;
+    outTrace.returnedSuccess = outTrace.queryDispatchSucceeded;
+    return queryDispatchSucceeded;
+}
+
+bool WoWCollision::EvaluateTerrainQuerySelectedContactContainerTransaction(
+    const G3D::Vector3& projectedPosition,
+    float collisionRadius,
+    float boundingHeight,
+    const G3D::Vector3& cachedBoundsMin,
+    const G3D::Vector3& cachedBoundsMax,
+    bool modelPropertyFlagSet,
+    uint32_t movementFlags,
+    float field20Value,
+    bool rootTreeFlagSet,
+    bool childTreeFlagSet,
+    const SceneQuery::AABBContact* existingContacts,
+    const TerrainQueryPairPayload* existingPairs,
+    uint32_t existingCount,
+    const SceneQuery::AABBContact* queryContacts,
+    const TerrainQueryPairPayload* queryPairs,
+    uint32_t queryCount,
+    bool queryDispatchSucceeded,
+    std::vector<SceneQuery::AABBContact>& outContacts,
+    std::vector<TerrainQueryPairPayload>& outPairs,
+    TerrainQuerySelectedContactContainerTrace& outTrace)
+{
+    outTrace = TerrainQuerySelectedContactContainerTrace{};
+    outContacts.clear();
+    outPairs.clear();
+
+    if ((existingCount != 0u && (existingContacts == nullptr || existingPairs == nullptr)) ||
+        (queryCount != 0u && (queryContacts == nullptr || queryPairs == nullptr))) {
+        return false;
+    }
+
+    const bool transactionSucceeded = EvaluateTerrainQueryMergedQueryTransaction(
+        projectedPosition,
+        collisionRadius,
+        boundingHeight,
+        cachedBoundsMin,
+        cachedBoundsMax,
+        modelPropertyFlagSet,
+        movementFlags,
+        field20Value,
+        rootTreeFlagSet,
+        childTreeFlagSet,
+        queryDispatchSucceeded,
+        outTrace.mergedQuery);
+
+    if (outTrace.mergedQuery.reusedCachedQuery != 0u) {
+        outTrace.reusedExistingContainer = 1u;
+        outContacts.assign(existingContacts, existingContacts + existingCount);
+        outPairs.assign(existingPairs, existingPairs + existingCount);
+        outTrace.outputContactCount = existingCount;
+        outTrace.returnedSuccess = 1u;
+        return true;
+    }
+
+    if (!transactionSucceeded) {
+        return false;
+    }
+
+    outTrace.copiedQueryResults = 1u;
+    outTrace.outputContactCount = CopyTerrainQueryWalkableContactsAndPairs(
+        queryContacts,
+        queryPairs,
+        queryCount,
+        outContacts,
+        outPairs);
+    outTrace.returnedSuccess = 1u;
+    return true;
+}
+
 void WoWCollision::NegatePlane(const G3D::Vector3& normal,
                                float planeDistance,
                                SelectorSupportPlane& outPlane)
 {
     outPlane.normal = -normal;
     outPlane.planeDistance = -planeDistance;
+}
+
+void WoWCollision::BuildPlaneFromNormalAndPoint(const G3D::Vector3& normal,
+                                                const G3D::Vector3& point,
+                                                SelectorSupportPlane& outPlane)
+{
+    outPlane.normal = normal;
+    outPlane.planeDistance = -normal.dot(point);
+}
+
+void WoWCollision::BuildObjectLocalQueryBounds(const G3D::Vector3& worldBoundsMin,
+                                               const G3D::Vector3& worldBoundsMax,
+                                               const G3D::Vector3& objectPosition,
+                                               G3D::Vector3& outLocalBoundsMin,
+                                               G3D::Vector3& outLocalBoundsMax)
+{
+    const G3D::Vector3 localOffset = -objectPosition;
+    outLocalBoundsMin = worldBoundsMin + localOffset;
+    outLocalBoundsMax = worldBoundsMax + localOffset;
+}
+
+bool WoWCollision::BuildPlaneFromTrianglePoints(const G3D::Vector3& point0,
+                                                const G3D::Vector3& point1,
+                                                const G3D::Vector3& point2,
+                                                SelectorSupportPlane& outPlane)
+{
+    const G3D::Vector3 edge20 = point2 - point0;
+    const G3D::Vector3 edge10 = point1 - point0;
+    const G3D::Vector3 normal = edge20.cross(edge10);
+    if (normal.squaredMagnitude() < (WOW_PLANE_BUILD_EPSILON * WOW_PLANE_BUILD_EPSILON)) {
+        return false;
+    }
+
+    BuildPlaneFromNormalAndPoint(normal.directionOrZero(), point0, outPlane);
+    return true;
+}
+
+bool WoWCollision::BuildSelectorHullSourceGeometry(const G3D::Vector3* supportPoints,
+                                                   uint32_t supportPointCount,
+                                                   SelectorSupportPlane* outPlanes,
+                                                   uint32_t planeCount,
+                                                   G3D::Vector3* outPoints,
+                                                   uint32_t outPointCount,
+                                                   G3D::Vector3* outAnchorPoint0,
+                                                   G3D::Vector3* outAnchorPoint1)
+{
+    if (supportPointCount < 8u || planeCount < 6u || outPlanes == nullptr || outPointCount < 8u || outPoints == nullptr || supportPoints == nullptr) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < 6u; ++i) {
+        InitializeSelectorSupportPlane(outPlanes[i]);
+    }
+
+    for (uint32_t i = 0; i < 8u; ++i) {
+        outPoints[i] = G3D::Vector3::zero();
+    }
+
+    if (outAnchorPoint0) {
+        *outAnchorPoint0 = G3D::Vector3::zero();
+    }
+
+    if (outAnchorPoint1) {
+        *outAnchorPoint1 = G3D::Vector3::zero();
+    }
+
+    for (uint32_t i = 0; i < 8u; ++i) {
+        outPoints[i] = supportPoints[i];
+    }
+
+    const G3D::Vector3& point0 = outPoints[0];
+    const G3D::Vector3& point1 = outPoints[1];
+    const G3D::Vector3& point2 = outPoints[2];
+    const G3D::Vector3& point3 = outPoints[3];
+    const G3D::Vector3& point4 = outPoints[4];
+    const G3D::Vector3& point5 = outPoints[5];
+    const G3D::Vector3& point6 = outPoints[6];
+    const G3D::Vector3& point7 = outPoints[7];
+
+    BuildPlaneFromNormalAndPoint(
+        NormalizeSelectorPlaneNormalBinary((point6 - point1).cross(point5 - point1)),
+        point1,
+        outPlanes[0]);
+    BuildPlaneFromNormalAndPoint(
+        NormalizeSelectorPlaneNormalBinary((point7 - point0).cross(point4 - point0)),
+        point0,
+        outPlanes[1]);
+    BuildPlaneFromNormalAndPoint(
+        NormalizeSelectorPlaneNormalBinary((point4 - point0).cross(point5 - point0)),
+        point0,
+        outPlanes[2]);
+    BuildPlaneFromNormalAndPoint(
+        NormalizeSelectorPlaneNormalBinary((point6 - point3).cross(point7 - point3)),
+        point3,
+        outPlanes[3]);
+    BuildPlaneFromNormalAndPoint(
+        NormalizeSelectorPlaneNormalBinary((point4 - point5).cross(point6 - point5)),
+        point5,
+        outPlanes[4]);
+    BuildPlaneFromNormalAndPoint(
+        -outPlanes[4].normal,
+        point2,
+        outPlanes[5]);
+
+    return true;
+}
+
+bool WoWCollision::TransformSelectorSupportPointBuffer(const G3D::Vector3* inputPoints,
+                                                       uint32_t pointCount,
+                                                       const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                       const G3D::Vector3& translation,
+                                                       G3D::Vector3* outPoints,
+                                                       uint32_t outPointCount)
+{
+    if ((pointCount != 0u && inputPoints == nullptr) || pointCount > outPointCount || outPoints == nullptr) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < pointCount; ++i) {
+        outPoints[i] = TransformSelectorLocalPointToWorld(transformBasisRows, inputPoints[i]) + translation;
+    }
+
+    return true;
+}
+
+uint32_t WoWCollision::BuildSelectorObjectCallbackMask(uint32_t movementFlags)
+{
+    uint32_t callbackMask = (movementFlags & 0x10u) != 0u ? 0xC6u : 0xEEu;
+    if ((movementFlags & 0x20u) != 0u) {
+        callbackMask &= ~0x24u;
+    }
+
+    if ((movementFlags & 0x40u) == 0u) {
+        callbackMask &= ~0x02u;
+    }
+
+    if ((movementFlags & 0x4000u) == 0u) {
+        callbackMask &= ~0x40u;
+    }
+
+    return callbackMask;
+}
+
+bool WoWCollision::ShouldResolveSelectorObjectNode(bool selectorEnabled,
+                                                   bool nodeEnabled,
+                                                   bool allowInactiveNode)
+{
+    return selectorEnabled && (nodeEnabled || allowInactiveNode);
+}
+
+const void* WoWCollision::ResolveSelectorObjectNodePointer(bool selectorEnabled,
+                                                           const void* nodePointer,
+                                                           bool nodeEnabled,
+                                                           bool allowInactiveNode)
+{
+    return ShouldResolveSelectorObjectNode(
+               selectorEnabled,
+               nodeEnabled,
+               allowInactiveNode)
+        ? nodePointer
+        : nullptr;
+}
+
+uint32_t WoWCollision::EvaluateSelectorObjectRouterEntries(const SelectorObjectRouterEntryRecord* entries,
+                                                           uint32_t entryCount,
+                                                           bool selectorEnabled,
+                                                           const G3D::Vector3& queryBoundsMin,
+                                                           const G3D::Vector3& queryBoundsMax,
+                                                           SelectorObjectRouterTrace* outTrace)
+{
+    SelectorObjectRouterTrace trace{};
+    if (entryCount != 0u && entries == nullptr) {
+        if (outTrace != nullptr) {
+            *outTrace = trace;
+        }
+
+        return 0u;
+    }
+
+    uint32_t accumulator = 0u;
+    for (uint32_t entryIndex = 0; entryIndex < entryCount; ++entryIndex) {
+        const SelectorObjectRouterEntryRecord& entry = entries[entryIndex];
+        if (!DoAabbsOverlapInclusive(entry.boundsMin, entry.boundsMax, queryBoundsMin, queryBoundsMax)) {
+            ++trace.overlapRejectedCount;
+            continue;
+        }
+
+        const void* nodePointer = ResolveSelectorObjectNodePointer(
+            selectorEnabled,
+            reinterpret_cast<const void*>(static_cast<uintptr_t>(entry.nodeToken)),
+            entry.nodeEnabled != 0u,
+            false);
+        if (nodePointer == nullptr) {
+            ++trace.nodeRejectedCount;
+            continue;
+        }
+
+        ++trace.dispatchedCount;
+        const uint32_t previousAccumulator = accumulator;
+        accumulator |= (entry.callbackReturn & 0xFFu);
+        if (accumulator != previousAccumulator) {
+            ++trace.accumulatorUpdatedCount;
+        }
+    }
+
+    trace.result = accumulator;
+    if (outTrace != nullptr) {
+        *outTrace = trace;
+    }
+
+    return accumulator;
+}
+
+bool WoWCollision::ShouldUseSelectorObjectCallback(uint64_t callbackToken)
+{
+    return callbackToken != 0u;
+}
+
+void WoWCollision::FinalizeSelectorObjectNoCallbackState(uint32_t inputHitResult,
+                                                         uint32_t inputRecordCount,
+                                                         uint32_t inputOutputFlags,
+                                                         SelectorObjectNoCallbackState& outState)
+{
+    outState.hitResult = inputHitResult;
+    outState.recordCount = inputRecordCount;
+    outState.outputFlags = inputOutputFlags;
+}
+
+uint32_t WoWCollision::EvaluateSelectorLeafQueueMutation(uint32_t triangleIndex,
+                                                         uint32_t stateMaskByte,
+                                                         bool predicateRejected,
+                                                         uint32_t& ioOverflowFlags,
+                                                         uint16_t* pendingIds,
+                                                         uint32_t pendingIdCapacity,
+                                                         uint32_t& ioPendingCount,
+                                                         uint16_t* acceptedIds,
+                                                         uint32_t acceptedIdCapacity,
+                                                         uint32_t& ioAcceptedCount,
+                                                         uint8_t* stateBytes,
+                                                         uint32_t stateByteCount,
+                                                         SelectorLeafQueueMutationTrace* outTrace)
+{
+    SelectorLeafQueueMutationTrace trace{};
+    const uint32_t stateByteIndex = triangleIndex * 2u;
+    if ((stateBytes == nullptr) ||
+        stateByteIndex >= stateByteCount ||
+        (pendingIds == nullptr && pendingIdCapacity != 0u) ||
+        (acceptedIds == nullptr && acceptedIdCapacity != 0u) ||
+        ioPendingCount > pendingIdCapacity ||
+        ioAcceptedCount > acceptedIdCapacity) {
+        if (outTrace != nullptr) {
+            *outTrace = trace;
+        }
+
+        return 0u;
+    }
+
+    trace.stateByteBefore = stateBytes[stateByteIndex];
+    if ((trace.stateByteBefore & (stateMaskByte & 0xFFu)) != 0u) {
+        trace.skippedByMask = 1u;
+        trace.stateByteAfter = stateBytes[stateByteIndex];
+        trace.pendingCountAfter = ioPendingCount;
+        trace.acceptedCountAfter = ioAcceptedCount;
+        if (outTrace != nullptr) {
+            *outTrace = trace;
+        }
+
+        return 0u;
+    }
+
+    constexpr uint32_t WOW_SELECTOR_PENDING_QUEUE_CAPACITY = 0x2000u;
+    if (ioPendingCount >= WOW_SELECTOR_PENDING_QUEUE_CAPACITY || ioPendingCount >= pendingIdCapacity) {
+        ioOverflowFlags |= 1u;
+        trace.overflowed = 1u;
+        trace.stateByteAfter = stateBytes[stateByteIndex];
+        trace.pendingCountAfter = ioPendingCount;
+        trace.acceptedCountAfter = ioAcceptedCount;
+        if (outTrace != nullptr) {
+            *outTrace = trace;
+        }
+
+        return 0u;
+    }
+
+    pendingIds[ioPendingCount] = static_cast<uint16_t>(triangleIndex & 0xFFFFu);
+    ++ioPendingCount;
+    trace.pendingEnqueued = 1u;
+
+    stateBytes[stateByteIndex] |= 0x80u;
+    trace.visitedBitSet = 1u;
+
+    if (predicateRejected) {
+        trace.predicateRejected = 1u;
+        trace.stateByteAfter = stateBytes[stateByteIndex];
+        trace.pendingCountAfter = ioPendingCount;
+        trace.acceptedCountAfter = ioAcceptedCount;
+        if (outTrace != nullptr) {
+            *outTrace = trace;
+        }
+
+        return 0u;
+    }
+
+    if (ioAcceptedCount < acceptedIdCapacity) {
+        acceptedIds[ioAcceptedCount] = static_cast<uint16_t>(triangleIndex & 0xFFFFu);
+        ++ioAcceptedCount;
+        trace.acceptedEnqueued = 1u;
+    }
+
+    trace.stateByteAfter = stateBytes[stateByteIndex];
+    trace.pendingCountAfter = ioPendingCount;
+    trace.acceptedCountAfter = ioAcceptedCount;
+    if (outTrace != nullptr) {
+        *outTrace = trace;
+    }
+
+    return trace.acceptedEnqueued;
+}
+
+bool WoWCollision::BuildSelectorNodeTraversalPayload(const SelectorNodeTraversalRecord& node,
+                                                     const G3D::Vector3* querySupportPoints,
+                                                     uint32_t supportPointCount,
+                                                     uint32_t callbackMask,
+                                                     SelectorNodeTraversalPayload& outPayload)
+{
+    if (querySupportPoints == nullptr || supportPointCount == 0u) {
+        outPayload = SelectorNodeTraversalPayload{};
+        return false;
+    }
+
+    outPayload = SelectorNodeTraversalPayload{};
+    BuildSelectorSupportPointBounds(
+        querySupportPoints,
+        supportPointCount,
+        outPayload.queryBoundsMin,
+        outPayload.queryBoundsMax);
+    outPayload.callbackMaskWord = (callbackMask | 0x80u) & 0xFFFFu;
+    outPayload.acceptedCount = 0u;
+    outPayload.traversalBaseToken = node.traversalBaseToken;
+    outPayload.extraNodeToken = node.extraNodeToken;
+    outPayload.stateBytesToken = node.stateBytesToken;
+    outPayload.vertexBufferToken = node.vertexBufferToken;
+    outPayload.triangleIndexToken = node.triangleIndexToken;
+    return true;
+}
+
+void WoWCollision::BuildSelectorSupportPointBounds(const G3D::Vector3* points,
+                                                   uint32_t pointCount,
+                                                   G3D::Vector3& outBoundsMin,
+                                                   G3D::Vector3& outBoundsMax)
+{
+    if (pointCount == 0u || points == nullptr) {
+        outBoundsMin = G3D::Vector3::zero();
+        outBoundsMax = G3D::Vector3::zero();
+        return;
+    }
+
+    outBoundsMin = points[0];
+    outBoundsMax = points[0];
+    for (uint32_t i = 1u; i < pointCount; ++i) {
+        outBoundsMin = G3D::Vector3(
+            std::min(outBoundsMin.x, points[i].x),
+            std::min(outBoundsMin.y, points[i].y),
+            std::min(outBoundsMin.z, points[i].z));
+        outBoundsMax = G3D::Vector3(
+            std::max(outBoundsMax.x, points[i].x),
+            std::max(outBoundsMax.y, points[i].y),
+            std::max(outBoundsMax.z, points[i].z));
+    }
+}
+
+bool WoWCollision::BuildSelectorDynamicObjectHullSourceGeometry(const SelectorSupportPlane* sourcePlanes,
+                                                                uint32_t planeCount,
+                                                                const G3D::Vector3& objectBoundsMin,
+                                                                const G3D::Vector3& objectBoundsMax,
+                                                                const G3D::Vector3* localSupportPoints,
+                                                                uint32_t supportPointCount,
+                                                                const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                                const G3D::Vector3& translation,
+                                                                SelectorSupportPlane* outPlanes,
+                                                                uint32_t outPlaneCount,
+                                                                G3D::Vector3* outPoints,
+                                                                uint32_t outPointCount,
+                                                                G3D::Vector3* outAnchorPoint0,
+                                                                G3D::Vector3* outAnchorPoint1)
+{
+    if ((planeCount != 0u && sourcePlanes == nullptr) ||
+        supportPointCount < 8u ||
+        localSupportPoints == nullptr ||
+        outPlaneCount < 6u ||
+        outPlanes == nullptr ||
+        outPointCount < 8u ||
+        outPoints == nullptr) {
+        return false;
+    }
+
+    if (EvaluateSelectorSourceAabbCull(sourcePlanes, planeCount, objectBoundsMin, objectBoundsMax) == 0u) {
+        return false;
+    }
+
+    std::array<G3D::Vector3, 8> transformedPoints{};
+    if (!TransformSelectorSupportPointBuffer(
+            localSupportPoints,
+            8u,
+            transformBasisRows,
+            translation,
+            transformedPoints.data(),
+            static_cast<uint32_t>(transformedPoints.size()))) {
+        return false;
+    }
+
+    return BuildSelectorHullSourceGeometry(
+        transformedPoints.data(),
+        static_cast<uint32_t>(transformedPoints.size()),
+        outPlanes,
+        outPlaneCount,
+        outPoints,
+        outPointCount,
+        outAnchorPoint0,
+        outAnchorPoint1);
+}
+
+bool WoWCollision::BuildSelectorBvhChildTraversal(const SelectorBvhNodeRecord& node,
+                                                  const G3D::Vector3& boundsMin,
+                                                  const G3D::Vector3& boundsMax,
+                                                  SelectorBvhChildTraversal& outTraversal)
+{
+    outTraversal = SelectorBvhChildTraversal{};
+
+    if ((node.controlWord & 0x4u) != 0u) {
+        return false;
+    }
+
+    const uint32_t axis = node.controlWord & 0x3u;
+    if (axis > 2u) {
+        return false;
+    }
+
+    outTraversal.axis = axis;
+    outTraversal.splitCoordinate = node.splitCoordinate;
+    outTraversal.lowChildIndex = node.lowChildIndex;
+    outTraversal.highChildIndex = node.highChildIndex;
+    outTraversal.lowBoundsMin = boundsMin;
+    outTraversal.lowBoundsMax = boundsMax;
+    outTraversal.highBoundsMin = boundsMin;
+    outTraversal.highBoundsMax = boundsMax;
+
+    const float axisMin = axis == 0u ? boundsMin.x : (axis == 1u ? boundsMin.y : boundsMin.z);
+    const float axisMax = axis == 0u ? boundsMax.x : (axis == 1u ? boundsMax.y : boundsMax.z);
+
+    if (axisMin <= node.splitCoordinate) {
+        outTraversal.visitLow = 1u;
+        if (axis == 0u) {
+            outTraversal.lowBoundsMax.x = std::min(outTraversal.lowBoundsMax.x, node.splitCoordinate);
+        } else if (axis == 1u) {
+            outTraversal.lowBoundsMax.y = std::min(outTraversal.lowBoundsMax.y, node.splitCoordinate);
+        } else {
+            outTraversal.lowBoundsMax.z = std::min(outTraversal.lowBoundsMax.z, node.splitCoordinate);
+        }
+    }
+
+    if (axisMax >= node.splitCoordinate) {
+        outTraversal.visitHigh = 1u;
+        if (axis == 0u) {
+            outTraversal.highBoundsMin.x = std::max(outTraversal.highBoundsMin.x, node.splitCoordinate);
+        } else if (axis == 1u) {
+            outTraversal.highBoundsMin.y = std::max(outTraversal.highBoundsMin.y, node.splitCoordinate);
+        } else {
+            outTraversal.highBoundsMin.z = std::max(outTraversal.highBoundsMin.z, node.splitCoordinate);
+        }
+    }
+
+    return true;
+}
+
+void WoWCollision::TranslateSelectorSourceGeometry(const G3D::Vector3& translation,
+                                                   SelectorSupportPlane* ioPlanes,
+                                                   uint32_t planeCount,
+                                                   G3D::Vector3* ioPoints,
+                                                   uint32_t pointCount,
+                                                   G3D::Vector3* ioAnchorPoint0,
+                                                   G3D::Vector3* ioAnchorPoint1)
+{
+    if (ioPoints) {
+        for (uint32_t i = 0; i < pointCount; ++i) {
+            ioPoints[i] += translation;
+        }
+    }
+
+    if (ioPlanes) {
+        for (uint32_t i = 0; i < planeCount; ++i) {
+            ioPlanes[i].planeDistance -= ioPlanes[i].normal.dot(translation);
+        }
+    }
+
+    if (ioAnchorPoint0) {
+        *ioAnchorPoint0 += translation;
+    }
+
+    if (ioAnchorPoint1) {
+        *ioAnchorPoint1 += translation;
+    }
+}
+
+uint32_t WoWCollision::BuildSelectorSourcePlaneOutcode(const SelectorSupportPlane* planes,
+                                                       uint32_t planeCount,
+                                                       const G3D::Vector3& point)
+{
+    if (planeCount != 0u && planes == nullptr) {
+        return 0u;
+    }
+
+    uint32_t outcode = 0u;
+    for (uint32_t i = 0; i < planeCount; ++i) {
+        const float signedDistance = planes[i].normal.dot(point) + planes[i].planeDistance;
+        if (signedDistance < WOW_SELECTOR_SOURCE_OUTCODE_THRESHOLD) {
+            outcode |= (1u << i);
+        }
+    }
+
+    return outcode;
+}
+
+uint32_t WoWCollision::EvaluateSelectorSourceAabbCull(const SelectorSupportPlane* planes,
+                                                      uint32_t planeCount,
+                                                      const G3D::Vector3& boundsMin,
+                                                      const G3D::Vector3& boundsMax)
+{
+    if (planeCount != 0u && planes == nullptr) {
+        return 0u;
+    }
+
+    for (uint32_t i = 0; i < planeCount; ++i) {
+        const G3D::Vector3 supportPoint(
+            planes[i].normal.x < 0.0f ? boundsMin.x : boundsMax.x,
+            planes[i].normal.y < 0.0f ? boundsMin.y : boundsMax.y,
+            planes[i].normal.z < 0.0f ? boundsMin.z : boundsMax.z);
+        if ((planes[i].normal.dot(supportPoint) + planes[i].planeDistance) < WOW_SELECTOR_SOURCE_OUTCODE_THRESHOLD) {
+            return 0u;
+        }
+    }
+
+    return 3u;
+}
+
+uint32_t WoWCollision::EvaluateSelectorHullTransformedBoundsCull(const SelectorSupportPlane* planes,
+                                                                uint32_t planeCount,
+                                                                const G3D::Vector3& localBoundsMin,
+                                                                const G3D::Vector3& localBoundsMax,
+                                                                const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                                const G3D::Vector3& translation)
+{
+    if (planeCount != 0u && planes == nullptr) {
+        return 0u;
+    }
+
+    for (uint32_t i = 0; i < planeCount; ++i) {
+        const G3D::Vector3 localPlaneNormal = TransformSelectorWorldNormalToLocal(
+            transformBasisRows,
+            planes[i].normal);
+
+        const G3D::Vector3 localSupportPoint(
+            localPlaneNormal.x < 0.0f ? localBoundsMin.x : localBoundsMax.x,
+            localPlaneNormal.y < 0.0f ? localBoundsMin.y : localBoundsMax.y,
+            localPlaneNormal.z < 0.0f ? localBoundsMin.z : localBoundsMax.z);
+        const G3D::Vector3 worldSupportPoint = TransformSelectorLocalPointToWorld(
+            transformBasisRows,
+            localSupportPoint) + translation;
+
+        if ((planes[i].normal.dot(worldSupportPoint) + planes[i].planeDistance) < WOW_SELECTOR_SOURCE_OUTCODE_THRESHOLD) {
+            return 0u;
+        }
+    }
+
+    return 3u;
+}
+
+uint32_t WoWCollision::EvaluateSelectorHullPointWithMargin(const SelectorSupportPlane* planes,
+                                                           uint32_t planeCount,
+                                                           const G3D::Vector3& point,
+                                                           float margin)
+{
+    if (planeCount != 0u && planes == nullptr) {
+        return 0u;
+    }
+
+    const float threshold = -margin;
+    for (uint32_t i = 0; i < planeCount; ++i) {
+        if ((planes[i].normal.dot(point) + planes[i].planeDistance) < threshold) {
+            return 0u;
+        }
+    }
+
+    return 3u;
+}
+
+uint32_t WoWCollision::EvaluateSelectorHullPointEpsilon(const SelectorSupportPlane* planes,
+                                                        uint32_t planeCount,
+                                                        const G3D::Vector3& point)
+{
+    if (planeCount != 0u && planes == nullptr) {
+        return 0u;
+    }
+
+    for (uint32_t i = 0; i < planeCount; ++i) {
+        if ((planes[i].normal.dot(point) + planes[i].planeDistance) < WOW_SELECTOR_SOURCE_OUTCODE_THRESHOLD) {
+            return 0u;
+        }
+    }
+
+    return 3u;
+}
+
+uint32_t WoWCollision::CountSelectorSourceTrianglesPassingPlaneOutcodes(const SelectorSupportPlane* planes,
+                                                                        uint32_t planeCount,
+                                                                        const G3D::Vector3* samplePoints,
+                                                                        uint32_t samplePointCount)
+{
+    if ((samplePointCount != 0u && samplePoints == nullptr) || samplePointCount <= WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back()) {
+        return 0u;
+    }
+
+    std::array<uint32_t, WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back() + 1u> pointOutcodes{};
+    for (uint32_t sampleIndex : WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES) {
+        pointOutcodes[sampleIndex] = BuildSelectorSourcePlaneOutcode(planes, planeCount, samplePoints[sampleIndex]);
+    }
+
+    uint32_t acceptedCount = 0u;
+    for (size_t triangleOffset = 0; triangleOffset < WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES.size(); triangleOffset += 3u) {
+        const uint16_t point0Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset];
+        const uint16_t point1Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 1u];
+        const uint16_t point2Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 2u];
+        if (!TriangleSharesSelectorPlaneOutcodeReject(
+                pointOutcodes[point0Index],
+                pointOutcodes[point1Index],
+                pointOutcodes[point2Index])) {
+            ++acceptedCount;
+        }
+    }
+
+    return acceptedCount;
+}
+
+bool WoWCollision::BuildSelectorSourceScanWindow(int32_t cellRowIndex,
+                                                 int32_t cellColumnIndex,
+                                                 int32_t queryRowMin,
+                                                 int32_t queryColumnMin,
+                                                 int32_t queryRowMax,
+                                                 int32_t queryColumnMax,
+                                                 SelectorSourceScanWindow& outWindow)
+{
+    outWindow.rowMin = std::max(queryRowMin - (cellRowIndex * 8), 0);
+    outWindow.columnMin = std::max(queryColumnMin - (cellColumnIndex * 8), 0);
+    outWindow.rowMax = std::min(queryRowMax - (cellRowIndex * 8), 7);
+    outWindow.columnMax = std::min(queryColumnMax - (cellColumnIndex * 8), 7);
+    if (outWindow.rowMin > outWindow.rowMax || outWindow.columnMin > outWindow.columnMax) {
+        return false;
+    }
+
+    outWindow.pointStartIndex = (outWindow.rowMin * 17) + outWindow.columnMin;
+    outWindow.rowAdvancePointCount = 17 - ((outWindow.columnMax - outWindow.columnMin) + 1);
+    return true;
+}
+
+uint32_t WoWCollision::BuildLocalBoundsAabbOutcode(const G3D::Vector3& localBoundsMin,
+                                                   const G3D::Vector3& localBoundsMax,
+                                                   const G3D::Vector3& point)
+{
+    uint32_t outcode = 0u;
+    if ((point.x - localBoundsMin.x + WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) < 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MIN_X;
+    }
+
+    if ((point.x - localBoundsMax.x - WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) > 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MAX_X;
+    }
+
+    if ((point.y - localBoundsMin.y + WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) < 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MIN_Y;
+    }
+
+    if ((point.y - localBoundsMax.y - WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) > 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MAX_Y;
+    }
+
+    if ((point.z - localBoundsMin.z + WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) < 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MIN_Z;
+    }
+
+    if ((point.z - localBoundsMax.z - WOW_SELECTOR_LOCAL_BOUNDS_OUTCODE_EPSILON) > 0.0f) {
+        outcode |= WOW_AABB_OUTCODE_MAX_Z;
+    }
+
+    return outcode;
+}
+
+bool WoWCollision::EvaluateTriangleLocalBoundsAabbReject(const G3D::Vector3& localBoundsMin,
+                                                         const G3D::Vector3& localBoundsMax,
+                                                         const G3D::Vector3& point0,
+                                                         const G3D::Vector3& point1,
+                                                         const G3D::Vector3& point2)
+{
+    const uint32_t outcode0 = BuildLocalBoundsAabbOutcode(localBoundsMin, localBoundsMax, point0);
+    const uint32_t outcode1 = BuildLocalBoundsAabbOutcode(localBoundsMin, localBoundsMax, point1);
+    const uint32_t outcode2 = BuildLocalBoundsAabbOutcode(localBoundsMin, localBoundsMax, point2);
+    return TriangleSharesAabbOutcodeReject(outcode0, outcode1, outcode2);
+}
+
+uint32_t WoWCollision::BuildSelectorSourceSubcellMask(uint32_t rowIndex,
+                                                      uint32_t columnIndex)
+{
+    return 1u << (((rowIndex >> 1u) << 2u) + (columnIndex >> 1u));
+}
+
+bool WoWCollision::IsSelectorSourceSubcellMaskedOut(uint32_t rowIndex,
+                                                    uint32_t columnIndex,
+                                                    uint32_t cellMaskFlags)
+{
+    return (BuildSelectorSourceSubcellMask(rowIndex, columnIndex) & cellMaskFlags) != 0u;
+}
+
+void WoWCollision::BuildTranslatedTriangleSelectorRecord(const G3D::Vector3& localPoint0,
+                                                         const G3D::Vector3& localPoint1,
+                                                         const G3D::Vector3& localPoint2,
+                                                         const G3D::Vector3& translation,
+                                                         bool useApproximatePlaneBuildPath,
+                                                         SelectorCandidateRecord& outRecord)
+{
+    outRecord.filterPlane = {};
+    outRecord.points[0] = localPoint0 + translation;
+    outRecord.points[1] = localPoint1 + translation;
+    outRecord.points[2] = localPoint2 + translation;
+
+    if (useApproximatePlaneBuildPath) {
+        // 0x6AC54C..0x6AC616 takes the SSE rsqrt path when the client CPU feature flag is set.
+        G3D::Vector3 normal = (outRecord.points[2] - outRecord.points[0]).cross(outRecord.points[1] - outRecord.points[0]);
+        normal = normal * ComputeBinaryRsqrt(normal.squaredMagnitude());
+        BuildPlaneFromNormalAndPoint(normal, outRecord.points[0], outRecord.filterPlane);
+        return;
+    }
+
+    BuildPlaneFromTrianglePoints(
+        outRecord.points[0],
+        outRecord.points[1],
+        outRecord.points[2],
+        outRecord.filterPlane);
+}
+
+uint32_t WoWCollision::AppendSelectorSourceTriangleCandidateRecords(const SelectorSupportPlane* planes,
+                                                                    uint32_t planeCount,
+                                                                    const G3D::Vector3* samplePoints,
+                                                                    uint32_t samplePointCount,
+                                                                    const G3D::Vector3& translation,
+                                                                    bool useApproximatePlaneBuildPath,
+                                                                    std::vector<SelectorCandidateRecord>& ioRecords)
+{
+    if ((samplePointCount != 0u && samplePoints == nullptr) || samplePointCount <= WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back()) {
+        return 0u;
+    }
+
+    const size_t initialCount = ioRecords.size();
+    ioRecords.reserve(initialCount + CountSelectorSourceTrianglesPassingPlaneOutcodes(
+        planes,
+        planeCount,
+        samplePoints,
+        samplePointCount));
+
+    std::array<uint32_t, WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back() + 1u> pointOutcodes{};
+    for (uint32_t sampleIndex : WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES) {
+        pointOutcodes[sampleIndex] = BuildSelectorSourcePlaneOutcode(planes, planeCount, samplePoints[sampleIndex]);
+    }
+
+    for (size_t triangleOffset = 0; triangleOffset < WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES.size(); triangleOffset += 3u) {
+        const uint16_t point0Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset];
+        const uint16_t point1Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 1u];
+        const uint16_t point2Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 2u];
+        if (TriangleSharesSelectorPlaneOutcodeReject(
+                pointOutcodes[point0Index],
+                pointOutcodes[point1Index],
+                pointOutcodes[point2Index])) {
+            continue;
+        }
+
+        SelectorCandidateRecord record{};
+        BuildTranslatedTriangleSelectorRecord(
+            samplePoints[point0Index],
+            samplePoints[point1Index],
+            samplePoints[point2Index],
+            translation,
+            useApproximatePlaneBuildPath,
+            record);
+        ioRecords.push_back(record);
+    }
+
+    return static_cast<uint32_t>(ioRecords.size() - initialCount);
+}
+
+uint32_t WoWCollision::AppendSelectorSourceScanWindowCandidateRecords(const SelectorSupportPlane* planes,
+                                                                      uint32_t planeCount,
+                                                                      const G3D::Vector3* pointGrid,
+                                                                      uint32_t pointGridPointCount,
+                                                                      const SelectorSourceScanWindow& scanWindow,
+                                                                      uint32_t cellMaskFlags,
+                                                                      const G3D::Vector3& translation,
+                                                                      bool useApproximatePlaneBuildPath,
+                                                                      std::vector<SelectorCandidateRecord>& ioRecords)
+{
+    if (pointGrid == nullptr ||
+        scanWindow.rowMin > scanWindow.rowMax ||
+        scanWindow.columnMin > scanWindow.columnMax ||
+        scanWindow.pointStartIndex < 0 ||
+        static_cast<uint32_t>(scanWindow.pointStartIndex) >= pointGridPointCount) {
+        return 0u;
+    }
+
+    const size_t initialCount = ioRecords.size();
+    int32_t currentPointIndex = scanWindow.pointStartIndex;
+    for (int32_t rowIndex = scanWindow.rowMin; rowIndex <= scanWindow.rowMax; ++rowIndex) {
+        int32_t currentColumnIndex = currentPointIndex;
+        for (int32_t columnIndex = scanWindow.columnMin; columnIndex <= scanWindow.columnMax; ++columnIndex) {
+            if (!IsSelectorSourceSubcellMaskedOut(
+                    static_cast<uint32_t>(rowIndex),
+                    static_cast<uint32_t>(columnIndex),
+                    cellMaskFlags) &&
+                currentColumnIndex >= 0 &&
+                static_cast<uint32_t>(currentColumnIndex) < pointGridPointCount) {
+                AppendSelectorSourceTriangleCandidateRecords(
+                    planes,
+                    planeCount,
+                    pointGrid + currentColumnIndex,
+                    pointGridPointCount - static_cast<uint32_t>(currentColumnIndex),
+                    translation,
+                    useApproximatePlaneBuildPath,
+                    ioRecords);
+            }
+
+            ++currentColumnIndex;
+        }
+
+        currentPointIndex = currentColumnIndex + scanWindow.rowAdvancePointCount;
+    }
+
+    return static_cast<uint32_t>(ioRecords.size() - initialCount);
+}
+
+uint32_t WoWCollision::AppendLocalBoundsScanWindowTriangleCandidateRecords(const G3D::Vector3& localBoundsMin,
+                                                                           const G3D::Vector3& localBoundsMax,
+                                                                           const G3D::Vector3* pointGrid,
+                                                                           uint32_t pointGridPointCount,
+                                                                           const SelectorSourceScanWindow& scanWindow,
+                                                                           uint32_t cellMaskFlags,
+                                                                           const G3D::Vector3& translation,
+                                                                           bool useApproximatePlaneBuildPath,
+                                                                           std::vector<SelectorCandidateRecord>& ioRecords)
+{
+    if (pointGrid == nullptr ||
+        scanWindow.rowMin > scanWindow.rowMax ||
+        scanWindow.columnMin > scanWindow.columnMax ||
+        scanWindow.pointStartIndex < 0 ||
+        static_cast<uint32_t>(scanWindow.pointStartIndex) >= pointGridPointCount) {
+        return 0u;
+    }
+
+    const size_t initialCount = ioRecords.size();
+    int32_t currentPointIndex = scanWindow.pointStartIndex;
+    for (int32_t rowIndex = scanWindow.rowMin; rowIndex <= scanWindow.rowMax; ++rowIndex) {
+        int32_t currentColumnIndex = currentPointIndex;
+        for (int32_t columnIndex = scanWindow.columnMin; columnIndex <= scanWindow.columnMax; ++columnIndex) {
+            if (IsSelectorSourceSubcellMaskedOut(
+                    static_cast<uint32_t>(rowIndex),
+                    static_cast<uint32_t>(columnIndex),
+                    cellMaskFlags) ||
+                currentColumnIndex < 0 ||
+                (static_cast<uint32_t>(currentColumnIndex) + WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back()) >= pointGridPointCount) {
+                ++currentColumnIndex;
+                continue;
+            }
+
+            std::array<uint32_t, WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES.back() + 1u> pointOutcodes{};
+            for (uint32_t sampleIndex : WOW_SELECTOR_SOURCE_SAMPLE_POINT_INDICES) {
+                pointOutcodes[sampleIndex] = BuildLocalBoundsAabbOutcode(
+                    localBoundsMin,
+                    localBoundsMax,
+                    pointGrid[currentColumnIndex + sampleIndex]);
+            }
+
+            for (size_t triangleOffset = 0; triangleOffset < WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES.size(); triangleOffset += 3u) {
+                const uint16_t point0Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset];
+                const uint16_t point1Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 1u];
+                const uint16_t point2Index = WOW_SELECTOR_SOURCE_TRIANGLE_POINT_INDICES[triangleOffset + 2u];
+                if (TriangleSharesAabbOutcodeReject(
+                        pointOutcodes[point0Index],
+                        pointOutcodes[point1Index],
+                        pointOutcodes[point2Index])) {
+                    continue;
+                }
+
+                SelectorCandidateRecord record{};
+                BuildTranslatedTriangleSelectorRecord(
+                    pointGrid[currentColumnIndex + point0Index],
+                    pointGrid[currentColumnIndex + point1Index],
+                    pointGrid[currentColumnIndex + point2Index],
+                    translation,
+                    useApproximatePlaneBuildPath,
+                    record);
+                ioRecords.push_back(record);
+            }
+
+            ++currentColumnIndex;
+        }
+
+        currentPointIndex = currentColumnIndex + scanWindow.rowAdvancePointCount;
+    }
+
+    return static_cast<uint32_t>(ioRecords.size() - initialCount);
+}
+
+void WoWCollision::AppendSelectorQuadRecordPair(const G3D::Vector3& basePoint,
+                                                const G3D::Vector3& firstEdge,
+                                                const G3D::Vector3& secondEdge,
+                                                const G3D::Vector3& normal,
+                                                std::vector<SelectorCandidateRecord>& ioRecords)
+{
+    SelectorCandidateRecord firstRecord{};
+    BuildPlaneFromNormalAndPoint(normal, basePoint, firstRecord.filterPlane);
+    firstRecord.points[0] = basePoint;
+    firstRecord.points[1] = basePoint + firstEdge;
+    firstRecord.points[2] = firstRecord.points[1] + secondEdge;
+    ioRecords.push_back(firstRecord);
+
+    SelectorCandidateRecord secondRecord{};
+    BuildPlaneFromNormalAndPoint(normal, basePoint, secondRecord.filterPlane);
+    secondRecord.points[0] = basePoint;
+    secondRecord.points[1] = basePoint + secondEdge;
+    secondRecord.points[2] = secondRecord.points[1] + firstEdge;
+    ioRecords.push_back(secondRecord);
+}
+
+uint32_t WoWCollision::BuildAabbBoundarySelectorCandidateRecords(const G3D::Vector3& boundaryMin,
+                                                                 const G3D::Vector3& boundaryMax,
+                                                                 const G3D::Vector3& queryBoundsMin,
+                                                                 const G3D::Vector3& queryBoundsMax,
+                                                                 std::vector<SelectorCandidateRecord>& outRecords)
+{
+    const size_t initialCount = outRecords.size();
+    const float spanX = boundaryMax.x - boundaryMin.x;
+    const float spanY = boundaryMax.y - boundaryMin.y;
+    const G3D::Vector3 verticalEdge(0.0f, 0.0f, WOW_SELECTOR_RECORD_VERTICAL_EXTRUSION);
+
+    // 0x6AB530 / 0x6ABA30 emit two triangles per crossed XY boundary face,
+    // always extruding upward from boundaryMin.z by a fixed 32000 units.
+    if (queryBoundsMin.y <= boundaryMin.y) {
+        AppendSelectorQuadRecordPair(
+            G3D::Vector3(boundaryMin.x, boundaryMin.y, boundaryMin.z),
+            G3D::Vector3(spanX, 0.0f, 0.0f),
+            verticalEdge,
+            G3D::Vector3(0.0f, -1.0f, 0.0f),
+            outRecords);
+    }
+
+    if (queryBoundsMax.y >= boundaryMax.y) {
+        AppendSelectorQuadRecordPair(
+            G3D::Vector3(boundaryMax.x, boundaryMax.y, boundaryMin.z),
+            G3D::Vector3(-spanX, 0.0f, 0.0f),
+            verticalEdge,
+            G3D::Vector3(0.0f, 1.0f, 0.0f),
+            outRecords);
+    }
+
+    if (queryBoundsMin.x <= boundaryMin.x) {
+        AppendSelectorQuadRecordPair(
+            G3D::Vector3(boundaryMin.x, boundaryMax.y, boundaryMin.z),
+            G3D::Vector3(0.0f, -spanY, 0.0f),
+            verticalEdge,
+            G3D::Vector3(-1.0f, 0.0f, 0.0f),
+            outRecords);
+    }
+
+    if (queryBoundsMax.x >= boundaryMax.x) {
+        AppendSelectorQuadRecordPair(
+            G3D::Vector3(boundaryMax.x, boundaryMin.y, boundaryMin.z),
+            G3D::Vector3(0.0f, spanY, 0.0f),
+            verticalEdge,
+            G3D::Vector3(1.0f, 0.0f, 0.0f),
+            outRecords);
+    }
+
+    return static_cast<uint32_t>(outRecords.size() - initialCount);
+}
+
+void WoWCollision::BuildTransformedTriangleSelectorRecord(const std::array<G3D::Vector3, 3>& transformBasisRows,
+                                                          const G3D::Vector3& localNormal,
+                                                          const G3D::Vector3& point0,
+                                                          const G3D::Vector3& point1,
+                                                          const G3D::Vector3& point2,
+                                                          SelectorCandidateRecord& outRecord)
+{
+    std::array<G3D::Vector3, 3> normalizedBasisRows = transformBasisRows;
+    for (G3D::Vector3& row : normalizedBasisRows) {
+        const float rowMagnitude = row.magnitude();
+        if (rowMagnitude >= PhysicsConstants::SPEED_EPSILON) {
+            row /= rowMagnitude;
+        }
+    }
+
+    outRecord.points[0] = point0;
+    outRecord.points[1] = point1;
+    outRecord.points[2] = point2;
+
+    const G3D::Vector3 worldNormal =
+        (normalizedBasisRows[0] * localNormal.x) +
+        (normalizedBasisRows[1] * localNormal.y) +
+        (normalizedBasisRows[2] * localNormal.z);
+    BuildPlaneFromNormalAndPoint(worldNormal, point0, outRecord.filterPlane);
 }
 
 void WoWCollision::TransformWorldPointToTransportLocal(const G3D::Vector3& worldPoint,
@@ -456,8 +1900,7 @@ void WoWCollision::BuildTransportLocalPlane(const G3D::Vector3& worldNormal,
     G3D::Vector3 localPoint;
     TransformWorldVectorToTransportLocal(worldNormal, transportOrientation, localNormal);
     TransformWorldPointToTransportLocal(worldPoint, transportPosition, transportOrientation, localPoint);
-    outPlane.normal = localNormal;
-    outPlane.planeDistance = -localNormal.dot(localPoint);
+    BuildPlaneFromNormalAndPoint(localNormal, localPoint, outPlane);
 }
 
 void WoWCollision::TransformSelectorCandidateRecordToTransportLocal(const SelectorCandidateRecord& worldRecord,
@@ -542,6 +1985,116 @@ void WoWCollision::InitializeSelectorTriangleSourceWrapperSeeds(G3D::Vector3& ou
     outTestPoint = G3D::Vector3(0.0f, 0.0f, -1.0f);
     outCandidateDirection = G3D::Vector3(0.0f, 0.0f, -1.0f);
     outBestRatio = 1.0f;
+}
+
+bool WoWCollision::EvaluateSelectorTriangleSourceWrapperTransaction(const G3D::Vector3& defaultPosition,
+                                                                    const G3D::Vector3* overridePosition,
+                                                                    bool terrainQuerySucceeded,
+                                                                    float inputBestRatio,
+                                                                    SelectorTriangleSourceWrapperTrace& outTrace)
+{
+    outTrace = SelectorTriangleSourceWrapperTrace{};
+    outTrace.supportPlaneInitCount = 7u;
+    outTrace.validationPlaneInitCount = 9u;
+    outTrace.scratchPointZeroCount = 9u;
+    outTrace.usedOverridePosition = (overridePosition != nullptr) ? 1u : 0u;
+    outTrace.terrainQueryInvoked = (overridePosition == nullptr) ? 1u : 0u;
+    outTrace.terrainQuerySucceeded = terrainQuerySucceeded ? 1u : 0u;
+    outTrace.selectedPosition = (overridePosition != nullptr) ? *overridePosition : defaultPosition;
+    outTrace.inputBestRatio = inputBestRatio;
+
+    InitializeSelectorTriangleSourceWrapperSeeds(
+        outTrace.testPoint,
+        outTrace.candidateDirection,
+        outTrace.initialBestRatio);
+
+    const bool accepted = FinalizeSelectorTriangleSourceWrapper(
+        overridePosition != nullptr,
+        terrainQuerySucceeded,
+        inputBestRatio,
+        outTrace.reportedBestRatio);
+    outTrace.returnedSuccess = accepted ? 1u : 0u;
+    outTrace.queryFailureZeroedOutput =
+        (!accepted && overridePosition == nullptr && !terrainQuerySucceeded && outTrace.reportedBestRatio == 0.0f) ? 1u : 0u;
+    return accepted;
+}
+
+bool WoWCollision::EvaluateSelectorTriangleSourceVariableTransaction(const G3D::Vector3& defaultPosition,
+                                                                     const G3D::Vector3* overridePosition,
+                                                                     const G3D::Vector3& projectedPosition,
+                                                                     uint32_t supportPlaneInitCount,
+                                                                     uint32_t validationPlaneInitCount,
+                                                                     uint32_t scratchPointZeroCount,
+                                                                     const G3D::Vector3& testPoint,
+                                                                     const G3D::Vector3& candidateDirection,
+                                                                     float initialBestRatio,
+                                                                     float collisionRadius,
+                                                                     float boundingHeight,
+                                                                     const G3D::Vector3& cachedBoundsMin,
+                                                                     const G3D::Vector3& cachedBoundsMax,
+                                                                     bool modelPropertyFlagSet,
+                                                                     uint32_t movementFlags,
+                                                                     float field20Value,
+                                                                     bool rootTreeFlagSet,
+                                                                     bool childTreeFlagSet,
+                                                                     bool queryDispatchSucceeded,
+                                                                     bool rankingAccepted,
+                                                                     uint32_t rankingCandidateCount,
+                                                                     int32_t rankingSelectedRecordIndex,
+                                                                     float rankingReportedBestRatio,
+                                                                     SelectorTriangleSourceVariableTransactionTrace& outTrace)
+{
+    outTrace = SelectorTriangleSourceVariableTransactionTrace{};
+    outTrace.supportPlaneInitCount = supportPlaneInitCount;
+    outTrace.validationPlaneInitCount = validationPlaneInitCount;
+    outTrace.scratchPointZeroCount = scratchPointZeroCount;
+    outTrace.usedOverridePosition = (overridePosition != nullptr) ? 1u : 0u;
+    outTrace.selectedPosition = (overridePosition != nullptr) ? *overridePosition : defaultPosition;
+    outTrace.projectedPosition = projectedPosition;
+    outTrace.testPoint = testPoint;
+    outTrace.candidateDirection = candidateDirection;
+    outTrace.initialBestRatio = initialBestRatio;
+    outTrace.rankingReportedBestRatio = rankingReportedBestRatio;
+    outTrace.rankingCandidateCount = rankingCandidateCount;
+    outTrace.rankingSelectedRecordIndex = rankingSelectedRecordIndex;
+
+    if (overridePosition == nullptr) {
+        outTrace.terrainQueryInvoked = 1u;
+
+        TerrainQueryMergedQueryTrace mergedQueryTrace{};
+        const bool terrainQuerySucceeded = EvaluateTerrainQueryMergedQueryTransaction(
+            projectedPosition,
+            collisionRadius,
+            boundingHeight,
+            cachedBoundsMin,
+            cachedBoundsMax,
+            modelPropertyFlagSet,
+            movementFlags,
+            field20Value,
+            rootTreeFlagSet,
+            childTreeFlagSet,
+            queryDispatchSucceeded,
+            mergedQueryTrace);
+        outTrace.terrainQuerySucceeded = terrainQuerySucceeded ? 1u : 0u;
+        outTrace.terrainQueryReusedCachedQuery = mergedQueryTrace.reusedCachedQuery;
+        outTrace.terrainQueryBuiltMergedBounds = mergedQueryTrace.builtMergedBounds;
+        outTrace.terrainQueryBuiltQueryMask = mergedQueryTrace.builtQueryMask;
+        outTrace.terrainQueryMask = mergedQueryTrace.queryMask;
+
+        if (!terrainQuerySucceeded) {
+            outTrace.outputReportedBestRatio = 0.0f;
+            outTrace.queryFailureZeroedOutput = 1u;
+            return false;
+        }
+    }
+
+    outTrace.rankingInvoked = 1u;
+    outTrace.rankingAccepted = rankingAccepted ? 1u : 0u;
+    outTrace.outputReportedBestRatio = ClampSelectorReportedBestRatio(rankingReportedBestRatio);
+    outTrace.zeroClampedOutput =
+        (outTrace.outputReportedBestRatio == 0.0f && rankingReportedBestRatio <= WOW_CORNER_PLANE_EPSILON) ? 1u : 0u;
+    outTrace.returnedSuccess = 1u;
+    return true;
 }
 
 void WoWCollision::BuildSelectorSupportPlanes(const G3D::Vector3& position,
@@ -1895,6 +3448,10 @@ namespace
                 continue;
             }
 
+            if (!WoWCollision::IsSelectorContactWithinAlternateWorkingVectorBand(normal.z)) {
+                continue;
+            }
+
             G3D::Vector3 horizontalNormal(normal.x, normal.y, 0.0f);
             const float horizontalMag = horizontalNormal.magnitude();
             if (horizontalMag <= PhysicsConstants::VECTOR_EPSILON) {
@@ -2155,6 +3712,7 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
     trace.branchKind = GROUNDED_WALL_BRANCH_HORIZONTAL;
 
     if (selectionInfo.selectedContact != nullptr) {
+        const bool selectedContactRawWalkable = selectionInfo.selectedContact->walkable;
         WoWCollision::CheckWalkableResult walkableResult = WoWCollision::CheckWalkable(
             *selectionInfo.selectedContact,
             currentPosition,
@@ -2163,7 +3721,11 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
             true,
             groundedWallState);
 
-        if (walkableResult.walkable) {
+        // Only raw walkable selected contacts take the direct vertical-only path.
+        // Stateful carry-over can keep flat support or side blockers "walkable"
+        // for selection purposes, but those contacts still belong in the later
+        // non-walkable branch gate instead of zeroing XY immediately.
+        if (selectedContactRawWalkable && walkableResult.walkable) {
             const float intoPlane = requestedMove.dot(selectionInfo.selectedNormal);
             G3D::Vector3 verticalCorrection = requestedMove - (selectionInfo.selectedNormal * intoPlane);
 
@@ -2180,7 +3742,48 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
         }
     }
 
-    if (!usedWalkableSelectedContact && std::fabs(selectionInfo.selectedNormal.z) > 0.01f) {
+    uint32_t nonWalkableGateReturnCode = 0u;
+    if (!usedWalkableSelectedContact) {
+        bool foundStatefulSupportCandidate = false;
+        float highestStatefulSupportZ = -FLT_MAX;
+
+        for (const auto& contact : slideContacts) {
+            G3D::Vector3 supportNormal = contact.normal.directionOrZero();
+            if (supportNormal.magnitude() <= PhysicsConstants::VECTOR_EPSILON) {
+                supportNormal = contact.rawNormal.directionOrZero();
+            }
+
+            // The stateful fallback scan is only looking for actual support faces.
+            // Horizontal or upward-facing blockers can be temporarily "walkable"
+            // under grounded-wall state, but they are not valid support for the
+            // non-walkable vertical retry gate.
+            if ((-supportNormal.z) <= WOW_WALKABLE_MIN_NORMAL_Z) {
+                continue;
+            }
+
+            const WoWCollision::CheckWalkableResult supportWalkable = WoWCollision::CheckWalkable(
+                contact,
+                currentPosition,
+                collisionRadius,
+                boundingHeight,
+                true,
+                groundedWallState);
+            if (!supportWalkable.walkable || !supportWalkable.walkableState) {
+                continue;
+            }
+
+            foundStatefulSupportCandidate = true;
+            highestStatefulSupportZ = std::max(highestStatefulSupportZ, contact.point.z);
+        }
+
+        if (foundStatefulSupportCandidate) {
+            const float upwardClearanceThreshold = std::max(0.05f, collisionRadius * 0.25f);
+            nonWalkableGateReturnCode =
+                highestStatefulSupportZ > (currentPosition.z + upwardClearanceThreshold) ? 2u : 1u;
+        }
+    }
+
+    if (!usedWalkableSelectedContact && nonWalkableGateReturnCode == 2u) {
         const float intoPlane = requestedMove.dot(selectionInfo.selectedNormal);
         projectedMove = requestedMove - (selectionInfo.selectedNormal * intoPlane);
 
@@ -3851,7 +5454,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// of the three movement passes.
 	// -------------------------------------------------------------------------
 	PhysicsHelpers::MovementPlan plan = PhysicsHelpers::BuildMovementPlan(
-		input.moveFlags, input.orientation, 
+		input.moveFlags, st.orientation,
 		input.runSpeed, input.walkSpeed, input.runBackSpeed, input.swimSpeed, input.swimBackSpeed,
 		intent.hasInput, dt, isSwimming);
 	

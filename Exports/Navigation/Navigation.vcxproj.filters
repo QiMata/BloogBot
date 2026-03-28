@@ -91,7 +91,39 @@
     <ClCompile Include="PhysicsMovement.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PhysicsTestExports.cpp" />
+    <ClCompile Include="PhysicsTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorChosenContact.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorChosenContactTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectTraversal.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectTraversalTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectConsumers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectConsumersTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectRasterConsumer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectorObjectRasterConsumerTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GroundedDriverParity.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GroundedDriverParityTestExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Navigation\MoveMap.h">
@@ -191,6 +223,21 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PhysicsMovement.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SelectorChosenContact.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SelectorObjectTraversal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SelectorObjectConsumers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SelectorObjectRasterConsumer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GroundedDriverParity.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

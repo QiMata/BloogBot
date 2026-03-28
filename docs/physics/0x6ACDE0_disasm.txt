@@ -1,0 +1,47 @@
+WoW.exe 1.12.1 (build 5875)
+Function: 0x6ACDE0
+Purpose: build one plane record from `normal.xyz` + one point on the plane
+Image base: 0x400000
+Capture date: 2026-03-26
+
+Relevant excerpt:
+
+0x006ACDE0: push     ebp
+0x006ACDE1: mov      ebp, esp
+0x006ACDE3: mov      eax, dword ptr [ebp + 8]
+0x006ACDE6: push     esi
+0x006ACDE7: push     edi
+0x006ACDE8: mov      edx, eax
+0x006ACDEA: mov      edi, dword ptr [edx]
+0x006ACDEC: mov      esi, ecx
+0x006ACDEE: mov      dword ptr [esi], edi
+0x006ACDF0: mov      edi, dword ptr [edx + 4]
+0x006ACDF3: mov      dword ptr [esi + 4], edi
+0x006ACDF6: mov      edx, dword ptr [edx + 8]
+0x006ACDF9: mov      dword ptr [esi + 8], edx
+0x006ACDFC: fld      dword ptr [eax + 8]
+0x006ACDFF: mov      edx, dword ptr [ebp + 0xc]
+0x006ACE02: fmul     dword ptr [edx + 8]
+0x006ACE06: fld      dword ptr [eax + 4]
+0x006ACE0A: fmul     dword ptr [edx + 4]
+0x006ACE0D: faddp    st(1)
+0x006ACE0F: fld      dword ptr [eax]
+0x006ACE11: fmul     dword ptr [edx]
+0x006ACE13: faddp    st(1)
+0x006ACE15: fchs
+0x006ACE17: fstp     dword ptr [ecx + 0xc]
+0x006ACE1A: pop      ebp
+0x006ACE1B: ret      8
+
+Interpretation:
+- `ecx` is the output plane record `{ normal.x, normal.y, normal.z, planeD }`.
+- `[ebp+8]` points at the input normal vector.
+- `[ebp+0xC]` points at one point on the plane.
+- The helper copies `normal.xyz` verbatim into the output record.
+- It then computes `planeD = -(normal dot point)` and stores that float at `+0x0C`.
+- There is no normalization, epsilon guard, or conditional branch in this helper.
+
+Parity implication for BG:
+- The terrain-query producer path does not construct these plane records with any hidden normalization or signed-distance adjustment.
+- Any BG helper that rebuilds the same record should preserve the incoming normal exactly and compute only `-(normal dot point)`.
+- This helper is one of the primitive writers feeding the unresolved `0x6AB530` temporary `0x34` contact-record builder.

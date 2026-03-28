@@ -490,7 +490,7 @@ public class UndercityUpperDoorContactTests(PhysicsEngineFixture fixture, ITestO
             foreach (var go in scenario.DynamicObjects)
             {
                 RegisterDynamicObject(go.Guid, 0, go.DisplayId, scenario.Recording.MapId, go.Scale);
-                UpdateDynamicObjectPosition(go.Guid, go.X, go.Y, go.Z, go.Orientation);
+                UpdateDynamicObjectPosition(go.Guid, go.X, go.Y, go.Z, go.Orientation, go.GoState);
             }
 
             var (boxMin, boxMax) = BuildMergedQueryBox(scenario);

@@ -77,6 +77,101 @@ struct ExportSelectorCandidateRecord
     G3D::Vector3 point2;
 };
 
+struct ExportSelectorSourceScanWindow
+{
+    int32_t rowMin;
+    int32_t columnMin;
+    int32_t rowMax;
+    int32_t columnMax;
+    int32_t pointStartIndex;
+    int32_t rowAdvancePointCount;
+};
+
+struct ExportSelectorBvhNodeRecord
+{
+    uint16_t controlWord;
+    uint16_t lowChildIndex;
+    uint16_t highChildIndex;
+    uint16_t leafTriangleCount;
+    uint32_t leafTriangleStartIndex;
+    float splitCoordinate;
+};
+
+struct ExportSelectorBvhChildTraversal
+{
+    uint32_t axis;
+    float splitCoordinate;
+    uint32_t lowChildIndex;
+    uint32_t highChildIndex;
+    uint32_t visitLow;
+    uint32_t visitHigh;
+    G3D::Vector3 lowBoundsMin;
+    G3D::Vector3 lowBoundsMax;
+    G3D::Vector3 highBoundsMin;
+    G3D::Vector3 highBoundsMax;
+};
+
+struct ExportSelectorObjectRouterEntryRecord
+{
+    G3D::Vector3 boundsMin;
+    G3D::Vector3 boundsMax;
+    uint64_t nodeToken;
+    uint32_t nodeEnabled;
+    uint32_t callbackReturn;
+};
+
+struct ExportSelectorObjectRouterTrace
+{
+    uint32_t overlapRejectedCount;
+    uint32_t nodeRejectedCount;
+    uint32_t dispatchedCount;
+    uint32_t accumulatorUpdatedCount;
+    uint32_t result;
+};
+
+struct ExportSelectorObjectNoCallbackState
+{
+    uint32_t hitResult;
+    uint32_t recordCount;
+    uint32_t outputFlags;
+};
+
+struct ExportSelectorLeafQueueMutationTrace
+{
+    uint32_t skippedByMask;
+    uint32_t overflowed;
+    uint32_t pendingEnqueued;
+    uint32_t visitedBitSet;
+    uint32_t predicateRejected;
+    uint32_t acceptedEnqueued;
+    uint32_t stateByteBefore;
+    uint32_t stateByteAfter;
+    uint32_t pendingCountAfter;
+    uint32_t acceptedCountAfter;
+};
+
+struct ExportSelectorNodeTraversalRecord
+{
+    uint64_t traversalBaseToken;
+    uint64_t extraNodeToken;
+    uint64_t stateBytesToken;
+    uint64_t vertexBufferToken;
+    uint64_t triangleIndexToken;
+};
+
+struct ExportSelectorNodeTraversalPayload
+{
+    G3D::Vector3 queryBoundsMin;
+    G3D::Vector3 queryBoundsMax;
+    uint32_t callbackMaskWord;
+    uint32_t acceptedCount;
+    uint64_t traversalBaseToken;
+    uint64_t extraNodeToken;
+    uint64_t stateBytesToken;
+    uint64_t vertexBufferToken;
+    uint64_t triangleIndexToken;
+};
+
 struct ExportSelectorRecordEvaluationTrace
 {
     float inputBestRatio;
@@ -176,6 +271,50 @@ struct ExportTerrainQueryPairPayload
     float second;
 };
 
+struct ExportTerrainQueryChunkSpan
+{
+    int32_t cellMinX;
+    int32_t cellMaxX;
+    int32_t cellMinY;
+    int32_t cellMaxY;
+    int32_t chunkMinX;
+    int32_t chunkMaxX;
+    int32_t chunkMinY;
+    int32_t chunkMaxY;
+};
+
+struct ExportTerrainQueryChunkCoordinate
+{
+    int32_t primary;
+    int32_t secondary;
+};
+
+struct ExportTerrainQueryMergedQueryTrace
+{
+    G3D::Vector3 queryBoundsMin;
+    G3D::Vector3 queryBoundsMax;
+    G3D::Vector3 mergedBoundsMin;
+    G3D::Vector3 mergedBoundsMax;
+    uint32_t cacheContainsBoundsMin;
+    uint32_t cacheContainsBoundsMax;
+    uint32_t reusedCachedQuery;
+    uint32_t builtMergedBounds;
+    uint32_t builtQueryMask;
+    uint32_t queryInvoked;
+    uint32_t queryDispatchSucceeded;
+    uint32_t returnedSuccess;
+    uint32_t queryMask;
+};
+
+struct ExportTerrainQuerySelectedContactContainerTrace
+{
+    ExportTerrainQueryMergedQueryTrace mergedQuery;
+    uint32_t reusedExistingContainer;
+    uint32_t copiedQueryResults;
+    uint32_t returnedSuccess;
+    uint32_t outputContactCount;
+};
+
 struct ExportSelectorPairConsumerTrace
 {
     float requestedDistance;
@@ -194,6 +333,52 @@ struct ExportSelectorPairConsumerTrace
     G3D::Vector3 inputMove;
     G3D::Vector3 outputMove;
     ExportSelectorPair outputPair;
+};
+
+struct ExportSelectorTriangleSourceWrapperTrace
+{
+    uint32_t supportPlaneInitCount;
+    uint32_t validationPlaneInitCount;
+    uint32_t scratchPointZeroCount;
+    uint32_t usedOverridePosition;
+    uint32_t terrainQueryInvoked;
+    uint32_t terrainQuerySucceeded;
+    uint32_t returnedSuccess;
+    uint32_t queryFailureZeroedOutput;
+    G3D::Vector3 selectedPosition;
+    G3D::Vector3 testPoint;
+    G3D::Vector3 candidateDirection;
+    float initialBestRatio;
+    float inputBestRatio;
+    float reportedBestRatio;
+};
+
+struct ExportSelectorTriangleSourceVariableTransactionTrace
+{
+    uint32_t supportPlaneInitCount;
+    uint32_t validationPlaneInitCount;
+    uint32_t scratchPointZeroCount;
+    uint32_t usedOverridePosition;
+    uint32_t terrainQueryInvoked;
+    uint32_t terrainQuerySucceeded;
+    uint32_t terrainQueryReusedCachedQuery;
+    uint32_t terrainQueryBuiltMergedBounds;
+    uint32_t terrainQueryBuiltQueryMask;
+    uint32_t rankingInvoked;
+    uint32_t rankingAccepted;
+    uint32_t zeroClampedOutput;
+    uint32_t returnedSuccess;
+    uint32_t queryFailureZeroedOutput;
+    G3D::Vector3 selectedPosition;
+    G3D::Vector3 projectedPosition;
+    G3D::Vector3 testPoint;
+    G3D::Vector3 candidateDirection;
+    float initialBestRatio;
+    float rankingReportedBestRatio;
+    float outputReportedBestRatio;
+    uint32_t rankingCandidateCount;
+    int32_t rankingSelectedRecordIndex;
+    uint32_t terrainQueryMask;
 };
 
 struct ExportGroundedWallSelectionTrace
@@ -985,6 +1170,68 @@ extern "C"
         return WoWCollision::IsPointInsideAabbInclusive(*boundsMin, *boundsMax, *point);
     }
 
+    __declspec(dllexport) bool EvaluateWoWAabbOverlapInclusive(
+        const G3D::Vector3* boundsMinA,
+        const G3D::Vector3* boundsMaxA,
+        const G3D::Vector3* boundsMinB,
+        const G3D::Vector3* boundsMaxB)
+    {
+        if (!boundsMinA || !boundsMaxA || !boundsMinB || !boundsMaxB) {
+            return false;
+        }
+
+        return WoWCollision::DoAabbsOverlapInclusive(*boundsMinA, *boundsMaxA, *boundsMinB, *boundsMaxB);
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWAabbOutcode(
+        const G3D::Vector3* point,
+        const G3D::Vector3* boundsMin,
+        const G3D::Vector3* boundsMax)
+    {
+        if (!point || !boundsMin || !boundsMax) {
+            return 0u;
+        }
+
+        return WoWCollision::BuildAabbOutcode(*point, *boundsMin, *boundsMax);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWTriangleAabbOutcodeReject(
+        uint32_t firstOutcode,
+        uint32_t secondOutcode,
+        uint32_t thirdOutcode)
+    {
+        return WoWCollision::TriangleSharesAabbOutcodeReject(firstOutcode, secondOutcode, thirdOutcode);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorTrianglePlaneOutcodeReject(
+        uint32_t firstOutcode,
+        uint32_t secondOutcode,
+        uint32_t thirdOutcode)
+    {
+        return WoWCollision::TriangleSharesSelectorPlaneOutcodeReject(firstOutcode, secondOutcode, thirdOutcode);
+    }
+
+    __declspec(dllexport) uint32_t CountWoWTrianglesPassingAabbOutcodeReject(
+        const uint16_t* triangleIndices,
+        int triangleIndexCount,
+        const uint32_t* vertexOutcodes,
+        int vertexOutcodeCount)
+    {
+        if ((!triangleIndices && triangleIndexCount != 0) ||
+            triangleIndexCount < 0 ||
+            (triangleIndexCount % 3) != 0 ||
+            (!vertexOutcodes && vertexOutcodeCount != 0) ||
+            vertexOutcodeCount < 0) {
+            return 0u;
+        }
+
+        return WoWCollision::CountTrianglesPassingAabbOutcodeReject(
+            triangleIndices,
+            static_cast<uint32_t>(triangleIndexCount / 3),
+            vertexOutcodes,
+            static_cast<uint32_t>(vertexOutcodeCount));
+    }
+
     __declspec(dllexport) uint32_t EvaluateWoWTerrainQueryMask(
         bool modelPropertyFlagSet,
         uint32_t movementFlags,
@@ -998,6 +1245,166 @@ extern "C"
             field20Value,
             rootTreeFlagSet,
             childTreeFlagSet);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWTerrainQueryPayloadEnabled(
+        uint32_t movementFlags,
+        const ExportTerrainQueryPairPayload* payload)
+    {
+        if (!payload) {
+            return false;
+        }
+
+        return WoWCollision::IsTerrainQueryPayloadEnabled(
+            movementFlags,
+            WoWCollision::TerrainQueryPairPayload{ payload->first, payload->second });
+    }
+
+    __declspec(dllexport) bool EvaluateWoWShouldRunDynamicCallbackProducer(
+        bool callbackPresent,
+        uint32_t movementFlags)
+    {
+        return WoWCollision::ShouldRunDynamicCallbackProducer(callbackPresent, movementFlags);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWShouldVisitTerrainQueryStampedEntry(
+        uint32_t entryVisitStamp,
+        uint32_t currentVisitStamp)
+    {
+        return WoWCollision::ShouldVisitTerrainQueryStampedEntry(entryVisitStamp, currentVisitStamp);
+    }
+
+    __declspec(dllexport) uint32_t BeginWoWTerrainQueryProducerPass(
+        uint32_t currentVisitStamp,
+        int inputRecordCount,
+        uint32_t* outNextVisitStamp)
+    {
+        if (!outNextVisitStamp || inputRecordCount < 0) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorCandidateRecord> records(static_cast<size_t>(inputRecordCount));
+        *outNextVisitStamp = WoWCollision::BeginTerrainQueryProducerPass(currentVisitStamp, records);
+        return static_cast<uint32_t>(records.size());
+    }
+
+    __declspec(dllexport) bool BuildWoWTerrainQueryChunkSpan(
+        const G3D::Vector3* worldBoundsMin,
+        const G3D::Vector3* worldBoundsMax,
+        ExportTerrainQueryChunkSpan* outSpan)
+    {
+        if (!worldBoundsMin || !worldBoundsMax || !outSpan) {
+            return false;
+        }
+
+        WoWCollision::TerrainQueryChunkSpan span{};
+        WoWCollision::BuildTerrainQueryChunkSpan(*worldBoundsMin, *worldBoundsMax, span);
+        outSpan->cellMinX = span.cellMinX;
+        outSpan->cellMaxX = span.cellMaxX;
+        outSpan->cellMinY = span.cellMinY;
+        outSpan->cellMaxY = span.cellMaxY;
+        outSpan->chunkMinX = span.chunkMinX;
+        outSpan->chunkMaxX = span.chunkMaxX;
+        outSpan->chunkMinY = span.chunkMinY;
+        outSpan->chunkMaxY = span.chunkMaxY;
+        return true;
+    }
+
+    __declspec(dllexport) int EnumerateWoWTerrainQueryChunkCoordinates(
+        const ExportTerrainQueryChunkSpan* span,
+        ExportTerrainQueryChunkCoordinate* outCoordinates,
+        int maxOutputCount)
+    {
+        if (!span || !outCoordinates || maxOutputCount < 0) {
+            return 0;
+        }
+
+        WoWCollision::TerrainQueryChunkSpan nativeSpan{};
+        nativeSpan.cellMinX = span->cellMinX;
+        nativeSpan.cellMaxX = span->cellMaxX;
+        nativeSpan.cellMinY = span->cellMinY;
+        nativeSpan.cellMaxY = span->cellMaxY;
+        nativeSpan.chunkMinX = span->chunkMinX;
+        nativeSpan.chunkMaxX = span->chunkMaxX;
+        nativeSpan.chunkMinY = span->chunkMinY;
+        nativeSpan.chunkMaxY = span->chunkMaxY;
+
+        std::vector<WoWCollision::TerrainQueryChunkCoordinate> coordinates;
+        const uint32_t builtCount = WoWCollision::EnumerateTerrainQueryChunkCoordinates(nativeSpan, coordinates);
+        const int outputCount = std::min<int>(static_cast<int>(builtCount), maxOutputCount);
+        for (int i = 0; i < outputCount; ++i) {
+            outCoordinates[i].primary = coordinates[static_cast<size_t>(i)].primary;
+            outCoordinates[i].secondary = coordinates[static_cast<size_t>(i)].secondary;
+        }
+
+        return outputCount;
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWOptionalSelectorChildDispatchMask(
+        const uint32_t* childPresenceFlags,
+        int childCount,
+        uint32_t movementFlags)
+    {
+        if ((!childPresenceFlags && childCount != 0) || childCount < 0) {
+            return 0u;
+        }
+
+        return WoWCollision::BuildOptionalSelectorChildDispatchMask(
+            childPresenceFlags,
+            static_cast<uint32_t>(childCount),
+            movementFlags);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWTerrainQueryEntryDispatch(
+        bool entryFlagMaskedOut,
+        bool alreadyVisited,
+        bool hasSourceGeometry,
+        uint32_t movementFlags,
+        const ExportTerrainQueryPairPayload* payload,
+        bool traversalAllowsDispatch,
+        const G3D::Vector3* entryBoundsMin,
+        const G3D::Vector3* entryBoundsMax,
+        const G3D::Vector3* queryBoundsMin,
+        const G3D::Vector3* queryBoundsMax)
+    {
+        if (!payload || !entryBoundsMin || !entryBoundsMax || !queryBoundsMin || !queryBoundsMax) {
+            return static_cast<uint32_t>(WoWCollision::TERRAIN_QUERY_ENTRY_SKIP);
+        }
+
+        return static_cast<uint32_t>(WoWCollision::EvaluateTerrainQueryEntryDispatch(
+            entryFlagMaskedOut,
+            alreadyVisited,
+            hasSourceGeometry,
+            movementFlags,
+            WoWCollision::TerrainQueryPairPayload{ payload->first, payload->second },
+            traversalAllowsDispatch,
+            *entryBoundsMin,
+            *entryBoundsMax,
+            *queryBoundsMin,
+            *queryBoundsMax));
+    }
+
+    __declspec(dllexport) bool EvaluateWoWDynamicTerrainQueryEntryDispatch(
+        bool entryFlagEnabled,
+        bool alreadyVisited,
+        bool callbackSucceeded,
+        const G3D::Vector3* entryBoundsMin,
+        const G3D::Vector3* entryBoundsMax,
+        const G3D::Vector3* queryBoundsMin,
+        const G3D::Vector3* queryBoundsMax)
+    {
+        if (!entryBoundsMin || !entryBoundsMax || !queryBoundsMin || !queryBoundsMax) {
+            return false;
+        }
+
+        return WoWCollision::ShouldDispatchDynamicTerrainQueryEntry(
+            entryFlagEnabled,
+            alreadyVisited,
+            callbackSucceeded,
+            *entryBoundsMin,
+            *entryBoundsMax,
+            *queryBoundsMin,
+            *queryBoundsMax);
     }
 
     __declspec(dllexport) bool BuildWoWTerrainQueryBounds(
@@ -1090,6 +1497,197 @@ extern "C"
         return true;
     }
 
+    __declspec(dllexport) bool EvaluateWoWTerrainQueryMergedQueryTransaction(
+        const G3D::Vector3* projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        const G3D::Vector3* cachedBoundsMin,
+        const G3D::Vector3* cachedBoundsMax,
+        bool modelPropertyFlagSet,
+        uint32_t movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet,
+        bool queryDispatchSucceeded,
+        ExportTerrainQueryMergedQueryTrace* outTrace)
+    {
+        if (!projectedPosition || !cachedBoundsMin || !cachedBoundsMax || !outTrace) {
+            return false;
+        }
+
+        WoWCollision::TerrainQueryMergedQueryTrace trace{};
+        const bool result = WoWCollision::EvaluateTerrainQueryMergedQueryTransaction(
+            *projectedPosition,
+            collisionRadius,
+            boundingHeight,
+            *cachedBoundsMin,
+            *cachedBoundsMax,
+            modelPropertyFlagSet,
+            movementFlags,
+            field20Value,
+            rootTreeFlagSet,
+            childTreeFlagSet,
+            queryDispatchSucceeded,
+            trace);
+
+        outTrace->queryBoundsMin = trace.queryBoundsMin;
+        outTrace->queryBoundsMax = trace.queryBoundsMax;
+        outTrace->mergedBoundsMin = trace.mergedBoundsMin;
+        outTrace->mergedBoundsMax = trace.mergedBoundsMax;
+        outTrace->cacheContainsBoundsMin = trace.cacheContainsBoundsMin;
+        outTrace->cacheContainsBoundsMax = trace.cacheContainsBoundsMax;
+        outTrace->reusedCachedQuery = trace.reusedCachedQuery;
+        outTrace->builtMergedBounds = trace.builtMergedBounds;
+        outTrace->builtQueryMask = trace.builtQueryMask;
+        outTrace->queryInvoked = trace.queryInvoked;
+        outTrace->queryDispatchSucceeded = trace.queryDispatchSucceeded;
+        outTrace->returnedSuccess = trace.returnedSuccess;
+        outTrace->queryMask = trace.queryMask;
+        return result;
+    }
+
+    __declspec(dllexport) int EvaluateWoWTerrainQuerySelectedContactContainerTransaction(
+        const G3D::Vector3* projectedPosition,
+        float collisionRadius,
+        float boundingHeight,
+        const G3D::Vector3* cachedBoundsMin,
+        const G3D::Vector3* cachedBoundsMax,
+        bool modelPropertyFlagSet,
+        uint32_t movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet,
+        const ExportAABBContact* existingContacts,
+        const ExportTerrainQueryPairPayload* existingPairs,
+        int existingCount,
+        const ExportAABBContact* queryContacts,
+        const ExportTerrainQueryPairPayload* queryPairs,
+        int queryCount,
+        bool queryDispatchSucceeded,
+        ExportAABBContact* outContacts,
+        ExportTerrainQueryPairPayload* outPairs,
+        int maxOutputCount,
+        ExportTerrainQuerySelectedContactContainerTrace* outTrace)
+    {
+        if (!projectedPosition || !cachedBoundsMin || !cachedBoundsMax || existingCount < 0 || queryCount < 0 ||
+            maxOutputCount < 0 || !outContacts || !outPairs || !outTrace ||
+            ((!existingContacts || !existingPairs) && existingCount != 0) ||
+            ((!queryContacts || !queryPairs) && queryCount != 0)) {
+            return 0;
+        }
+
+        std::vector<SceneQuery::AABBContact> existingContactBuffer(static_cast<size_t>(existingCount));
+        std::vector<WoWCollision::TerrainQueryPairPayload> existingPairBuffer(static_cast<size_t>(existingCount));
+        for (int i = 0; i < existingCount; ++i) {
+            SceneQuery::AABBContact contact{};
+            contact.point = existingContacts[i].point;
+            contact.normal = existingContacts[i].normal;
+            contact.rawNormal = existingContacts[i].rawNormal;
+            contact.triangleA = existingContacts[i].triangleA;
+            contact.triangleB = existingContacts[i].triangleB;
+            contact.triangleC = existingContacts[i].triangleC;
+            contact.planeDistance = existingContacts[i].planeDistance;
+            contact.distance = existingContacts[i].distance;
+            contact.instanceId = existingContacts[i].instanceId;
+            contact.sourceType = existingContacts[i].sourceType;
+            contact.walkable = existingContacts[i].walkable != 0u;
+            existingContactBuffer[static_cast<size_t>(i)] = contact;
+            existingPairBuffer[static_cast<size_t>(i)] = WoWCollision::TerrainQueryPairPayload{
+                existingPairs[i].first,
+                existingPairs[i].second,
+            };
+        }
+
+        std::vector<SceneQuery::AABBContact> queryContactBuffer(static_cast<size_t>(queryCount));
+        std::vector<WoWCollision::TerrainQueryPairPayload> queryPairBuffer(static_cast<size_t>(queryCount));
+        for (int i = 0; i < queryCount; ++i) {
+            SceneQuery::AABBContact contact{};
+            contact.point = queryContacts[i].point;
+            contact.normal = queryContacts[i].normal;
+            contact.rawNormal = queryContacts[i].rawNormal;
+            contact.triangleA = queryContacts[i].triangleA;
+            contact.triangleB = queryContacts[i].triangleB;
+            contact.triangleC = queryContacts[i].triangleC;
+            contact.planeDistance = queryContacts[i].planeDistance;
+            contact.distance = queryContacts[i].distance;
+            contact.instanceId = queryContacts[i].instanceId;
+            contact.sourceType = queryContacts[i].sourceType;
+            contact.walkable = queryContacts[i].walkable != 0u;
+            queryContactBuffer[static_cast<size_t>(i)] = contact;
+            queryPairBuffer[static_cast<size_t>(i)] = WoWCollision::TerrainQueryPairPayload{
+                queryPairs[i].first,
+                queryPairs[i].second,
+            };
+        }
+
+        std::vector<SceneQuery::AABBContact> outputContactBuffer;
+        std::vector<WoWCollision::TerrainQueryPairPayload> outputPairBuffer;
+        WoWCollision::TerrainQuerySelectedContactContainerTrace trace{};
+        const bool result = WoWCollision::EvaluateTerrainQuerySelectedContactContainerTransaction(
+            *projectedPosition,
+            collisionRadius,
+            boundingHeight,
+            *cachedBoundsMin,
+            *cachedBoundsMax,
+            modelPropertyFlagSet,
+            movementFlags,
+            field20Value,
+            rootTreeFlagSet,
+            childTreeFlagSet,
+            existingCount > 0 ? existingContactBuffer.data() : nullptr,
+            existingCount > 0 ? existingPairBuffer.data() : nullptr,
+            static_cast<uint32_t>(existingCount),
+            queryCount > 0 ? queryContactBuffer.data() : nullptr,
+            queryCount > 0 ? queryPairBuffer.data() : nullptr,
+            static_cast<uint32_t>(queryCount),
+            queryDispatchSucceeded,
+            outputContactBuffer,
+            outputPairBuffer,
+            trace);
+
+        outTrace->mergedQuery.queryBoundsMin = trace.mergedQuery.queryBoundsMin;
+        outTrace->mergedQuery.queryBoundsMax = trace.mergedQuery.queryBoundsMax;
+        outTrace->mergedQuery.mergedBoundsMin = trace.mergedQuery.mergedBoundsMin;
+        outTrace->mergedQuery.mergedBoundsMax = trace.mergedQuery.mergedBoundsMax;
+        outTrace->mergedQuery.cacheContainsBoundsMin = trace.mergedQuery.cacheContainsBoundsMin;
+        outTrace->mergedQuery.cacheContainsBoundsMax = trace.mergedQuery.cacheContainsBoundsMax;
+        outTrace->mergedQuery.reusedCachedQuery = trace.mergedQuery.reusedCachedQuery;
+        outTrace->mergedQuery.builtMergedBounds = trace.mergedQuery.builtMergedBounds;
+        outTrace->mergedQuery.builtQueryMask = trace.mergedQuery.builtQueryMask;
+        outTrace->mergedQuery.queryInvoked = trace.mergedQuery.queryInvoked;
+        outTrace->mergedQuery.queryDispatchSucceeded = trace.mergedQuery.queryDispatchSucceeded;
+        outTrace->mergedQuery.returnedSuccess = trace.mergedQuery.returnedSuccess;
+        outTrace->mergedQuery.queryMask = trace.mergedQuery.queryMask;
+        outTrace->reusedExistingContainer = trace.reusedExistingContainer;
+        outTrace->copiedQueryResults = trace.copiedQueryResults;
+        outTrace->returnedSuccess = trace.returnedSuccess;
+        outTrace->outputContactCount = trace.outputContactCount;
+
+        if (!result) {
+            return 0;
+        }
+
+        const int outputCount = std::min<int>(static_cast<int>(outputContactBuffer.size()), maxOutputCount);
+        for (int i = 0; i < outputCount; ++i) {
+            const auto& contact = outputContactBuffer[static_cast<size_t>(i)];
+            outContacts[i].point = contact.point;
+            outContacts[i].normal = contact.normal;
+            outContacts[i].rawNormal = contact.rawNormal;
+            outContacts[i].triangleA = contact.triangleA;
+            outContacts[i].triangleB = contact.triangleB;
+            outContacts[i].triangleC = contact.triangleC;
+            outContacts[i].planeDistance = contact.planeDistance;
+            outContacts[i].distance = contact.distance;
+            outContacts[i].instanceId = contact.instanceId;
+            outContacts[i].sourceType = contact.sourceType;
+            outContacts[i].walkable = contact.walkable ? 1u : 0u;
+            outPairs[i].first = outputPairBuffer[static_cast<size_t>(i)].first;
+            outPairs[i].second = outputPairBuffer[static_cast<size_t>(i)].second;
+        }
+
+        return outputCount;
+    }
+
     __declspec(dllexport) bool BuildWoWNegatedPlane(
         const G3D::Vector3* normal,
         float planeDistance,
@@ -1103,6 +1701,967 @@ extern "C"
         WoWCollision::NegatePlane(*normal, planeDistance, plane);
         outPlane->normal = plane.normal;
         outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWPlaneFromNormalAndPoint(
+        const G3D::Vector3* normal,
+        const G3D::Vector3* point,
+        ExportSelectorSupportPlane* outPlane)
+    {
+        if (!normal || !point || !outPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        WoWCollision::BuildPlaneFromNormalAndPoint(*normal, *point, plane);
+        outPlane->normal = plane.normal;
+        outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWPlaneFromTrianglePoints(
+        const G3D::Vector3* point0,
+        const G3D::Vector3* point1,
+        const G3D::Vector3* point2,
+        ExportSelectorSupportPlane* outPlane)
+    {
+        if (!point0 || !point1 || !point2 || !outPlane) {
+            return false;
+        }
+
+        WoWCollision::SelectorSupportPlane plane{};
+        if (!WoWCollision::BuildPlaneFromTrianglePoints(*point0, *point1, *point2, plane)) {
+            return false;
+        }
+
+        outPlane->normal = plane.normal;
+        outPlane->planeDistance = plane.planeDistance;
+        return true;
+    }
+
+    __declspec(dllexport) bool TranslateWoWSelectorSourceGeometry(
+        const G3D::Vector3* translation,
+        ExportSelectorSupportPlane* ioPlanes,
+        int planeCount,
+        G3D::Vector3* ioPoints,
+        int pointCount,
+        G3D::Vector3* ioAnchorPoint0,
+        G3D::Vector3* ioAnchorPoint1)
+    {
+        if (!translation || planeCount < 0 || pointCount < 0) {
+            return false;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planes(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planes[static_cast<size_t>(i)].normal = ioPlanes[i].normal;
+            planes[static_cast<size_t>(i)].planeDistance = ioPlanes[i].planeDistance;
+        }
+
+        WoWCollision::TranslateSelectorSourceGeometry(
+            *translation,
+            planeCount > 0 ? planes.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            ioPoints,
+            static_cast<uint32_t>(pointCount),
+            ioAnchorPoint0,
+            ioAnchorPoint1);
+
+        for (int i = 0; i < planeCount; ++i) {
+            ioPlanes[i].normal = planes[static_cast<size_t>(i)].normal;
+            ioPlanes[i].planeDistance = planes[static_cast<size_t>(i)].planeDistance;
+        }
+
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorHullSourceGeometry(
+        const G3D::Vector3* supportPoints,
+        int supportPointCount,
+        ExportSelectorSupportPlane* outPlanes,
+        int planeCount,
+        G3D::Vector3* outPoints,
+        int outPointCount,
+        G3D::Vector3* outAnchorPoint0,
+        G3D::Vector3* outAnchorPoint1)
+    {
+        if ((!supportPoints && supportPointCount != 0) || supportPointCount < 0 ||
+            (!outPlanes && planeCount != 0) || planeCount < 0 ||
+            (!outPoints && outPointCount != 0) || outPointCount < 0) {
+            return false;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        const bool built = WoWCollision::BuildSelectorHullSourceGeometry(
+            supportPointCount > 0 ? supportPoints : nullptr,
+            static_cast<uint32_t>(supportPointCount),
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            outPointCount > 0 ? outPoints : nullptr,
+            static_cast<uint32_t>(outPointCount),
+            outAnchorPoint0,
+            outAnchorPoint1);
+        if (!built) {
+            return false;
+        }
+
+        for (int i = 0; i < planeCount; ++i) {
+            outPlanes[i].normal = planeBuffer[static_cast<size_t>(i)].normal;
+            outPlanes[i].planeDistance = planeBuffer[static_cast<size_t>(i)].planeDistance;
+        }
+
+        return true;
+    }
+
+    __declspec(dllexport) bool TransformWoWSelectorSupportPointBuffer(
+        const G3D::Vector3* inputPoints,
+        int pointCount,
+        const G3D::Vector3* basisRow0,
+        const G3D::Vector3* basisRow1,
+        const G3D::Vector3* basisRow2,
+        const G3D::Vector3* translation,
+        G3D::Vector3* outPoints,
+        int outPointCount)
+    {
+        if ((!inputPoints && pointCount != 0) || pointCount < 0 ||
+            !basisRow0 || !basisRow1 || !basisRow2 || !translation ||
+            (!outPoints && outPointCount != 0) || outPointCount < 0) {
+            return false;
+        }
+
+        const std::array<G3D::Vector3, 3> transformBasisRows = { *basisRow0, *basisRow1, *basisRow2 };
+        return WoWCollision::TransformSelectorSupportPointBuffer(
+            pointCount > 0 ? inputPoints : nullptr,
+            static_cast<uint32_t>(pointCount),
+            transformBasisRows,
+            *translation,
+            outPoints,
+            static_cast<uint32_t>(outPointCount));
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWSelectorObjectCallbackMask(
+        uint32_t movementFlags)
+    {
+        return WoWCollision::BuildSelectorObjectCallbackMask(movementFlags);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWShouldResolveSelectorObjectNode(
+        bool selectorEnabled,
+        bool nodeEnabled,
+        bool allowInactiveNode)
+    {
+        return WoWCollision::ShouldResolveSelectorObjectNode(
+            selectorEnabled,
+            nodeEnabled,
+            allowInactiveNode);
+    }
+
+    __declspec(dllexport) const void* ResolveWoWSelectorObjectNodePointer(
+        bool selectorEnabled,
+        const void* nodePointer,
+        bool nodeEnabled,
+        bool allowInactiveNode)
+    {
+        return WoWCollision::ResolveSelectorObjectNodePointer(
+            selectorEnabled,
+            nodePointer,
+            nodeEnabled,
+            allowInactiveNode);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorObjectRouterEntries(
+        const ExportSelectorObjectRouterEntryRecord* entries,
+        int entryCount,
+        bool selectorEnabled,
+        const G3D::Vector3* queryBoundsMin,
+        const G3D::Vector3* queryBoundsMax,
+        ExportSelectorObjectRouterTrace* outTrace)
+    {
+        if ((!entries && entryCount != 0) || entryCount < 0 || !queryBoundsMin || !queryBoundsMax) {
+            if (outTrace) {
+                *outTrace = ExportSelectorObjectRouterTrace{};
+            }
+
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorObjectRouterEntryRecord> entryBuffer(static_cast<size_t>(entryCount));
+        for (int i = 0; i < entryCount; ++i) {
+            entryBuffer[static_cast<size_t>(i)].boundsMin = entries[i].boundsMin;
+            entryBuffer[static_cast<size_t>(i)].boundsMax = entries[i].boundsMax;
+            entryBuffer[static_cast<size_t>(i)].nodeToken = entries[i].nodeToken;
+            entryBuffer[static_cast<size_t>(i)].nodeEnabled = entries[i].nodeEnabled;
+            entryBuffer[static_cast<size_t>(i)].callbackReturn = entries[i].callbackReturn;
+        }
+
+        WoWCollision::SelectorObjectRouterTrace trace{};
+        const uint32_t result = WoWCollision::EvaluateSelectorObjectRouterEntries(
+            entryCount > 0 ? entryBuffer.data() : nullptr,
+            static_cast<uint32_t>(entryCount),
+            selectorEnabled,
+            *queryBoundsMin,
+            *queryBoundsMax,
+            outTrace ? &trace : nullptr);
+
+        if (outTrace) {
+            outTrace->overlapRejectedCount = trace.overlapRejectedCount;
+            outTrace->nodeRejectedCount = trace.nodeRejectedCount;
+            outTrace->dispatchedCount = trace.dispatchedCount;
+            outTrace->accumulatorUpdatedCount = trace.accumulatorUpdatedCount;
+            outTrace->result = trace.result;
+        }
+
+        return result;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWShouldUseSelectorObjectCallback(uint64_t callbackToken)
+    {
+        return WoWCollision::ShouldUseSelectorObjectCallback(callbackToken);
+    }
+
+    __declspec(dllexport) bool FinalizeWoWSelectorObjectNoCallbackState(
+        uint32_t inputHitResult,
+        uint32_t inputRecordCount,
+        uint32_t inputOutputFlags,
+        ExportSelectorObjectNoCallbackState* outState)
+    {
+        if (!outState) {
+            return false;
+        }
+
+        WoWCollision::SelectorObjectNoCallbackState state{};
+        WoWCollision::FinalizeSelectorObjectNoCallbackState(
+            inputHitResult,
+            inputRecordCount,
+            inputOutputFlags,
+            state);
+        outState->hitResult = state.hitResult;
+        outState->recordCount = state.recordCount;
+        outState->outputFlags = state.outputFlags;
+        return true;
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorLeafQueueMutation(
+        uint32_t triangleIndex,
+        uint32_t stateMaskByte,
+        bool predicateRejected,
+        uint32_t inputOverflowFlags,
+        const uint16_t* inputPendingIds,
+        int pendingIdCapacity,
+        uint32_t inputPendingCount,
+        const uint16_t* inputAcceptedIds,
+        int acceptedIdCapacity,
+        uint32_t inputAcceptedCount,
+        const uint8_t* inputStateBytes,
+        int stateByteCount,
+        uint32_t* outOverflowFlags,
+        uint16_t* outPendingIds,
+        int outPendingIdCapacity,
+        uint32_t* outPendingCount,
+        uint16_t* outAcceptedIds,
+        int outAcceptedIdCapacity,
+        uint32_t* outAcceptedCount,
+        uint8_t* outStateBytes,
+        int outStateByteCount,
+        ExportSelectorLeafQueueMutationTrace* outTrace)
+    {
+        if (pendingIdCapacity < 0 || acceptedIdCapacity < 0 || stateByteCount < 0 ||
+            outPendingIdCapacity < 0 || outAcceptedIdCapacity < 0 || outStateByteCount < 0 ||
+            !outOverflowFlags || !outPendingCount || !outAcceptedCount || !outStateBytes ||
+            (!outPendingIds && outPendingIdCapacity != 0) ||
+            (!outAcceptedIds && outAcceptedIdCapacity != 0) ||
+            (!inputStateBytes && stateByteCount != 0) ||
+            (!inputPendingIds && pendingIdCapacity != 0) ||
+            (!inputAcceptedIds && acceptedIdCapacity != 0)) {
+            if (outTrace) {
+                *outTrace = ExportSelectorLeafQueueMutationTrace{};
+            }
+
+            return 0u;
+        }
+
+        std::vector<uint16_t> pendingBuffer(static_cast<size_t>(outPendingIdCapacity));
+        std::vector<uint16_t> acceptedBuffer(static_cast<size_t>(outAcceptedIdCapacity));
+        std::vector<uint8_t> stateBuffer(static_cast<size_t>(outStateByteCount));
+
+        const int pendingCopyCount = std::min(pendingIdCapacity, outPendingIdCapacity);
+        const int acceptedCopyCount = std::min(acceptedIdCapacity, outAcceptedIdCapacity);
+        const int stateCopyCount = std::min(stateByteCount, outStateByteCount);
+        if (pendingCopyCount > 0) {
+            std::copy_n(inputPendingIds, pendingCopyCount, pendingBuffer.begin());
+        }
+
+        if (acceptedCopyCount > 0) {
+            std::copy_n(inputAcceptedIds, acceptedCopyCount, acceptedBuffer.begin());
+        }
+
+        if (stateCopyCount > 0) {
+            std::copy_n(inputStateBytes, stateCopyCount, stateBuffer.begin());
+        }
+
+        uint32_t overflowFlags = inputOverflowFlags;
+        uint32_t pendingCount = inputPendingCount;
+        uint32_t acceptedCount = inputAcceptedCount;
+        WoWCollision::SelectorLeafQueueMutationTrace trace{};
+        const uint32_t result = WoWCollision::EvaluateSelectorLeafQueueMutation(
+            triangleIndex,
+            stateMaskByte,
+            predicateRejected,
+            overflowFlags,
+            outPendingIdCapacity > 0 ? pendingBuffer.data() : nullptr,
+            static_cast<uint32_t>(outPendingIdCapacity),
+            pendingCount,
+            outAcceptedIdCapacity > 0 ? acceptedBuffer.data() : nullptr,
+            static_cast<uint32_t>(outAcceptedIdCapacity),
+            acceptedCount,
+            outStateByteCount > 0 ? stateBuffer.data() : nullptr,
+            static_cast<uint32_t>(outStateByteCount),
+            outTrace ? &trace : nullptr);
+
+        if (outPendingIdCapacity > 0) {
+            std::copy_n(pendingBuffer.begin(), outPendingIdCapacity, outPendingIds);
+        }
+
+        if (outAcceptedIdCapacity > 0) {
+            std::copy_n(acceptedBuffer.begin(), outAcceptedIdCapacity, outAcceptedIds);
+        }
+
+        if (outStateByteCount > 0) {
+            std::copy_n(stateBuffer.begin(), outStateByteCount, outStateBytes);
+        }
+
+        *outOverflowFlags = overflowFlags;
+        *outPendingCount = pendingCount;
+        *outAcceptedCount = acceptedCount;
+        if (outTrace) {
+            outTrace->skippedByMask = trace.skippedByMask;
+            outTrace->overflowed = trace.overflowed;
+            outTrace->pendingEnqueued = trace.pendingEnqueued;
+            outTrace->visitedBitSet = trace.visitedBitSet;
+            outTrace->predicateRejected = trace.predicateRejected;
+            outTrace->acceptedEnqueued = trace.acceptedEnqueued;
+            outTrace->stateByteBefore = trace.stateByteBefore;
+            outTrace->stateByteAfter = trace.stateByteAfter;
+            outTrace->pendingCountAfter = trace.pendingCountAfter;
+            outTrace->acceptedCountAfter = trace.acceptedCountAfter;
+        }
+
+        return result;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorNodeTraversalPayload(
+        const ExportSelectorNodeTraversalRecord* node,
+        const G3D::Vector3* querySupportPoints,
+        int supportPointCount,
+        uint32_t callbackMask,
+        ExportSelectorNodeTraversalPayload* outPayload)
+    {
+        if (!node || (!querySupportPoints && supportPointCount != 0) || supportPointCount < 0 || !outPayload) {
+            return false;
+        }
+
+        WoWCollision::SelectorNodeTraversalRecord nativeNode{};
+        nativeNode.traversalBaseToken = node->traversalBaseToken;
+        nativeNode.extraNodeToken = node->extraNodeToken;
+        nativeNode.stateBytesToken = node->stateBytesToken;
+        nativeNode.vertexBufferToken = node->vertexBufferToken;
+        nativeNode.triangleIndexToken = node->triangleIndexToken;
+
+        WoWCollision::SelectorNodeTraversalPayload payload{};
+        const bool built = WoWCollision::BuildSelectorNodeTraversalPayload(
+            nativeNode,
+            supportPointCount > 0 ? querySupportPoints : nullptr,
+            static_cast<uint32_t>(supportPointCount),
+            callbackMask,
+            payload);
+        if (!built) {
+            return false;
+        }
+
+        outPayload->queryBoundsMin = payload.queryBoundsMin;
+        outPayload->queryBoundsMax = payload.queryBoundsMax;
+        outPayload->callbackMaskWord = payload.callbackMaskWord;
+        outPayload->acceptedCount = payload.acceptedCount;
+        outPayload->traversalBaseToken = payload.traversalBaseToken;
+        outPayload->extraNodeToken = payload.extraNodeToken;
+        outPayload->stateBytesToken = payload.stateBytesToken;
+        outPayload->vertexBufferToken = payload.vertexBufferToken;
+        outPayload->triangleIndexToken = payload.triangleIndexToken;
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorSupportPointBounds(
+        const G3D::Vector3* points,
+        int pointCount,
+        G3D::Vector3* outBoundsMin,
+        G3D::Vector3* outBoundsMax)
+    {
+        if ((!points && pointCount != 0) || pointCount < 0 || !outBoundsMin || !outBoundsMax) {
+            return false;
+        }
+
+        WoWCollision::BuildSelectorSupportPointBounds(
+            pointCount > 0 ? points : nullptr,
+            static_cast<uint32_t>(pointCount),
+            *outBoundsMin,
+            *outBoundsMax);
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorDynamicObjectHullSourceGeometry(
+        const ExportSelectorSupportPlane* sourcePlanes,
+        int planeCount,
+        const G3D::Vector3* objectBoundsMin,
+        const G3D::Vector3* objectBoundsMax,
+        const G3D::Vector3* localSupportPoints,
+        int supportPointCount,
+        const G3D::Vector3* basisRow0,
+        const G3D::Vector3* basisRow1,
+        const G3D::Vector3* basisRow2,
+        const G3D::Vector3* translation,
+        ExportSelectorSupportPlane* outPlanes,
+        int outPlaneCount,
+        G3D::Vector3* outPoints,
+        int outPointCount,
+        G3D::Vector3* outAnchorPoint0,
+        G3D::Vector3* outAnchorPoint1)
+    {
+        if ((!sourcePlanes && planeCount != 0) || planeCount < 0 ||
+            !objectBoundsMin || !objectBoundsMax ||
+            (!localSupportPoints && supportPointCount != 0) || supportPointCount < 0 ||
+            !basisRow0 || !basisRow1 || !basisRow2 || !translation ||
+            (!outPlanes && outPlaneCount != 0) || outPlaneCount < 0 ||
+            (!outPoints && outPointCount != 0) || outPointCount < 0) {
+            return false;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> sourcePlaneBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            sourcePlaneBuffer[static_cast<size_t>(i)].normal = sourcePlanes[i].normal;
+            sourcePlaneBuffer[static_cast<size_t>(i)].planeDistance = sourcePlanes[i].planeDistance;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> outPlaneBuffer(static_cast<size_t>(outPlaneCount));
+        const std::array<G3D::Vector3, 3> transformBasisRows = { *basisRow0, *basisRow1, *basisRow2 };
+        const bool built = WoWCollision::BuildSelectorDynamicObjectHullSourceGeometry(
+            planeCount > 0 ? sourcePlaneBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *objectBoundsMin,
+            *objectBoundsMax,
+            supportPointCount > 0 ? localSupportPoints : nullptr,
+            static_cast<uint32_t>(supportPointCount),
+            transformBasisRows,
+            *translation,
+            outPlaneCount > 0 ? outPlaneBuffer.data() : nullptr,
+            static_cast<uint32_t>(outPlaneCount),
+            outPointCount > 0 ? outPoints : nullptr,
+            static_cast<uint32_t>(outPointCount),
+            outAnchorPoint0,
+            outAnchorPoint1);
+        if (!built) {
+            return false;
+        }
+
+        for (int i = 0; i < outPlaneCount; ++i) {
+            outPlanes[i].normal = outPlaneBuffer[static_cast<size_t>(i)].normal;
+            outPlanes[i].planeDistance = outPlaneBuffer[static_cast<size_t>(i)].planeDistance;
+        }
+
+        return true;
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorBvhChildTraversal(
+        const ExportSelectorBvhNodeRecord* node,
+        const G3D::Vector3* boundsMin,
+        const G3D::Vector3* boundsMax,
+        ExportSelectorBvhChildTraversal* outTraversal)
+    {
+        if (!node || !boundsMin || !boundsMax || !outTraversal) {
+            return false;
+        }
+
+        WoWCollision::SelectorBvhNodeRecord nativeNode{};
+        nativeNode.controlWord = node->controlWord;
+        nativeNode.lowChildIndex = node->lowChildIndex;
+        nativeNode.highChildIndex = node->highChildIndex;
+        nativeNode.leafTriangleCount = node->leafTriangleCount;
+        nativeNode.leafTriangleStartIndex = node->leafTriangleStartIndex;
+        nativeNode.splitCoordinate = node->splitCoordinate;
+
+        WoWCollision::SelectorBvhChildTraversal traversal{};
+        const bool built = WoWCollision::BuildSelectorBvhChildTraversal(
+            nativeNode,
+            *boundsMin,
+            *boundsMax,
+            traversal);
+        if (!built) {
+            return false;
+        }
+
+        outTraversal->axis = traversal.axis;
+        outTraversal->splitCoordinate = traversal.splitCoordinate;
+        outTraversal->lowChildIndex = traversal.lowChildIndex;
+        outTraversal->highChildIndex = traversal.highChildIndex;
+        outTraversal->visitLow = traversal.visitLow;
+        outTraversal->visitHigh = traversal.visitHigh;
+        outTraversal->lowBoundsMin = traversal.lowBoundsMin;
+        outTraversal->lowBoundsMax = traversal.lowBoundsMax;
+        outTraversal->highBoundsMin = traversal.highBoundsMin;
+        outTraversal->highBoundsMax = traversal.highBoundsMax;
+        return true;
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWSelectorSourcePlaneOutcode(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* point)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || !point) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        return WoWCollision::BuildSelectorSourcePlaneOutcode(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *point);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorSourceAabbCull(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* boundsMin,
+        const G3D::Vector3* boundsMax)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || !boundsMin || !boundsMax) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        return WoWCollision::EvaluateSelectorSourceAabbCull(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *boundsMin,
+            *boundsMax);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorHullTransformedBoundsCull(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* localBoundsMin,
+        const G3D::Vector3* localBoundsMax,
+        const G3D::Vector3* basisRow0,
+        const G3D::Vector3* basisRow1,
+        const G3D::Vector3* basisRow2,
+        const G3D::Vector3* translation)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || !localBoundsMin || !localBoundsMax ||
+            !basisRow0 || !basisRow1 || !basisRow2 || !translation) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        const std::array<G3D::Vector3, 3> transformBasisRows = { *basisRow0, *basisRow1, *basisRow2 };
+        return WoWCollision::EvaluateSelectorHullTransformedBoundsCull(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *localBoundsMin,
+            *localBoundsMax,
+            transformBasisRows,
+            *translation);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorHullPointWithMargin(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* point,
+        float margin)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || !point) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        return WoWCollision::EvaluateSelectorHullPointWithMargin(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *point,
+            margin);
+    }
+
+    __declspec(dllexport) uint32_t EvaluateWoWSelectorHullPointEpsilon(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* point)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || !point) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        return WoWCollision::EvaluateSelectorHullPointEpsilon(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            *point);
+    }
+
+    __declspec(dllexport) uint32_t CountWoWSelectorSourceTrianglesPassingPlaneOutcodes(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* samplePoints,
+        int samplePointCount)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || (!samplePoints && samplePointCount != 0) || samplePointCount < 0) {
+            return 0u;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        return WoWCollision::CountSelectorSourceTrianglesPassingPlaneOutcodes(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            samplePoints,
+            static_cast<uint32_t>(samplePointCount));
+    }
+
+    __declspec(dllexport) bool BuildWoWSelectorSourceScanWindow(
+        int cellRowIndex,
+        int cellColumnIndex,
+        int queryRowMin,
+        int queryColumnMin,
+        int queryRowMax,
+        int queryColumnMax,
+        ExportSelectorSourceScanWindow* outWindow)
+    {
+        if (!outWindow) {
+            return false;
+        }
+
+        WoWCollision::SelectorSourceScanWindow window{};
+        const bool result = WoWCollision::BuildSelectorSourceScanWindow(
+            cellRowIndex,
+            cellColumnIndex,
+            queryRowMin,
+            queryColumnMin,
+            queryRowMax,
+            queryColumnMax,
+            window);
+
+        outWindow->rowMin = window.rowMin;
+        outWindow->columnMin = window.columnMin;
+        outWindow->rowMax = window.rowMax;
+        outWindow->columnMax = window.columnMax;
+        outWindow->pointStartIndex = window.pointStartIndex;
+        outWindow->rowAdvancePointCount = window.rowAdvancePointCount;
+        return result;
+    }
+
+    __declspec(dllexport) bool BuildWoWObjectLocalQueryBounds(
+        const G3D::Vector3* worldBoundsMin,
+        const G3D::Vector3* worldBoundsMax,
+        const G3D::Vector3* objectPosition,
+        G3D::Vector3* outLocalBoundsMin,
+        G3D::Vector3* outLocalBoundsMax)
+    {
+        if (!worldBoundsMin || !worldBoundsMax || !objectPosition || !outLocalBoundsMin || !outLocalBoundsMax) {
+            return false;
+        }
+
+        WoWCollision::BuildObjectLocalQueryBounds(
+            *worldBoundsMin,
+            *worldBoundsMax,
+            *objectPosition,
+            *outLocalBoundsMin,
+            *outLocalBoundsMax);
+        return true;
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWLocalBoundsAabbOutcode(
+        const G3D::Vector3* localBoundsMin,
+        const G3D::Vector3* localBoundsMax,
+        const G3D::Vector3* point)
+    {
+        if (!localBoundsMin || !localBoundsMax || !point) {
+            return 0u;
+        }
+
+        return WoWCollision::BuildLocalBoundsAabbOutcode(*localBoundsMin, *localBoundsMax, *point);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWTriangleLocalBoundsAabbReject(
+        const G3D::Vector3* localBoundsMin,
+        const G3D::Vector3* localBoundsMax,
+        const G3D::Vector3* point0,
+        const G3D::Vector3* point1,
+        const G3D::Vector3* point2)
+    {
+        if (!localBoundsMin || !localBoundsMax || !point0 || !point1 || !point2) {
+            return false;
+        }
+
+        return WoWCollision::EvaluateTriangleLocalBoundsAabbReject(
+            *localBoundsMin,
+            *localBoundsMax,
+            *point0,
+            *point1,
+            *point2);
+    }
+
+    __declspec(dllexport) int BuildWoWSelectorSourceScanWindowCandidateRecords(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* pointGrid,
+        int pointGridPointCount,
+        const ExportSelectorSourceScanWindow* scanWindow,
+        uint32_t cellMaskFlags,
+        const G3D::Vector3* translation,
+        bool useApproximatePlaneBuildPath,
+        ExportSelectorCandidateRecord* outRecords,
+        int maxRecords)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || (!pointGrid && pointGridPointCount != 0) || pointGridPointCount < 0 || !scanWindow || !translation || !outRecords || maxRecords <= 0) {
+            return 0;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        WoWCollision::SelectorSourceScanWindow nativeWindow{};
+        nativeWindow.rowMin = scanWindow->rowMin;
+        nativeWindow.columnMin = scanWindow->columnMin;
+        nativeWindow.rowMax = scanWindow->rowMax;
+        nativeWindow.columnMax = scanWindow->columnMax;
+        nativeWindow.pointStartIndex = scanWindow->pointStartIndex;
+        nativeWindow.rowAdvancePointCount = scanWindow->rowAdvancePointCount;
+
+        std::vector<WoWCollision::SelectorCandidateRecord> records;
+        const uint32_t builtCount = WoWCollision::AppendSelectorSourceScanWindowCandidateRecords(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            pointGrid,
+            static_cast<uint32_t>(pointGridPointCount),
+            nativeWindow,
+            cellMaskFlags,
+            *translation,
+            useApproximatePlaneBuildPath,
+            records);
+
+        const int copyCount = std::min<int>(static_cast<int>(builtCount), maxRecords);
+        for (int i = 0; i < copyCount; ++i) {
+            outRecords[i].filterPlane.normal = records[static_cast<size_t>(i)].filterPlane.normal;
+            outRecords[i].filterPlane.planeDistance = records[static_cast<size_t>(i)].filterPlane.planeDistance;
+            outRecords[i].point0 = records[static_cast<size_t>(i)].points[0];
+            outRecords[i].point1 = records[static_cast<size_t>(i)].points[1];
+            outRecords[i].point2 = records[static_cast<size_t>(i)].points[2];
+        }
+
+        return copyCount;
+    }
+
+    __declspec(dllexport) int BuildWoWLocalBoundsScanWindowCandidateRecords(
+        const G3D::Vector3* localBoundsMin,
+        const G3D::Vector3* localBoundsMax,
+        const G3D::Vector3* pointGrid,
+        int pointGridPointCount,
+        const ExportSelectorSourceScanWindow* scanWindow,
+        uint32_t cellMaskFlags,
+        const G3D::Vector3* translation,
+        bool useApproximatePlaneBuildPath,
+        ExportSelectorCandidateRecord* outRecords,
+        int maxRecords)
+    {
+        if (!localBoundsMin || !localBoundsMax || (!pointGrid && pointGridPointCount != 0) || pointGridPointCount < 0 || !scanWindow || !translation || !outRecords || maxRecords <= 0) {
+            return 0;
+        }
+
+        WoWCollision::SelectorSourceScanWindow nativeWindow{};
+        nativeWindow.rowMin = scanWindow->rowMin;
+        nativeWindow.columnMin = scanWindow->columnMin;
+        nativeWindow.rowMax = scanWindow->rowMax;
+        nativeWindow.columnMax = scanWindow->columnMax;
+        nativeWindow.pointStartIndex = scanWindow->pointStartIndex;
+        nativeWindow.rowAdvancePointCount = scanWindow->rowAdvancePointCount;
+
+        std::vector<WoWCollision::SelectorCandidateRecord> records;
+        const uint32_t builtCount = WoWCollision::AppendLocalBoundsScanWindowTriangleCandidateRecords(
+            *localBoundsMin,
+            *localBoundsMax,
+            pointGrid,
+            static_cast<uint32_t>(pointGridPointCount),
+            nativeWindow,
+            cellMaskFlags,
+            *translation,
+            useApproximatePlaneBuildPath,
+            records);
+
+        const int copyCount = std::min<int>(static_cast<int>(builtCount), maxRecords);
+        for (int i = 0; i < copyCount; ++i) {
+            outRecords[i].filterPlane.normal = records[static_cast<size_t>(i)].filterPlane.normal;
+            outRecords[i].filterPlane.planeDistance = records[static_cast<size_t>(i)].filterPlane.planeDistance;
+            outRecords[i].point0 = records[static_cast<size_t>(i)].points[0];
+            outRecords[i].point1 = records[static_cast<size_t>(i)].points[1];
+            outRecords[i].point2 = records[static_cast<size_t>(i)].points[2];
+        }
+
+        return copyCount;
+    }
+
+    __declspec(dllexport) uint32_t BuildWoWSelectorSourceSubcellMask(
+        uint32_t rowIndex,
+        uint32_t columnIndex)
+    {
+        return WoWCollision::BuildSelectorSourceSubcellMask(rowIndex, columnIndex);
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorSourceSubcellMask(
+        uint32_t rowIndex,
+        uint32_t columnIndex,
+        uint32_t cellMaskFlags)
+    {
+        return WoWCollision::IsSelectorSourceSubcellMaskedOut(rowIndex, columnIndex, cellMaskFlags);
+    }
+
+    __declspec(dllexport) int BuildWoWSelectorSourceTriangleCandidateRecords(
+        const ExportSelectorSupportPlane* planes,
+        int planeCount,
+        const G3D::Vector3* samplePoints,
+        int samplePointCount,
+        const G3D::Vector3* translation,
+        bool useApproximatePlaneBuildPath,
+        ExportSelectorCandidateRecord* outRecords,
+        int maxRecords)
+    {
+        if ((!planes && planeCount != 0) || planeCount < 0 || (!samplePoints && samplePointCount != 0) || samplePointCount < 0 || !translation || !outRecords || maxRecords <= 0) {
+            return 0;
+        }
+
+        std::vector<WoWCollision::SelectorSupportPlane> planeBuffer(static_cast<size_t>(planeCount));
+        for (int i = 0; i < planeCount; ++i) {
+            planeBuffer[static_cast<size_t>(i)].normal = planes[i].normal;
+            planeBuffer[static_cast<size_t>(i)].planeDistance = planes[i].planeDistance;
+        }
+
+        std::vector<WoWCollision::SelectorCandidateRecord> records;
+        records.reserve(4);
+        const uint32_t builtCount = WoWCollision::AppendSelectorSourceTriangleCandidateRecords(
+            planeCount > 0 ? planeBuffer.data() : nullptr,
+            static_cast<uint32_t>(planeCount),
+            samplePoints,
+            static_cast<uint32_t>(samplePointCount),
+            *translation,
+            useApproximatePlaneBuildPath,
+            records);
+
+        const int copyCount = std::min<int>(static_cast<int>(builtCount), maxRecords);
+        for (int i = 0; i < copyCount; ++i) {
+            outRecords[i].filterPlane.normal = records[static_cast<size_t>(i)].filterPlane.normal;
+            outRecords[i].filterPlane.planeDistance = records[static_cast<size_t>(i)].filterPlane.planeDistance;
+            outRecords[i].point0 = records[static_cast<size_t>(i)].points[0];
+            outRecords[i].point1 = records[static_cast<size_t>(i)].points[1];
+            outRecords[i].point2 = records[static_cast<size_t>(i)].points[2];
+        }
+
+        return copyCount;
+    }
+
+    __declspec(dllexport) int BuildWoWAabbBoundarySelectorCandidateRecords(
+        const G3D::Vector3* boundaryMin,
+        const G3D::Vector3* boundaryMax,
+        const G3D::Vector3* queryBoundsMin,
+        const G3D::Vector3* queryBoundsMax,
+        ExportSelectorCandidateRecord* outRecords,
+        int maxRecords)
+    {
+        if (!boundaryMin || !boundaryMax || !queryBoundsMin || !queryBoundsMax || !outRecords || maxRecords <= 0) {
+            return 0;
+        }
+
+        std::vector<WoWCollision::SelectorCandidateRecord> records;
+        records.reserve(8);
+        const uint32_t builtCount = WoWCollision::BuildAabbBoundarySelectorCandidateRecords(
+            *boundaryMin,
+            *boundaryMax,
+            *queryBoundsMin,
+            *queryBoundsMax,
+            records);
+
+        const int copyCount = std::min<int>(static_cast<int>(builtCount), maxRecords);
+        for (int i = 0; i < copyCount; ++i) {
+            outRecords[i].filterPlane.normal = records[i].filterPlane.normal;
+            outRecords[i].filterPlane.planeDistance = records[i].filterPlane.planeDistance;
+            outRecords[i].point0 = records[i].points[0];
+            outRecords[i].point1 = records[i].points[1];
+            outRecords[i].point2 = records[i].points[2];
+        }
+
+        return copyCount;
+    }
+
+    __declspec(dllexport) bool BuildWoWTransformedTriangleSelectorRecord(
+        const G3D::Vector3* transformBasisRows,
+        int transformBasisRowCount,
+        const G3D::Vector3* localNormal,
+        const G3D::Vector3* point0,
+        const G3D::Vector3* point1,
+        const G3D::Vector3* point2,
+        ExportSelectorCandidateRecord* outRecord)
+    {
+        if (!transformBasisRows || transformBasisRowCount != 3 || !localNormal || !point0 || !point1 || !point2 || !outRecord) {
+            return false;
+        }
+
+        std::array<G3D::Vector3, 3> basisRows{};
+        for (int i = 0; i < 3; ++i) {
+            basisRows[static_cast<size_t>(i)] = transformBasisRows[i];
+        }
+
+        WoWCollision::SelectorCandidateRecord record{};
+        WoWCollision::BuildTransformedTriangleSelectorRecord(
+            basisRows,
+            *localNormal,
+            *point0,
+            *point1,
+            *point2,
+            record);
+
+        outRecord->filterPlane.normal = record.filterPlane.normal;
+        outRecord->filterPlane.planeDistance = record.filterPlane.planeDistance;
+        outRecord->point0 = record.points[0];
+        outRecord->point1 = record.points[1];
+        outRecord->point2 = record.points[2];
         return true;
     }
 
@@ -1270,6 +2829,127 @@ extern "C"
             *outCandidateDirection,
             *outBestRatio);
         return true;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorTriangleSourceWrapperTransaction(
+        const G3D::Vector3* defaultPosition,
+        const G3D::Vector3* overridePosition,
+        bool terrainQuerySucceeded,
+        float inputBestRatio,
+        ExportSelectorTriangleSourceWrapperTrace* outTrace)
+    {
+        if (!defaultPosition || !outTrace) {
+            return false;
+        }
+
+        WoWCollision::SelectorTriangleSourceWrapperTrace trace{};
+        const bool result = WoWCollision::EvaluateSelectorTriangleSourceWrapperTransaction(
+            *defaultPosition,
+            overridePosition,
+            terrainQuerySucceeded,
+            inputBestRatio,
+            trace);
+
+        outTrace->supportPlaneInitCount = trace.supportPlaneInitCount;
+        outTrace->validationPlaneInitCount = trace.validationPlaneInitCount;
+        outTrace->scratchPointZeroCount = trace.scratchPointZeroCount;
+        outTrace->usedOverridePosition = trace.usedOverridePosition;
+        outTrace->terrainQueryInvoked = trace.terrainQueryInvoked;
+        outTrace->terrainQuerySucceeded = trace.terrainQuerySucceeded;
+        outTrace->returnedSuccess = trace.returnedSuccess;
+        outTrace->queryFailureZeroedOutput = trace.queryFailureZeroedOutput;
+        outTrace->selectedPosition = trace.selectedPosition;
+        outTrace->testPoint = trace.testPoint;
+        outTrace->candidateDirection = trace.candidateDirection;
+        outTrace->initialBestRatio = trace.initialBestRatio;
+        outTrace->inputBestRatio = trace.inputBestRatio;
+        outTrace->reportedBestRatio = trace.reportedBestRatio;
+        return result;
+    }
+
+    __declspec(dllexport) bool EvaluateWoWSelectorTriangleSourceVariableTransaction(
+        const G3D::Vector3* defaultPosition,
+        const G3D::Vector3* overridePosition,
+        const G3D::Vector3* projectedPosition,
+        uint32_t supportPlaneInitCount,
+        uint32_t validationPlaneInitCount,
+        uint32_t scratchPointZeroCount,
+        const G3D::Vector3* testPoint,
+        const G3D::Vector3* candidateDirection,
+        float initialBestRatio,
+        float collisionRadius,
+        float boundingHeight,
+        const G3D::Vector3* cachedBoundsMin,
+        const G3D::Vector3* cachedBoundsMax,
+        bool modelPropertyFlagSet,
+        uint32_t movementFlags,
+        float field20Value,
+        bool rootTreeFlagSet,
+        bool childTreeFlagSet,
+        bool queryDispatchSucceeded,
+        bool rankingAccepted,
+        uint32_t rankingCandidateCount,
+        int32_t rankingSelectedRecordIndex,
+        float rankingReportedBestRatio,
+        ExportSelectorTriangleSourceVariableTransactionTrace* outTrace)
+    {
+        if (!defaultPosition || !projectedPosition || !testPoint || !candidateDirection ||
+            !cachedBoundsMin || !cachedBoundsMax || !outTrace) {
+            return false;
+        }
+
+        WoWCollision::SelectorTriangleSourceVariableTransactionTrace trace{};
+        const bool result = WoWCollision::EvaluateSelectorTriangleSourceVariableTransaction(
+            *defaultPosition,
+            overridePosition,
+            *projectedPosition,
+            supportPlaneInitCount,
+            validationPlaneInitCount,
+            scratchPointZeroCount,
+            *testPoint,
+            *candidateDirection,
+            initialBestRatio,
+            collisionRadius,
+            boundingHeight,
+            *cachedBoundsMin,
+            *cachedBoundsMax,
+            modelPropertyFlagSet,
+            movementFlags,
+            field20Value,
+            rootTreeFlagSet,
+            childTreeFlagSet,
+            queryDispatchSucceeded,
+            rankingAccepted,
+            rankingCandidateCount,
+            rankingSelectedRecordIndex,
+            rankingReportedBestRatio,
+            trace);
+
+        outTrace->supportPlaneInitCount = trace.supportPlaneInitCount;
+        outTrace->validationPlaneInitCount = trace.validationPlaneInitCount;
+        outTrace->scratchPointZeroCount = trace.scratchPointZeroCount;
+        outTrace->usedOverridePosition = trace.usedOverridePosition;
+        outTrace->terrainQueryInvoked = trace.terrainQueryInvoked;
+        outTrace->terrainQuerySucceeded = trace.terrainQuerySucceeded;
+        outTrace->terrainQueryReusedCachedQuery = trace.terrainQueryReusedCachedQuery;
+        outTrace->terrainQueryBuiltMergedBounds = trace.terrainQueryBuiltMergedBounds;
+        outTrace->terrainQueryBuiltQueryMask = trace.terrainQueryBuiltQueryMask;
+        outTrace->rankingInvoked = trace.rankingInvoked;
+        outTrace->rankingAccepted = trace.rankingAccepted;
+        outTrace->zeroClampedOutput = trace.zeroClampedOutput;
+        outTrace->returnedSuccess = trace.returnedSuccess;
+        outTrace->queryFailureZeroedOutput = trace.queryFailureZeroedOutput;
+        outTrace->selectedPosition = trace.selectedPosition;
+        outTrace->projectedPosition = trace.projectedPosition;
+        outTrace->testPoint = trace.testPoint;
+        outTrace->candidateDirection = trace.candidateDirection;
+        outTrace->initialBestRatio = trace.initialBestRatio;
+        outTrace->rankingReportedBestRatio = trace.rankingReportedBestRatio;
+        outTrace->outputReportedBestRatio = trace.outputReportedBestRatio;
+        outTrace->rankingCandidateCount = trace.rankingCandidateCount;
+        outTrace->rankingSelectedRecordIndex = trace.rankingSelectedRecordIndex;
+        outTrace->terrainQueryMask = trace.terrainQueryMask;
+        return result;
     }
 
     __declspec(dllexport) bool HasWoWSelectorCandidateWithUnitZ(
@@ -2375,6 +4055,76 @@ extern "C"
 
             outputPairs[i].first = filteredPairs[static_cast<size_t>(i)].first;
             outputPairs[i].second = filteredPairs[static_cast<size_t>(i)].second;
+        }
+
+        return outputCount;
+    }
+
+    __declspec(dllexport) int AppendWoWTerrainQueryPairPayloadRange(
+        const ExportTerrainQueryPairPayload* inputPairs,
+        int inputPairCount,
+        uint32_t previousRecordCount,
+        uint32_t currentRecordCount,
+        const ExportTerrainQueryPairPayload* payload,
+        ExportTerrainQueryPairPayload* outputPairs,
+        int maxOutputCount)
+    {
+        if ((!inputPairs && inputPairCount != 0) || inputPairCount < 0 || !payload || !outputPairs || maxOutputCount < 0) {
+            return 0;
+        }
+
+        std::vector<WoWCollision::TerrainQueryPairPayload> pairBuffer(static_cast<size_t>(inputPairCount));
+        for (int i = 0; i < inputPairCount; ++i) {
+            pairBuffer[static_cast<size_t>(i)] = WoWCollision::TerrainQueryPairPayload{
+                inputPairs[i].first,
+                inputPairs[i].second,
+            };
+        }
+
+        WoWCollision::AppendTerrainQueryPairPayloadRange(
+            previousRecordCount,
+            currentRecordCount,
+            WoWCollision::TerrainQueryPairPayload{ payload->first, payload->second },
+            pairBuffer);
+
+        const int outputCount = std::min<int>(static_cast<int>(pairBuffer.size()), maxOutputCount);
+        for (int i = 0; i < outputCount; ++i) {
+            outputPairs[i].first = pairBuffer[static_cast<size_t>(i)].first;
+            outputPairs[i].second = pairBuffer[static_cast<size_t>(i)].second;
+        }
+
+        return outputCount;
+    }
+
+    __declspec(dllexport) int ZeroWoWTerrainQueryPairPayloadRange(
+        const ExportTerrainQueryPairPayload* inputPairs,
+        int inputPairCount,
+        uint32_t previousRecordCount,
+        uint32_t currentRecordCount,
+        ExportTerrainQueryPairPayload* outputPairs,
+        int maxOutputCount)
+    {
+        if ((!inputPairs && inputPairCount != 0) || inputPairCount < 0 || !outputPairs || maxOutputCount < 0) {
+            return 0;
+        }
+
+        std::vector<WoWCollision::TerrainQueryPairPayload> pairBuffer(static_cast<size_t>(inputPairCount));
+        for (int i = 0; i < inputPairCount; ++i) {
+            pairBuffer[static_cast<size_t>(i)] = WoWCollision::TerrainQueryPairPayload{
+                inputPairs[i].first,
+                inputPairs[i].second,
+            };
+        }
+
+        WoWCollision::ZeroTerrainQueryPairPayloadRange(
+            previousRecordCount,
+            currentRecordCount,
+            pairBuffer);
+
+        const int outputCount = std::min<int>(static_cast<int>(pairBuffer.size()), maxOutputCount);
+        for (int i = 0; i < outputCount; ++i) {
+            outputPairs[i].first = pairBuffer[static_cast<size_t>(i)].first;
+            outputPairs[i].second = pairBuffer[static_cast<size_t>(i)].second;
         }
 
         return outputCount;

@@ -261,6 +261,10 @@
     <ClInclude Include="Ray.h" />
     <ClInclude Include="SceneCache.h" />
     <ClInclude Include="SceneQuery.h" />
+    <ClInclude Include="SelectorObjectConsumers.h" />
+    <ClInclude Include="SelectorObjectRasterConsumer.h" />
+    <ClInclude Include="SelectorObjectTraversal.h" />
+    <ClInclude Include="SelectorChosenContact.h" />
     <ClInclude Include="StaticMapTree.h" />
     <ClInclude Include="Vector3.h" />
     <ClInclude Include="VMapDefinitions.h" />
@@ -309,6 +313,16 @@
     <ClCompile Include="PhysicsLiquidHelpers.cpp" />
     <ClCompile Include="PhysicsMovement.cpp" />
     <ClCompile Include="PhysicsTestExports.cpp" />
+    <ClCompile Include="SelectorObjectConsumers.cpp" />
+    <ClCompile Include="SelectorObjectConsumersTestExports.cpp" />
+    <ClCompile Include="SelectorObjectRasterConsumer.cpp" />
+    <ClCompile Include="SelectorObjectRasterConsumerTestExports.cpp" />
+    <ClCompile Include="SelectorObjectTraversal.cpp" />
+    <ClCompile Include="SelectorObjectTraversalTestExports.cpp" />
+    <ClCompile Include="SelectorChosenContact.cpp" />
+    <ClCompile Include="SelectorChosenContactTestExports.cpp" />
+    <ClCompile Include="GroundedDriverParity.cpp" />
+    <ClCompile Include="GroundedDriverParityTestExports.cpp" />
     <ClCompile Include="Ray.cpp" />
     <ClCompile Include="SceneCache.cpp" />
     <ClCompile Include="SceneQuery.cpp" />
