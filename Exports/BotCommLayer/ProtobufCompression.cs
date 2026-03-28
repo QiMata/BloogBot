@@ -69,21 +69,21 @@ namespace BotCommLayer
         /// <summary>
         /// Decode payload bytes (after the 4-byte length prefix has been read and stripped).
         /// The first byte is the compression flag; remaining bytes are the payload.
+        /// Backward-compatible: if the first byte is not a known compression flag (0x00 or 0x01),
+        /// the entire buffer is treated as a legacy raw protobuf message (no flag byte).
         /// </summary>
         public static byte[] Decode(byte[] wirePayload)
         {
             if (wirePayload.Length < 1)
-                throw new InvalidDataException("Wire payload too short — missing compression flag.");
+                return wirePayload;
 
             var flag = wirePayload[0];
-            var payloadOffset = 1;
-            var payloadLength = wirePayload.Length - 1;
 
             return flag switch
             {
-                FlagRaw => wirePayload.AsSpan(payloadOffset, payloadLength).ToArray(),
-                FlagGzip => GZipDecompress(wirePayload, payloadOffset, payloadLength),
-                _ => throw new InvalidDataException($"Unknown compression flag: 0x{flag:X2}")
+                FlagRaw => wirePayload.AsSpan(1, wirePayload.Length - 1).ToArray(),
+                FlagGzip => GZipDecompress(wirePayload, 1, wirePayload.Length - 1),
+                _ => wirePayload  // Legacy format: no flag byte, entire buffer is raw protobuf
             };
         }
 
