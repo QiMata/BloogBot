@@ -4930,6 +4930,15 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     st.vx = dirN.x * moveSpeed;
     st.vy = dirN.y * moveSpeed;
     st.groundNormal = bestNormal;
+
+    // Binary 0x635600 tail: reset groundedWallState when landing on a clearly
+    // walkable surface. The flag should only persist across frames when the
+    // character is actively traversing a non-walkable slope (gate return 2 path).
+    // Without this reset, the flag accumulates and causes isStatefulSupportWalkable
+    // to accept contacts from wrong terrain layers.
+    if (bestSupportContact && bestSupportContact->walkable) {
+        st.groundedWallState = false;
+    }
     st.supportInstanceId = 0;
     st.supportLocalPoint = G3D::Vector3(0, 0, 0);
 
