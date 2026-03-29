@@ -4232,6 +4232,24 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     st.wallBlockedFraction = 1.0f;
 
     const G3D::Vector3 dirN = moveDir.directionOrZero();
+
+    // Binary parity (0x633C7B): snap to ground surface before computing sweep.
+    // WoW.exe queries GetGroundZ at the current position and snaps Z to the
+    // terrain surface before building the AABB sweep volume. Without this,
+    // the character can start slightly above/below the terrain (from previous
+    // frame's movement), causing the sweep to miss contacts or produce
+    // incorrect AABB bounds.
+    {
+        float snapZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y,
+            st.z + PhysicsConstants::STEP_HEIGHT,
+            PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT);
+        if (VMAP::IsValidHeight(snapZ) &&
+            snapZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT &&
+            snapZ <= st.z + PhysicsConstants::STEP_HEIGHT) {
+            st.z = snapZ;
+        }
+    }
+
     const float startX = st.x, startY = st.y, startZ = st.z;
 
     // WoW.exe constants from binary (VA 0x633840)

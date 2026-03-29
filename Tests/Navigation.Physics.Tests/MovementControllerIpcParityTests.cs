@@ -42,19 +42,38 @@ public sealed class MovementControllerIpcParityTests : IDisposable
     }
 
     [Fact]
-    public void FlatPath_StaysGrounded() => RunTest("FlatPath", -260, -4350, 57, -230, -4310, 120, 5);
+    public void FlatPath_StaysGrounded() => RunTest("FlatPath", -260, -4350, 57, -230, -4310, 120, 0);
 
     [Fact]
-    public void SteepDescent_StaysGrounded() => RunTest("SteepDescent", -224, -4310, 65, -310, -4410, 120, 10);
+    public void SteepDescent_StaysGrounded() => RunTest("SteepDescent", -224, -4310, 65, -310, -4410, 120, 0);
 
     [Fact]
-    public void ReverseHill_StaysGrounded() => RunTest("ReverseHill", -240, -4320, 62, -270, -4380, 120, 10);
+    public void ReverseHill_StaysGrounded()
+    {
+        float groundZ = NavigationInterop.GetGroundZ(1, -240, -4320, 70, 10);
+        float startZ = groundZ > -50000 ? groundZ : 62;
+        _output.WriteLine($"ReverseHill start groundZ={groundZ:F2}, using startZ={startZ:F2}");
+        RunTest("ReverseHill", -240, -4320, startZ, -270, -4380, 120, 0);
+    }
 
     [Fact]
-    public void HillPath_StaysGrounded() => RunTest("HillPath", -310, -4410, 48, -260, -4350, 120, 5);
+    public void HillPath_StaysGrounded()
+    {
+        // Query actual terrain Z at start position instead of hardcoding
+        float groundZ = NavigationInterop.GetGroundZ(1, -310, -4410, 50, 10);
+        float startZ = groundZ > -50000 ? groundZ : 48;
+        _output.WriteLine($"HillPath start groundZ={groundZ:F2}, using startZ={startZ:F2}");
+        RunTest("HillPath", -310, -4410, startZ, -260, -4350, 120, 3);
+    }
 
     [Fact]
-    public void SteepClimb_StaysGrounded() => RunTest("SteepClimb", -310, -4410, 48, -224, -4310, 120, 5);
+    public void SteepClimb_StaysGrounded()
+    {
+        float groundZ = NavigationInterop.GetGroundZ(1, -310, -4410, 50, 10);
+        float startZ = groundZ > -50000 ? groundZ : 48;
+        _output.WriteLine($"SteepClimb start groundZ={groundZ:F2}, using startZ={startZ:F2}");
+        RunTest("SteepClimb", -310, -4410, startZ, -224, -4310, 120, 3);
+    }
 
     private void RunTest(string name, float sx, float sy, float sz, float tx, float ty, int frames, int maxAirborne)
     {
