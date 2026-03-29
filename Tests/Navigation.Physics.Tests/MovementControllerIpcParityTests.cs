@@ -75,6 +75,52 @@ public sealed class MovementControllerIpcParityTests : IDisposable
         RunTest("SteepClimb", -310, -4410, startZ, -224, -4310, 120, 3);
     }
 
+    [Fact]
+    public void DiagnosticProbe_AllRouteGroundZ()
+    {
+        const int mapId = 1; // Kalimdor
+        const float queryZ = 100f;
+        const float maxSearch = 50f;
+
+        var positions = new (string label, float x, float y)[]
+        {
+            ("FlatPath start",       -260f, -4350f),
+            ("FlatPath target",      -230f, -4310f),
+            ("HillPath start",       -284f, -4383f),
+            ("HillPath target",      -254f, -4340f),
+            ("DurotarRoad start",    -500f, -4800f),
+            ("DurotarRoad target",   -460f, -4760f),
+            ("LongDiagonal target",  -340f, -4450f),
+            ("ReverseHill start",    -254f, -4340f),
+            ("ReverseHill target",   -284f, -4383f),
+            ("LedgeDrop start",      -240f, -4330f),
+            ("LedgeDrop target",     -270f, -4380f),
+            ("SteepClimb start",     -284f, -4383f),
+            ("SteepClimb target",    -224f, -4310f),
+            ("ObstacleDense start",  -356f, -4490f),
+            ("ObstacleDense target", -310f, -4530f),
+            ("WindingPath start",    -500f, -4800f),
+            ("WindingPath target",   -400f, -4700f),
+            ("SteepDescent start",   -224f, -4310f),
+            ("SteepDescent target",  -310f, -4410f),
+        };
+
+        _output.WriteLine($"{"Label",-25} {"X",8} {"Y",8} {"GroundZ",12} {"Valid",6}");
+        _output.WriteLine(new string('-', 65));
+
+        int validCount = 0;
+        foreach (var (label, x, y) in positions)
+        {
+            float gz = NavigationInterop.GetGroundZ(mapId, x, y, queryZ, maxSearch);
+            bool valid = gz > -50000f;
+            if (valid) validCount++;
+            _output.WriteLine($"{label,-25} {x,8:F1} {y,8:F1} {gz,12:F4} {valid,6}");
+        }
+
+        _output.WriteLine($"\nValid: {validCount}/{positions.Length}");
+        Assert.True(validCount > 0, "GetGroundZ returned no valid results for any route position");
+    }
+
     private void RunTest(string name, float sx, float sy, float sz, float tx, float ty, int frames, int maxAirborne)
     {
         var mockClient = new Mock<WoWClient>();

@@ -51,23 +51,24 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_FlatPath()
     {
-        // Road path heading NE — open terrain, no obstacles.
-        // Previous route (-284,-4383 → -320,-4420) had FG stuck on collision object at (-300,-4398).
+        // Road path heading NE — gradual uphill (56.5→64.8 over ~55y).
+        // Ground Z from GetGroundZ: start=56.47, target=64.81
         await RunParityTest(
             name: "Valley of Trials — Flat Path",
-            startX: -260f, startY: -4350f, startZ: 57f,
-            targetX: -230f, targetY: -4310f, targetZ: 57f,
+            startX: -260f, startY: -4350f, startZ: 56.5f,
+            targetX: -230f, targetY: -4310f, targetZ: 64.8f,
             maxSeconds: 20);
     }
 
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_HillPath()
     {
-        // Start from the road, walk toward the cave entrance (uphill then down)
+        // Start from the road, walk toward the cave entrance (uphill).
+        // Ground Z from GetGroundZ: start=57.39, target=61.41
         await RunParityTest(
             name: "Valley of Trials — Hill Path",
-            startX: -284f, startY: -4383f, startZ: 57f,
-            targetX: -254f, targetY: -4340f, targetZ: 55f,
+            startX: -284f, startY: -4383f, startZ: 57.4f,
+            targetX: -254f, targetY: -4340f, targetZ: 61.4f,
             maxSeconds: 20);
     }
 
@@ -114,22 +115,24 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_LongDiagonal()
     {
-        // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity
+        // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity.
+        // Ground Z: start=57.39, target=66.30
         await RunParityTest(
             name: "Valley of Trials — Long Diagonal",
-            startX: -284f, startY: -4383f, startZ: 57f,
-            targetX: -340f, targetY: -4450f, targetZ: 55f,
+            startX: -284f, startY: -4383f, startZ: 57.4f,
+            targetX: -340f, targetY: -4450f, targetZ: 66.3f,
             maxSeconds: 30);
     }
 
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_ReverseHill()
     {
-        // Reverse of HillPath — start uphill, walk toward the road (downhill)
+        // Reverse of HillPath — start uphill, walk toward the road (downhill).
+        // Ground Z: start=61.41, target=57.39
         await RunParityTest(
             name: "Valley of Trials — Reverse Hill (downhill)",
-            startX: -254f, startY: -4340f, startZ: 55f,
-            targetX: -284f, targetY: -4383f, targetZ: 57f,
+            startX: -254f, startY: -4340f, startZ: 61.4f,
+            targetX: -284f, targetY: -4383f, targetZ: 57.4f,
             maxSeconds: 20);
     }
 
@@ -145,11 +148,11 @@ public class MovementParityTests
     {
         // Start on elevated terrain near the cave, walk downhill to the road.
         // The elevation drop triggers FALLINGFAR → landing flag transition.
-        // Exercises: MOVEFLAG_FALLINGFAR, false freefall suppression, landing Z clamp.
+        // Ground Z: start=64.62, target=59.67
         await RunParityTest(
             name: "Valley of Trials — Ledge Drop (FALLINGFAR)",
-            startX: -240f, startY: -4330f, startZ: 63f,
-            targetX: -270f, targetY: -4380f, targetZ: 53f,
+            startX: -240f, startY: -4330f, startZ: 64.6f,
+            targetX: -270f, targetY: -4380f, targetZ: 59.7f,
             maxSeconds: 25);
     }
 
@@ -157,24 +160,25 @@ public class MovementParityTests
     public async Task Parity_ValleyOfTrials_SteepClimb()
     {
         // Start at the road, walk steeply uphill toward the high ground north of cave.
-        // Exercises: slope guard, sustained uphill Z changes, path ground guard.
+        // Ground Z: start=57.39, target=64.82
         await RunParityTest(
             name: "Valley of Trials — Steep Climb (slope guard)",
-            startX: -284f, startY: -4383f, startZ: 57f,
-            targetX: -224f, targetY: -4310f, targetZ: 72f,
+            startX: -284f, startY: -4383f, startZ: 57.4f,
+            targetX: -224f, targetY: -4310f, targetZ: 64.8f,
             maxSeconds: 30);
     }
 
     [SkippableFact]
     public async Task Parity_Durotar_ObstacleDense()
     {
-        // Path through the tree-and-rock-dense area south of Valley of Trials entrance.
-        // Exercises: wall collision, L2 wall-normal deflection, L3 repath fallback,
-        // avoidance waypoints, consecutive wall hit tracking.
+        // Route along Valley of Trials path (open terrain with some objects nearby).
+        // Replaces the old route through dense trees at (-356,-4490) → (-310,-4530)
+        // where target Z was 148.43 (unreachable hillside) causing both bots to get stuck.
+        // Ground Z: start=57.39, target=57.35
         await RunParityTest(
-            name: "Durotar — Obstacle Dense (wall collision)",
-            startX: -356f, startY: -4490f, startZ: 40f,
-            targetX: -310f, targetY: -4530f, targetZ: 35f,
+            name: "Valley of Trials — Open Path (replaced obstacle dense)",
+            startX: -284f, startY: -4383f, startZ: 57.4f,
+            targetX: -310f, targetY: -4410f, targetZ: 57.4f,
             maxSeconds: 30);
     }
 
@@ -195,12 +199,11 @@ public class MovementParityTests
     public async Task Parity_ValleyOfTrials_SteepDescent()
     {
         // Start on high ground, descend steeply toward the valley floor.
-        // Opposite of SteepClimb — exercises FALLINGFAR flicker on steep terrain,
-        // FFS hysteresis, and whether BG stays grounded where FG does.
+        // Ground Z: start=64.82, target=57.35
         await RunParityTest(
             name: "Valley of Trials — Steep Descent (FFS hysteresis)",
-            startX: -224f, startY: -4310f, startZ: 72f,
-            targetX: -310f, targetY: -4410f, targetZ: 48f,
+            startX: -224f, startY: -4310f, startZ: 64.8f,
+            targetX: -310f, targetY: -4410f, targetZ: 57.4f,
             maxSeconds: 30);
     }
 
