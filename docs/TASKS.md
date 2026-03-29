@@ -91,6 +91,113 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 ---
 
+## P23 — Interaction Test Suite (FG/BG Parity with Packet Recording)
+
+**Goal:** Complete LiveValidation test coverage for ALL NPC/world interaction systems. Every test runs BOTH FG (injected, gold standard) and BG (headless protocol) bots in parallel, records FG packets as reference, and asserts BG behavior matches. Uses recorded FG packet sequences to verify BG sends correct opcodes.
+
+**Architecture:** FG bot records full packet trace (CMSG+SMSG) via `ForegroundPacketTraceRecorder`. BG bot records its own outbound packets. Tests compare opcode sequences, timing, and state transitions between the two. Binary dumps from `docs/server-protocol/` confirm opcode formats.
+
+### 23A — Packet Recording Framework Enhancement
+
+| # | Task | Spec |
+|---|------|------|
+| 23.1 | **Extend BackgroundPacketTraceRecorder to capture ALL opcodes** — Currently only records movement opcodes. Add full opcode capture matching FG's `PacketLogger.OnPacketCaptured`. File: `Services/BackgroundBotRunner/Diagnostics/BackgroundPacketTraceRecorder.cs`. Wire to `WoWClient.OnPacketSent` / `OnPacketReceived` events. | Open |
+| 23.2 | **Add packet payload recording** — Current CSV captures opcode+size only. Add binary payload dump for interaction opcodes (AH, bank, mail, vendor, trainer). Save as sidecar `.bin` file alongside CSV. | Open |
+| 23.3 | **Create `PacketSequenceComparator` test helper** — Compares FG and BG packet traces for a given interaction. Input: two CSV files. Output: opcode sequence diff, missing/extra packets, timing delta. File: `Tests/Tests.Infrastructure/PacketSequenceComparator.cs`. | Open |
+
+### 23B — Auction House Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.4 | **Create `FgAuctionFrame.cs`** — Lua-based FG auction house frame. Methods: `IsOpen`, `SearchByName(name)`, `PostItem(bagId, slotId, startBid, buyout, duration)`, `PlaceBid(auctionId, amount)`, `CancelAuction(auctionId)`, `GetSearchResults()`. File: `Services/ForegroundBotRunner/Frames/FgAuctionFrame.cs`. | Open |
+| 23.5 | **AH search test** — BG+FG: teleport to Orgrimmar AH, interact with auctioneer, search for "Linen Cloth". Assert: both get SMSG_AUCTION_LIST_RESULT, result counts match. Record FG packets, verify BG sends matching CMSG_AUCTION_LIST_ITEMS. | Open |
+| 23.6 | **AH post+buy test** — Bot A posts item via CMSG_AUCTION_SELL_ITEM. Bot B searches and buys via CMSG_AUCTION_PLACE_BID. Assert: SMSG_AUCTION_COMMAND_RESULT success, item delivered via mail. | Open |
+| 23.7 | **AH cancel test** — Post item, cancel via CMSG_AUCTION_REMOVE_ITEM. Assert: item returned to inventory. | Open |
+
+### 23C — Bank Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.8 | **Create `FgBankFrame.cs`** — Lua-based FG bank frame. Methods: `IsOpen`, `DepositItem(bagId, slotId)`, `WithdrawItem(bankSlot)`, `GetBankSlots()`, `PurchaseBankSlot()`. File: `Services/ForegroundBotRunner/Frames/FgBankFrame.cs`. | Open |
+| 23.9 | **Bank deposit/withdraw test** — BG+FG: teleport to Orgrimmar bank, interact with banker, deposit an item, verify it appears in bank slot. Withdraw it back, verify inventory. Record packets. | Open |
+| 23.10 | **Bank slot purchase test** — Purchase a new bank bag slot via CMSG_BUY_BANK_SLOT. Assert: SMSG_BUY_BANK_SLOT_RESULT = OK. | Open |
+
+### 23D — Mail Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.11 | **Wire mail take operations** — `MailNetworkClientComponent` has CMSG_MAIL_TAKE_MONEY, CMSG_MAIL_TAKE_ITEM, CMSG_MAIL_DELETE but observables return Never. Parse SMSG responses and wire observables. | Open |
+| 23.12 | **Mail send test** — Bot A sends mail with 1 copper to Bot B via CMSG_SEND_MAIL. Assert: SMSG_SEND_MAIL_RESULT success. Bot B opens mailbox, gets mail list, takes money. | Open |
+| 23.13 | **Mail with item test** — Bot A sends mail with an item attachment. Bot B takes item. Assert item in inventory. | Open |
+
+### 23E — Flight Master & Transport Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.14 | **Flight path completion detection** — Track player position during taxi flight. Detect arrival when position stops changing after flight start. Add `IsInFlight` property to ObjectManager. Wire `SMSG_MONSTER_MOVE` spline completion for taxi. | Open |
+| 23.15 | **Taxi ride test** — BG+FG: teleport to Orgrimmar flight master, discover nodes, activate flight to Crossroads. Assert: CMSG_ACTIVATETAXI sent, both arrive at Crossroads within 2 minutes. Record FG packets. | Open |
+| 23.16 | **Transport boarding test** — BG+FG: teleport to Ratchet dock, board the boat to Booty Bay. Assert: TransportGuid set on boarding, cleared on arrival. Uses TransportWaitingLogic state machine. | Open |
+| 23.17 | **Cross-continent transport test** — Horde bots: board Orgrimmar→Undercity zeppelin. Assert: mapId changes from 1 to 0 during transit, position updates reflect transport movement, arrive in Tirisfal Glades. | Open |
+
+### 23F — Trade Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.18 | **Trade initiate + cancel test** — Bot A initiates trade with Bot B (CMSG_INITIATE_TRADE). Bot B accepts (SMSG_TRADE_STATUS = Begin). Both cancel. Assert: SMSG_TRADE_STATUS = Cancelled. | Open |
+| 23.19 | **Trade gold + item test** — Bot A offers 10 copper + 1 item. Bot B accepts. Assert: gold transferred, item in Bot B inventory. | Open |
+
+### 23G — Innkeeper & Spirit Healer Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.20 | **Implement innkeeper set-home** — Interact with innkeeper NPC (UNIT_NPC_FLAG_INNKEEPER), select gossip option (GossipTypes.Binder), verify SMSG_BINDPOINTUPDATE with new bind location. Create `SetBindPointTask.cs`. | Open |
+| 23.21 | **Spirit healer resurrection test** — Kill bot, release spirit, navigate to spirit healer NPC, activate via CMSG_SPIRIT_HEALER_ACTIVATE. Assert: resurrection sickness debuff applied, health restored. | Open |
+
+### 23H — Gossip & Quest Frame Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 23.22 | **Multi-option gossip test** — Interact with NPC that has multiple gossip options (e.g., trainer + quest giver). Assert: SMSG_GOSSIP_MESSAGE contains correct option count and types. Select each option, verify correct sub-frame opens. | Open |
+| 23.23 | **Quest chain test** — Accept quest from NPC, complete objectives (kill mobs), return to NPC, complete quest. Assert: SMSG_QUESTUPDATE_ADD_KILL increments, SMSG_QUESTGIVER_QUEST_COMPLETE fires, reward received. | Open |
+| 23.24 | **Quest reward selection test** — Complete quest with multiple reward choices. Select specific reward item. Assert: correct item ID in inventory. | Open |
+
+---
+
+## P24 — 3000-Bot Load Test
+
+**Goal:** Verify the system handles 3000 concurrent bot connections (1 FG + 2999 BG) with all race/class combinations evenly distributed. Incrementally scale from 10 → 100 → 500 → 1000 → 3000.
+
+**Architecture:** Each BG bot is a `BackgroundBotRunner` process with `LocalPhysicsClient` (direct P/Invoke). All connect to the same MaNGOS server. StateManager orchestrates all bots. Metrics: connection time, snapshot latency, physics frame rate, memory per bot, CPU utilization.
+
+### Race/Class Distribution (3000 bots)
+
+WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 22. Valid Alliance combos: 22. Total unique combos: 44.
+- 3000 bots ÷ 44 combos ≈ 68 bots per combo
+- 1 FG bot (Orc Warrior) + 2999 BG bots distributed across all valid combos
+
+### Load Test Milestones
+
+| # | Task | Spec |
+|---|------|------|
+| 24.1 | **Create `LoadTestHarness` project** — File: `Tests/LoadTests/LoadTestHarness.csproj`. Parameterized test that spawns N headless bots. Each bot: connects to MaNGOS, logs in, creates character (if needed), enters world, performs basic patrol in assigned zone. Outputs CSV metrics per bot: connectionTimeMs, loginTimeMs, enterWorldTimeMs, avgPhysicsFrameMs, avgSnapshotLatencyMs, memoryMB. | Open |
+| 24.2 | **Race/class distribution generator** — File: `Tests/LoadTests/BotDistribution.cs`. Generates account names + character configs for all 44 valid race/class combos. Even distribution. Uses naming convention: `LT_{race2}{class2}{index:D4}` (e.g., `LTORWA0001` = Orc Warrior #1). | Open |
+| 24.3 | **MaNGOS account bulk creation** — Script that creates N accounts via SOAP API. `ExecuteGMCommandAsync(".account create LT_ORWA0001 password")` for each. Idempotent (skip existing). | Open |
+| 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | Open |
+| 24.5 | **100-bot test** — 1 FG + 99 BG. Mixed zones: 50 in Orgrimmar, 25 in Durotar, 25 in Barrens. 5-minute patrol. Metrics: P50/P95/P99 physics frame time, snapshot round-trip, memory per bot. | Open |
+| 24.6 | **500-bot test** — 1 FG + 499 BG. All Horde zones. 10-minute run. Measure: MaNGOS server load (world update time), pathfinding queue depth, total system memory. Identify bottlenecks. | Open |
+| 24.7 | **1000-bot test** — 1 FG + 999 BG. Multi-zone. 15-minute run. Expected issues: MaNGOS world update lag, pathfinding contention, network bandwidth. Document findings. | Open |
+| 24.8 | **3000-bot target test** — 1 FG + 2999 BG. Full distribution across all 44 race/class combos. 30-minute run. Mixed activities: 1000 grinding, 500 in cities, 500 questing, 500 patrolling, 499 idle. Dashboard: real-time metrics for all bots. | Open |
+
+### Load Test Infrastructure
+
+| # | Task | Spec |
+|---|------|------|
+| 24.9 | **Per-bot metrics collector** — Each bot reports to a central metrics aggregator via UDP. Fields: accountName, frameTimeMs, snapshotLatencyMs, posX, posY, posZ, movementFlags, isConnected, memoryMB. Collector writes to InfluxDB or CSV. | Open |
+| 24.10 | **Load test dashboard** — Simple HTML page that reads metrics CSV and displays: total connected bots, avg/P95 physics time, total memory, map showing bot positions. Refreshes every 5s. | Open |
+| 24.11 | **Bot process pooling** — For 3000 bots, run 50-100 bots per process (using the multi-BotContext architecture from P9). Each process loads Navigation.dll once, shares scene data. Reduces total processes from 3000 to 30-60. | Open |
+
+---
+
 ## P22 — Character Progression Planner (Goal-Driven Bot Behavior)
 
 **Goal:** A config-driven progression system where each bot has explicit long-term objectives — target spec, gear set, reputation standings, rare items, mount, gold target, skill priorities — and StateManager continuously evaluates progress against those goals to decide what the bot should do next. This is the layer that makes 3000 bots behave like a population of real players with individual ambitions.
