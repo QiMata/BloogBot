@@ -198,6 +198,13 @@ message PhysicsInput {
 	// Step-up height persistence (from prior tick output)
 	float step_up_base_z = 41;     // Z height to maintain (-200000 = inactive)
 	uint32 step_up_age = 42;       // frames since step-up detected
+
+	// Binary parity: CMovement grounded state persistence.
+	// WoW.exe persists isGrounded in CMovement struct independently of packet flags.
+	// This field carries the previous frame's physics-derived grounded state so
+	// StepV2 can initialize st.isGrounded from physics state, not input packet flags.
+	// Prevents FALLINGFAR feedback loops on uphill terrain.
+	bool was_grounded = 43;
 }
 
 // Physics output

@@ -163,6 +163,11 @@ struct PhysicsInput
     // between native steps. This is not packet moveFlags state; it feeds the
     // selected-contact `CheckWalkable` helper on the next grounded frame.
     uint32_t groundedWallState;
+
+    // Binary parity: CMovement grounded state persistence.
+    // Carries the previous frame's physics-derived grounded state so StepV2
+    // initializes st.isGrounded from physics state, not input packet flags.
+    uint32_t wasGrounded;
 };
 
 constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;

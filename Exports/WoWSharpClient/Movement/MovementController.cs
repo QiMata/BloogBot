@@ -409,6 +409,9 @@ namespace WoWSharpClient.Movement
 
                 StepUpBaseZ = _stepUpBaseZ,
                 StepUpAge = _stepUpAge,
+
+                // Binary parity: CMovement grounded state persistence
+                WasGrounded = _wasGroundedLastFrame,
             };
 
             input.NearbyObjects.Add(BuildPhysicsNearbyObjects(_player.Position, activeTransport));
@@ -577,6 +580,9 @@ namespace WoWSharpClient.Movement
         // must NOT engage until we've confirmed real ground contact — otherwise elevated spawns
         // cause _prevGroundZ = spawnZ, making the guard think we're "close to ground" at altitude.
         private bool _hasPhysicsGroundContact = false;
+        // Binary parity: CMovement grounded state persistence across frames.
+        // Set from physics output each frame, sent as input to next frame.
+        private bool _wasGroundedLastFrame = true;
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
@@ -613,6 +619,9 @@ namespace WoWSharpClient.Movement
             // Fall time: trust physics output
             bool isFalling = (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
             _fallTimeMs = isFalling ? (uint)MathF.Max(0, output.FallTime) : 0;
+
+            // Binary parity: persist grounded state for next frame's input
+            _wasGroundedLastFrame = !isFalling;
 
             // Persist StepV2 continuity outputs
             bool physicsHasGround = output.GroundZ > -50000f;
@@ -1225,6 +1234,11 @@ namespace WoWSharpClient.Movement
             _falseFreefallCount = 0;
             _ffsStartZ = float.NaN;
             _hasPhysicsGroundContact = false;
+            // Don't assume grounded after teleport — the first physics frame will determine
+            // the correct state. Setting true here prevents airborne tests from falling.
+            // Setting false allows CollisionStepWoW to set grounded on the first frame
+            // if ground is found within step height.
+            _wasGroundedLastFrame = false;
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.

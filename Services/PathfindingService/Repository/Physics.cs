@@ -265,6 +265,7 @@ namespace PathfindingService.Repository
         public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint stepUpAge;          // frames since step-up detected
         public uint groundedWallState;  // internal selected-contact walkability state
+        public uint wasGrounded;        // CMovement grounded state from previous frame
     }
 
     [StructLayout(LayoutKind.Sequential)]

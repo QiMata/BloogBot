@@ -909,7 +909,10 @@ namespace PathfindingService
 
 				// Step-up height persistence
 				stepUpBaseZ = proto.StepUpBaseZ,
-				stepUpAge = proto.StepUpAge
+				stepUpAge = proto.StepUpAge,
+
+				// Binary parity: CMovement grounded state
+				wasGrounded = proto.WasGrounded ? 1u : 0u
             };
         }
 

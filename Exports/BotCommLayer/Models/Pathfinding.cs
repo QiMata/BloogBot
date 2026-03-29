@@ -74,7 +74,7 @@ namespace Pathfinding {
             "bmFtaWNPYmplY3RQcm90bxIMCgRndWlkGAEgASgEEhIKCmRpc3BsYXlfaWQY",
             "AiABKA0SCQoBeBgDIAEoAhIJCgF5GAQgASgCEgkKAXoYBSABKAISEwoLb3Jp",
             "ZW50YXRpb24YBiABKAISDQoFc2NhbGUYByABKAISEAoIZ29fc3RhdGUYCCAB",
-            "KA0i1gcKDFBoeXNpY3NJbnB1dBIWCg5tb3ZlbWVudF9mbGFncxgBIAEoDRIN",
+            "KA0i7AcKDFBoeXNpY3NJbnB1dBIWCg5tb3ZlbWVudF9mbGFncxgBIAEoDRIN",
             "CgVwb3NfeBgCIAEoAhINCgVwb3NfeRgDIAEoAhINCgVwb3NfehgEIAEoAhIO",
             "CgZmYWNpbmcYBSABKAISFgoOdHJhbnNwb3J0X2d1aWQYBiABKAQSGgoSdHJh",
             "bnNwb3J0X29mZnNldF94GAcgASgCEhoKEnRyYW5zcG9ydF9vZmZzZXRfeRgI",
@@ -95,38 +95,38 @@ namespace Pathfinding {
             "YW5kaW5nX29uX2xvY2FsX3kYJCABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxf",
             "ehglIAEoAhIVCg1waHlzaWNzX2ZsYWdzGCYgASgNEjcKDm5lYXJieV9vYmpl",
             "Y3RzGCggAygLMh8ucGF0aGZpbmRpbmcuRHluYW1pY09iamVjdFByb3RvEhYK",
-            "DnN0ZXBfdXBfYmFzZV96GCkgASgCEhMKC3N0ZXBfdXBfYWdlGCogASgNIsQG",
-            "Cg1QaHlzaWNzT3V0cHV0EhEKCW5ld19wb3NfeBgBIAEoAhIRCgluZXdfcG9z",
-            "X3kYAiABKAISEQoJbmV3X3Bvc196GAMgASgCEhEKCW5ld192ZWxfeBgEIAEo",
-            "AhIRCgluZXdfdmVsX3kYBSABKAISEQoJbmV3X3ZlbF96GAYgASgCEhYKDm1v",
-            "dmVtZW50X2ZsYWdzGAcgASgNEhMKC29yaWVudGF0aW9uGAggASgCEg0KBXBp",
-            "dGNoGAkgASgCEhMKC2lzX2dyb3VuZGVkGAogASgIEhMKC2lzX3N3aW1taW5n",
-            "GAsgASgIEhEKCWlzX2ZseWluZxgMIAEoCBIRCglmYWxsX3RpbWUYDSABKAIS",
-            "HAoUY3VycmVudF9zcGxpbmVfaW5kZXgYDiABKAUSFwoPc3BsaW5lX3Byb2dy",
-            "ZXNzGA8gASgCEhAKCGdyb3VuZF96GBAgASgCEhEKCWdyb3VuZF9ueBgRIAEo",
-            "AhIRCglncm91bmRfbnkYEiABKAISEQoJZ3JvdW5kX256GBMgASgCEhAKCGxp",
-            "cXVpZF96GBQgASgCEhMKC2xpcXVpZF90eXBlGBUgASgNEhcKD3BlbmRpbmdf",
-            "ZGVwZW5feBgWIAEoAhIXCg9wZW5kaW5nX2RlcGVuX3kYFyABKAISFwoPcGVu",
-            "ZGluZ19kZXBlbl96GBggASgCEh8KF3N0YW5kaW5nX29uX2luc3RhbmNlX2lk",
-            "GBkgASgNEhsKE3N0YW5kaW5nX29uX2xvY2FsX3gYGiABKAISGwoTc3RhbmRp",
-            "bmdfb25fbG9jYWxfeRgbIAEoAhIbChNzdGFuZGluZ19vbl9sb2NhbF96GBwg",
-            "ASgCEhUKDWZhbGxfZGlzdGFuY2UYHSABKAISFAoMZmFsbF9zdGFydF96GB4g",
-            "ASgCEhAKCGhpdF93YWxsGB8gASgIEhUKDXdhbGxfbm9ybWFsX3gYICABKAIS",
-            "FQoNd2FsbF9ub3JtYWxfeRghIAEoAhIVCg13YWxsX25vcm1hbF96GCIgASgC",
-            "EhgKEGJsb2NrZWRfZnJhY3Rpb24YIyABKAISFgoOc3RlcF91cF9iYXNlX3oY",
-            "JCABKAISEwoLc3RlcF91cF9hZ2UYJSABKA0iYgoWU2VnbWVudER5bkNoZWNr",
-            "UmVxdWVzdBIOCgZtYXBfaWQYASABKA0SHAoEZnJvbRgCIAEoCzIOLmdhbWUu",
-            "UG9zaXRpb24SGgoCdG8YAyABKAsyDi5nYW1lLlBvc2l0aW9uIi0KF1NlZ21l",
-            "bnREeW5DaGVja1Jlc3BvbnNlEhIKCmludGVyc2VjdHMYASABKAgiXgoTTmF2",
-            "bWVzaFBvaW50UmVxdWVzdBIOCgZtYXBfaWQYASABKA0SIAoIcG9zaXRpb24Y",
-            "AiABKAsyDi5nYW1lLlBvc2l0aW9uEhUKDXNlYXJjaF9yYWRpdXMYAyABKAIi",
-            "UQoUTmF2bWVzaFBvaW50UmVzcG9uc2USEgoKb25fbmF2bWVzaBgBIAEoCBIl",
-            "Cg1uZWFyZXN0X3BvaW50GAIgASgLMg4uZ2FtZS5Qb3NpdGlvbiJhChZOZWFy",
-            "ZXN0V2Fsa2FibGVSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEoDRIgCghwb3NpdGlv",
-            "bhgCIAEoCzIOLmdhbWUuUG9zaXRpb24SFQoNc2VhcmNoX3JhZGl1cxgDIAEo",
-            "AiJTChdOZWFyZXN0V2Fsa2FibGVSZXNwb25zZRIRCglhcmVhX3R5cGUYASAB",
-            "KA0SJQoNbmVhcmVzdF9wb2ludBgCIAEoCzIOLmdhbWUuUG9zaXRpb25CDqoC",
-            "C1BhdGhmaW5kaW5nYgZwcm90bzM="));
+            "DnN0ZXBfdXBfYmFzZV96GCkgASgCEhMKC3N0ZXBfdXBfYWdlGCogASgNEhQK",
+            "DHdhc19ncm91bmRlZBgrIAEoCCLEBgoNUGh5c2ljc091dHB1dBIRCgluZXdf",
+            "cG9zX3gYASABKAISEQoJbmV3X3Bvc195GAIgASgCEhEKCW5ld19wb3NfehgD",
+            "IAEoAhIRCgluZXdfdmVsX3gYBCABKAISEQoJbmV3X3ZlbF95GAUgASgCEhEK",
+            "CW5ld192ZWxfehgGIAEoAhIWCg5tb3ZlbWVudF9mbGFncxgHIAEoDRITCgtv",
+            "cmllbnRhdGlvbhgIIAEoAhINCgVwaXRjaBgJIAEoAhITCgtpc19ncm91bmRl",
+            "ZBgKIAEoCBITCgtpc19zd2ltbWluZxgLIAEoCBIRCglpc19mbHlpbmcYDCAB",
+            "KAgSEQoJZmFsbF90aW1lGA0gASgCEhwKFGN1cnJlbnRfc3BsaW5lX2luZGV4",
+            "GA4gASgFEhcKD3NwbGluZV9wcm9ncmVzcxgPIAEoAhIQCghncm91bmRfehgQ",
+            "IAEoAhIRCglncm91bmRfbngYESABKAISEQoJZ3JvdW5kX255GBIgASgCEhEK",
+            "CWdyb3VuZF9uehgTIAEoAhIQCghsaXF1aWRfehgUIAEoAhITCgtsaXF1aWRf",
+            "dHlwZRgVIAEoDRIXCg9wZW5kaW5nX2RlcGVuX3gYFiABKAISFwoPcGVuZGlu",
+            "Z19kZXBlbl95GBcgASgCEhcKD3BlbmRpbmdfZGVwZW5fehgYIAEoAhIfChdz",
+            "dGFuZGluZ19vbl9pbnN0YW5jZV9pZBgZIAEoDRIbChNzdGFuZGluZ19vbl9s",
+            "b2NhbF94GBogASgCEhsKE3N0YW5kaW5nX29uX2xvY2FsX3kYGyABKAISGwoT",
+            "c3RhbmRpbmdfb25fbG9jYWxfehgcIAEoAhIVCg1mYWxsX2Rpc3RhbmNlGB0g",
+            "ASgCEhQKDGZhbGxfc3RhcnRfehgeIAEoAhIQCghoaXRfd2FsbBgfIAEoCBIV",
+            "Cg13YWxsX25vcm1hbF94GCAgASgCEhUKDXdhbGxfbm9ybWFsX3kYISABKAIS",
+            "FQoNd2FsbF9ub3JtYWxfehgiIAEoAhIYChBibG9ja2VkX2ZyYWN0aW9uGCMg",
+            "ASgCEhYKDnN0ZXBfdXBfYmFzZV96GCQgASgCEhMKC3N0ZXBfdXBfYWdlGCUg",
+            "ASgNImIKFlNlZ21lbnREeW5DaGVja1JlcXVlc3QSDgoGbWFwX2lkGAEgASgN",
+            "EhwKBGZyb20YAiABKAsyDi5nYW1lLlBvc2l0aW9uEhoKAnRvGAMgASgLMg4u",
+            "Z2FtZS5Qb3NpdGlvbiItChdTZWdtZW50RHluQ2hlY2tSZXNwb25zZRISCgpp",
+            "bnRlcnNlY3RzGAEgASgIIl4KE05hdm1lc2hQb2ludFJlcXVlc3QSDgoGbWFw",
+            "X2lkGAEgASgNEiAKCHBvc2l0aW9uGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIV",
+            "Cg1zZWFyY2hfcmFkaXVzGAMgASgCIlEKFE5hdm1lc2hQb2ludFJlc3BvbnNl",
+            "EhIKCm9uX25hdm1lc2gYASABKAgSJQoNbmVhcmVzdF9wb2ludBgCIAEoCzIO",
+            "LmdhbWUuUG9zaXRpb24iYQoWTmVhcmVzdFdhbGthYmxlUmVxdWVzdBIOCgZt",
+            "YXBfaWQYASABKA0SIAoIcG9zaXRpb24YAiABKAsyDi5nYW1lLlBvc2l0aW9u",
+            "EhUKDXNlYXJjaF9yYWRpdXMYAyABKAIiUwoXTmVhcmVzdFdhbGthYmxlUmVz",
+            "cG9uc2USEQoJYXJlYV90eXBlGAEgASgNEiUKDW5lYXJlc3RfcG9pbnQYAiAB",
+            "KAsyDi5nYW1lLlBvc2l0aW9uQg6qAgtQYXRoZmluZGluZ2IGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
@@ -145,7 +145,7 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.BatchGroundZResponse), global::Pathfinding.BatchGroundZResponse.Parser, new[]{ "Results" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.BatchGroundZEntry), global::Pathfinding.BatchGroundZEntry.Parser, new[]{ "GroundZ", "Found" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.DynamicObjectProto), global::Pathfinding.DynamicObjectProto.Parser, new[]{ "Guid", "DisplayId", "X", "Y", "Z", "Orientation", "Scale", "GoState" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge", "WasGrounded" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.SegmentDynCheckRequest), global::Pathfinding.SegmentDynCheckRequest.Parser, new[]{ "MapId", "From", "To" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.SegmentDynCheckResponse), global::Pathfinding.SegmentDynCheckResponse.Parser, new[]{ "Intersects" }, null, null, null, null),
@@ -5131,6 +5131,7 @@ namespace Pathfinding {
       nearbyObjects_ = other.nearbyObjects_.Clone();
       stepUpBaseZ_ = other.stepUpBaseZ_;
       stepUpAge_ = other.stepUpAge_;
+      wasGrounded_ = other.wasGrounded_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5698,6 +5699,25 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "was_grounded" field.</summary>
+    public const int WasGroundedFieldNumber = 43;
+    private bool wasGrounded_;
+    /// <summary>
+    /// Binary parity: CMovement grounded state persistence.
+    /// WoW.exe persists isGrounded in CMovement struct independently of packet flags.
+    /// This field carries the previous frame's physics-derived grounded state so
+    /// StepV2 can initialize st.isGrounded from physics state, not input packet flags.
+    /// Prevents FALLINGFAR feedback loops on uphill terrain.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool WasGrounded {
+      get { return wasGrounded_; }
+      set {
+        wasGrounded_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5755,6 +5775,7 @@ namespace Pathfinding {
       if(!nearbyObjects_.Equals(other.nearbyObjects_)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
       if (StepUpAge != other.StepUpAge) return false;
+      if (WasGrounded != other.WasGrounded) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5804,6 +5825,7 @@ namespace Pathfinding {
       hash ^= nearbyObjects_.GetHashCode();
       if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
       if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
+      if (WasGrounded != false) hash ^= WasGrounded.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5987,6 +6009,10 @@ namespace Pathfinding {
         output.WriteRawTag(208, 2);
         output.WriteUInt32(StepUpAge);
       }
+      if (WasGrounded != false) {
+        output.WriteRawTag(216, 2);
+        output.WriteBool(WasGrounded);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -6162,6 +6188,10 @@ namespace Pathfinding {
         output.WriteRawTag(208, 2);
         output.WriteUInt32(StepUpAge);
       }
+      if (WasGrounded != false) {
+        output.WriteRawTag(216, 2);
+        output.WriteBool(WasGrounded);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -6295,6 +6325,9 @@ namespace Pathfinding {
       }
       if (StepUpAge != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(StepUpAge);
+      }
+      if (WasGrounded != false) {
+        size += 2 + 1;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -6431,6 +6464,9 @@ namespace Pathfinding {
       }
       if (other.StepUpAge != 0) {
         StepUpAge = other.StepUpAge;
+      }
+      if (other.WasGrounded != false) {
+        WasGrounded = other.WasGrounded;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -6619,6 +6655,10 @@ namespace Pathfinding {
             StepUpAge = input.ReadUInt32();
             break;
           }
+          case 344: {
+            WasGrounded = input.ReadBool();
+            break;
+          }
         }
       }
     #endif
@@ -6804,6 +6844,10 @@ namespace Pathfinding {
           }
           case 336: {
             StepUpAge = input.ReadUInt32();
+            break;
+          }
+          case 344: {
+            WasGrounded = input.ReadBool();
             break;
           }
         }
