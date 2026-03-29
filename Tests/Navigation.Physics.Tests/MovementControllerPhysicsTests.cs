@@ -1355,19 +1355,22 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-        // Start in air (no ground below for a while)
-        var (ctrl, player, _) = CreateController(-442f, -2598f, 150f, facing: 0f);
+        // Start 200y above ground — must be far enough that GetGroundZ probe fails
+        var (ctrl, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 200f, facing: 0f);
+        ctrl.SetGroundedState(false);  // Binary: CMovement airborne — must be set explicitly
         float startZ = player.Position.Z;
 
-        // Run 20 frames (1 second) of freefall
-        player.MovementFlags = MovementFlags.MOVEFLAG_FALLINGFAR;
-        var frames = RunFramesWithTrace(ctrl, player, 20, 0.05f);
+        // Run 20 frames (1 second) of freefall — force FALLINGFAR each frame
+        // because ApplyPhysicsResult merges physics flags, and without FORWARD
+        // intent the idle guard skips physics if all flags get cleared.
+        var frames = RunFramesWithTrace(ctrl, player, 20, 0.05f,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FALLINGFAR);
 
         float endZ = player.Position.Z;
         float totalDrop = startZ - endZ;
 
         // Expected: 0.5 * g * t² = 0.5 * 19.291 * 1² = 9.645y
-        _output.WriteLine($"Freefall drop in 1s: {totalDrop:F2}y (expected ~9.65)");
+        _output.WriteLine($"Freefall drop in 1s: {totalDrop:F2}y (expected ~9.65) startZ={startZ:F1} endZ={endZ:F1} frames={frames.Count} f0Z={frames[0].Z:F1} f0flags=0x{(uint)frames[0].Flags:X}");
         Assert.True(totalDrop > 8.5f && totalDrop < 11.0f,
             $"Gravity wrong: dropped {totalDrop:F2}y in 1s (expected ~9.65, g=19.291)");
     }
@@ -1410,10 +1413,11 @@ public class MovementControllerPhysicsTests
         // Start very high — need to fall for ~3s to reach terminal velocity
         // terminal = g*t → t = 60.148/19.291 = 3.12s
         var (ctrl, player, _) = CreateController(-442f, -2598f, 500f, facing: 0f);
-        player.MovementFlags = MovementFlags.MOVEFLAG_FALLINGFAR;
+        ctrl.SetGroundedState(false);  // Binary: CMovement airborne when 500y above ground
 
-        // Fall for 4 seconds (80 frames at 50ms)
-        var frames = RunFramesWithTrace(ctrl, player, 80, 0.05f);
+        // Fall for 4 seconds (80 frames at 50ms) — force FALLINGFAR each frame
+        var frames = RunFramesWithTrace(ctrl, player, 80, 0.05f,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FALLINGFAR);
 
         // Check velocity in last few frames — should be near terminal
         float lastDz = MathF.Abs(frames[frames.Count - 1].DeltaZ);

@@ -69,7 +69,8 @@ public class NativePathfindingClient : PathfindingClient
             MapId = proto.MapId,
             DeltaTime = proto.DeltaTime,
             FrameCounter = proto.FrameCounter,
-            PhysicsFlags = 0
+            PhysicsFlags = 0,
+            WasGrounded = proto.WasGrounded ? 1u : 0u,
         };
 
         // Call real C++ physics engine

@@ -583,6 +583,12 @@ namespace WoWSharpClient.Movement
         // Binary parity: CMovement grounded state persistence across frames.
         // Set from physics output each frame, sent as input to next frame.
         private bool _wasGroundedLastFrame = true;
+
+        /// <summary>
+        /// Override the physics-derived grounded state for testing.
+        /// In production, this is set by ApplyPhysicsResult from physics output.
+        /// </summary>
+        public void SetGroundedState(bool grounded) => _wasGroundedLastFrame = grounded;
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
