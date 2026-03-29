@@ -158,8 +158,15 @@ namespace BackgroundBotRunner
                 wowClient.SetIpAddress(realmIp);
             }
 
+            // Create local physics client — direct P/Invoke to Navigation.dll,
+            // zero IPC latency, matching WoW.exe's synchronous CMovement::Update.
+            var localPhysics = new WoWSharpClient.Movement.LocalPhysicsClient(
+                _loggerFactory.CreateLogger("LocalPhysicsClient"));
+
             var objectManager = WoWSharpObjectManager.Instance;
-            objectManager.Initialize(wowClient, pathfindingClient, _loggerFactory.CreateLogger<WoWSharpObjectManager>());
+            objectManager.Initialize(wowClient, pathfindingClient,
+                _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
+                physicsClient: localPhysics);
 
             var initialWorldClient = WoWClientFactory.CreateWorldClient();
             var agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(initialWorldClient, _loggerFactory);

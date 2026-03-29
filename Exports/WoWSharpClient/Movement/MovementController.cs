@@ -13,10 +13,10 @@ using WoWSharpClient.Parsers;
 
 namespace WoWSharpClient.Movement
 {
-    public class MovementController(WoWClient client, PathfindingClient physics, WoWLocalPlayer player)
+    public class MovementController(WoWClient client, IPhysicsClient physics, WoWLocalPlayer player)
     {
         private readonly WoWClient _client = client;
-        private readonly PathfindingClient _physics = physics;
+        private readonly IPhysicsClient _physics = physics;
         private readonly WoWLocalPlayer _player = player;
 
         // Physics state

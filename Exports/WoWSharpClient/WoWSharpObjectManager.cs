@@ -55,6 +55,7 @@ namespace WoWSharpClient
         private WoWClient _woWClient;
 
         private PathfindingClient _pathfindingClient;
+        private IPhysicsClient _physicsClient;
 
         // Movement controller - handles all movement logic
         private MovementController _movementController;
@@ -91,7 +92,8 @@ namespace WoWSharpClient
         public void Initialize(
             WoWClient wowClient,
             PathfindingClient pathfindingClient,
-            ILogger<WoWSharpObjectManager> logger
+            ILogger<WoWSharpObjectManager> logger,
+            IPhysicsClient? physicsClient = null
         )
         {
             WoWSharpEventEmitter.Instance.Reset();
@@ -101,6 +103,7 @@ namespace WoWSharpClient
 
             _logger = logger;
             _pathfindingClient = pathfindingClient;
+            _physicsClient = physicsClient ?? pathfindingClient;
             _woWClient = wowClient;
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
@@ -153,11 +156,11 @@ namespace WoWSharpClient
         private void InitializeMovementController()
         {
             // Initialize movement controller when we have a player
-            if (Player != null && _woWClient != null && _pathfindingClient != null)
+            if (Player != null && _woWClient != null && _physicsClient != null)
             {
                 _movementController = new MovementController(
                     _woWClient,
-                    _pathfindingClient,
+                    _physicsClient,
                     (WoWLocalPlayer)Player
                 );
             }
@@ -228,7 +231,10 @@ namespace WoWSharpClient
         // Fixed physics timestep: 50ms (matches timer interval). When the timer fires late,
         // physics runs multiple sub-steps at this fixed dt instead of one large step.
         // This prevents rubber banding (large single-frame jumps) and sinking (over-integrated gravity).
-        private const float PHYSICS_FIXED_DT = 0.050f;
+        // Binary parity: WoW.exe runs CMovement::Update at render framerate (~30-60 FPS).
+        // With local P/Invoke physics (zero IPC latency), we can match this rate.
+        // 16ms = 60 FPS, matching typical WoW.exe framerate for smooth movement.
+        private const float PHYSICS_FIXED_DT = 0.016f;
         // Maximum wall-clock delta to process per tick. Prevents runaway catch-up after long stalls
         // (e.g. GC pause, thread pool starvation). Caps at 4 sub-steps (200ms).
         private const float PHYSICS_MAX_DT = 0.200f;

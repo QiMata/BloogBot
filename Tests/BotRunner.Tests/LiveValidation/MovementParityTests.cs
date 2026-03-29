@@ -242,11 +242,10 @@ public class MovementParityTests
         _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({targetX},{targetY},{targetZ}) = {routeDist:F1}y\n");
 
         // --- TELEPORT ---
-        // Teleport slightly above ground to avoid VMaNGOS undermap detection.
-        // Z+1 keeps the bot within the idle GetGroundZ search range (STEP_DOWN_HEIGHT=4y)
-        // so the ground snap phase can find terrain during the settle. Z+3 was too high —
-        // the idle path's search range (Z+STEP_HEIGHT-STEP_DOWN_HEIGHT) didn't reach terrain.
-        float teleportZ = startZ + 1f;
+        // .go xyz with exact ground Z triggers undermap detection on VMaNGOS.
+        // Teleport Z+3 above nominal ground. The idle ground snap (GetGroundZ with 6y range)
+        // handles the 3y gap within the first physics frame after Reset().
+        float teleportZ = startZ + 3f;
         await Task.WhenAll(
             _bot.BotTeleportAsync(bgAccount!, MapId, startX, startY, teleportZ),
             _bot.BotTeleportAsync(fgAccount!, MapId, startX, startY, teleportZ));

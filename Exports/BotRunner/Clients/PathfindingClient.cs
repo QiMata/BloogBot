@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 namespace BotRunner.Clients
 {
-    public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
+    public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>, IPhysicsClient
     {
         internal const int DefaultPathRequestTimeoutMs = 30_000;
         internal const int DefaultQueryTimeoutMs = 10_000;
