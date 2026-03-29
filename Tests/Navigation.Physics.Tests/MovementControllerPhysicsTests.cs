@@ -1485,4 +1485,153 @@ public class MovementControllerPhysicsTests
         Assert.True(packetCount >= 8 && packetCount <= 12,
             $"Wrong heartbeat count: {packetCount} (expected ~10 at 500ms over 5s)");
     }
+
+    // ============================================================================
+    // Valley of Trials multi-level terrain oscillation tests
+    // These reproduce the exact coordinates from the live parity tests that were
+    // failing due to Z oscillation / FALLINGFAR flag toggling.
+    // ============================================================================
+
+    [Fact]
+    public void ValleyOfTrials_FlatPath_NoFallingOscillation()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Exact coordinates from Parity_ValleyOfTrials_FlatPath live test
+        const float startX = -260f, startY = -4350f, startZ = 57f;
+        const float targetX = -230f, targetY = -4310f;
+        float facing = MathF.Atan2(targetY - startY, targetX - startX);
+
+        var (controller, player, _) = CreateController(startX, startY, startZ, facing);
+        controller.SetPath([
+            new Position(startX, startY, startZ),
+            new Position(targetX, targetY, startZ)
+        ]);
+
+        var trace = RunFramesWithTrace(controller, player, frameCount: 120,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(ValleyOfTrials_FlatPath_NoFallingOscillation), trace);
+
+        int airborneFrames = trace.Count(f =>
+            (f.Flags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0);
+
+        float totalDisplacement = MathF.Sqrt(
+            MathF.Pow(player.Position.X - startX, 2) +
+            MathF.Pow(player.Position.Y - startY, 2));
+        float avgSpeed = totalDisplacement / (120 * 0.05f);
+
+        _output.WriteLine($"Airborne: {airborneFrames}/120, displacement: {totalDisplacement:F1}y, speed: {avgSpeed:F2} y/s");
+
+        Assert.True(airborneFrames <= 5,
+            $"FALLINGFAR oscillation on Valley of Trials flat path: {airborneFrames}/120 airborne frames");
+        Assert.True(avgSpeed >= 3.5f,
+            $"Speed too low on flat path: {avgSpeed:F2} y/s (expected >= 3.5)");
+    }
+
+    [Fact]
+    public void ValleyOfTrials_SteepDescent_NoFallingOscillation()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Steep descent path from live test
+        const float startX = -230f, startY = -4310f, startZ = 65f;
+        const float targetX = -260f, targetY = -4350f;
+        float facing = MathF.Atan2(targetY - startY, targetX - startX);
+
+        var (controller, player, _) = CreateController(startX, startY, startZ, facing);
+        controller.SetPath([
+            new Position(startX, startY, startZ),
+            new Position(targetX, targetY, startZ - 10f)
+        ]);
+
+        var trace = RunFramesWithTrace(controller, player, frameCount: 120,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(ValleyOfTrials_SteepDescent_NoFallingOscillation), trace);
+
+        int airborneFrames = trace.Count(f =>
+            (f.Flags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0);
+
+        float totalDisplacement = MathF.Sqrt(
+            MathF.Pow(player.Position.X - startX, 2) +
+            MathF.Pow(player.Position.Y - startY, 2));
+        float avgSpeed = totalDisplacement / (120 * 0.05f);
+
+        _output.WriteLine($"Airborne: {airborneFrames}/120, displacement: {totalDisplacement:F1}y, speed: {avgSpeed:F2} y/s");
+
+        Assert.True(airborneFrames <= 10,
+            $"FALLINGFAR oscillation on descent: {airborneFrames}/120 airborne frames");
+        Assert.True(avgSpeed >= 3.0f,
+            $"Speed too low on descent: {avgSpeed:F2} y/s (expected >= 3.0)");
+    }
+
+    [Fact]
+    public void ValleyOfTrials_ReverseHill_NoFallingOscillation()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Reverse hill path from live test
+        const float startX = -240f, startY = -4320f, startZ = 62f;
+        const float targetX = -270f, targetY = -4380f;
+        float facing = MathF.Atan2(targetY - startY, targetX - startX);
+
+        var (controller, player, _) = CreateController(startX, startY, startZ, facing);
+        controller.SetPath([
+            new Position(startX, startY, startZ),
+            new Position(targetX, targetY, startZ)
+        ]);
+
+        var trace = RunFramesWithTrace(controller, player, frameCount: 120,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(ValleyOfTrials_ReverseHill_NoFallingOscillation), trace);
+
+        int airborneFrames = trace.Count(f =>
+            (f.Flags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0);
+
+        float totalDisplacement = MathF.Sqrt(
+            MathF.Pow(player.Position.X - startX, 2) +
+            MathF.Pow(player.Position.Y - startY, 2));
+        float avgSpeed = totalDisplacement / (120 * 0.05f);
+
+        _output.WriteLine($"Airborne: {airborneFrames}/120, displacement: {totalDisplacement:F1}y, speed: {avgSpeed:F2} y/s");
+
+        Assert.True(airborneFrames <= 10,
+            $"FALLINGFAR oscillation on reverse hill: {airborneFrames}/120 airborne frames");
+        Assert.True(avgSpeed >= 3.0f,
+            $"Speed too low on reverse hill: {avgSpeed:F2} y/s (expected >= 3.0)");
+    }
+
+    [Fact]
+    public void Orgrimmar_BankArea_SplineElevNoZJump()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Orgrimmar bank area where the 1.31y SPLINE_ELEV drift was observed
+        // Frame 1975 from Dralrahgra_Orgrimmar_2026-02-08_11-01-15 recording
+        const float startX = 1680f, startY = -4375f, startZ = 26.5f;
+        float facing = MathF.PI; // heading west
+
+        var (controller, player, _) = CreateController(startX, startY, startZ, facing);
+        controller.SetPath([
+            new Position(startX, startY, startZ),
+            new Position(startX - 20f, startY, startZ)
+        ]);
+
+        var trace = RunFramesWithTrace(controller, player, frameCount: 60,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(Orgrimmar_BankArea_SplineElevNoZJump), trace);
+
+        float maxZJump = 0f;
+        for (int i = 1; i < trace.Count; i++)
+        {
+            float zDelta = MathF.Abs(trace[i].Z - trace[i - 1].Z);
+            if (zDelta > maxZJump) maxZJump = zDelta;
+        }
+
+        _output.WriteLine($"Max single-frame Z jump: {maxZJump:F3}y");
+
+        // Binary caps upward Z change to boundingRadius per frame.
+        // With radius ~0.6y and 50ms ticks, max Z change should be < 1.0y
+        Assert.True(maxZJump < 1.0f,
+            $"Z jumped {maxZJump:F3}y in a single frame — exceeds binary VerticalCap threshold");
+    }
 }
