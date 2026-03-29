@@ -316,6 +316,29 @@ public class MovementParityTests
             uint fgFlags = fgSnap?.Player?.Unit?.MovementFlags ?? 0;
             uint bgFlags = bgSnap?.Player?.Unit?.MovementFlags ?? 0;
 
+            // FG-observed BG position: what does the server tell the FG client about where BG is?
+            // If this Z oscillates while BG's own snapshot Z is stable, the BG bot's PACKETS
+            // are wrong — the server interprets them as oscillating even though our internal
+            // physics is correct. This is the key diagnostic for packet behavior parity.
+            float fgSeesBgZ = float.NaN;
+            uint fgSeesBgFlags = 0;
+            if (!float.IsNaN(bgX) && fgSnap?.NearbyUnits != null)
+            {
+                foreach (var unit in fgSnap.NearbyUnits)
+                {
+                    var unitPos = unit.GameObject?.Base?.Position;
+                    if (unitPos == null) continue;
+                    // Match by XY proximity (within 10y — same area)
+                    float dx = unitPos.X - bgX, dy = unitPos.Y - bgY;
+                    if (dx * dx + dy * dy < 100f) // 10y radius
+                    {
+                        fgSeesBgZ = unitPos.Z;
+                        fgSeesBgFlags = unit.MovementFlags;
+                        break;
+                    }
+                }
+            }
+
             // Per-frame speed calculation (frame-to-frame for display)
             float fgFrameSpeed = 0f, bgFrameSpeed = 0f;
             string note = "";
@@ -381,11 +404,13 @@ public class MovementParityTests
             // Print every 10th sample (~500ms) or anomalous frames
             if (i % 10 == 0 || note.Length > 0)
             {
+                string fgSeesBgStr = float.IsNaN(fgSeesBgZ) ? "---" : $"{fgSeesBgZ:F1}/0x{fgSeesBgFlags:X}";
                 _output.WriteLine(
                     $"{elapsed,7:F2}s | {fgX,8:F1} {fgY,8:F1} {fgZ,7:F2} {fgFlags,5:X} {fgFrameSpeed,5:F1} | " +
                     $"{bgX,8:F1} {bgY,8:F1} {bgZ,7:F2} {bgFlags,5:X} {bgFrameSpeed,5:F1} | " +
                     $"{(float.IsNaN(dXY) ? "  n/a" : $"{dXY,5:F1}")} " +
-                    $"{(float.IsNaN(dZ) ? "   n/a" : $"{dZ,6:F2}")} {note}");
+                    $"{(float.IsNaN(dZ) ? "   n/a" : $"{dZ,6:F2}")} " +
+                    $"FG→BG:{fgSeesBgStr} {note}");
             }
 
             if (!float.IsNaN(fgX) && Distance2D(fgX, fgY, targetX, targetY) < 5f) fgArrived = true;
