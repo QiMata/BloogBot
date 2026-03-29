@@ -46,14 +46,42 @@ public sealed class LocalPhysicsClient : IPhysicsClient, IDisposable
     {
         if (_initialized && _currentMapId == mapId) return;
 
-        // Set data directory from environment before first map load
+        // Set data directory before first map load.
+        // Auto-resolve from WWOW_DATA_DIR env var, or search common locations.
         if (!_initialized)
         {
             var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+            if (string.IsNullOrEmpty(dataDir))
+            {
+                // Auto-resolve: search relative to exe directory
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var candidates = new[]
+                {
+                    Path.Combine(baseDir, "Data"),
+                    Path.Combine(baseDir, "..", "Data"),
+                    Path.Combine(baseDir, "..", "..", "Data"),
+                    Path.Combine(baseDir, "..", "..", "..", "Data"),
+                };
+                foreach (var candidate in candidates)
+                {
+                    var resolved = Path.GetFullPath(candidate);
+                    if (Directory.Exists(resolved) &&
+                        (Directory.Exists(Path.Combine(resolved, "vmaps")) ||
+                         Directory.Exists(Path.Combine(resolved, "scenes"))))
+                    {
+                        dataDir = resolved;
+                        break;
+                    }
+                }
+            }
             if (!string.IsNullOrEmpty(dataDir))
             {
                 _logger.LogInformation("[LocalPhysics] Setting data directory: {DataDir}", dataDir);
                 NativePhysics.SetDataDirectory(dataDir);
+            }
+            else
+            {
+                _logger.LogWarning("[LocalPhysics] No data directory found. Set WWOW_DATA_DIR or ensure Data/ exists near the executable.");
             }
         }
 
