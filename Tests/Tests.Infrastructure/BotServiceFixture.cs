@@ -100,6 +100,12 @@ public class BotServiceFixture : IAsyncLifetime
     public bool PathfindingServiceReady { get; private set; }
 
     /// <summary>
+    /// Whether SceneDataService is listening on its configured port (default 5003).
+    /// Tests that require scene data should check this in addition to <see cref="ServicesReady"/>.
+    /// </summary>
+    public bool SceneDataServiceReady { get; private set; }
+
+    /// <summary>
     /// Reason for service unavailability, if any.
     /// </summary>
     public string? UnavailableReason { get; private set; }
@@ -248,6 +254,17 @@ public class BotServiceFixture : IAsyncLifetime
                 Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
             }
 
+            // Check if SceneDataService is also available (StateManager launches it as a child process).
+            // SceneDataService listens on port 5003 by default.
+            SceneDataServiceReady = await WaitForSceneDataServiceAsync();
+            Log($"  SceneDataService (5003): {SceneDataServiceReady}");
+            if (!SceneDataServiceReady)
+            {
+                Log("  [SceneDataService] WARNING: SceneDataService is not available on port 5003.");
+                Log("  [SceneDataService] Likely cause: WWOW_DATA_DIR is not set or SceneDataService.dll is not built.");
+                Log("  [SceneDataService] Tests requiring scene data will fall back to pre-loaded data from disk.");
+            }
+
             // Start background crash monitoring
             StartCrashMonitor();
         }
@@ -315,6 +332,14 @@ public class BotServiceFixture : IAsyncLifetime
                     {
                         PathfindingServiceReady = false;
                         var msg = $"PathfindingService (port 5001) stopped responding at {DateTime.Now:HH:mm:ss}";
+                        Log($"  [CrashMonitor] {msg}");
+                    }
+
+                    // Check SceneDataService (port 5003)
+                    if (SceneDataServiceReady && !IsPortInUse(5003))
+                    {
+                        SceneDataServiceReady = false;
+                        var msg = $"SceneDataService (port 5003) stopped responding at {DateTime.Now:HH:mm:ss}";
                         Log($"  [CrashMonitor] {msg}");
                     }
 
@@ -480,6 +505,7 @@ public class BotServiceFixture : IAsyncLifetime
         CrashMessage = null;
         UnavailableReason = null;
         PathfindingServiceReady = false;
+        SceneDataServiceReady = false;
 
         CustomSettingsPath = settingsPath;
         await InitializeAsync();
@@ -568,6 +594,33 @@ public class BotServiceFixture : IAsyncLifetime
 
         // 4. Kill orphaned PathfindingService
         pfKilled += await KillPathfindingServiceProcessesAsync("PF");
+
+        // 4b. Kill orphaned SceneDataService
+        foreach (var proc in Process.GetProcessesByName("SceneDataService"))
+        {
+            try
+            {
+                Log($"Cleanup: killing SceneDataService PID {proc.Id}");
+                if (await ForceKillProcessAsync(proc, "SDS"))
+                    pfKilled++;
+            }
+            finally { proc.Dispose(); }
+        }
+        foreach (var sdsPid in FindDotnetProcessesByDll("SceneDataService"))
+        {
+            try
+            {
+                var proc = Process.GetProcessById(sdsPid);
+                try
+                {
+                    Log($"Cleanup: killing SceneDataService (dotnet-hosted) PID {sdsPid}");
+                    if (await ForceKillProcessAsync(proc, "SDS"))
+                        pfKilled++;
+                }
+                finally { proc.Dispose(); }
+            }
+            catch (ArgumentException) { /* already dead */ }
+        }
 
         // 5. Kill orphaned BackgroundBotRunner processes
         int bgKilled = 0;
@@ -694,6 +747,33 @@ public class BotServiceFixture : IAsyncLifetime
         // 3. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
         pfKilled += await KillPathfindingServiceProcessesAsync("Cleanup-PF");
 
+        // 3b. Kill orphaned SceneDataService
+        foreach (var proc in Process.GetProcessesByName("SceneDataService"))
+        {
+            try
+            {
+                Log($"  [Cleanup] Killing orphaned SceneDataService PID {proc.Id}");
+                if (await ForceKillProcessAsync(proc, "Cleanup-SDS"))
+                    pfKilled++;
+            }
+            finally { proc.Dispose(); }
+        }
+        foreach (var sdsPid in FindDotnetProcessesByDll("SceneDataService"))
+        {
+            try
+            {
+                var proc = Process.GetProcessById(sdsPid);
+                try
+                {
+                    Log($"  [Cleanup] Killing orphaned SceneDataService (dotnet-hosted) PID {sdsPid}");
+                    if (await ForceKillProcessAsync(proc, "Cleanup-SDS"))
+                        pfKilled++;
+                }
+                finally { proc.Dispose(); }
+            }
+            catch (ArgumentException) { /* already dead */ }
+        }
+
         int totalKilled = smKilled + wowKilled + pfKilled;
         if (totalKilled > 0)
         {
@@ -746,6 +826,43 @@ public class BotServiceFixture : IAsyncLifetime
         }
 
         Log($"  [PathfindingService] Did not become ready within {maxWaitSeconds}s.");
+        return false;
+    }
+
+    /// <summary>
+    /// Waits for SceneDataService to become available on port 5003.
+    /// StateManager launches SceneDataService as a child process.
+    /// </summary>
+    private async Task<bool> WaitForSceneDataServiceAsync()
+    {
+        const int sceneDataPort = 5003;
+        const int maxWaitSeconds = 30;
+
+        // If port is already in use, it's ready
+        if (IsPortInUse(sceneDataPort))
+        {
+            Log($"  [SceneDataService] Already listening on port {sceneDataPort}.");
+            return true;
+        }
+
+        // Give StateManager time to launch SceneDataService
+        Log($"  [SceneDataService] Waiting up to {maxWaitSeconds}s for port {sceneDataPort}...");
+        for (int i = 0; i < maxWaitSeconds; i++)
+        {
+            var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", sceneDataPort, 1000);
+            if (ready)
+            {
+                Log($"  [SceneDataService] Ready on port {sceneDataPort} after {i + 1}s.");
+                return true;
+            }
+
+            if (i % 10 == 9)
+                Log($"  [SceneDataService] Still waiting... ({i + 1}s)");
+
+            await Task.Delay(1000);
+        }
+
+        Log($"  [SceneDataService] Did not become ready within {maxWaitSeconds}s.");
         return false;
     }
 

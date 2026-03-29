@@ -295,6 +295,48 @@ extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
     __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
+// Set the data directory for all subsystems (MapLoader, VMapManager, SceneQuery).
+// Must be called before PreloadMap. Used by SceneDataService and LocalPhysicsClient
+// to configure the data root when WWOW_DATA_DIR may not be set in the environment.
+extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
+{
+    __try
+    {
+        if (!dataDir)
+            return;
+
+        std::string root(dataDir);
+        if (!root.empty() && root.back() != '/' && root.back() != '\\')
+            root += '/';
+
+        // Set the native environment variable so InitializeAllSystems picks it up
+        SetEnvironmentVariableA("WWOW_DATA_DIR", root.c_str());
+
+        // If already initialized, update SceneQuery scenes dir directly
+        SceneQuery::SetScenesDir(root + "scenes/");
+
+        // Update VMapManager base path if already created
+        if (g_vmapManager)
+        {
+            std::string vmapPath = root + "vmaps/";
+            if (std::filesystem::exists(vmapPath))
+                g_vmapManager->setBasePath(vmapPath);
+        }
+
+        // Update MapLoader if already created
+        if (g_mapLoader)
+        {
+            std::string mapPath = root + "maps/";
+            if (std::filesystem::exists(mapPath))
+                g_mapLoader->Initialize(mapPath);
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        OutputDebugStringA("[Navigation.dll] SEH exception in SetDataDirectory\n");
+    }
+}
+
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
     __try

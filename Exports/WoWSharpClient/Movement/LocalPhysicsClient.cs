@@ -46,6 +46,17 @@ public sealed class LocalPhysicsClient : IPhysicsClient, IDisposable
     {
         if (_initialized && _currentMapId == mapId) return;
 
+        // Set data directory from environment before first map load
+        if (!_initialized)
+        {
+            var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                _logger.LogInformation("[LocalPhysics] Setting data directory: {DataDir}", dataDir);
+                NativePhysics.SetDataDirectory(dataDir);
+            }
+        }
+
         _logger.LogInformation("[LocalPhysics] Loading map {MapId} collision data...", mapId);
         NativePhysics.PreloadMap(mapId);
         _currentMapId = mapId;
@@ -191,6 +202,9 @@ public sealed class LocalPhysicsClient : IPhysicsClient, IDisposable
 internal static class NativePhysics
 {
     private const string DllName = "Navigation";
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern void SetDataDirectory(string dataDir);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void PreloadMap(uint mapId);

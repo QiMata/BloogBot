@@ -24,6 +24,15 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
     public void InitializeNavigation()
     {
         if (_initialized) return;
+
+        // Set data directory from environment before loading maps
+        var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+        if (!string.IsNullOrEmpty(dataDir))
+        {
+            _logger.LogInformation("[SceneDataService] Setting data directory: {DataDir}", dataDir);
+            NativeScene.SetDataDirectory(dataDir);
+        }
+
         NativeScene.PreloadMap(0); // Eastern Kingdoms
         NativeScene.PreloadMap(1); // Kalimdor
         _initialized = true;
@@ -118,6 +127,9 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
 internal static class NativeScene
 {
     private const string DllName = "Navigation";
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern void SetDataDirectory(string dataDir);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void PreloadMap(uint mapId);

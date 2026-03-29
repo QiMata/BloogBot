@@ -198,6 +198,16 @@ namespace WoWStateManager
                 if (isReady)
                 {
                     _logger.LogInformation($"PathfindingService is READY at {pathfindingIp}:{pathfindingPort} (checked in {sw.Elapsed.TotalSeconds:F1}s)");
+
+                    // Also check SceneDataService availability (non-blocking — it's optional)
+                    var sceneDataIp = _configuration["SceneDataService:IpAddress"] ?? "127.0.0.1";
+                    var sceneDataPortStr = _configuration["SceneDataService:Port"] ?? "5003";
+                    if (int.TryParse(sceneDataPortStr, out var sceneDataPort))
+                    {
+                        var sceneReady = await IsServiceReadyAsync(sceneDataIp, sceneDataPort, TimeSpan.FromSeconds(2));
+                        _logger.LogInformation($"SceneDataService at {sceneDataIp}:{sceneDataPort}: {(sceneReady ? "READY" : "not available (optional)")}");
+                    }
+
                     return true;
                 }
 
