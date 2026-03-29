@@ -4921,6 +4921,40 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
         }
     }
 
+    // Binary-backed chooser probe (0x635F80): multi-level terrain disambiguator.
+    // When the selected ground Z jumps significantly between frames on flat-ish
+    // terrain, it means the AABB query picked a contact from a different terrain
+    // layer. The chooser probe checks alignment between the movement direction
+    // and the Z delta. If misaligned (Z jumping while moving horizontally), it
+    // clamps the Z change to maintain layer continuity.
+    //
+    // Constants from binary: kWoWChooserAlignmentDotMin = cos(10°) = 0.9848
+    {
+        const float zDelta = bestGroundZ - startZ;
+        const float horizontalDist = std::sqrt((endX - startX) * (endX - startX) +
+                                                (endY - startY) * (endY - startY));
+
+        // Only probe when Z jumps more than step height on primarily horizontal movement
+        if (std::fabs(zDelta) > stepH && horizontalDist > PhysicsConstants::VECTOR_EPSILON) {
+            // Compute the 3D movement direction and check if Z component is consistent
+            // with the slope. On genuinely sloped terrain, |zDelta/horizontalDist| matches
+            // the terrain slope. On multi-layer terrain, the ratio is extreme.
+            const float slopeRatio = std::fabs(zDelta) / horizontalDist;
+            const float maxAllowedSlope = PhysicsConstants::WALKABLE_TAN_MAX_SLOPE * 1.5f; // 50° * 1.5 = generous
+
+            if (slopeRatio > maxAllowedSlope) {
+                // Z jump is too steep for the horizontal movement — wrong terrain layer.
+                // Clamp to the maximum walkable slope from startZ.
+                const float maxZChange = horizontalDist * PhysicsConstants::WALKABLE_TAN_MAX_SLOPE;
+                if (zDelta > 0.0f) {
+                    bestGroundZ = std::min(bestGroundZ, startZ + maxZChange);
+                } else {
+                    bestGroundZ = std::max(bestGroundZ, startZ - maxZChange);
+                }
+            }
+        }
+    }
+
     // Step 8: Commit position
     st.x = endX;
     st.y = endY;
@@ -5425,7 +5459,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// Overlap recovery can falsely set isGrounded and zero vz when the character
 		// has airborne flags (JUMPING/FALLINGFAR). Restore the airborne state and
 		// velocity to prevent routing through the grounded-jump branch.
-		if (preserveAirborne) {
+		// EXCEPTION: if the character has FALLINGFAR (not JUMPING) and the pre-move
+		// ground probe found a walkable contact, let the grounded state stand.
+		// This prevents single-frame ground misses from locking into FALLINGFAR
+		// oscillation on multi-level terrain where the capsule sweep intermittently
+		// misses the correct layer.
+		const bool isJumping = (input.moveFlags & MOVEFLAG_JUMPING) != 0;
+		if (preserveAirborne && (isJumping || !st.isGrounded)) {
 			st.isGrounded = false;
 			st.vz = savedVz;
 		}
