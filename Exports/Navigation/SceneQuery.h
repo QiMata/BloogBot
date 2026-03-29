@@ -300,6 +300,7 @@ class SceneQuery
         static void SetSceneCache(uint32_t mapId, SceneCache* cache);
         static SceneCache* GetSceneCache(uint32_t mapId);
         static void ClearSceneCaches();
+        static void ClearSceneCache(uint32_t mapId);
         static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
         static const std::string& GetScenesDir() { return m_scenesDir; }
 

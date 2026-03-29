@@ -99,6 +99,18 @@ public:
     LiquidCell GetLiquidAt(float x, float y) const;
     bool HasLiquidData() const { return !m_liquidGrid.empty(); }
 
+    // Inject triangles from an external source (SceneDataService).
+    // Builds the spatial grid from the injected triangle data.
+    struct InjectedTriangle
+    {
+        float v0x, v0y, v0z;
+        float v1x, v1y, v1z;
+        float v2x, v2y, v2z;
+        float nx, ny, nz;
+    };
+    void InjectTriangles(float minX, float minY, float maxX, float maxY,
+                         const InjectedTriangle* triangles, int count);
+
     // Diagnostics
     size_t GetTriangleCount() const { return m_triangles.size(); }
     size_t GetCellCount() const { return m_cellsX * m_cellsY; }

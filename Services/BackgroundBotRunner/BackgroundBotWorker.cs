@@ -160,8 +160,16 @@ namespace BackgroundBotRunner
 
             // Create local physics client — direct P/Invoke to Navigation.dll,
             // zero IPC latency, matching WoW.exe's synchronous CMovement::Update.
+            WoWSharpClient.Movement.SceneDataClient? sceneDataClient = null;
+            var sceneDataIp = configuration["SceneDataService:IpAddress"];
+            var sceneDataPortStr = configuration["SceneDataService:Port"];
+            if (!string.IsNullOrWhiteSpace(sceneDataIp) && int.TryParse(sceneDataPortStr, out var sceneDataPort))
+            {
+                sceneDataClient = new WoWSharpClient.Movement.SceneDataClient(
+                    sceneDataIp, sceneDataPort, _loggerFactory.CreateLogger("SceneDataClient"));
+            }
             var localPhysics = new WoWSharpClient.Movement.LocalPhysicsClient(
-                _loggerFactory.CreateLogger("LocalPhysicsClient"));
+                _loggerFactory.CreateLogger("LocalPhysicsClient"), sceneDataClient);
 
             var objectManager = WoWSharpObjectManager.Instance;
             objectManager.Initialize(wowClient, pathfindingClient,

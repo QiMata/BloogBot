@@ -20,14 +20,23 @@ namespace WoWSharpClient.Movement;
 public sealed class LocalPhysicsClient : IPhysicsClient, IDisposable
 {
     private readonly ILogger _logger;
+    private SceneDataClient? _sceneDataClient;
     private bool _initialized;
     private uint _currentMapId;
+    private float _lastSceneX, _lastSceneY;
     private bool _disposed;
 
-    public LocalPhysicsClient(ILogger logger)
+    public LocalPhysicsClient(ILogger logger, SceneDataClient? sceneDataClient = null)
     {
         _logger = logger;
+        _sceneDataClient = sceneDataClient;
     }
+
+    /// <summary>
+    /// Set the SceneDataClient for on-demand terrain loading.
+    /// If not set, the client relies on pre-loaded scene data from disk.
+    /// </summary>
+    public void SetSceneDataClient(SceneDataClient client) => _sceneDataClient = client;
 
     /// <summary>
     /// Ensure Navigation.dll has loaded the specified map's collision data.
@@ -48,6 +57,20 @@ public sealed class LocalPhysicsClient : IPhysicsClient, IDisposable
     {
         if (!_initialized || proto.MapId != _currentMapId)
             EnsureMapLoaded(proto.MapId);
+
+        // Request scene data around current position if SceneDataClient is available.
+        // Only re-request when position moves >100y from last request.
+        if (_sceneDataClient != null)
+        {
+            float dx = proto.PosX - _lastSceneX;
+            float dy = proto.PosY - _lastSceneY;
+            if (dx * dx + dy * dy > 100f * 100f || (_lastSceneX == 0 && _lastSceneY == 0))
+            {
+                _sceneDataClient.EnsureSceneDataAround(proto.MapId, proto.PosX, proto.PosY);
+                _lastSceneX = proto.PosX;
+                _lastSceneY = proto.PosY;
+            }
+        }
 
         var (radius, height) = RaceDimensions.GetCapsuleForRace(
             (Race)proto.Race, (Gender)proto.Gender);
@@ -177,6 +200,22 @@ internal static class NativePhysics
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float queryZ, float maxSearchDist);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern bool InjectSceneTriangles(uint mapId, float minX, float minY, float maxX, float maxY,
+        IntPtr triangles, int triangleCount);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void ClearSceneCache(uint mapId);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct InjectedTriangle
+    {
+        public float V0X, V0Y, V0Z;
+        public float V1X, V1Y, V1Z;
+        public float V2X, V2Y, V2Z;
+        public float NX, NY, NZ;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct PhysicsInput

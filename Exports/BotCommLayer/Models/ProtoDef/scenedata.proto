@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package scenedata;
+option csharp_namespace = "SceneData";
+
+// Request scene collision data for a bounded region of a map.
+// The service extracts triangles from VMAP + ADT within the specified bounds.
+message SceneGridRequest {
+    uint32 map_id = 1;
+    float min_x = 2;
+    float min_y = 3;
+    float max_x = 4;
+    float max_y = 5;
+}
+
+// Response containing collision triangles for the requested region.
+message SceneGridResponse {
+    uint32 map_id = 1;
+    float min_x = 2;
+    float min_y = 3;
+    float max_x = 4;
+    float max_y = 5;
+
+    // Packed triangle data: 9 floats per triangle (3 vertices × 3 components)
+    repeated float triangle_data = 6;
+
+    // Per-triangle walkability flags (1 = walkable, 0 = wall/obstacle)
+    repeated bool walkable = 7;
+
+    // Per-triangle normal (3 floats per triangle: nx, ny, nz)
+    repeated float normal_data = 8;
+
+    uint32 triangle_count = 9;
+
+    // Status
+    bool success = 10;
+    string error_message = 11;
+}
+
+// Liquid data for a region
+message LiquidGridRequest {
+    uint32 map_id = 1;
+    float min_x = 2;
+    float min_y = 3;
+    float max_x = 4;
+    float max_y = 5;
+}
+
+message LiquidGridResponse {
+    uint32 map_id = 1;
+    // Packed liquid cell data
+    repeated float liquid_levels = 2;  // Z level per cell
+    repeated uint32 liquid_types = 3;  // type per cell
+    float cell_size = 4;
+    uint32 cells_x = 5;
+    uint32 cells_y = 6;
+    bool success = 7;
+}

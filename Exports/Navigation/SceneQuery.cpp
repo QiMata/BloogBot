@@ -539,6 +539,17 @@ void SceneQuery::ClearSceneCaches()
     m_sceneCaches.clear();
 }
 
+void SceneQuery::ClearSceneCache(uint32_t mapId)
+{
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
+    auto it = m_sceneCaches.find(mapId);
+    if (it != m_sceneCaches.end())
+    {
+        delete it->second;
+        m_sceneCaches.erase(it);
+    }
+}
+
 float SceneQuery::GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType)
 {
     // Prefer ADT (MapLoader) if available

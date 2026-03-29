@@ -8,6 +8,7 @@
 #include "PhysicsShapeHelpers.h"
 #include "MapLoader.h"
 #include "SceneQuery.h"
+#include "SceneCache.h"
 #include "DynamicObjectRegistry.h"
 #include "DetourPathCorridor.h"
 #include "VMapLog.h"
@@ -192,6 +193,106 @@ extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
         fprintf(stderr, "[Navigation.dll] SEH exception in PreloadMap (code=0x%08lx)\n",
                 GetExceptionCode());
     }
+}
+
+// Inject scene triangles into the SceneCache for a map.
+// Called by the bot client after receiving scene data from SceneDataService.
+// The triangles are added to (or replace) the existing SceneCache for this map.
+extern "C" __declspec(dllexport) bool InjectSceneTriangles(
+    uint32_t mapId,
+    float minX, float minY, float maxX, float maxY,
+    const SceneCache::InjectedTriangle* triangles,
+    int triangleCount)
+{
+    __try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        if (!triangles || triangleCount <= 0)
+            return false;
+
+        // Build a SceneCache from the injected triangles
+        auto* cache = new SceneCache();
+        cache->mapId = mapId;
+        cache->InjectTriangles(minX, minY, maxX, maxY, triangles, triangleCount);
+
+        // Replace or merge into the existing scene cache
+        SceneQuery::SetSceneCache(mapId, cache);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// Query AABB terrain contacts for a region — used by SceneDataService.
+struct ExportedAABBContact
+{
+    float pointX, pointY, pointZ;
+    float normalX, normalY, normalZ;
+    float v1X, v1Y, v1Z;
+    float v2X, v2Y, v2Z;
+    int walkable;
+    uint32_t instanceId;
+};
+
+extern "C" __declspec(dllexport) int QueryTerrainAABBTriangles(
+    uint32_t mapId,
+    float minX, float minY, float minZ,
+    float maxX, float maxY, float maxZ,
+    ExportedAABBContact* outContacts,
+    int maxContacts)
+{
+    __try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        SceneQuery::EnsureMapLoaded(mapId);
+
+        G3D::Vector3 boxMin(minX, minY, minZ);
+        G3D::Vector3 boxMax(maxX, maxY, maxZ);
+        std::vector<SceneQuery::AABBContact> contacts;
+        SceneQuery::TestTerrainAABB(mapId, boxMin, boxMax, contacts);
+
+        int count = std::min(static_cast<int>(contacts.size()), maxContacts);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& c = contacts[i];
+            outContacts[i].pointX = c.point.x;
+            outContacts[i].pointY = c.point.y;
+            outContacts[i].pointZ = c.point.z;
+            outContacts[i].normalX = c.normal.x;
+            outContacts[i].normalY = c.normal.y;
+            outContacts[i].normalZ = c.normal.z;
+            // Store full triangle vertices
+            outContacts[i].v1X = c.triangleB.x;
+            outContacts[i].v1Y = c.triangleB.y;
+            outContacts[i].v1Z = c.triangleB.z;
+            outContacts[i].v2X = c.triangleC.x;
+            outContacts[i].v2Y = c.triangleC.y;
+            outContacts[i].v2Z = c.triangleC.z;
+            outContacts[i].walkable = c.walkable ? 1 : 0;
+            outContacts[i].instanceId = c.instanceId;
+        }
+
+        return count;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return 0;
+    }
+}
+
+extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
+{
+    __try
+    {
+        SceneQuery::ClearSceneCache(mapId);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)

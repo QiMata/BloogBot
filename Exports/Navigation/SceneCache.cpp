@@ -787,6 +787,39 @@ void SceneCache::BuildSpatialIndex()
     }
 }
 
+void SceneCache::InjectTriangles(float minX, float minY, float maxX, float maxY,
+                                  const InjectedTriangle* triangles, int count)
+{
+    m_minX = minX;
+    m_minY = minY;
+    m_maxX = maxX;
+    m_maxY = maxY;
+    m_cellSize = 4.0f;
+
+    m_triangles.clear();
+    m_triangles.reserve(count);
+    m_triangleMetadata.clear();
+    m_triangleMetadata.reserve(count);
+
+    for (int i = 0; i < count; ++i)
+    {
+        const auto& t = triangles[i];
+        SceneTri tri{};
+        tri.ax = t.v0x; tri.ay = t.v0y; tri.az = t.v0z;
+        tri.bx = t.v1x; tri.by = t.v1y; tri.bz = t.v1z;
+        tri.cx = t.v2x; tri.cy = t.v2y; tri.cz = t.v2z;
+        tri.sourceType = 1; // ADT terrain (default)
+        tri.instanceId = 0;
+        m_triangles.push_back(tri);
+
+        SceneTriMetadata meta{};
+        meta.sourceType = 1;
+        m_triangleMetadata.push_back(meta);
+    }
+
+    BuildSpatialIndex();
+}
+
 // ============================================================================
 // QUERY METHODS
 // ============================================================================
