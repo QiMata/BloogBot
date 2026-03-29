@@ -252,13 +252,19 @@ public class MovementParityTests
         var bgSettled = await _bot.WaitForTeleportSettledAsync(bgAccount!, startX, startY, timeoutMs: 8000);
         var fgSettled = await _bot.WaitForTeleportSettledAsync(fgAccount!, startX, startY, timeoutMs: 8000);
 
+        // Post-settle stabilization: wait 1s for the bot to clear any residual
+        // FALLINGFAR flag from the gravity drop. Without this, the first walking
+        // frame has FALLINGFAR in the input, routing to the airborne path.
+        await Task.Delay(1000);
+
         await _bot.RefreshSnapshotsAsync();
         var fgStart = await _bot.GetSnapshotAsync(fgAccount!);
         var bgStart = await _bot.GetSnapshotAsync(bgAccount!);
         var fgStartPos = fgStart?.Player?.Unit?.GameObject?.Base?.Position;
         var bgStartPos = bgStart?.Player?.Unit?.GameObject?.Base?.Position;
+        var bgStartFlags = bgStart?.Player?.Unit?.MovementFlags ?? 0;
 
-        _output.WriteLine($"[SETUP] BG settled={bgSettled} pos=({bgStartPos?.X:F1},{bgStartPos?.Y:F1},{bgStartPos?.Z:F2})");
+        _output.WriteLine($"[SETUP] BG settled={bgSettled} pos=({bgStartPos?.X:F1},{bgStartPos?.Y:F1},{bgStartPos?.Z:F2}) flags=0x{bgStartFlags:X}");
         _output.WriteLine($"[SETUP] FG settled={fgSettled} pos=({fgStartPos?.X:F1},{fgStartPos?.Y:F1},{fgStartPos?.Z:F2})");
         Assert.NotNull(fgStartPos);
 
