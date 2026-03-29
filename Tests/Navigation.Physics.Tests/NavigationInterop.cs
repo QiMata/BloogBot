@@ -640,6 +640,7 @@ public static partial class NavigationInterop
         public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint StepUpAge;          // frames since step-up detected
         public uint GroundedWallState;  // internal selected-contact walkability state
+        public uint WasGrounded;        // CMovement grounded state persistence (1=grounded, 0=airborne)
     }
 
     public const uint PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
