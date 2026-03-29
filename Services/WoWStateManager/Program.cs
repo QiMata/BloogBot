@@ -90,7 +90,6 @@ namespace WoWStateManager
     {
         private static IConfiguration _configuration;
         private static Process _pathfindingProcess;
-        private static Process _sceneDataProcess;
         private static PathfindingServiceState _serviceState = PathfindingServiceState.AlreadyRunning;
 
         private const int MaxRetries = 120; // 2 minutes max wait for nav/physics to load
@@ -141,29 +140,8 @@ namespace WoWStateManager
                 }
             }
 
-            // Launch SceneDataService if not already running
-            if (!IsSceneDataServiceRunning())
-            {
-                _sceneDataProcess = LaunchSceneDataService();
-                if (_sceneDataProcess != null)
-                {
-                    _sceneDataProcess.EnableRaisingEvents = true;
-                    _sceneDataProcess.Exited += (s, e) =>
-                    {
-                        Console.WriteLine($"SceneDataService process exited with code {_sceneDataProcess?.ExitCode}.");
-                    };
-                }
-            }
-            else
-            {
-                Console.WriteLine("SceneDataService is already running.");
-            }
-
             // Wait for PathfindingService to become available before starting bot profiles
             WaitForPathfindingService();
-
-            // Wait for SceneDataService to become available
-            WaitForSceneDataService();
 
             try
             {
@@ -194,30 +172,6 @@ namespace WoWStateManager
                     {
                         _pathfindingProcess.Dispose();
                         _pathfindingProcess = null;
-                    }
-                }
-
-                // Kill SceneDataService if WE launched it
-                if (_sceneDataProcess != null)
-                {
-                    try
-                    {
-                        if (!_sceneDataProcess.HasExited)
-                        {
-                            Console.WriteLine($"Stopping SceneDataService (PID: {_sceneDataProcess.Id})...");
-                            _sceneDataProcess.Kill();
-                            _sceneDataProcess.WaitForExit(5000);
-                            Console.WriteLine("SceneDataService stopped.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Warning: Could not stop SceneDataService: {ex.Message}");
-                    }
-                    finally
-                    {
-                        _sceneDataProcess.Dispose();
-                        _sceneDataProcess = null;
                     }
                 }
             }
@@ -468,137 +422,6 @@ namespace WoWStateManager
             }
 
             return isRunning;
-        }
-
-        private static Process LaunchSceneDataService()
-        {
-            try
-            {
-                // Try same directory first (unified net8.0 output), fall back to ../x64/
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
-                var dllPath = Path.Combine(baseDir, "SceneDataService.dll");
-                var serviceDir = baseDir;
-
-                if (!File.Exists(dllPath))
-                {
-                    dllPath = Path.Combine(x64Dir, "SceneDataService.dll");
-                    serviceDir = x64Dir;
-                }
-
-                if (!File.Exists(dllPath))
-                {
-                    Console.WriteLine($"SceneDataService.dll not found at: {Path.Combine(baseDir, "SceneDataService.dll")} or {Path.Combine(x64Dir, "SceneDataService.dll")}");
-                    Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
-                    return null;
-                }
-
-                var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = $"\"{dllPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = !showWindows,
-                    RedirectStandardOutput = !showWindows,
-                    RedirectStandardError = !showWindows,
-                    WorkingDirectory = serviceDir
-                };
-
-                var process = Process.Start(processInfo);
-                Console.WriteLine($"SceneDataService launched from {serviceDir} (PID: {process?.Id}).");
-
-                if (!showWindows && process != null)
-                {
-                    process.OutputDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                            Console.WriteLine($"[SceneDataService-OUT] {e.Data}");
-                    };
-                    process.ErrorDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                            Console.WriteLine($"[SceneDataService-ERR] {e.Data}");
-                    };
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
-                }
-                return process;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to launch SceneDataService: {ex.Message}");
-                return null;
-            }
-        }
-
-        private static bool IsSceneDataServiceRunning()
-        {
-            try
-            {
-                var ipAddress = _configuration["SceneDataService:IpAddress"] ?? "127.0.0.1";
-                var portValue = _configuration["SceneDataService:Port"] ?? "5003";
-                var port = int.Parse(portValue);
-
-                using var client = new System.Net.Sockets.TcpClient();
-                var result = client.BeginConnect(ipAddress, port, null, null);
-                var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(500));
-                if (success)
-                {
-                    client.EndConnect(result);
-                    return true;
-                }
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void WaitForSceneDataService()
-        {
-            var ipAddress = _configuration["SceneDataService:IpAddress"] ?? "127.0.0.1";
-            var portStr = _configuration["SceneDataService:Port"] ?? "5003";
-            var port = int.Parse(portStr);
-
-            bool weStartedProcess = _sceneDataProcess != null;
-            if (weStartedProcess)
-            {
-                Console.WriteLine($"Waiting for SceneDataService at {ipAddress}:{port}...");
-            }
-
-            int delayMs = weStartedProcess ? QuickCheckDelayMs : RetryDelayMs;
-            int maxAttempts = weStartedProcess ? MaxRetries * (RetryDelayMs / QuickCheckDelayMs) : MaxRetries;
-
-            for (int attempt = 1; attempt <= maxAttempts; attempt++)
-            {
-                // Check if process died while we're waiting
-                if (weStartedProcess && _sceneDataProcess.HasExited)
-                {
-                    Console.WriteLine(
-                        $"WARNING: SceneDataService process exited with code {_sceneDataProcess.ExitCode} before becoming available. " +
-                        "Proceeding without scene data. Bots will use pre-loaded scene data from disk.");
-                    return;
-                }
-
-                if (IsSceneDataServiceRunning())
-                {
-                    Console.WriteLine($"SceneDataService is READY at {ipAddress}:{port}.");
-                    return;
-                }
-
-                if (weStartedProcess && attempt % (10000 / delayMs) == 0)
-                {
-                    Console.WriteLine($"Still waiting for SceneDataService... ({attempt * delayMs / 1000}s elapsed)");
-                }
-
-                Thread.Sleep(delayMs);
-            }
-
-            Console.WriteLine(
-                $"WARNING: SceneDataService did not become available at {ipAddress}:{port} after {maxAttempts * delayMs / 1000} seconds. " +
-                "Proceeding without scene data. Bots will use pre-loaded scene data from disk.");
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
