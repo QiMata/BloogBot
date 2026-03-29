@@ -330,3 +330,12 @@ TestResults/
 
 # Centralized navmesh/vmap/map data directory (large binary files)
 Data/
+
+# Temp debug artifacts
+__tmp_trace*
+
+# MaNGOS honor calculation outputs
+docker/linux/vmangos/storage/mangosd/honor/
+
+# Bot runtime logs (build output, not source)
+Bot/Release/net8.0/WWoWLogs/
