@@ -76,6 +76,49 @@ public sealed class MovementControllerIpcParityTests : IDisposable
     }
 
     [Fact]
+    public void TeleportAboveGround_IdleSnapsToTerrain()
+    {
+        // Simulate teleport Z+3 above terrain — the idle physics frame should snap down
+        float terrainZ = NavigationInterop.GetGroundZ(1, -224, -4310, 100, 50);
+        Assert.True(terrainZ > -50000, "Terrain not found at SteepDescent start");
+        float teleportZ = terrainZ + 3f;  // Z+3 above terrain, same as live test
+        _output.WriteLine($"Terrain Z={terrainZ:F2}, Teleport Z={teleportZ:F2}");
+
+        // Run through IPC with movement disabled — just idle physics
+        var mockClient = new Mock<WoWClient>();
+        mockClient.Setup(c => c.SendMovementOpcodeAsync(
+            It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var player = new WoWLocalPlayer(new HighGuid(42))
+        {
+            Position = new Position(-224, -4310, teleportZ),  // 3y above terrain
+            MapId = 1, Race = Race.Orc, Gender = Gender.Male,
+            WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
+        };
+
+        var controller = new MovementController(mockClient.Object, _client, player);
+        // Simulate teleport: Reset() sets _needsGroundSnap=true so physics runs even when idle
+        controller.Reset(teleportZ);
+
+        // Run 10 idle frames (no movement flags) — ground snap should bring Z down
+        for (int i = 0; i < 10; i++)
+        {
+            controller.Update(0.05f, (uint)(1000 + i * 50));
+            bool air = (player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+            _output.WriteLine($"  idle f={i} Z={player.Position.Z:F2} flags=0x{(uint)player.MovementFlags:X} {(air ? "AIRBORNE" : "grounded")}");
+        }
+
+        float finalZ = player.Position.Z;
+        float gapToTerrain = MathF.Abs(finalZ - terrainZ);
+        _output.WriteLine($"Final Z={finalZ:F2}, terrain Z={terrainZ:F2}, gap={gapToTerrain:F2}");
+
+        Assert.True(gapToTerrain < 1.0f,
+            $"After 10 idle frames, Z={finalZ:F2} should be within 1y of terrain Z={terrainZ:F2} (gap={gapToTerrain:F2})");
+    }
+
+    [Fact]
     public void DiagnosticProbe_AllRouteGroundZ()
     {
         const int mapId = 1; // Kalimdor
