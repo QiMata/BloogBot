@@ -242,9 +242,11 @@ public class MovementParityTests
         _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({targetX},{targetY},{targetZ}) = {routeDist:F1}y\n");
 
         // --- TELEPORT ---
-        // .go xyz with exact ground Z triggers undermap detection on VMaNGOS.
-        // Always teleport Z+3 above nominal ground — physics/gravity will settle the bot down.
-        float teleportZ = startZ + 3f;
+        // Teleport slightly above ground to avoid VMaNGOS undermap detection.
+        // Z+1 keeps the bot within the idle GetGroundZ search range (STEP_DOWN_HEIGHT=4y)
+        // so the ground snap phase can find terrain during the settle. Z+3 was too high —
+        // the idle path's search range (Z+STEP_HEIGHT-STEP_DOWN_HEIGHT) didn't reach terrain.
+        float teleportZ = startZ + 1f;
         await Task.WhenAll(
             _bot.BotTeleportAsync(bgAccount!, MapId, startX, startY, teleportZ),
             _bot.BotTeleportAsync(fgAccount!, MapId, startX, startY, teleportZ));
@@ -252,10 +254,27 @@ public class MovementParityTests
         var bgSettled = await _bot.WaitForTeleportSettledAsync(bgAccount!, startX, startY, timeoutMs: 8000);
         var fgSettled = await _bot.WaitForTeleportSettledAsync(fgAccount!, startX, startY, timeoutMs: 8000);
 
-        // Post-settle stabilization: wait 1s for the bot to clear any residual
-        // FALLINGFAR flag from the gravity drop. Without this, the first walking
-        // frame has FALLINGFAR in the input, routing to the airborne path.
-        await Task.Delay(1000);
+        // Post-settle stabilization: wait for the BG bot's Z to converge toward
+        // the FG bot's Z. The BG bot may still be at teleport Z if its ground snap
+        // hasn't propagated to the snapshot yet. Poll until BG Z is within 2y of
+        // FG Z, or timeout after 5s.
+        for (int settle = 0; settle < 10; settle++)
+        {
+            await Task.Delay(500);
+            await _bot.RefreshSnapshotsAsync();
+            var fgCheck = await _bot.GetSnapshotAsync(fgAccount!);
+            var bgCheck = await _bot.GetSnapshotAsync(bgAccount!);
+            var fgCheckZ = fgCheck?.Player?.Unit?.GameObject?.Base?.Position?.Z ?? float.NaN;
+            var bgCheckZ = bgCheck?.Player?.Unit?.GameObject?.Base?.Position?.Z ?? float.NaN;
+            if (!float.IsNaN(fgCheckZ) && !float.IsNaN(bgCheckZ) &&
+                MathF.Abs(fgCheckZ - bgCheckZ) < 2.0f)
+            {
+                _output.WriteLine($"[SETTLE] BG Z converged to FG Z after {(settle + 1) * 500}ms: FG={fgCheckZ:F2} BG={bgCheckZ:F2}");
+                break;
+            }
+            if (settle == 9)
+                _output.WriteLine($"[SETTLE] WARNING: BG Z did not converge after 5s: FG={fgCheckZ:F2} BG={bgCheckZ:F2} delta={MathF.Abs(fgCheckZ - bgCheckZ):F2}");
+        }
 
         await _bot.RefreshSnapshotsAsync();
         var fgStart = await _bot.GetSnapshotAsync(fgAccount!);
