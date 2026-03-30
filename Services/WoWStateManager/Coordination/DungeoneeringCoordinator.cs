@@ -395,6 +395,7 @@ public class DungeoneeringCoordinator
             (2388,  "Tarnished Chain Boots"),       // Mail feet
             (25,    "Worn Shortsword"),             // 1H Sword (main hand)
             (2129,  "Large Round Shield"),          // Shield (off-hand)
+            (3111,  "Crude Throwing Axe"),          // Ranged (thrown) — for pulling
         ],
         ["Shaman"] = [
             (2385,  "Tarnished Chain Vest"),        // Mail chest
@@ -536,7 +537,7 @@ public class DungeoneeringCoordinator
     /// <summary>Weapon skill IDs per class based on their equipped weapons.</summary>
     private static readonly Dictionary<string, int[]> Level8WeaponSkills = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Warrior"] = [43, 433],   // 1H Swords, Shield
+        ["Warrior"] = [43, 433, 176],   // 1H Swords, Shield, Thrown
         ["Shaman"] = [54, 433],    // 1H Maces, Shield
         ["Druid"] = [160],         // 2H Maces
         ["Priest"] = [136],        // Staves
