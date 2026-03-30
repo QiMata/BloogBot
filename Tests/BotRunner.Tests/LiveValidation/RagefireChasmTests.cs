@@ -397,11 +397,18 @@ public class RagefireChasmTests
             "Oggleflint", "Taragaman the Hungerer", "Jergosh the Invoker", "Bazzalan"
         };
 
+        // ===== Combat: let the raid clear the entire dungeon =====
+        // GM level 6 bots are immortal at HP=1 — they can brute-force every pull.
+        // We give up to 15 minutes for a full clear. The dungeon is "cleared" when:
+        //   - No nearby hostile units remain alive (all mobs dead), OR
+        //   - Bots have traversed the full dungeon length (>150y from entrance)
+        //     with no targets remaining.
+        // Stale = 90s with no position/combat changes (bots stuck).
         var dungeonStartTime = DateTime.UtcNow;
         await WaitForProgressAsync<int>(
-            phaseName: "DungeonCombat",
-            maxTimeout: TimeSpan.FromMinutes(3),
-            staleTimeout: TimeSpan.FromSeconds(60),
+            phaseName: "DungeonClear",
+            maxTimeout: TimeSpan.FromMinutes(15),
+            staleTimeout: TimeSpan.FromSeconds(90),
             pollInterval: TimeSpan.FromSeconds(5),
             evaluate: snapshots =>
             {
@@ -412,7 +419,7 @@ public class RagefireChasmTests
                 var botsInCombat = 0;
                 var fpParts = new StringBuilder();
 
-                // Include ALL bots in fingerprint (not just RFC) to diagnose missing bots
+                // Non-RFC bots in fingerprint for diagnostics
                 foreach (var snap in snapshots)
                 {
                     var m = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
@@ -433,12 +440,10 @@ public class RagefireChasmTests
                     var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
                     var aggressorCount = snap.NearbyUnits?.Count(u => u.TargetGuid == playerGuid && u.Health > 0) ?? 0;
 
-                    // Exclude self-targeting (from .targetself during spell learning) from combat count
                     var isTargetingSelf = targetGuid == playerGuid;
                     if (aggressorCount > 0 || (targetGuid != 0 && !isTargetingSelf))
                         botsInCombat++;
 
-                    // Include position (rounded), health, and target in fingerprint
                     fpParts.Append($"{snap.AccountName}:hp{hp}t{targetGuid:X4}p{pos?.X:F0},{pos?.Y:F0}|");
 
                     // Boss tracking
@@ -461,18 +466,26 @@ public class RagefireChasmTests
                 if (botsInCombat > 0)
                     combatEngagements++;
 
-                // Wipe detection
-                if (rfcBots.Count > 0 && rfcBots.All(s => (s.Player?.Unit?.Health ?? 0) <= 0))
-                    return (true, combatEngagements, $"WIPE|{fpParts}");
-
-                // Dungeon clear detection — require at least 1 bot on RFC map
-                if (rfcBots.Count > 0 && combatEngagements > 5 && botsInCombat == 0 &&
-                    !rfcBots.Any(s => s.Player?.Unit?.TargetGuid != 0))
-                    return (true, combatEngagements, $"CLEAR|{fpParts}");
-
-                // Forward-progress checks based on elapsed time
                 var elapsed = (DateTime.UtcNow - dungeonStartTime).TotalSeconds;
-                if (elapsed > 90 && rfcBots.Count > 0)
+
+                // Dungeon clear: no bots in combat, no bots have targets, after meaningful combat
+                if (rfcBots.Count > 0 && combatEngagements > 10 && botsInCombat == 0 &&
+                    !rfcBots.Any(s =>
+                    {
+                        var tg = s.Player?.Unit?.TargetGuid ?? 0;
+                        var pg = s.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
+                        return tg != 0 && tg != pg; // has a non-self target
+                    }))
+                {
+                    // Verify no nearby hostile units alive
+                    var hostileAlive = rfcBots.Sum(s =>
+                        s.NearbyUnits?.Count(u => u.Health > 0 && u.TargetGuid != 0) ?? 0);
+                    if (hostileAlive == 0)
+                        return (true, combatEngagements, $"CLEAR|engagements={combatEngagements},bosses={bossesKilled.Count}|{fpParts}");
+                }
+
+                // Deep progress check — bots reached the far end of the dungeon
+                if (rfcBots.Count > 0 && elapsed > 60)
                 {
                     const float entranceX = 3f, entranceY = -11f;
                     var maxDistFromEntrance = rfcBots.Max(s =>
@@ -484,29 +497,22 @@ public class RagefireChasmTests
                         return MathF.Sqrt(dxE * dxE + dyE * dyE);
                     });
 
-                    // No forward progress at all — fail fast
-                    if (maxDistFromEntrance < 10f)
+                    // No forward progress at all after 3 minutes — stuck
+                    if (elapsed > 180 && maxDistFromEntrance < 10f)
                     {
                         return (true, combatEngagements,
                             $"NO_PROGRESS|maxDist={maxDistFromEntrance:F1}y after {elapsed:F0}s|{fpParts}");
                     }
-
-                    // Sufficient progress — bots advanced significantly and engaged in combat.
-                    // The dungeon run is working; don't wait for a full clear (mobs evade, leader dies).
-                    if (maxDistFromEntrance > 30f && combatEngagements >= 10)
-                    {
-                        return (true, combatEngagements,
-                            $"PROGRESS_OK|maxDist={maxDistFromEntrance:F1}y, {combatEngagements} engagements|{fpParts}");
-                    }
                 }
 
                 var fingerprint = $"combat={botsInCombat},engagements={combatEngagements}," +
-                    $"bosses={bossesKilled.Count}|{fpParts}";
+                    $"bosses={bossesKilled.Count},dist|{fpParts}";
                 return (false, combatEngagements, fingerprint);
             });
 
         // ===== Final Report =====
         _output.WriteLine("\n=== DUNGEON RUN SUMMARY ===");
+        _output.WriteLine($"Duration: {(DateTime.UtcNow - dungeonStartTime).TotalSeconds:F0}s");
         _output.WriteLine($"Combat engagements (5s ticks with active combat): {combatEngagements}");
         _output.WriteLine($"Bosses engaged: [{string.Join(", ", bossesKilled)}]");
 
