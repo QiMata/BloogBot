@@ -1266,9 +1266,14 @@ public class DungeoneeringCoordinator
             return teleportAction; // null if throttled — bot will re-poll
         }
 
+        // Leader must be dispatched FIRST. If this is a non-leader bot and the leader
+        // hasn't been dispatched yet, return null (wait for leader to poll).
+        // This prevents all 9 BG bots from getting dispatched as followers before the
+        // FG leader (which polls slower) gets its leader=true dispatch.
+        if (!isLeader && !_dungeoneeringDispatched.ContainsKey(_leaderAccount))
+            return null;
+
         // Only dispatch ONCE per bot. TryAdd returns false if already dispatched.
-        // Without this guard, every poll re-sends StartDungeoneering which rebuilds the
-        // behavior tree, steals DungeoneeringTask ticks, and floods the pathfinding service.
         if (!_dungeoneeringDispatched.TryAdd(requestingAccount, 0))
             return null;
 
