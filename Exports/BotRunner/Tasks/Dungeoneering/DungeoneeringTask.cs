@@ -340,7 +340,12 @@ public class DungeoneeringTask : BotTask, IBotTask
             .OrderByDescending(m => m.Position!.DistanceTo(entrance))
             .FirstOrDefault();
 
-        // If no party members visible, navigate toward next waypoint as fallback.
+        // If the "furthest" party member is still near the entrance, nobody is leading.
+        // Fall through to waypoint navigation so the follower advances independently.
+        if (leader?.Position != null && leader.Position.DistanceTo(entrance) < WaypointReachDistance * 3)
+            leader = null; // Force waypoint fallback
+
+        // If no party members visible (or all near entrance), navigate waypoints.
         // But ONLY if we're on the correct dungeon map — waypoint coordinates exist
         // on both the instance map and the overworld, causing bots to wander Kalimdor.
         if (leader?.Position == null)
