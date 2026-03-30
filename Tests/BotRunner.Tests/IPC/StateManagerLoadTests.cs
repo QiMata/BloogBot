@@ -444,6 +444,124 @@ public class StateManagerLoadTests
             $"Pipeline ({pipelineResult.Errors} errors) should not be worse than legacy ({legacyResult.Errors} errors)");
     }
 
+    // =========================================================================
+    // ASYNC CLIENT TESTS — SendMessageAsync vs SendMessage
+    // =========================================================================
+
+    private LoadTestResult RunAsyncPipelineLoadTest(int clientCount, int durationSec, int pollIntervalMs = 100)
+    {
+        var port = GetFreePort();
+        using var server = new PipelineLoadTestServer("127.0.0.1", port);
+        Thread.Sleep(200);
+
+        var allLatencies = new ConcurrentBag<double>();
+        var errorCount = 0;
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(durationSec));
+        int snapshotSize = 0;
+
+        var tasks = new Task[clientCount];
+        for (int i = 0; i < clientCount; i++)
+        {
+            int clientId = i;
+            tasks[i] = Task.Run(async () =>
+            {
+                try
+                {
+                    using var client = new ProtobufSocketClient<WoWActivitySnapshot, WoWActivitySnapshot>(
+                        "127.0.0.1", port, NullLogger.Instance);
+
+                    var snapshot = CreateRealisticSnapshot($"BOT{clientId:D4}");
+                    if (clientId == 0)
+                        Interlocked.Exchange(ref snapshotSize, snapshot.ToByteArray().Length);
+
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        var sw = Stopwatch.StartNew();
+                        try
+                        {
+                            // Use async API
+                            var response = await client.SendMessageAsync(snapshot, cts.Token);
+                            sw.Stop();
+                            allLatencies.Add(sw.Elapsed.TotalMilliseconds);
+                        }
+                        catch (OperationCanceledException) { break; }
+                        catch
+                        {
+                            Interlocked.Increment(ref errorCount);
+                        }
+
+                        var remaining = pollIntervalMs - (int)sw.ElapsedMilliseconds;
+                        if (remaining > 0 && !cts.Token.IsCancellationRequested)
+                            await Task.Delay(remaining, cts.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                catch
+                {
+                    Interlocked.Increment(ref errorCount);
+                }
+            });
+        }
+
+        Task.WaitAll(tasks, TimeSpan.FromSeconds(durationSec + 15));
+
+        var latencies = allLatencies.OrderBy(x => x).ToList();
+        var totalMessages = latencies.Count;
+
+        return new LoadTestResult(
+            ClientCount: clientCount,
+            TotalMessages: totalMessages,
+            DurationSec: durationSec,
+            MsgPerSec: totalMessages / (double)durationSec,
+            P50Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.50)] : 0,
+            P95Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.95)] : 0,
+            P99Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.99)] : 0,
+            MaxMs: latencies.Count > 0 ? latencies.Last() : 0,
+            Errors: errorCount,
+            SnapshotBytes: snapshotSize);
+    }
+
+    [Fact]
+    public void Async_100Clients_10Seconds()
+    {
+        var result = RunAsyncPipelineLoadTest(clientCount: 100, durationSec: 10);
+        PrintResult(result);
+
+        Assert.Equal(0, result.Errors);
+        Assert.True(result.TotalMessages > 50, $"Expected >50 msgs, got {result.TotalMessages}");
+    }
+
+    [Fact]
+    public void Async_500Clients_15Seconds()
+    {
+        var result = RunAsyncPipelineLoadTest(clientCount: 500, durationSec: 15);
+        PrintResult(result);
+
+        Assert.True(result.TotalMessages > 0, $"Expected >0 msgs, got {result.TotalMessages}");
+    }
+
+    [Fact]
+    public void Async_vs_Sync_100Clients()
+    {
+        _output.WriteLine("=== SYNC CLIENT + PIPELINE SERVER ===");
+        var syncResult = RunPipelineLoadTest(clientCount: 100, durationSec: 5);
+        PrintResult(syncResult);
+
+        _output.WriteLine("\n=== ASYNC CLIENT + PIPELINE SERVER ===");
+        var asyncResult = RunAsyncPipelineLoadTest(clientCount: 100, durationSec: 5);
+        PrintResult(asyncResult);
+
+        _output.WriteLine($"\n=== COMPARISON ===");
+        _output.WriteLine($"  Sync:  {syncResult.MsgPerSec:F0} msg/s, P50={syncResult.P50Ms:F1}ms, P99={syncResult.P99Ms:F1}ms, errors={syncResult.Errors}");
+        _output.WriteLine($"  Async: {asyncResult.MsgPerSec:F0} msg/s, P50={asyncResult.P50Ms:F1}ms, P99={asyncResult.P99Ms:F1}ms, errors={asyncResult.Errors}");
+
+        if (syncResult.MsgPerSec > 0)
+        {
+            var improvement = asyncResult.MsgPerSec / syncResult.MsgPerSec;
+            _output.WriteLine($"  Speedup: {improvement:F1}x");
+        }
+    }
+
     private static int GetFreePort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

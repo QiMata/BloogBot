@@ -291,6 +291,116 @@ namespace BotCommLayer
             }
         }
 
+        // =====================================================================
+        // ASYNC API — use these for high-concurrency scenarios (3000+ bots)
+        // =====================================================================
+
+        private readonly SemaphoreSlim _asyncLock = new(1, 1);
+
+        /// <summary>
+        /// Async send/receive. Does not block ThreadPool threads during I/O.
+        /// Use instead of SendMessage for high-concurrency BotRunner tick loops.
+        /// </summary>
+        public async Task<TResponse> SendMessageAsync(TRequest request, CancellationToken ct = default)
+        {
+            if (_stream == null && _ipAddress == null)
+                throw new InvalidOperationException("Client is not connected.");
+
+            await _asyncLock.WaitAsync(ct);
+            try
+            {
+                return await SendMessageInternalAsync(request, ct);
+            }
+            catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+            {
+                if (_ipAddress != null)
+                {
+                    _logger?.LogWarning("Connection lost ({Type}). Reconnecting to {Ip}:{Port}...",
+                        ex.GetType().Name, _ipAddress, _port);
+                    try
+                    {
+                        await ConnectAsync(ct);
+                        _logger?.LogInformation("Reconnected to {Ip}:{Port}. Retrying.", _ipAddress, _port);
+                        return await SendMessageInternalAsync(request, ct);
+                    }
+                    catch (Exception reconnectEx)
+                    {
+                        _logger?.LogError("Reconnect failed: {Message}", reconnectEx.Message);
+                        throw;
+                    }
+                }
+                throw;
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+        }
+
+        private async Task<TResponse> SendMessageInternalAsync(TRequest request, CancellationToken ct)
+        {
+            if (_stream == null)
+                throw new InvalidOperationException("No active stream.");
+
+            // Encode
+            byte[] encoded = ProtobufCompression.Encode(request.ToByteArray());
+            await _stream.WriteAsync(encoded, ct);
+
+            // Read response length (4 bytes)
+            byte[] lengthBuffer = new byte[4];
+            await ReadExactAsync(_stream, lengthBuffer, ct);
+            int responseLength = BitConverter.ToInt32(lengthBuffer, 0);
+
+            // Read response payload
+            byte[] wirePayload = new byte[responseLength];
+            await ReadExactAsync(_stream, wirePayload, ct);
+            byte[] protobufBytes = ProtobufCompression.Decode(wirePayload);
+
+            TResponse response = new();
+            response.MergeFrom(protobufBytes);
+            return response;
+        }
+
+        private static async Task ReadExactAsync(NetworkStream stream, byte[] buffer, CancellationToken ct)
+        {
+            int totalRead = 0;
+            while (totalRead < buffer.Length)
+            {
+                int bytesRead = await stream.ReadAsync(
+                    buffer.AsMemory(totalRead, buffer.Length - totalRead), ct);
+                if (bytesRead == 0)
+                    throw new IOException("Unexpected EOF while reading stream.");
+                totalRead += bytesRead;
+            }
+        }
+
+        private async Task ConnectAsync(CancellationToken ct)
+        {
+            _client?.Dispose();
+            _client = new TcpClient();
+
+            const int maxRetries = 5;
+            const int baseDelayMs = 200;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    await _client.ConnectAsync(IPAddress.Parse(_ipAddress!), _port, ct);
+                    _stream = _client.GetStream();
+                    _stream.ReadTimeout = 5000;
+                    _stream.WriteTimeout = 5000;
+                    return;
+                }
+                catch (SocketException) when (attempt < maxRetries)
+                {
+                    await Task.Delay(baseDelayMs * (1 << (attempt - 1)), ct);
+                }
+            }
+
+            throw new InvalidOperationException($"Failed to connect to {_ipAddress}:{_port} after {maxRetries} attempts.");
+        }
+
         public void Close()
         {
             _stream?.Close();
