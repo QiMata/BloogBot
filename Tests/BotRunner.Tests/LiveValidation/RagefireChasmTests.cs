@@ -207,6 +207,7 @@ public class RagefireChasmTests
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
         // ===== Phase: Bots enter world =====
+        // ALL bots must connect. Any missing bot = automatic failure (crash/disconnect is a bug).
         // Fingerprint: bot count. Stale if count stops increasing for 30s.
         await WaitForProgressAsync<int>(
             phaseName: "BotsEnterWorld",
@@ -218,7 +219,7 @@ public class RagefireChasmTests
                 var count = snapshots.Count;
                 return (count >= ExpectedBotCount, count, $"bots={count}");
             });
-        Assert.True(_bot.AllBots.Count >= 2, $"Need at least 2 bots for RFC test (got {_bot.AllBots.Count})");
+        Assert.Equal(ExpectedBotCount, _bot.AllBots.Count);
 
         // ===== Phase: Coordinator prep pipeline =====
         // TeleportToOrgrimmar → DisbandAndReset → PrepareCharacters → EquipGear → FormGroup → TeleportToRFC

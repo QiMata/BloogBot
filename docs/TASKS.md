@@ -91,6 +91,78 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 ---
 
+## P28 — Test Audit & Cleanup
+
+**Goal:** Clean up existing LiveValidation tests that have accumulated unnecessary teleporting and convoluted workarounds. ALL bots in every config MUST connect — any crash, disconnect, or missing bot is an automatic failure that triggers investigation. No workarounds for missing bots. Tests must have TIGHT assertions that fail fast on any disruption.
+
+| # | Task | Status |
+|---|------|--------|
+| 28.1 | **ALL tests: strict bot count assertions** — Every test config specifies exact bot count. ALL bots must connect. Any missing bot, crash, or disconnect is an automatic failure and must be investigated. No partial-count workarounds. `Assert.Equal(expectedCount, actualCount)` everywhere. | Open |
+| 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Lines 72-77 teleport to Orgrimmar safe zone before teleporting to Valley of Trials. The Org stop adds ~3s of unnecessary setup. Teleport directly to quest NPC area. | Open |
+| 28.3 | **EquipmentEquipTests: use .unequip instead of .reset items** — `.reset items` clears ALL inventory. Use targeted `.unequip` for mainhand slot only. More surgical, less state pollution. | Open |
+| 28.4 | **All DungeonInstanceFixture-based tests: strict bot count** — Every dungeon test must Assert.Equal on expected bot count. Crash = failure = investigate. | Open |
+| 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | Open |
+| 28.6 | **DeathCorpseRunTests: document CRASH-001 more clearly** — The FG ghost movement crash (0x00619CDF) is well-documented but uses a hardcoded `Skip.If(true)`. Add a binary investigation note for future fix attempts. | Open |
+| 28.7 | **Remove OrgrimmarGroundZAnalysisTests** — Diagnostic test, not a real validation. Move to a diagnostic tool or archive. | Open |
+
+---
+
+## P29 — Fast Travel & Navigation Tests
+
+**Goal:** Test coverage for ALL fast-travel systems in vanilla WoW: mage teleports/portals, flight masters (taxi), boats, zeppelins, elevators, Deeprun Tram, meeting stones, warlock summoning. Both Horde and Alliance sides.
+
+**Depends on:** P21 (travel planner), P26 (dungeon infrastructure for summoning stone tests).
+
+### 29A — Mage Teleport Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 29.1 | **Create Mage bot accounts** — 2 accounts: `MAGETESTH` (Horde Troll Mage) + `MAGETESTA` (Alliance Gnome Mage). Level 60, learn all teleport + portal spells via `.learn`. | Open |
+| 29.2 | **Mage self-teleport test (Horde)** — Mage at Razor Hill. Cast Teleport: Orgrimmar (spell 3567). Assert: mapId stays 1, position changes to Orgrimmar (within 50y of 1676,-4315,61). Under 15s. | Open |
+| 29.3 | **Mage self-teleport test (Alliance)** — Mage at Goldshire. Cast Teleport: Stormwind (spell 3561). Assert: position in SW within 15s. | Open |
+| 29.4 | **Mage portal test** — Mage + 4 party members. Mage casts Portal: Orgrimmar (spell 11417). Requires Rune of Portals (item 17032). 4 members click portal. Assert: all 5 in Orgrimmar within 30s. | Open |
+| 29.5 | **Mage all-city teleport test** — Test all 6 teleport spells: Orgrimmar (3567), Undercity (3563), Thunder Bluff (3566), Stormwind (3561), Ironforge (3562), Darnassus (3565). Assert each lands in correct city. | Open |
+
+### 29B — Flight Master (Taxi) Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 29.6 | **Horde taxi discovery test** — Bot at Orgrimmar flight master. Interact. Assert: `SMSG_SHOWTAXINODES` received, node list contains Orgrimmar node. Discover Crossroads node via `.tele`. | Open |
+| 29.7 | **Horde taxi ride test** — Bot at Orgrimmar flight master with Crossroads discovered. Activate flight. Assert: `CMSG_ACTIVATETAXI` sent, position changes over time, arrives at Crossroads within 3 minutes. | Open |
+| 29.8 | **Alliance taxi ride test** — Bot at Stormwind flight master. Fly to Ironforge via Deeprun Tram alternative. Assert arrival. | Open |
+| 29.9 | **Multi-hop taxi test** — Bot at Orgrimmar, fly to Gadgetzan (multiple hops). Assert: intermediate nodes traversed, final arrival at Gadgetzan. | Open |
+
+### 29C — Transport Tests (Boats, Zeppelins, Elevators)
+
+| # | Task | Spec |
+|---|------|------|
+| 29.10 | **Orgrimmar→Undercity zeppelin test** — Bot walks to Org zeppelin tower. Boards zeppelin. Assert: `TransportGuid` set, mapId changes from 1 to 0, arrives in Tirisfal Glades. Uses existing `TransportWaitingLogic`. | Open |
+| 29.11 | **Ratchet→Booty Bay boat test** — Bot teleported to Ratchet dock. Boards boat. Assert: arrives in Booty Bay (STV). | Open |
+| 29.12 | **Menethil→Theramore boat test (Alliance)** — Alliance bot. Board ship. Cross from Wetlands to Dustwallow Marsh. | Open |
+| 29.13 | **Undercity elevator test** — Bot at UC upper level. Takes elevator down. Assert: Z drops ~100y, position in Undercity interior. Uses existing `TransportData.UndercityElevatorWest`. | Open |
+| 29.14 | **Thunder Bluff elevator test** — Bot at TB upper. Takes elevator down. Assert: Z drops, arrives at base level. | Open |
+| 29.15 | **Deeprun Tram test** — Alliance bot. Ride tram from Ironforge to Stormwind (or vice versa). Assert: map transition via tram instance. | Open |
+
+### 29D — Summoning Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 29.16 | **Warlock summon test** — Party of 5. Warlock + 2 helpers at dungeon entrance. 2 members in Orgrimmar. Warlock casts Ritual of Summoning (698). 2 helpers click portal. Absent member accepts. Assert: summoned member appears at entrance. | Open |
+| 29.17 | **Meeting stone summon test** — Party of 5. 3 at WC meeting stone. 2 in Orgrimmar. Interact with meeting stone (GameObjectType 23). Assert: absent members summoned. | Open |
+
+### 29E — Alliance-Side Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 29.18 | **Create Alliance test accounts** — `ALLYBOT1` through `ALLYBOT10`. Mixed races (Human, Dwarf, NightElf, Gnome). Mixed classes. Level 60 via `.character level`. | Open |
+| 29.19 | **Alliance navigation test** — Bot at Goldshire. Navigate to Stormwind entrance. Assert: arrival within expected path time. | Open |
+| 29.20 | **Alliance vendor test** — Bot at Stormwind vendor. Buy/sell items. Same as VendorBuySellTests but Alliance NPC. | Open |
+| 29.21 | **Alliance dungeon test: The Deadmines** (mapId=36) — 10 Alliance bots. Form group, enter Deadmines. Already in DungeonEntryData. Fixture needed. | Open |
+| 29.22 | **Alliance dungeon test: The Stockade** (mapId=34) — 10 Alliance bots in Stormwind. Enter Stockade. | Open |
+| 29.23 | **Alliance dungeon test: Gnomeregan** (mapId=90) — Alliance approach via Dun Morogh. | Open |
+
+---
+
 ## P23 — Interaction Test Suite (FG/BG Parity with Packet Recording)
 
 **Goal:** Complete LiveValidation test coverage for ALL NPC/world interaction systems. Every test runs BOTH FG (injected, gold standard) and BG (headless protocol) bots in parallel, records FG packets as reference, and asserts BG behavior matches. Uses recorded FG packet sequences to verify BG sends correct opcodes.
@@ -276,7 +348,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 26.6 | **Wailing Caverns** (mapId=43) — Fixture + entry test created. | **Done** (1464e7d) |
 | 26.7 | **Shadowfang Keep** (mapId=33) — Fixture + entry test created. | **Done** (1464e7d) |
 | 26.8 | **Blackfathom Deeps** (mapId=48) — Fixture + entry test created. | **Done** (1464e7d) |
-| 26.9 | **The Stockade** (mapId=34) — Alliance-only, skipped (Horde test bots). | Skipped |
+| 26.9 | **The Stockade** (mapId=34) — Needs Alliance bots. Teleport 2 to entrance, summon rest. See P29.22. | Open |
 | 26.10 | **Gnomeregan** (mapId=90) — Fixture + entry test created. | **Done** (1464e7d) |
 
 ### 26C — Mid-Level Dungeons (Levels 30-50)
