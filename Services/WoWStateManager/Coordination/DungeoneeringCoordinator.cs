@@ -733,23 +733,53 @@ public class DungeoneeringCoordinator
         CoordState nextState, int expectedMapId)
     {
         _tickCount++;
-        // Wait ~2 seconds (4 ticks) for teleport to settle
+        // Wait ~2 seconds (4 ticks) for initial teleport propagation
         if (_tickCount < 4)
             return null;
 
-        // Verify at least some bots are on the expected map
-        var onMap = snapshots.Values.Count(s =>
-        {
-            var mapId = s.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            return mapId == expectedMapId;
-        });
+        var allAccounts = new List<string> { _leaderAccount };
+        allAccounts.AddRange(_memberAccounts);
 
-        _logger.LogInformation("DUNGEON_COORD: Settle check: {OnMap}/{Total} bots on map {Map}",
-            onMap, snapshots.Count, expectedMapId);
-
-        // Proceed even if not all are on target map (teleport might still be propagating)
-        if (_tickCount >= 8 || onMap >= 2)
+        // Check which bots are on the expected map
+        var onMap = 0;
+        var missingBots = new List<string>();
+        foreach (var account in allAccounts)
         {
+            if (snapshots.TryGetValue(account, out var snap))
+            {
+                var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                if (mapId == expectedMapId)
+                    onMap++;
+                else
+                    missingBots.Add(account);
+            }
+        }
+
+        if (_tickCount % 10 == 0)
+            _logger.LogInformation("DUNGEON_COORD: Settle check: {OnMap}/{Total} bots on map {Map}, missing: [{Missing}]",
+                onMap, allAccounts.Count, expectedMapId, string.Join(", ", missingBots));
+
+        // Re-teleport bots that aren't on the correct map yet
+        if (missingBots.Count > 0 && missingBots.Contains(requestingAccount))
+        {
+            if (expectedMapId == RfcMapId)
+            {
+                return TrySendThrottledTeleport(requestingAccount,
+                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            }
+            else if (expectedMapId == 1) // Orgrimmar
+            {
+                return TrySendThrottledTeleport(requestingAccount,
+                    $".go xyz {OrgX:0.#} {OrgY:0.#} {OrgZ:0.#} 1");
+            }
+        }
+
+        // Require ALL bots on the map, or give up after 30 ticks (~15s)
+        if (onMap >= allAccounts.Count || _tickCount >= 30)
+        {
+            if (missingBots.Count > 0)
+                _logger.LogWarning("DUNGEON_COORD: Proceeding with {Missing} bot(s) not on map {Map}: [{Names}]",
+                    missingBots.Count, expectedMapId, string.Join(", ", missingBots));
             TransitionTo(nextState);
         }
 

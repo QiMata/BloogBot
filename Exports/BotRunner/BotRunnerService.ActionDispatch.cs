@@ -795,7 +795,7 @@ namespace BotRunner
                                     ? waypointPositions
                                     : mapWaypoints;
 
-                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints));
+                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints, mapId));
                             }
                             return BehaviourTreeStatus.Success;
                         });

@@ -43,6 +43,7 @@ public class DungeoneeringTask : BotTask, IBotTask
     private readonly bool _isLeader;
     public bool IsLeader => _isLeader;
     private readonly List<Position> _waypoints;
+    private readonly uint _targetMapId;
     private DungeonState _state;
     private int _waypointIndex;
     private Position? _lastPosition;
@@ -54,20 +55,22 @@ public class DungeoneeringTask : BotTask, IBotTask
     /// </summary>
     /// <param name="botContext">Bot context with ObjectManager, pathfinding, etc.</param>
     /// <param name="isLeader">True if this bot is the raid leader (navigates waypoints, pulls).</param>
-    /// <param name="waypoints">Ordered list of dungeon waypoints to navigate. Leader only.</param>
-    public DungeoneeringTask(IBotContext botContext, bool isLeader, IReadOnlyList<Position>? waypoints = null)
+    /// <param name="waypoints">Ordered list of dungeon waypoints to navigate.</param>
+    /// <param name="targetMapId">Expected instance map ID (e.g., 389 for RFC). Used for wrong-map detection.</param>
+    public DungeoneeringTask(IBotContext botContext, bool isLeader, IReadOnlyList<Position>? waypoints = null, uint targetMapId = 0)
         : base(botContext)
     {
         _isLeader = isLeader;
         _waypoints = waypoints?.Select(p => new Position(p.X, p.Y, p.Z)).ToList() ?? [];
+        _targetMapId = targetMapId;
 
         if (_waypoints.Count == 0)
             Log.Warning("[DUNGEONEERING] Task created with NO waypoints (leader={IsLeader}) — bot will not navigate!", _isLeader);
 
         _state = _isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader;
 
-        Log.Information("[DUNGEONEERING] Task started: leader={IsLeader}, waypoints={Count}",
-            _isLeader, _waypoints.Count);
+        Log.Information("[DUNGEONEERING] Task started: leader={IsLeader}, waypoints={Count}, targetMap={MapId}",
+            _isLeader, _waypoints.Count, _targetMapId);
     }
 
     private int _updateCount;
@@ -130,9 +133,17 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     private void HandleNavigateToWaypoint(IWoWPlayer player)
     {
-        // While navigating, only pull mobs within close aggro range (12y).
-        // This prevents the infinite pull loop in dense corridors where
-        // the bot would pull everything within 25y and never advance.
+        // Wrong-map guard: don't navigate dungeon waypoints on the overworld
+        if (_targetMapId != 0 && player.MapId != _targetMapId)
+        {
+            ObjectManager.StopAllMovement();
+            if (_updateCount % 50 == 1)
+                Log.Warning("[DUNGEONEERING] On wrong map {Map} (expected {Expected}), waiting for teleport",
+                    player.MapId, _targetMapId);
+            return;
+        }
+
+        // While navigating, only pull mobs within close aggro range.
         var aggroTarget = FindPullTarget(player, AggroCheckRange);
         if (aggroTarget != null)
         {
@@ -307,11 +318,22 @@ public class DungeoneeringTask : BotTask, IBotTask
             .OrderByDescending(m => m.Position!.DistanceTo(entrance))
             .FirstOrDefault();
 
-        // If no party members visible, navigate toward next waypoint directly.
-        // Do NOT call HandleNavigateToWaypoint — that puts followers into the
-        // leader's PullHostiles/WaitForCombatClear states, causing deadlocks.
+        // If no party members visible, navigate toward next waypoint as fallback.
+        // But ONLY if we're on the correct dungeon map — waypoint coordinates exist
+        // on both the instance map and the overworld, causing bots to wander Kalimdor.
         if (leader?.Position == null)
         {
+            var expectedMapId = _waypoints.Count > 0 ? _targetMapId : 0u;
+            if (expectedMapId != 0 && player.MapId != expectedMapId)
+            {
+                // Wrong map — just stop and wait. The coordinator will re-teleport us.
+                ObjectManager.StopAllMovement();
+                if (_updateCount % 50 == 1)
+                    Log.Warning("[DUNGEONEERING] Follower on wrong map {Map} (expected {Expected}), waiting for teleport",
+                        player.MapId, expectedMapId);
+                return;
+            }
+
             if (_waypointIndex < _waypoints.Count)
             {
                 var wp = _waypoints[_waypointIndex];
