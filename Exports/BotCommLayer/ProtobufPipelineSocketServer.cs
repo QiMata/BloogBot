@@ -34,7 +34,7 @@ public class ProtobufPipelineSocketServer<TRequest, TResponse> : IDisposable
     private const int MaxMessageSize = 16 * 1024 * 1024; // 16MB safety limit
 
     private readonly Socket _listenSocket;
-    private readonly ILogger _logger;
+    protected readonly ILogger _logger;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _concurrencyLimit;
     private readonly Task _acceptTask;

@@ -12,7 +12,7 @@ using WoWStateManager.Settings;
 
 namespace WoWStateManager.Listeners
 {
-    public class CharacterStateSocketListener : ProtobufSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
+    public class CharacterStateSocketListener : ProtobufPipelineSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
     {
         /// <summary>
         /// Thread-safe snapshot storage. Written by port 5002 (bot polls), read by port 8088 (test queries).
