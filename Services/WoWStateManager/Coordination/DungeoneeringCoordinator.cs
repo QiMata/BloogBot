@@ -78,7 +78,7 @@ public class DungeoneeringCoordinator
     private readonly List<string> _rfcTeleportOrder = new(); // Built once: leader first, then members
     private int _rfcTeleportIndex;
     private DateTime _lastRfcTeleportAt = DateTime.MinValue;
-    private const double RFC_TELEPORT_STAGGER_SEC = 1.0; // Seconds between each bot's teleport (FG crash fixed, 1s is safe)
+    private const double RFC_TELEPORT_STAGGER_SEC = 2.0; // Seconds between each bot's teleport — leader must enter first to create instance
 
     // Chat-based spell/item tracking — per-bot command index into the chat command sequence
     private readonly ConcurrentDictionary<string, int> _chatSpellIndex = new(); // account → next spell command index
@@ -774,8 +774,8 @@ public class DungeoneeringCoordinator
             }
         }
 
-        // Require ALL bots on the map, or give up after 30 ticks (~15s)
-        if (onMap >= allAccounts.Count || _tickCount >= 30)
+        // Require ALL bots on the map, or give up after 60 ticks (~30s)
+        if (onMap >= allAccounts.Count || _tickCount >= 60)
         {
             if (missingBots.Count > 0)
                 _logger.LogWarning("DUNGEON_COORD: Proceeding with {Missing} bot(s) not on map {Map}: [{Names}]",
@@ -1366,6 +1366,18 @@ public class DungeoneeringCoordinator
                 return leaderAction;
             }
             return null;
+        }
+
+        // Re-teleport ANY bot that's not on the RFC map (not just the leader).
+        // Silent .go xyz failures can leave bots on Kalimdor.
+        if (snapshots.TryGetValue(requestingAccount, out var reqSnap))
+        {
+            var reqMapId = reqSnap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            if (reqMapId != RfcMapId)
+            {
+                return TrySendThrottledTeleport(requestingAccount,
+                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            }
         }
 
         if (!snapshots.TryGetValue(_leaderAccount, out leaderSnap))
