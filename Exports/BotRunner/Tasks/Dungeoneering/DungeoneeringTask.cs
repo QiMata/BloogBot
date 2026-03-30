@@ -118,27 +118,33 @@ public class DungeoneeringTask : BotTask, IBotTask
         if (_isLeader)
         {
             // LEADER: check for hostiles to pull, or advance to next waypoint
-            var hostileInRange = ObjectManager.Hostiles
-                .Where(h => h.Health > 0
-                    && h.Position != null
-                    && player.Position.DistanceTo(h.Position) < HostilePullRange
-                    && player.InLosWith(h))
-                .OrderBy(h => player.Position.DistanceTo(h.Position))
-                .FirstOrDefault();
-
-            if (hostileInRange != null)
+            // Only pull hostiles if NOT in combat cooldown. During cooldown,
+            // the leader navigates past mobs instead of pulling new ones.
+            if (!inCombatCooldown)
             {
-                // Pull: stop, target, mark skull, push PullTargetTask
-                ObjectManager.StopAllMovement();
-                ClearNavigation();
-                ObjectManager.SetTarget(hostileInRange.Guid);
-                ObjectManager.SetRaidTarget(hostileInRange, TargetMarker.Skull);
+                var hostileInRange = ObjectManager.Hostiles
+                    .Where(h => h.Health > 0
+                        && h.Position != null
+                        && player.Position.DistanceTo(h.Position) < HostilePullRange
+                        && player.InLosWith(h))
+                    .OrderBy(h => player.Position.DistanceTo(h.Position))
+                    .FirstOrDefault();
 
-                Log.Information("[DUNGEONEERING] Leader pulling: {Name} (0x{Guid:X}) at {Dist:F0}y",
-                    hostileInRange.Name, hostileInRange.Guid, player.Position.DistanceTo(hostileInRange.Position));
+                if (hostileInRange != null)
+                {
+                    // Pull: stop, target, mark skull, push PullTargetTask
+                    ObjectManager.StopAllMovement();
+                    ClearNavigation();
+                    ObjectManager.SetTarget(hostileInRange.Guid);
+                    ObjectManager.SetRaidTarget(hostileInRange, TargetMarker.Skull);
 
-                BotTasks.Push(Container.ClassContainer.CreatePullTargetTask(BotContext));
-                return;
+                    Log.Information("[DUNGEONEERING] Leader pulling: {Name} (0x{Guid:X}) at {Dist:F0}y",
+                        hostileInRange.Name, hostileInRange.Guid, player.Position.DistanceTo(hostileInRange.Position));
+
+                    _lastCombatPush = DateTime.UtcNow;
+                    BotTasks.Push(Container.ClassContainer.CreatePullTargetTask(BotContext));
+                    return;
+                }
             }
 
             // No hostiles — advance to next waypoint
