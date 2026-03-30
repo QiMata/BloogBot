@@ -19,12 +19,14 @@ public class ClassContainer : IClassContainer, IDependencyContainer
         Func<IBotContext, IBotTask> createPvERotationTask,
         Func<IBotContext, IBotTask> createPvPRotationTask,
         PathfindingClient pathfindingClient,
-        IQuestRepository? questRepository = null)
+        IQuestRepository? questRepository = null,
+        Func<IBotContext, IBotTask>? createPullTargetTask = null)
     {
         Name = name;
         CreateRestTask = createRestTask;
         CreateBuffTask = createBuffTask;
         CreateMoveToTargetTask = createMoveToTargetTask;
+        CreatePullTargetTask = createPullTargetTask ?? createMoveToTargetTask;
         CreatePvERotationTask = createPvERotationTask;
         CreatePvPRotationTask = createPvPRotationTask;
         PathfindingClient = pathfindingClient;
@@ -36,6 +38,7 @@ public class ClassContainer : IClassContainer, IDependencyContainer
     public Func<IBotContext, IBotTask> CreateRestTask { get; }
     public Func<IBotContext, IBotTask> CreateBuffTask { get; }
     public Func<IBotContext, IBotTask> CreateMoveToTargetTask { get; }
+    public Func<IBotContext, IBotTask> CreatePullTargetTask { get; }
     public Func<IBotContext, IBotTask> CreatePvERotationTask { get; }
     public Func<IBotContext, IBotTask> CreatePvPRotationTask { get; }
 

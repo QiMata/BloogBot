@@ -640,7 +640,8 @@ namespace ForegroundBotRunner
                 botProfile.CreateMoveToTargetTask,
                 botProfile.CreatePvERotationTask,
                 botProfile.CreatePvPRotationTask,
-                pathfindingClient);
+                pathfindingClient,
+                createPullTargetTask: botProfile.CreatePullTargetTask);
         }
 
         public override async Task StopAsync(CancellationToken cancellationToken)

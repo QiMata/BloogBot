@@ -48,6 +48,8 @@ public class DungeoneeringTask : BotTask, IBotTask
     private int _waypointIndex;
     private Position? _lastPosition;
     private DateTime _lastMoveTime = DateTime.UtcNow;
+    private DateTime _combatStartTime = DateTime.UtcNow;
+    private const double CombatTimeoutSec = 10.0; // Max seconds to fight before resuming navigation
     private int _killCount;
 
     /// <summary>
@@ -92,11 +94,9 @@ public class DungeoneeringTask : BotTask, IBotTask
                 ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(), player.MapId);
         }
 
-        // Leader: mark closest aggressor as skull and auto-attack, but do NOT push
-        // PvERotation here. The state machine handles combat via HandlePullHostiles.
-        // Previously this unconditionally pushed PvERotation every tick, which permanently
-        // blocked waypoint navigation — PvERotation never pops when the level 8 leader
-        // can't kill level 14 mobs, so the DungeoneeringTask state machine never runs.
+        // Leader: when aggressors are present, mark skull, fight with a timeout.
+        // Push PullTargetTask (class-specific approach + opener) then PvERotation pops when done.
+        // After CombatTimeoutSec, give up and resume navigation — GM bots are immortal.
         if (_isLeader && ObjectManager.Aggressors.Any())
         {
             var aggressor = ObjectManager.Aggressors
@@ -104,8 +104,30 @@ public class DungeoneeringTask : BotTask, IBotTask
                 .First();
             ObjectManager.SetTarget(aggressor.Guid);
             ObjectManager.SetRaidTarget(aggressor, TargetMarker.Skull);
-            ObjectManager.StartMeleeAttack();
-            // Fall through to the state machine — leader navigates AND fights
+
+            // Push combat if we aren't already in a combat task
+            if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
+            {
+                var elapsed = (DateTime.UtcNow - _combatStartTime).TotalSeconds;
+                if (elapsed < CombatTimeoutSec)
+                {
+                    // Use the class-specific pull task (Charge, ranged pull, etc.)
+                    BotTasks.Push(Container.ClassContainer.CreatePullTargetTask(BotContext));
+                    return;
+                }
+                // Combat timeout — stop fighting, resume navigation
+                _combatStartTime = DateTime.UtcNow; // Reset for next pull
+            }
+            else
+            {
+                // Already in a combat task (PullTarget or PvERotation) — let it run
+                return;
+            }
+        }
+        else if (_isLeader)
+        {
+            // No aggressors — reset combat timer for the next encounter
+            _combatStartTime = DateTime.UtcNow;
         }
 
         switch (_state)
@@ -233,41 +255,41 @@ public class DungeoneeringTask : BotTask, IBotTask
             return;
         }
 
-        // Mark skull and target for the party, auto-attack, then resume navigation.
-        // Do NOT push PvERotation — it blocks the state machine permanently when
-        // the leader can't kill mobs (level disadvantage). The leader fights while moving.
+        // Mark skull for the raid, set target, push the class-specific pull task.
+        // PullTargetTask handles approach + opener (Charge, ranged pull, etc.)
+        // then pops itself and pushes PvERotation. When PvERotation pops,
+        // WaitForCombatClear transitions back to NavigateToWaypoint.
         ObjectManager.SetTarget(target.Guid);
         ObjectManager.SetRaidTarget(target, TargetMarker.Skull);
-        ObjectManager.StartMeleeAttack();
 
-        var dist = player.Position.DistanceTo(target.Position);
+        Log.Information("[DUNGEONEERING] Leader pulling: {Name} (0x{Guid:X}) at {Dist:F0}y",
+            target.Name, target.Guid, player.Position.DistanceTo(target.Position));
 
-        if (dist > 8f)
-        {
-            // Navigate toward the mob
-            TryNavigateToward(target.Position, allowDirectFallback: true);
-        }
-
-        // After marking and engaging, resume waypoint navigation.
-        // The leader will continue auto-attacking while moving to the next waypoint.
-        // Followers assist the skull target via their own combat logic.
-        TransitionTo(DungeonState.NavigateToWaypoint);
+        _combatStartTime = DateTime.UtcNow;
+        BotTasks.Push(Container.ClassContainer.CreatePullTargetTask(BotContext));
+        TransitionTo(DungeonState.WaitForCombatClear);
     }
 
     private void HandleWaitForCombatClear()
     {
-        // Combat rotation task is on the stack — when it pops, we resume here.
-        // Return to the appropriate state based on role.
+        // Followers: never wait, resume following immediately
+        if (!_isLeader)
+        {
+            TransitionTo(DungeonState.FollowLeader);
+            return;
+        }
+
+        // Leader: resume navigation when aggressors clear OR combat times out
         if (!ObjectManager.Aggressors.Any())
         {
-            TransitionTo(_isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader);
+            _killCount++;
+            TransitionTo(DungeonState.NavigateToWaypoint);
         }
-        else if (!_isLeader)
+        else if ((DateTime.UtcNow - _combatStartTime).TotalSeconds > CombatTimeoutSec)
         {
-            // Followers: don't wait for combat clear — resume following.
-            // The leader controls the pace. Followers shouldn't get stuck
-            // fighting entrance mobs while the leader advances.
-            TransitionTo(DungeonState.FollowLeader);
+            Log.Information("[DUNGEONEERING] Combat timeout ({Sec}s), resuming navigation with {Aggressors} aggressors",
+                CombatTimeoutSec, ObjectManager.Aggressors.Count());
+            TransitionTo(DungeonState.NavigateToWaypoint);
         }
     }
 

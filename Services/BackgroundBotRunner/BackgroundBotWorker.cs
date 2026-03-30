@@ -382,7 +382,8 @@ namespace BackgroundBotRunner
                 botProfile.CreateMoveToTargetTask,
                 botProfile.CreatePvERotationTask,
                 botProfile.CreatePvPRotationTask,
-                pathfindingClient);
+                pathfindingClient,
+                createPullTargetTask: botProfile.CreatePullTargetTask);
         }
 
     }

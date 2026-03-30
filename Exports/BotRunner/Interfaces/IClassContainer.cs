@@ -28,6 +28,12 @@ public interface IClassContainer
     Func<IBotContext, IBotTask> CreateMoveToTargetTask { get; }
 
     /// <summary>
+    /// Factory to create pull target tasks. The pull task approaches the current target
+    /// using class-specific openers (e.g., Charge for warrior) then transitions to PvE rotation.
+    /// </summary>
+    Func<IBotContext, IBotTask> CreatePullTargetTask { get; }
+
+    /// <summary>
     /// Factory to create PvE rotation tasks.
     /// </summary>
     Func<IBotContext, IBotTask> CreatePvERotationTask { get; }
