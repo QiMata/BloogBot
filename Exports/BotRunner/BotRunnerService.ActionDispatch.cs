@@ -779,6 +779,8 @@ namespace BotRunner
                         builder.Do("Queue Dungeoneering Task", time =>
                         {
                             var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
+                            Log.Information("[BOT RUNNER] StartDungeoneering: isLeader={IsLeader}, existing={Existing}, existingIsLeader={ExLeader}",
+                                isLeader, existingTask != null, existingTask?.IsLeader);
                             if (existingTask != null && existingTask.IsLeader == isLeader)
                             {
                                 // Same role task already running — skip duplicate dispatch
