@@ -89,20 +89,20 @@ public class DungeoneeringTask : BotTask, IBotTask
                 ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(), player.MapId);
         }
 
-        // Leader combat: stop and fight aggressors. Mark skull target for the raid.
+        // Leader: mark closest aggressor as skull and auto-attack, but do NOT push
+        // PvERotation here. The state machine handles combat via HandlePullHostiles.
+        // Previously this unconditionally pushed PvERotation every tick, which permanently
+        // blocked waypoint navigation — PvERotation never pops when the level 8 leader
+        // can't kill level 14 mobs, so the DungeoneeringTask state machine never runs.
         if (_isLeader && ObjectManager.Aggressors.Any())
         {
-            if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
-            {
-                var aggressor = ObjectManager.Aggressors
-                    .OrderBy(a => player.Position.DistanceTo(a.Position))
-                    .First();
-                ObjectManager.SetTarget(aggressor.Guid);
-                ObjectManager.SetRaidTarget(aggressor, TargetMarker.Skull);
-                ClearNavigation();
-                BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
-            }
-            return;
+            var aggressor = ObjectManager.Aggressors
+                .OrderBy(a => player.Position.DistanceTo(a.Position))
+                .First();
+            ObjectManager.SetTarget(aggressor.Guid);
+            ObjectManager.SetRaidTarget(aggressor, TargetMarker.Skull);
+            ObjectManager.StartMeleeAttack();
+            // Fall through to the state machine — leader navigates AND fights
         }
 
         switch (_state)
@@ -222,40 +222,25 @@ public class DungeoneeringTask : BotTask, IBotTask
             return;
         }
 
-        // Mark skull and target for the party
+        // Mark skull and target for the party, auto-attack, then resume navigation.
+        // Do NOT push PvERotation — it blocks the state machine permanently when
+        // the leader can't kill mobs (level disadvantage). The leader fights while moving.
         ObjectManager.SetTarget(target.Guid);
         ObjectManager.SetRaidTarget(target, TargetMarker.Skull);
+        ObjectManager.StartMeleeAttack();
 
         var dist = player.Position.DistanceTo(target.Position);
 
-        // If mob is already an aggressor (in combat), push combat rotation directly
-        if (ObjectManager.Aggressors.Any(a => a.Guid == target.Guid))
-        {
-            ObjectManager.StopAllMovement();
-            ClearNavigation();
-            Log.Information("[DUNGEONEERING] Engaging aggressor: {Name} (0x{Guid:X}) at {Dist:F0}y",
-                target.Name, target.Guid, dist);
-            BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
-            _killCount++;
-            TransitionTo(DungeonState.WaitForCombatClear);
-            return;
-        }
-
-        // Not an aggressor yet — navigate toward the mob to enter its aggro range.
-        // The aggressor check in Update() (line 90) will push combat when the mob aggros.
-        // This prevents the push-pop cycle where PvERotation pops immediately because
-        // EnsureTarget() finds no aggressors.
         if (dist > 8f)
         {
+            // Navigate toward the mob
             TryNavigateToward(target.Position, allowDirectFallback: true);
         }
-        else
-        {
-            // Very close but not agroed — try auto-attack to initiate combat
-            ObjectManager.StartMeleeAttack();
-            Log.Information("[DUNGEONEERING] Auto-attacking to pull: {Name} (0x{Guid:X}) at {Dist:F0}y",
-                target.Name, target.Guid, dist);
-        }
+
+        // After marking and engaging, resume waypoint navigation.
+        // The leader will continue auto-attacking while moving to the next waypoint.
+        // Followers assist the skull target via their own combat logic.
+        TransitionTo(DungeonState.NavigateToWaypoint);
     }
 
     private void HandleWaitForCombatClear()
