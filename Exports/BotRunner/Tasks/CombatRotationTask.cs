@@ -355,6 +355,18 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             return false;
         }
 
+        // Combat timeout: if fighting for >15s without killing, disengage.
+        // This prevents permanent combat locks when GM bots can't kill mobs
+        // (level disadvantage). The DungeoneeringTask will resume and advance.
+        _combatDurationTicks++;
+        if (_combatDurationTicks > 150) // ~15s at 100ms tick rate
+        {
+            Serilog.Log.Debug("[COMBAT] Combat timeout after {Ticks} ticks, disengaging", _combatDurationTicks);
+            _combatDurationTicks = 0;
+            BotTasks.Pop();
+            return false;
+        }
+
         var player = ObjectManager.Player;
         var target = ObjectManager.GetTarget(ObjectManager.Player);
         bool targetIsValidAggressor = target != null
@@ -366,6 +378,8 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
 
         return true;
     }
+
+    private int _combatDurationTicks;
 
     /// <summary>
     /// Assign the best DPS target from aggressors.
