@@ -618,26 +618,26 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Status |
 |---|------|--------|
-| 8.1 | Add null guards to all 6 trade sequences in `BotRunnerService.Sequences.Trade.cs` (OfferTrade, OfferGold, OfferItem, AcceptTrade, EnchantTrade, LockpickTrade). Currently NullRef when TradeFrame is null on BG. Add `if (TradeFrame == null) { log warning; return Failure; }` guards. | Open |
+| 8.1 | Add null guards to all 6 trade sequences. Already done — all have `TradeFrame Available` condition checks. | **Done** (pre-existing) |
 | 8.2 | Wire `TradeNetworkClientComponent` packet path as BG fallback for all 6 trade actions. Pattern: check params for targetGuid, use `InitiateTradeAsync(guid)` / `SetTradeItemAsync()` / `AcceptTradeAsync()` instead of frame methods. Model after BuyItem dual-path in ActionDispatch.cs:311-326. | Open |
 
 ### 8B — FG-Only Features Needing BG Packet Paths
 
 | # | Task | Status |
 |---|------|--------|
-| 8.3 | Add BG BuybackItem path. `VendorNetworkClientComponent` already has `BuyItemAsync()`. Add `BuybackItemAsync(vendorGuid, itemId)` sending `CMSG_BUYBACK_ITEM`. Wire into `BuildBuybackItemSequence()` with vendorGuid param check. | Open |
-| 8.4 | Add BG Craft path. `ProfessionsNetworkClientComponent` has trainer/craft observables. Add `CraftItemAsync(spellId, count)` sending `CMSG_CAST_SPELL` with trade skill target. Wire into `BuildCraftSequence()`. | Open |
-| 8.5 | Wire `FlightMasterNetworkClientComponent.ActivateTaxiAsync(nodeId)` into `BuildSelectTaxiNodeSequence()` as BG fallback when TaxiFrame is null. Send `CMSG_ACTIVATETAXI` with source+dest node IDs. | Open |
-| 8.6 | Wire `TrainerNetworkClientComponent.BuySpellAsync(spellId)` into `BuildTrainSkillSequence()` as BG fallback when TrainerFrame is null. Send `CMSG_TRAINER_BUY_SPELL`. | Open |
-| 8.7 | Wire `TalentNetworkClientComponent.LearnTalentAsync(tabIndex, talentIndex)` into `BuildLearnTalentSequence()` as BG fallback when TalentFrame is null. | Open |
-| 8.8 | Wire `GossipNetworkClientComponent.SelectOptionAsync(optionIndex)` into `BuildSelectGossipSequence()` as BG fallback when GossipFrame is null. | Open |
+| 8.3 | BG BuybackItem — already done. ActionDispatch dual-path: `VendorAgent.BuybackItemAsync` packet vs legacy MerchantFrame. | **Done** (pre-existing) |
+| 8.4 | BG Craft — already done. ActionDispatch dual-path: 2-param packet (`CMSG_CAST_SPELL`) vs legacy CraftFrame. | **Done** (pre-existing) |
+| 8.5 | Wire FlightMaster BG path — already done. ActionDispatch has dual-path: 3-param packet vs 1-param TaxiFrame. `FlightMasterAgent.ActivateFlightAsync` wired. | **Done** (pre-existing) |
+| 8.6 | Wire Trainer BG path — already done. ActionDispatch: 2-param packet via `TrainerAgent.BuySpellAsync` vs legacy TrainerFrame. | **Done** (pre-existing) |
+| 8.7 | Wire Talent BG path — already done. ActionDispatch: 2-param packet via `TalentAgent` vs legacy TalentFrame. | **Done** (pre-existing) |
+| 8.8 | Wire Gossip BG path — already done. ActionDispatch: 2-param packet via `GossipAgent.SelectOptionAsync` vs legacy GossipFrame. | **Done** (pre-existing) |
 
 ### 8C — Proto/Enum Alignment
 
 | # | Task | Status |
 |---|------|--------|
 | 8.9 | Add `StartWandAttack` to `CharacterAction` enum. Map `START_WAND_ATTACK` (proto 34). In ActionDispatch, call `_objectManager.StartWandAttack()` (FG uses `CastSpellByName('Shoot')`, BG uses `CMSG_CAST_SPELL` with Shoot spell ID). | Open |
-| 8.10 | Remove `START_PHYSICS_RECORDING` / `STOP_PHYSICS_RECORDING` (proto 70/71) from communication.proto — these are debug-only and should not be in the action protocol. Regenerate proto. | Open |
+| 8.10 | Remove `START_PHYSICS_RECORDING` / `STOP_PHYSICS_RECORDING` — already removed from proto. | **Done** (pre-existing) |
 
 ---
 
