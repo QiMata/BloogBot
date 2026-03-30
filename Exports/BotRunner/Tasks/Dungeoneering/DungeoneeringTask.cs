@@ -36,6 +36,8 @@ public class DungeoneeringTask : BotTask, IBotTask
     private int _waypointIndex;
     private Position? _lastPosition;
     private DateTime _lastMoveTime = DateTime.UtcNow;
+    private DateTime _lastCombatPush = DateTime.MinValue;
+    private const double CombatRepushCooldownSec = 20.0; // After combat timeout, navigate this long before re-engaging
     private int _updateCount;
 
     public DungeoneeringTask(IBotContext botContext, bool isLeader, IReadOnlyList<Position>? waypoints = null, uint targetMapId = 0)
@@ -80,8 +82,12 @@ public class DungeoneeringTask : BotTask, IBotTask
         // =====================================================================
         // STEP 1: ALL bots — if aggressors exist, stop and fight.
         // This is the SAME for leader and followers. The group fights together.
+        // After combat timeout pops PvERotation, there's a cooldown period where
+        // the bot navigates instead of re-engaging — this prevents the infinite
+        // combat loop when GM bots can't kill mobs.
         // =====================================================================
-        if (ObjectManager.Aggressors.Any())
+        bool inCombatCooldown = (DateTime.UtcNow - _lastCombatPush).TotalSeconds < CombatRepushCooldownSec;
+        if (ObjectManager.Aggressors.Any() && !inCombatCooldown)
         {
             ObjectManager.StopAllMovement();
             ClearNavigation();
@@ -98,7 +104,10 @@ public class DungeoneeringTask : BotTask, IBotTask
 
             // Push PvE rotation if not already fighting
             if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
+            {
+                _lastCombatPush = DateTime.UtcNow;
                 BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            }
 
             return;
         }
