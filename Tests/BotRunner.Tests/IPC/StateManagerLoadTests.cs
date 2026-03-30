@@ -302,6 +302,148 @@ public class StateManagerLoadTests
             Assert.Equal(0, r.Errors);
     }
 
+    // =========================================================================
+    // PIPELINE SERVER TESTS (new async implementation)
+    // =========================================================================
+
+    private sealed class PipelineLoadTestServer : ProtobufPipelineSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
+    {
+        public PipelineLoadTestServer(string ip, int port)
+            : base(ip, port, NullLogger.Instance) { }
+
+        protected override WoWActivitySnapshot HandleRequest(WoWActivitySnapshot request)
+        {
+            var response = request.Clone();
+            response.CurrentAction = new ActionMessage { ActionType = ActionType.Wait };
+            return response;
+        }
+    }
+
+    private LoadTestResult RunPipelineLoadTest(int clientCount, int durationSec, int pollIntervalMs = 100)
+    {
+        var port = GetFreePort();
+        using var server = new PipelineLoadTestServer("127.0.0.1", port);
+        Thread.Sleep(200);
+
+        var allLatencies = new ConcurrentBag<double>();
+        var errorCount = 0;
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(durationSec));
+        int snapshotSize = 0;
+
+        var tasks = new Task[clientCount];
+        for (int i = 0; i < clientCount; i++)
+        {
+            int clientId = i;
+            tasks[i] = Task.Run(() =>
+            {
+                try
+                {
+                    using var client = new ProtobufSocketClient<WoWActivitySnapshot, WoWActivitySnapshot>(
+                        "127.0.0.1", port, NullLogger.Instance);
+
+                    var snapshot = CreateRealisticSnapshot($"BOT{clientId:D4}");
+                    if (clientId == 0)
+                        Interlocked.Exchange(ref snapshotSize, snapshot.ToByteArray().Length);
+
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        var sw = Stopwatch.StartNew();
+                        try
+                        {
+                            var response = client.SendMessage(snapshot);
+                            sw.Stop();
+                            allLatencies.Add(sw.Elapsed.TotalMilliseconds);
+                        }
+                        catch
+                        {
+                            Interlocked.Increment(ref errorCount);
+                        }
+
+                        var remaining = pollIntervalMs - (int)sw.ElapsedMilliseconds;
+                        if (remaining > 0 && !cts.Token.IsCancellationRequested)
+                            Thread.Sleep(remaining);
+                    }
+                }
+                catch
+                {
+                    Interlocked.Increment(ref errorCount);
+                }
+            });
+        }
+
+        Task.WaitAll(tasks, TimeSpan.FromSeconds(durationSec + 10));
+
+        var latencies = allLatencies.OrderBy(x => x).ToList();
+        var totalMessages = latencies.Count;
+
+        return new LoadTestResult(
+            ClientCount: clientCount,
+            TotalMessages: totalMessages,
+            DurationSec: durationSec,
+            MsgPerSec: totalMessages / (double)durationSec,
+            P50Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.50)] : 0,
+            P95Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.95)] : 0,
+            P99Ms: latencies.Count > 0 ? latencies[(int)(latencies.Count * 0.99)] : 0,
+            MaxMs: latencies.Count > 0 ? latencies.Last() : 0,
+            Errors: errorCount,
+            SnapshotBytes: snapshotSize);
+    }
+
+    [Fact]
+    public void Pipeline_10Clients_10Seconds()
+    {
+        var result = RunPipelineLoadTest(clientCount: 10, durationSec: 10);
+        PrintResult(result);
+
+        Assert.Equal(0, result.Errors);
+        Assert.True(result.MsgPerSec > 30, $"Expected >30 msg/s, got {result.MsgPerSec:F0}");
+    }
+
+    [Fact]
+    public void Pipeline_100Clients_10Seconds()
+    {
+        var result = RunPipelineLoadTest(clientCount: 100, durationSec: 10);
+        PrintResult(result);
+
+        Assert.Equal(0, result.Errors);
+        Assert.True(result.TotalMessages > 10, $"Expected >10 msgs, got {result.TotalMessages}");
+    }
+
+    [Fact]
+    public void Pipeline_500Clients_15Seconds()
+    {
+        var result = RunPipelineLoadTest(clientCount: 500, durationSec: 15);
+        PrintResult(result);
+
+        // Pipeline server should process SOME messages at 500 clients
+        // (legacy server fails completely with 0 messages and 60 errors).
+        // Throughput limited by synchronous ProtobufSocketClient, not the server.
+        Assert.True(result.TotalMessages > 0, $"Expected >0 msgs, got {result.TotalMessages}");
+        Assert.True(result.Errors < 100, $"Expected <100 errors, got {result.Errors}");
+    }
+
+    [Fact]
+    public void Pipeline_vs_Legacy_100Clients()
+    {
+        _output.WriteLine("=== LEGACY SERVER (ProtobufSocketServer) ===");
+        var legacyResult = RunLoadTest(clientCount: 100, durationSec: 5);
+        PrintResult(legacyResult);
+
+        _output.WriteLine("\n=== PIPELINE SERVER (ProtobufPipelineSocketServer) ===");
+        var pipelineResult = RunPipelineLoadTest(clientCount: 100, durationSec: 5);
+        PrintResult(pipelineResult);
+
+        _output.WriteLine($"\n=== COMPARISON ===");
+        _output.WriteLine($"  Legacy:   {legacyResult.MsgPerSec:F0} msg/s, P95={legacyResult.P95Ms:F1}ms, errors={legacyResult.Errors}");
+        _output.WriteLine($"  Pipeline: {pipelineResult.MsgPerSec:F0} msg/s, P95={pipelineResult.P95Ms:F1}ms, errors={pipelineResult.Errors}");
+        var improvement = pipelineResult.MsgPerSec / Math.Max(legacyResult.MsgPerSec, 0.1);
+        _output.WriteLine($"  Speedup: {improvement:F1}x");
+
+        // Pipeline should have fewer errors than legacy at 100 clients
+        Assert.True(pipelineResult.Errors <= legacyResult.Errors,
+            $"Pipeline ({pipelineResult.Errors} errors) should not be worse than legacy ({legacyResult.Errors} errors)");
+    }
+
     private static int GetFreePort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
