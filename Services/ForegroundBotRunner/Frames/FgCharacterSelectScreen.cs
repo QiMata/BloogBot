@@ -164,7 +164,11 @@ public class FgCharacterSelectScreen(
 
             case 2:
             {
-                // Step 2: Select race (click the race button)
+                if (state != WoWScreenState.CharacterCreate)
+                {
+                    Log.Warning("[FG-CHARSEL] Step 2: Not on CharacterCreate screen (state={State}), waiting", state);
+                    break; // Don't advance — wait for screen transition from step 1
+                }
                 var raceIndex = GetCharCreateRaceIndex(race);
                 Log.Information("[FG-CHARSEL] Step 2: Set race={Race} (index {Index})", race, raceIndex);
                 luaCall($"if CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click() end");
@@ -174,7 +178,11 @@ public class FgCharacterSelectScreen(
 
             case 3:
             {
-                // Step 3: Select class
+                if (state != WoWScreenState.CharacterCreate)
+                {
+                    Log.Warning("[FG-CHARSEL] Step 3: Not on CharacterCreate screen (state={State}), waiting", state);
+                    break;
+                }
                 var classIndex = GetCharCreateClassIndex(@class);
                 Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (index {Index})", @class, classIndex);
                 luaCall($"if CharacterCreateClassButton{classIndex} then CharacterCreateClassButton{classIndex}:Click() end");
@@ -184,13 +192,20 @@ public class FgCharacterSelectScreen(
 
             case 4:
                 // Step 4: Set gender + name + create
+                // Guard: only proceed if we're actually on the CharacterCreate screen
+                if (state != WoWScreenState.CharacterCreate)
+                {
+                    Log.Warning("[FG-CHARSEL] Step 4: Not on CharacterCreate screen (state={State}), retrying step 1", state);
+                    _createCharStep = 1; // Go back to clicking "Create New Character"
+                    break;
+                }
                 Log.Information("[FG-CHARSEL] Step 4: Set gender={Gender}, create character '{Name}'", gender, name);
                 if (gender == Gender.Female)
                     luaCall("if CharacterCreateGenderButtonFemale then CharacterCreateGenderButtonFemale:Click() end");
                 else
                     luaCall("if CharacterCreateGenderButtonMale then CharacterCreateGenderButtonMale:Click() end");
                 luaCall($"if CharacterCreateNameEdit then CharacterCreateNameEdit:SetText(\"{name}\") end");
-                luaCall($"CreateCharacter(\"{name}\")");
+                luaCall($"if CreateCharacter then CreateCharacter(\"{name}\") end");
                 _createCharStep++;
                 break;
 

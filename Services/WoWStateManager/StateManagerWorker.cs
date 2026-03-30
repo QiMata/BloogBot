@@ -269,14 +269,17 @@ namespace WoWStateManager
                 {
                     _logger.LogInformation($"Creating new account: {accountName}");
                     await _mangosSOAPClient.CreateAccountAsync(accountName);
-                    await Task.Delay(100);
+                    await Task.Delay(500); // Wait for SOAP account creation to commit to DB
                 }
 
-                // Set GM level from config (default 6). Brotalnia's build reads from account.gmlevel at login.
+                // Set GM level via SOAP (.account set gmlevel) — this writes to account_access
+                // which is what VMaNGOS reads at login. The old MySQL path (account.gmlevel)
+                // doesn't work on VMaNGOS builds that read from account_access instead.
                 var targetGmLevel = characterSettings.GmLevel;
                 _logger.LogInformation($"Setting GM level {targetGmLevel} for account: {accountName}");
-                var gmResult = ReamldRepository.SetGMLevel(accountName, targetGmLevel);
-                _logger.LogInformation($"SetGMLevel result for {accountName}: {gmResult}");
+                var gmSoapResult = await _mangosSOAPClient.ExecuteGMCommandAsync(
+                    $".account set gmlevel {accountName} {targetGmLevel}");
+                _logger.LogInformation($"SetGMLevel SOAP result for {accountName}: {gmSoapResult}");
 
                 // Start the appropriate bot worker based on RunnerType
                 switch (characterSettings.RunnerType)

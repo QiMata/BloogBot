@@ -120,7 +120,7 @@ public class DungeoneeringCoordinator
 
     // Teleport throttle — prevent spamming .go xyz to bots mid-loading (causes crashes)
     private readonly ConcurrentDictionary<string, DateTime> _lastTeleportSent = new();
-    private const double TELEPORT_COOLDOWN_SEC = 20.0; // Cross-map load can take 15s+
+    private const double TELEPORT_COOLDOWN_SEC = 5.0; // Retry teleport if bot not on target map after 5s
 
     public CoordState State => _state;
 
@@ -1306,11 +1306,11 @@ public class DungeoneeringCoordinator
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
             snapshots.TryGetValue(_leaderAccount, out leaderSnap);
-            // Late-join teleport: if leader is not on RFC map AND wasn't already teleported,
-            // send them there. If they were already teleported (in TeleportToRFC phase),
-            // their snapshot may lag behind during WoW.exe loading — just wait.
+            // If leader is not on RFC map, re-send the teleport command.
+            // The original teleport in TeleportToRFC may have failed silently
+            // (FG bot in loading screen, command dropped). Throttled to once per 5s.
             var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            if (leaderMapId != RfcMapId && !_teleportedToRFC.ContainsKey(_leaderAccount))
+            if (leaderMapId != RfcMapId)
             {
                 return TrySendThrottledTeleport(_leaderAccount,
                     $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
