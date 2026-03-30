@@ -41,6 +41,7 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const int StuckTimeoutMs = 8000;
 
     private readonly bool _isLeader;
+    public bool IsLeader => _isLeader;
     private readonly List<Position> _waypoints;
     private DungeonState _state;
     private int _waypointIndex;
