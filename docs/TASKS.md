@@ -816,7 +816,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 13.1 | **Parse quest objective updates** — `SMSG_QUESTUPDATE_ADD_KILL` handler already in `QuestHandler.cs:48` but only logs. Wire into ObjectManager: track `QuestObjectives[questId] = { killCount, requiredCount, itemCount }`. Update on each ADD_KILL/ADD_ITEM. Add `SMSG_QUESTUPDATE_ADD_ITEM` handler (opcode exists, no handler). | Open |
+| 13.1 | **Parse quest objective updates** — Already done. QuestHandler parses ADD_KILL + ADD_ITEM, calls `UpdateQuestKillProgress`/`UpdateQuestItemProgress` on ObjectManager. ConcurrentDictionary tracks progress, fires events. | **Done** (pre-existing) |
 | 13.2 | **Quest objective display in snapshot** — Add `questObjectives` repeated field to `WoWPlayer` proto message. Populate from ObjectManager quest tracking. StateManager/AI can see quest progress. | Open |
 | 13.3 | **Quest chain router** — Create `QuestChainRouter.cs` in `Exports/BotRunner/Tasks/Questing/`. Load quest chain data from MaNGOS `quest_template` table (read-only MySQL). Given current quest log, determine next quest in each chain. Suggest travel to quest giver NPC position. | Open |
 | 13.4 | **Escort quest support** — Create `EscortQuestTask.cs`. After accepting escort quest, follow NPC (use existing `FollowTarget` action with NPC GUID). Defend NPC from attackers (use existing combat rotation). Complete when NPC reaches destination. | Open |
@@ -838,7 +838,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 15.1 | **Create `ChannelNetworkClientComponent`** — File: `Exports/WoWSharpClient/Networking/ClientComponents/ChannelNetworkClientComponent.cs`. Methods: `JoinChannelAsync(name, password)` (CMSG_JOIN_CHANNEL), `LeaveChannelAsync(name)` (CMSG_LEAVE_CHANNEL), `SendChannelMessage(channelName, message)` (CMSG_MESSAGECHAT with CHAT_MSG_CHANNEL). Observables: `ChannelJoined`, `ChannelLeft`, `ChannelNotify` (SMSG_CHANNEL_NOTIFY), `ChannelList` (SMSG_CHANNEL_LIST). | Open |
+| 15.1 | **`ChannelNetworkClientComponent`** — Already exists with JoinChannel, LeaveChannel, SendChannelMessage. | **Done** (pre-existing) |
 | 15.2 | **Auto-join General/Trade/LocalDefense** — On world entry, auto-join zone-appropriate channels. `BotRunnerService` sends JoinChannel actions after `HasEnteredWorld` flag. | Open |
 | 15.3 | **Whisper conversation tracking** — Add `WhisperHistory` dictionary (playerName → last 10 messages) to `ChatNetworkClientComponent`. Filter incoming SMSG_MESSAGECHAT by CHAT_MSG_WHISPER type. Surface in snapshot for AI response generation. | Open |
 
