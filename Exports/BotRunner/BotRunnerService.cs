@@ -578,7 +578,14 @@ namespace BotRunner
         }
 
         private static bool IsCorpseState(IWoWLocalPlayer player)
-            => !IsGhostState(player) && (player.Health == 0 || IsStandStateDead(player));
+        {
+            if (IsGhostState(player)) return false;
+            // Require stand-state-dead flag from the server, not just HP==0.
+            // GM level 6 accounts sit at HP 0/1 under damage without actually dying —
+            // the server never sets UNIT_STAND_STATE_DEAD for them.
+            // HP==0 alone is NOT sufficient to declare death.
+            return IsStandStateDead(player);
+        }
 
         private static bool IsDeadOrGhostState(IWoWLocalPlayer player)
             => IsGhostState(player) || IsCorpseState(player);

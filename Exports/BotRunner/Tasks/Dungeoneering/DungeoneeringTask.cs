@@ -36,8 +36,8 @@ public class DungeoneeringTask : BotTask, IBotTask
     private const float FollowDistance = 15f;
     private const float FollowStopDistance = 8f;
     private const float GroupPaceDistance = 40f;    // Leader waits if fewer than half the group is within this range
-    private const int RestHealthPercent = 10;       // Very low — GM immortal bots don't need rest
-    private const int RestManaPercent = 10;         // Very low — proceed without resting
+    private const int RestHealthPercent = 0;        // Never rest on HP — GM bots are immortal at HP 0/1
+    private const int RestManaPercent = 0;          // Never rest on mana — proceed always
     private const int StuckTimeoutMs = 8000;
 
     private readonly bool _isLeader;
@@ -306,8 +306,29 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     private void HandleFollowLeader(IWoWPlayer player)
     {
-        // Followers fight aggressors (mobs attacking them) then resume following.
-        if (ObjectManager.Aggressors.Any())
+        // Find the party member furthest ahead in the dungeon (deepest from entrance).
+        // This is the actual dungeon leader — follow them, not the nearest member.
+        // Don't filter on Health > 0 because GM accounts sit at HP 0/1 permanently.
+        var entrance = _waypoints.Count > 0 ? _waypoints[0] : player.Position;
+        var partyMembers = ObjectManager.PartyMembers
+            .Where(m => m.Position != null && m.Guid != player.Guid)
+            .ToList();
+
+        var leader = partyMembers
+            .OrderByDescending(m => m.Position!.DistanceTo(entrance))
+            .FirstOrDefault();
+
+        // If no party members visible, navigate waypoints as fallback
+        if (leader?.Position == null)
+        {
+            HandleNavigateToWaypoint(player);
+            return;
+        }
+
+        var distToLeader = player.Position.DistanceTo(leader.Position);
+
+        // Priority 1: if close to leader and have aggressors, fight them
+        if (distToLeader < FollowDistance && ObjectManager.Aggressors.Any())
         {
             if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
             {
@@ -319,31 +340,27 @@ public class DungeoneeringTask : BotTask, IBotTask
             return;
         }
 
-        // Find the party leader (raid leader) to follow.
-        var leader = ObjectManager.PartyMembers
-            .Where(m => m.Position != null && m.Health > 0)
-            .OrderBy(m => player.Position.DistanceTo(m.Position))
-            .FirstOrDefault();
-
-        // If no leader visible, navigate waypoints as fallback
-        if (leader?.Position == null)
-        {
-            HandleNavigateToWaypoint(player);
-            return;
-        }
-
-        var distToLeader = player.Position.DistanceTo(leader.Position);
-
+        // Priority 2: catch up to the leader — movement takes precedence over combat
+        // when the leader is far away. Don't let entrance mobs trap followers.
         if (distToLeader > FollowDistance)
         {
             TryNavigateToward(leader.Position, allowDirectFallback: true);
         }
         else if (distToLeader < FollowStopDistance)
         {
-            ObjectManager.StopAllMovement();
-            ClearNavigation();
+            // Close enough — assist leader's target if they have one
+            if (leader.TargetGuid != 0 && leader.TargetGuid != leader.Guid)
+            {
+                ObjectManager.SetTarget(leader.TargetGuid);
+                if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
+                    BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            }
+            else
+            {
+                ObjectManager.StopAllMovement();
+                ClearNavigation();
+            }
         }
-        // Between stop and follow distance — hold position
     }
 
     private void HandleComplete()
