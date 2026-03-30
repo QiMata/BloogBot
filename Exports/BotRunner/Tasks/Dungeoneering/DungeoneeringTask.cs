@@ -261,13 +261,17 @@ public class DungeoneeringTask : BotTask, IBotTask
     private void HandleWaitForCombatClear()
     {
         // Combat rotation task is on the stack — when it pops, we resume here.
-        // ALWAYS return to NavigateToWaypoint after combat clears.
-        // NavigateToWaypoint will check for close aggro targets (12y) while advancing.
-        // This prevents the infinite pull loop where the bot would re-check for
-        // hostiles within 25y after every kill and never advance past dense packs.
+        // Return to the appropriate state based on role.
         if (!ObjectManager.Aggressors.Any())
         {
-            TransitionTo(DungeonState.NavigateToWaypoint);
+            TransitionTo(_isLeader ? DungeonState.NavigateToWaypoint : DungeonState.FollowLeader);
+        }
+        else if (!_isLeader)
+        {
+            // Followers: don't wait for combat clear — resume following.
+            // The leader controls the pace. Followers shouldn't get stuck
+            // fighting entrance mobs while the leader advances.
+            TransitionTo(DungeonState.FollowLeader);
         }
     }
 
@@ -318,10 +322,19 @@ public class DungeoneeringTask : BotTask, IBotTask
             .OrderByDescending(m => m.Position!.DistanceTo(entrance))
             .FirstOrDefault();
 
-        // If no party members visible, navigate waypoints as fallback
+        // If no party members visible, navigate toward next waypoint directly.
+        // Do NOT call HandleNavigateToWaypoint — that puts followers into the
+        // leader's PullHostiles/WaitForCombatClear states, causing deadlocks.
         if (leader?.Position == null)
         {
-            HandleNavigateToWaypoint(player);
+            if (_waypointIndex < _waypoints.Count)
+            {
+                var wp = _waypoints[_waypointIndex];
+                if (player.Position.DistanceTo(wp) < WaypointReachDistance)
+                    _waypointIndex++;
+                else
+                    TryNavigateToward(wp, allowDirectFallback: true);
+            }
             return;
         }
 
@@ -412,12 +425,8 @@ public class DungeoneeringTask : BotTask, IBotTask
             var player = ObjectManager.Player;
             if (player == null) return false;
 
-            if (player.HealthPercent <= RestHealthPercent)
-                return false;
-
-            // Only check mana for classes that use it. Warriors/rogues have MaxMana=0.
-            if (player.MaxMana > 0 && player.ManaPercent < RestManaPercent)
-                return false;
+            // Never rest during dungeoneering — GM bots are immortal.
+            // HealthPercent can be 0 for GM accounts (server clamps HP, doesn't kill).
 
             return true;
         }
