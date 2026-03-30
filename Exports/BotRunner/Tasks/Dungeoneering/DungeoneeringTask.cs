@@ -203,10 +203,8 @@ public class DungeoneeringTask : BotTask, IBotTask
             }
         }
 
-        // =====================================================================
-        // STEP 3: Push buff task every cycle (pops immediately if nothing to do)
-        // =====================================================================
-        if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
-            BotTasks.Push(Container.ClassContainer.CreateBuffTask(BotContext));
+        // Buff task intentionally NOT pushed every cycle — the BG bot's buff detection
+        // may not properly track active auras, causing repeated cast spam. Buffs are
+        // handled by the coordinator's prep phase and the combat rotation's own logic.
     }
 }
