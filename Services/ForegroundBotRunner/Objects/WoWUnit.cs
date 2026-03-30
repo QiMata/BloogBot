@@ -141,7 +141,8 @@ namespace ForegroundBotRunner.Objects
 
         public CreatureType CreatureType => Functions.GetCreatureType(Pointer);
 
-        public UnitReaction UnitReaction => Functions.GetUnitReaction(Pointer, Pointer);
+        public UnitReaction UnitReaction => Functions.GetUnitReaction(
+            Statics.ObjectManager.PlayerPointer, Pointer);
 
         public virtual CreatureRank CreatureRank => (CreatureRank)Functions.GetCreatureRank(Pointer);
 

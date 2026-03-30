@@ -163,8 +163,11 @@ namespace ForegroundBotRunner.Statics
                     {
                         // Truly can't find player — null it out
                         Player = null;
+                        PlayerPointer = nint.Zero;
                         return;
                     }
+
+                    PlayerPointer = playerObject;
 
                     lock (_objectsLock)
                     {

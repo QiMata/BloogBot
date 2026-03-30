@@ -34,6 +34,12 @@ namespace ForegroundBotRunner.Statics
 
         public IWoWLocalPlayer Player { get; internal set; }
 
+        /// <summary>
+        /// Native pointer to the local player object. Used by WoWUnit.UnitReaction
+        /// to call GetUnitReaction(playerPtr, unitPtr) instead of (unitPtr, unitPtr).
+        /// </summary>
+        internal static nint PlayerPointer { get; set; }
+
 
 
         public IWoWLocalPet Pet { get; private set; }
