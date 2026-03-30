@@ -808,7 +808,20 @@ namespace WoWSharpClient
         /// </summary>
 
 
-        public void SetRaidTarget(IWoWUnit target, TargetMarker v) { }
+        public void SetRaidTarget(IWoWUnit target, TargetMarker marker)
+        {
+            if (target == null || _woWClient?.WorldClient == null) return;
+
+            // MSG_RAID_TARGET_UPDATE (0x321): uint8 mode (0=set) + uint64 targetGuid + uint8 iconId
+            // iconId: 0=none, 1=star, 2=circle, 3=diamond, 4=triangle, 5=moon, 6=square, 7=cross, 8=skull
+            var payload = new byte[1 + 8 + 1];
+            payload[0] = 0; // mode = set
+            BitConverter.GetBytes(target.Guid).CopyTo(payload, 1);
+            payload[9] = (byte)marker;
+
+            _ = _woWClient.WorldClient.SendOpcodeAsync(
+                GameData.Core.Enums.Opcode.MSG_RAID_TARGET_UPDATE, payload);
+        }
 
 
         public void JoinBattleGroundQueue() { }
