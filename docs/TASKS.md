@@ -198,6 +198,169 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 
 ---
 
+## P25 — Battleground Integration Tests (WSG, AB, AV)
+
+**Goal:** Full-scale battleground tests with realistic team sizes. Each test launches bots on BOTH factions, forms raid groups, queues for the BG, enters, and plays objectives. Validates: BG queue/join/leave protocol, faction-vs-faction combat, objective interaction, honor tracking, and BG-specific coordination.
+
+**Depends on:** P10 (BG network infrastructure), P11A (raid formation), P8 (FG/BG parity gaps for BG packet paths).
+
+### 25A — Shared BG Test Infrastructure
+
+| # | Task | Spec |
+|---|------|------|
+| 25.1 | **Create `BattlegroundTestFixture`** — File: `Tests/Tests.Infrastructure/BattlegroundTestFixture.cs`. Base fixture for all BG tests. Parameters: `int hordeCount`, `int allianceCount`, `BattlegroundType bgType`. Creates MaNGOS accounts (WSGBOT1-N for Horde, WSGBOTA1-N for Alliance), sets GM level 6, creates characters with even race/class distribution across the faction. Launches two StateManager instances (one per faction) or a single StateManager managing both factions. Provides `HordeBots` and `AllianceBots` snapshot lists. Implements `IAsyncLifetime` for setup/teardown. | Open |
+| 25.2 | **Create `BattlegroundCoordinator`** — File: `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`. StateManager coordination that: (1) Forms raid group from all same-faction bots. (2) Leader interacts with battlemaster NPC. (3) Leader queues for BG via `CMSG_BATTLEMASTER_JOIN`. (4) All members accept invite via `CMSG_BATTLEFIELD_PORT`. (5) Tracks BG state via `SMSG_BATTLEFIELD_STATUS`. (6) Dispatches objective tasks inside BG. (7) Handles BG end (honor, marks collection). | Open |
+| 25.3 | **Create `BattlemasterData.cs`** — File: `Exports/BotRunner/Travel/BattlemasterData.cs`. Static data: battlemaster NPC positions by faction and BG type. Orgrimmar WSG battlemaster (mapId=1, pos), Orgrimmar AB battlemaster, Orgrimmar AV battlemaster. Same for Alliance (Stormwind, Ironforge). ~12 entries. | Open |
+| 25.4 | **Implement `BattlegroundNetworkClientComponent`** — (P10.1 implementation) Full packet handling for BG queue, join, leave, status. Required by all BG tests. | Open |
+
+### 25B — Warsong Gulch (1 FG + 19 BG, 10v10)
+
+**Setup:** 10 Horde bots (1 FG TESTBOT1 + 9 BG WSGBOT2-10) vs 10 Alliance bots (10 BG WSGBOTA1-10). Both sides form raid, queue at battlemasters, enter WSG (mapId=489).
+
+| # | Task | Spec |
+|---|------|------|
+| 25.5 | **Create WSG accounts + settings** — 20 MaNGOS accounts via SOAP. `WarsongGulch.settings.json` with 20-bot config (10 Horde + 10 Alliance). Account naming: `WSGBOT{n}` (Horde), `WSGBOTA{n}` (Alliance). Mixed classes for each side. FG bot (TESTBOT1) is Horde raid leader. | Open |
+| 25.6 | **WSG queue + entry test** — `Tests/BotRunner.Tests/LiveValidation/WarsongGulchTests.cs`. Both factions queue for WSG. Assert: all 20 bots receive `SMSG_BATTLEFIELD_STATUS` with status=QUEUED, then INVITED, then accept and enter mapId=489. All 20 on BG map within 2 minutes. | Open |
+| 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | Open |
+| 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | Open |
+
+### 25C — Arathi Basin (1 FG + 29 BG, 15v15)
+
+**Setup:** 15 Horde bots (1 FG TESTBOT1 + 14 BG ABBOT2-15) vs 15 Alliance bots (15 BG ABBOTA1-15). Both sides form raid, queue, enter AB (mapId=529).
+
+| # | Task | Spec |
+|---|------|------|
+| 25.9 | **Create AB accounts + settings** — 30 MaNGOS accounts via SOAP. `ArathiBasin.settings.json`. Account naming: `ABBOT{n}` (Horde), `ABBOTA{n}` (Alliance). | Open |
+| 25.10 | **AB queue + entry test** — Both factions queue for AB. Assert: all 30 bots enter mapId=529. | Open |
+| 25.11 | **AB node assault test** — Horde bots split into 3 groups (5 each), assault Stables, Blacksmith, Farm. Assert: `SMSG_UPDATE_WORLD_STATE` shows nodes captured. Track resource points accumulating. | Open |
+| 25.12 | **AB full game test** — Play until one side reaches 2000 resources or 30-minute timer. Assert: BG complete, honor awarded, marks distributed. Timeout: 35 minutes. | Open |
+
+### 25D — Alterac Valley (1 FG + 79 BG, 40v40)
+
+**Setup:** 40 Horde bots (1 FG TESTBOT1 + 39 BG AVBOT2-40) vs 40 Alliance bots (40 BG AVBOTA1-40). Both form raid (8 subgroups × 5), queue, enter AV (mapId=30).
+
+| # | Task | Spec |
+|---|------|------|
+| 25.13 | **Create AV accounts + settings** — 80 MaNGOS accounts via SOAP. `AlteracValley.settings.json`. Account naming: `AVBOT{n}` (Horde), `AVBOTA{n}` (Alliance). | Open |
+| 25.14 | **AV queue + entry test** — Both factions queue for AV. Assert: all 80 bots enter mapId=30. This is the first 80-bot concurrent test — validates connection scaling. | Open |
+| 25.15 | **AV tower assault test** — Horde pushes south, assaults Stonehearth Bunker. Assert tower capture via world state updates. | Open |
+| 25.16 | **AV graveyard capture test** — Horde captures Snowfall Graveyard. Assert: GY ownership changes, dead Horde bots respawn at captured GY. | Open |
+| 25.17 | **AV general kill test** — Full AV game: Horde pushes to Vanndar Stormpike, Alliance pushes to Drek'Thar. Assert: one general dies, `SMSG_BATTLEFIELD_STATUS` shows BG winner. Timeout: 60 minutes. | Open |
+
+---
+
+## P26 — Dungeon Instance Tests (1 FG + 9 BG, All Vanilla Dungeons)
+
+**Goal:** Integration test for EVERY vanilla dungeon. Each test launches 10 bots (1 FG + 9 BG) with role-diverse composition, forms a group, travels to the dungeon entrance, and enters the instance. Tests validate: group formation, travel/summoning, instance portal entry, map transition, and basic dungeon progress. Summoning stone interaction is tested for each dungeon that has one — a subset of bots teleport to the stone and summon the rest.
+
+**Depends on:** P5 (RFC pattern), P21 (travel planner), P10.1/P11.1 (group/raid infrastructure).
+
+**Architecture:** Each dungeon test follows the RFC pattern (P5): `DungeoneeringCoordinator` drives the full pipeline. A `DungeonTestFixture` base class parameterized by dungeon ID provides shared setup. Summoning stone tests: GM-teleport 3 bots to the meeting stone position, remaining 7 teleport to a distant city. The 3 bots at the stone use `CMSG_MEETINGSTONE_JOIN` to summon each of the 7, validating the full summoning flow.
+
+### 26A — Dungeon Test Infrastructure
+
+| # | Task | Spec |
+|---|------|------|
+| 26.1 | **Create `DungeonTestFixture`** — File: `Tests/Tests.Infrastructure/DungeonTestFixture.cs`. Parameterized base fixture. Parameters: `string dungeonName`, `uint instanceMapId`, `float entranceX/Y/Z` (world-side portal position on mapId 0 or 1), `float stoneX/Y/Z` (meeting stone position, nullable), `int botCount = 10`. Creates `DUNBOT{dungeonAbbrev}{n}` accounts. Launches StateManager with dungeon-specific settings JSON. Provides `AllBots` snapshot list. Reuses `WaitForProgressAsync` pattern from RFC tests. | Open |
+| 26.2 | **Create `DungeonEntryData.cs`** — File: `Exports/BotRunner/Travel/DungeonEntryData.cs`. Static data for ALL vanilla dungeon entrances and meeting stones. Query `areatrigger_teleport` from MaNGOS DB (read-only) for authoritative portal coords. Fields per dungeon: `Name`, `Abbreviation`, `InstanceMapId`, `EntranceMapId`, `EntranceX/Y/Z`, `StoneMapId`, `StoneX/Y/Z` (nullable), `MinLevel`, `MaxLevel`, `MaxPlayers`, `Faction` (Both/Horde/Alliance). | Open |
+| 26.3 | **Implement meeting stone summoning** — File: `Exports/BotRunner/Tasks/Travel/MeetingStoneSummonTask.cs`. Steps: (1) Navigate to meeting stone game object (GameObjectType 23). (2) Interact via `CMSG_MEETINGSTONE_JOIN`. (3) Wait for `SMSG_MEETINGSTONE_SETQUEUE` confirmation. (4) When 3 members are at stone, summoning portal appears. (5) Target absent member, confirm summon. (6) Wait for `SMSG_MEETINGSTONE_COMPLETE`. (7) Repeat for all absent members. Also implement Warlock Ritual of Summoning (spell 698) as alternative path when party has a Warlock. | Open |
+| 26.4 | **Create `SummoningStoneData.cs`** — File: `Exports/BotRunner/Travel/SummoningStoneData.cs`. Meeting stone positions for all vanilla dungeons. Source: `gameobject` table WHERE `type=23` (GAMEOBJECT_TYPE_MEETINGSTONE). ~20 entries covering major dungeons. | Open |
+
+### 26B — Classic Dungeons (Levels 13-30)
+
+Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar → summon all → enter dungeon → verify mapId change → basic forward progress.
+
+| # | Task | Spec |
+|---|------|------|
+| 26.5 | **Ragefire Chasm** (mapId=389) — Already implemented in P5. Entrance: Orgrimmar cleft (1,1811,-4410,-18). No meeting stone (city dungeon). Validate existing test still passes as part of P26 regression. | Done (P5) |
+| 26.6 | **Wailing Caverns** (mapId=43) — Entrance: Barrens (1,-740,-2214,16). Meeting stone outside. 10 bots, verify all enter map 43. Test summoning stone flow: 3 at stone, 7 in Org, summon all 7. | Open |
+| 26.7 | **Shadowfang Keep** (mapId=33) — Entrance: Silverpine Forest (0,-229,1571,76). Meeting stone. Horde-accessible (neutral dungeon). | Open |
+| 26.8 | **Blackfathom Deeps** (mapId=48) — Entrance: Ashenvale (1,4254,740,-25). Meeting stone. Requires underwater swim to entrance portal. | Open |
+| 26.9 | **The Stockade** (mapId=34) — Entrance: Stormwind (0,-8764,846,88). Alliance-only city dungeon, no meeting stone. Skip for Horde bots. | Open |
+| 26.10 | **Gnomeregan** (mapId=90) — Entrance: Dun Morogh (0,-5163,927,257). Meeting stone. Alliance-favored but Horde has back entrance via teleporter in Booty Bay. | Open |
+
+### 26C — Mid-Level Dungeons (Levels 30-50)
+
+| # | Task | Spec |
+|---|------|------|
+| 26.11 | **Razorfen Kraul** (mapId=47) — Entrance: Barrens (1,-4464,-1666,82). Meeting stone. | Open |
+| 26.12 | **Scarlet Monastery — Graveyard** (mapId=189) — Entrance: Tirisfal Glades (0,2892,-764,161). Four wings share one entrance area. Meeting stone. Test: enter GY wing specifically. | Open |
+| 26.13 | **Scarlet Monastery — Library** (mapId=189) — Same entrance area. Different instance portal. | Open |
+| 26.14 | **Scarlet Monastery — Armory** (mapId=189) — Same entrance area. | Open |
+| 26.15 | **Scarlet Monastery — Cathedral** (mapId=189) — Same entrance area. Hardest wing. | Open |
+| 26.16 | **Razorfen Downs** (mapId=129) — Entrance: Barrens (1,-4658,-2524,85). Meeting stone. | Open |
+| 26.17 | **Uldaman** (mapId=70) — Entrance: Badlands (0,-6072,-2955,209). Meeting stone. | Open |
+| 26.18 | **Zul'Farrak** (mapId=209) — Entrance: Tanaris (1,-6802,-2890,9). Meeting stone. Open-world entrance (no portal, zone into instance). | Open |
+| 26.19 | **Maraudon** (mapId=349) — Entrance: Desolace (1,-1433,2928,52). Three entrances (Orange, Purple, Celebras shortcut). Meeting stone. | Open |
+
+### 26D — High-Level Dungeons (Levels 50-60)
+
+| # | Task | Spec |
+|---|------|------|
+| 26.20 | **Sunken Temple** (mapId=109) — Entrance: Swamp of Sorrows (0,-10456,-3829,-43). Meeting stone. Underwater entrance approach. | Open |
+| 26.21 | **Blackrock Depths** (mapId=230) — Entrance: Blackrock Mountain (0,-7178,-920,166). Meeting stone at mountain base. Complex entrance path through BRM lava chains. | Open |
+| 26.22 | **Lower Blackrock Spire** (mapId=229) — Entrance: Blackrock Mountain (0,-7535,-1002,275). Same BRM approach. 10-man. Meeting stone shared with BRD/UBRS. | Open |
+| 26.23 | **Upper Blackrock Spire** (mapId=229) — Same entrance as LBRS but requires UBRS key (Seal of Ascension). 10-man raid-size dungeon. Test with GM-provided key. | Open |
+| 26.24 | **Dire Maul — East** (mapId=429) — Entrance: Feralas (1,-3979,1127,161). Three wings. Meeting stone. | Open |
+| 26.25 | **Dire Maul — West** (mapId=429) — Same entrance area, different portal. | Open |
+| 26.26 | **Dire Maul — North** (mapId=429) — Same entrance area, different portal. Tribute run possible. | Open |
+| 26.27 | **Stratholme — Living Side** (mapId=329) — Entrance: Eastern Plaguelands (0,3352,-3379,145). Meeting stone. Key: Key to the City (or paladin shortcut). | Open |
+| 26.28 | **Stratholme — Undead Side** (mapId=329) — Service entrance (0,3392,-3363,142). Same meeting stone. Baron Rivendare farming route. | Open |
+| 26.29 | **Scholomance** (mapId=289) — Entrance: Western Plaguelands (0,1267,-2556,95). Meeting stone. Requires Skeleton Key (or lockpick/seaforium). | Open |
+
+### 26E — Warlock Summoning Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 26.30 | **Warlock summon test (RFC)** — Use RFC as test dungeon. Party composition includes 1 Warlock. 3 bots (including Warlock) at RFC entrance. 7 bots in Orgrimmar. Warlock casts Ritual of Summoning (spell 698). 2 nearby bots right-click portal to assist. Target absent bot accepts summon via `CMSG_SUMMON_RESPONSE`. Assert: summoned bot appears at dungeon entrance. Repeat for all 7 absent bots. Requires: Warlock has spell 698 learned, has Soul Shard in inventory. | Open |
+| 26.31 | **Meeting stone summon test (Wailing Caverns)** — 3 bots GM-teleported to WC meeting stone. 7 bots in Orgrimmar. Bots at stone interact with meeting stone object. Assert: `SMSG_MEETINGSTONE_SETQUEUE` received. Absent bots summoned one by one. Assert: all 10 bots at dungeon entrance within 5 minutes. | Open |
+| 26.32 | **Fallback: no summoner available** — All 10 bots in Orgrimmar, no Warlock, no meeting stone nearby. Test that TravelTask (P21) routes all bots to dungeon entrance via walking/flight path. Assert: all arrive within travel time limit. | Open |
+
+---
+
+## P27 — Raid Instance Tests (10-Man Formation, All Vanilla Raids)
+
+**Goal:** Integration test for EVERY vanilla raid instance. Each test launches 10 bots (1 FG + 9 BG) — not the full 20/40 raid size, but enough to test group formation, raid conversion, travel, instance entry, and basic encounter positioning. Uses the same DungeoneeringCoordinator pattern as P5/P26 but with raid-specific setup (subgroups, role assignment, ready checks).
+
+**Why 10 bots:** Full 40-man tests (P11, P25D) are separate scalability exercises. P27 validates the mechanical pipeline: can the system form a raid, enter every instance portal, and not crash? 10 bots covers all code paths without the resource overhead of 40.
+
+**Depends on:** P11A (raid formation), P26A (dungeon test infrastructure), P21 (travel).
+
+### 27A — Raid Test Infrastructure
+
+| # | Task | Spec |
+|---|------|------|
+| 27.1 | **Create `RaidTestFixture`** — File: `Tests/Tests.Infrastructure/RaidTestFixture.cs`. Extends `DungeonTestFixture` with raid-specific setup: converts group to raid (`CMSG_GROUP_SET_LEADER` + `CMSG_GROUP_RAID_CONVERT`), assigns subgroups (2 subgroups of 5), sets raid difficulty, initiates ready check. Parameters: `string raidName`, `uint instanceMapId`, `float entranceX/Y/Z`, `int botCount = 10`. | Open |
+| 27.2 | **Create `RaidEntryData.cs`** — File: `Exports/BotRunner/Travel/RaidEntryData.cs`. Static data for all vanilla raid entrances. Fields: `Name`, `Abbreviation`, `InstanceMapId`, `EntranceMapId`, `EntranceX/Y/Z`, `StoneX/Y/Z` (nullable), `MinLevel`, `MaxPlayers` (20 or 40), `Faction`, `AttunementRequired` (bool), `AttunementQuestId` (nullable). | Open |
+
+### 27B — 20-Man Raids
+
+| # | Task | Spec |
+|---|------|------|
+| 27.3 | **Zul'Gurub** (mapId=309) — Entrance: Stranglethorn Vale (0,-11916,-1243,65). No attunement. 20-man. 10 bots form raid, enter map 309. Assert: all on raid map, basic patrol/pull possible. | Open |
+| 27.4 | **Ruins of Ahn'Qiraj (AQ20)** (mapId=509) — Entrance: Silithus (1,-8409,1498,30). No attunement (gate must be opened server-side). 20-man. | Open |
+
+### 27C — 40-Man Raids
+
+| # | Task | Spec |
+|---|------|------|
+| 27.5 | **Molten Core** (mapId=409) — Entrance: Blackrock Mountain (0,-7513,-1037,181, inside BRD). Attunement: talk to Lothos Riftwalker after touching BRD core. 40-man. Test with GM-bypassed attunement. 10 bots enter map 409. | Open |
+| 27.6 | **Onyxia's Lair** (mapId=249) — Entrance: Dustwallow Marsh (1,-4708,-3727,-62). Attunement: Drakefire Amulet quest chain. 40-man. GM-bypass attunement. | Open |
+| 27.7 | **Blackwing Lair** (mapId=469) — Entrance: Blackrock Mountain UBRS (0,-7666,-1101,400). Attunement: touch orb behind Drakkisath in UBRS. 40-man. GM-bypass. | Open |
+| 27.8 | **Temple of Ahn'Qiraj (AQ40)** (mapId=531) — Entrance: Silithus (1,-8233,2017,129). Gate event required server-side. 40-man. | Open |
+| 27.9 | **Naxxramas** (mapId=533) — Entrance: Eastern Plaguelands (0,3125,-3748,136). Attunement: Argent Dawn reputation + quest. 40-man. GM-bypass. Floating necropolis — teleport to entrance. | Open |
+
+### 27D — Raid-Specific Coordination Tests
+
+| # | Task | Spec |
+|---|------|------|
+| 27.10 | **Raid ready check test** — In MC (or any raid), raid leader initiates `MSG_RAID_READY_CHECK`. All 9 members respond with `MSG_RAID_READY_CHECK_CONFIRM`. Assert: `MSG_RAID_READY_CHECK_FINISHED` received by all. | Open |
+| 27.11 | **Raid subgroup assignment test** — 10 bots split into 2 subgroups of 5 via `CMSG_GROUP_CHANGE_SUB_GROUP`. Assert: each bot knows its subgroup assignment. Tanks in group 1, healers in group 2. | Open |
+| 27.12 | **Raid mark targeting test** — Raid leader sets skull mark on a mob via `CMSG_SET_RAID_ICON`. All DPS bots target the skull-marked mob. Assert: all DPS bots' `TargetGuid` matches the marked mob. | Open |
+| 27.13 | **Raid loot rules test** — Set loot method to Master Looter via `CMSG_LOOT_METHOD` before entering raid. Assert: `SMSG_GROUP_SET_LEADER` + loot method change confirmed. After killing a mob, raid leader receives loot via `CMSG_LOOT_MASTER_GIVE`. | Open |
+
+---
+
 ## P22 — Character Progression Planner (Goal-Driven Bot Behavior)
 
 **Goal:** A config-driven progression system where each bot has explicit long-term objectives — target spec, gear set, reputation standings, rare items, mount, gold target, skill priorities — and StateManager continuously evaluates progress against those goals to decide what the bot should do next. This is the layer that makes 3000 bots behave like a population of real players with individual ambitions.

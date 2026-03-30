@@ -13,6 +13,7 @@ namespace BackgroundBotRunner.Diagnostics;
 
 /// <summary>
 /// Writes a stable background packet sidecar for live parity tests.
+/// Captures ALL sent (CMSG) and received (SMSG) opcodes via WoWClient events.
 /// Bound to BotRunnerService's Start/StopPhysicsRecording lifecycle.
 /// </summary>
 public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecorder, IDisposable
@@ -33,6 +34,7 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
     private sealed record PacketTraceRow(
         int Index,
         long ElapsedMs,
+        string Direction,
         Opcode Opcode,
         int Size);
 
@@ -43,7 +45,10 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
 
         _wowClient = wowClient;
         _logger = loggerFactory.CreateLogger<BackgroundPacketTraceRecorder>();
-        _wowClient.MovementOpcodeSent += HandleMovementOpcodeSent;
+
+        // Subscribe to ALL packets (sent + received), not just movement
+        _wowClient.PacketSent += HandlePacketSent;
+        _wowClient.PacketReceived += HandlePacketReceived;
     }
 
     public void StartRecording(string accountName)
@@ -78,11 +83,12 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
         lock (_lock)
         {
             StopRecordingInternal(writeFile: false);
-            _wowClient.MovementOpcodeSent -= HandleMovementOpcodeSent;
+            _wowClient.PacketSent -= HandlePacketSent;
+            _wowClient.PacketReceived -= HandlePacketReceived;
         }
     }
 
-    private void HandleMovementOpcodeSent(Opcode opcode, int size)
+    private void HandlePacketSent(Opcode opcode, int size)
     {
         lock (_lock)
         {
@@ -92,6 +98,23 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
             _rows.Add(new PacketTraceRow(
                 Index: _nextIndex++,
                 ElapsedMs: _stopwatch.ElapsedMilliseconds,
+                Direction: "Send",
+                Opcode: opcode,
+                Size: size));
+        }
+    }
+
+    private void HandlePacketReceived(Opcode opcode, int size)
+    {
+        lock (_lock)
+        {
+            if (!_isRecording || _stopwatch == null || _rows == null)
+                return;
+
+            _rows.Add(new PacketTraceRow(
+                Index: _nextIndex++,
+                ElapsedMs: _stopwatch.ElapsedMilliseconds,
+                Direction: "Recv",
                 Opcode: opcode,
                 Size: size));
         }
@@ -122,14 +145,17 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
         sb.AppendLine("Index,ElapsedMs,Direction,Opcode,OpcodeHex,OpcodeName,Size,IsMovement");
         foreach (var row in rows)
         {
+            string opcodeName = row.Opcode.ToString();
+            bool isMovement = opcodeName.Contains("MOVE", StringComparison.Ordinal);
+
             sb.Append(row.Index).Append(',');
             sb.Append(row.ElapsedMs).Append(',');
-            sb.Append("Send").Append(',');
+            sb.Append(row.Direction).Append(',');
             sb.Append((ushort)row.Opcode).Append(',');
             sb.Append($"0x{(ushort)row.Opcode:X4}").Append(',');
-            sb.Append(row.Opcode).Append(',');
+            sb.Append(opcodeName).Append(',');
             sb.Append(row.Size.ToString(CultureInfo.InvariantCulture)).Append(',');
-            sb.AppendLine("1");
+            sb.AppendLine(isMovement ? "1" : "0");
         }
 
         File.WriteAllText(filePath, sb.ToString());

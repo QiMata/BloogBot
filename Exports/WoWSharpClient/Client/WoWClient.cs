@@ -29,6 +29,16 @@ namespace WoWSharpClient.Client
 
         public event Action<Opcode, int>? MovementOpcodeSent;
 
+        /// <summary>
+        /// Fires after every outbound CMSG is sent. Args: (opcode, payloadSize).
+        /// </summary>
+        public event Action<Opcode, int>? PacketSent;
+
+        /// <summary>
+        /// Fires after every inbound SMSG is decoded and routed. Args: (opcode, payloadSize).
+        /// </summary>
+        public event Action<Opcode, int>? PacketReceived;
+
         public void Dispose()
         {
             if (!_disposed)
@@ -98,7 +108,9 @@ namespace WoWSharpClient.Client
 
             _worldClient?.Dispose();
             _worldClient = WoWClientFactory.CreateWorldClient();
-            
+            _worldClient.PacketSent += (opcode, size) => PacketSent?.Invoke(opcode, size);
+            _worldClient.PacketReceived += (opcode, size) => PacketReceived?.Invoke(opcode, size);
+
             var sessionKey = _authClient.SessionKey;
             var username = _authClient.Username;
             

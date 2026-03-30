@@ -43,6 +43,9 @@ namespace WoWSharpClient.Client
         // Dynamic opcode subjects registry
         private readonly ConcurrentDictionary<Opcode, ISubject<ReadOnlyMemory<byte>>> _opcodeStreams = new();
 
+        public event Action<Opcode, int>? PacketSent;
+        public event Action<Opcode, int>? PacketReceived;
+
         public WorldClient(
             IConnection connection,
             IMessageFramer framer,
@@ -54,7 +57,9 @@ namespace WoWSharpClient.Client
             _encryptor = encryptor ?? throw new ArgumentNullException(nameof(encryptor));
             
             _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
-            
+            _pipeline.PacketSending += (opcode, size) => PacketSent?.Invoke(opcode, size);
+            _pipeline.PacketRouted += (opcode, size) => PacketReceived?.Invoke(opcode, size);
+
             RegisterWorldHandlers();
         }
 

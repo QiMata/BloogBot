@@ -118,6 +118,16 @@ namespace WoWSharpClient.Client
         /// <param name="newEncryptor">The new encryptor to use.</param>
         void UpdateEncryptor(IEncryptor newEncryptor);
 
+        /// <summary>
+        /// Fires after every outbound CMSG is sent. Args: (opcode, payloadSize).
+        /// </summary>
+        event Action<Opcode, int>? PacketSent;
+
+        /// <summary>
+        /// Fires after every inbound SMSG is decoded and routed. Args: (opcode, payloadSize).
+        /// </summary>
+        event Action<Opcode, int>? PacketReceived;
+
         // Reactive streams
 
         /// <summary>

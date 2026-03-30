@@ -91,6 +91,16 @@ namespace WoWSharpClient.Networking.Implementation
         public event Action<Exception?>? Disconnected;
 
         /// <summary>
+        /// Fires after every outbound packet is sent. Args: (opcode, payloadSize).
+        /// </summary>
+        public event Action<TOpcode, int>? PacketSending;
+
+        /// <summary>
+        /// Fires after every inbound packet is decoded and routed. Args: (opcode, payloadSize).
+        /// </summary>
+        public event Action<TOpcode, int>? PacketRouted;
+
+        /// <summary>
         /// Connects to the specified host and port.
         /// </summary>
         public Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
@@ -135,6 +145,7 @@ namespace WoWSharpClient.Networking.Implementation
                 }
 
                 await _connection.SendAsync(encryptedData, cancellationToken);
+                PacketSending?.Invoke(opcode, payload.Length);
             }
             finally
             {
@@ -174,7 +185,10 @@ namespace WoWSharpClient.Networking.Implementation
                     while (_framer.TryPop(out var message))
                     {
                         if (_codec.TryDecode(message, out var opcode, out var payload))
+                        {
                             await _router.RouteAsync(opcode, payload);
+                            PacketRouted?.Invoke(opcode, payload.Length);
+                        }
                         else
                             Console.WriteLine($"Failed to decode packet of {message.Length} bytes");
                     }
@@ -235,6 +249,7 @@ namespace WoWSharpClient.Networking.Implementation
                             Console.WriteLine($"[RX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr2} size={size} payload={payload.Length}b");
                         }
                         await _router.RouteAsync(opcode, payload);
+                        PacketRouted?.Invoke(opcode, payload.Length);
                     }
                     else
                     {
