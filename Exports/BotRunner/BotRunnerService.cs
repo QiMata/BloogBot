@@ -194,7 +194,8 @@ namespace BotRunner
                     Communication.WoWActivitySnapshot? incomingActivityMemberState = null;
                     try
                     {
-                        incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
+                        incomingActivityMemberState = await _characterStateUpdateClient
+                            .SendMemberStateUpdateAsync(_activitySnapshot, cancellationToken);
                     }
                     catch (ObjectDisposedException)
                     {
@@ -205,6 +206,10 @@ namespace BotRunner
                     catch (System.IO.IOException)
                     {
                         // Connection reset or broken pipe — same recovery as above.
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
                     }
 
                     var playerWorldReady = _objectManager.HasEnteredWorld

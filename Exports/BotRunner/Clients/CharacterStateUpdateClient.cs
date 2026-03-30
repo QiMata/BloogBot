@@ -23,5 +23,9 @@ namespace BotRunner.Clients
         }
 
         public virtual WoWActivitySnapshot SendMemberStateUpdate(WoWActivitySnapshot update) => SendMessage(update);
+
+        public virtual async System.Threading.Tasks.Task<WoWActivitySnapshot> SendMemberStateUpdateAsync(
+            WoWActivitySnapshot update, System.Threading.CancellationToken ct = default)
+            => await SendMessageAsync(update, ct);
     }
 }
