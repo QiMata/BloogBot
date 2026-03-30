@@ -1358,12 +1358,19 @@ public class DungeoneeringCoordinator
         if (requestingAccount.Equals(_leaderAccount, StringComparison.OrdinalIgnoreCase))
         {
             snapshots.TryGetValue(_leaderAccount, out leaderSnap);
-            // If leader is not on RFC map, re-send the teleport command.
-            // The original teleport in TeleportToRFC may have failed silently
-            // (FG bot in loading screen, command dropped). Throttled to once per 5s.
+            // If leader is not on RFC map AND hasn't been teleported recently,
+            // re-send the teleport. Skip during the first 30s after a teleport
+            // to avoid re-teleporting during an active map transfer (causes FG crash).
             var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
             if (leaderMapId != RfcMapId)
             {
+                // Only retry if it's been >30s since last teleport (transfer takes 10-20s)
+                if (_lastTeleportSent.TryGetValue(_leaderAccount, out var lastTp)
+                    && (DateTime.UtcNow - lastTp).TotalSeconds < 30)
+                {
+                    // Still within transfer window — wait
+                    return null;
+                }
                 return TrySendThrottledTeleport(_leaderAccount,
                     $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
             }
@@ -1386,12 +1393,16 @@ public class DungeoneeringCoordinator
         }
 
         // Re-teleport ANY bot that's not on the RFC map (not just the leader).
-        // Silent .go xyz failures can leave bots on Kalimdor.
+        // Skip if teleported within last 30s to avoid crashing during active transfer.
         if (snapshots.TryGetValue(requestingAccount, out var reqSnap))
         {
             var reqMapId = reqSnap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
             if (reqMapId != RfcMapId)
             {
+                if (_lastTeleportSent.TryGetValue(requestingAccount, out var lastTp)
+                    && (DateTime.UtcNow - lastTp).TotalSeconds < 30)
+                    return null; // Still within transfer window
+
                 return TrySendThrottledTeleport(requestingAccount,
                     $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
             }
