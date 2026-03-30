@@ -512,9 +512,14 @@ public class DungeoneeringCoordinator
                 commands.Add($".learn {spellId}");
         }
 
+        // Learn weapon proficiencies that the class doesn't start with
+        if (Level8WeaponProficiencies.TryGetValue(charClass, out var profSpells))
+        {
+            foreach (var spellId in profSpells)
+                commands.Add($".learn {spellId}");
+        }
+
         // Max out weapon and defense skills for level 8 (cap = 40)
-        // Skill IDs: Defense=95, 1H Swords=43, 1H Maces=54, 2H Maces=160,
-        //            Daggers=173, Staves=136, Crossbows=226, Unarmed=162
         const int maxSkill = 40;
         commands.Add($".setskill 95 {maxSkill} {maxSkill}");  // Defense
         commands.Add($".setskill 162 {maxSkill} {maxSkill}"); // Unarmed
@@ -539,6 +544,17 @@ public class DungeoneeringCoordinator
         ["Hunter"] = [226, 43],    // Crossbows, 1H Swords
         ["Rogue"] = [173],         // Daggers
         ["Mage"] = [136],          // Staves
+    };
+
+    /// <summary>
+    /// Weapon proficiency spell IDs that must be learned before .setskill works.
+    /// Classes that don't start with a weapon type need the proficiency spell taught first.
+    /// </summary>
+    private static readonly Dictionary<string, uint[]> Level8WeaponProficiencies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Priest"] = [227],    // Staff proficiency — Priests don't start with it
+        ["Warlock"] = [227],   // Staff proficiency — Warlocks don't start with it
+        ["Mage"] = [227],      // Staff proficiency — Mages don't start with it
     };
 
     /// <summary>
