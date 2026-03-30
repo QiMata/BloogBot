@@ -272,10 +272,10 @@ namespace WoWStateManager
                     await Task.Delay(100);
                 }
 
-                // Always ensure GM level 6 (console) via direct DB update (SOAP writes to account_access
-                // but brotalnia's build reads from account.gmlevel at login)
-                _logger.LogInformation($"Ensuring GM level 6 for account: {accountName}");
-                var gmResult = ReamldRepository.SetGMLevel(accountName, 6);
+                // Set GM level from config (default 6). Brotalnia's build reads from account.gmlevel at login.
+                var targetGmLevel = characterSettings.GmLevel;
+                _logger.LogInformation($"Setting GM level {targetGmLevel} for account: {accountName}");
+                var gmResult = ReamldRepository.SetGMLevel(accountName, targetGmLevel);
                 _logger.LogInformation($"SetGMLevel result for {accountName}: {gmResult}");
 
                 // Start the appropriate bot worker based on RunnerType

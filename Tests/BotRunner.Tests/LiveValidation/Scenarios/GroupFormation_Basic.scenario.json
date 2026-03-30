@@ -9,13 +9,13 @@
     {
       "account": "$FG",
       "cleanSlate": true,
-      "gmCommands": [".gm on"],
+      "gmCommands": [""],
       "teleport": { "mapId": 1, "x": 1629.4, "y": -4373.4, "z": 34.2 }
     },
     {
       "account": "$BG",
       "cleanSlate": true,
-      "gmCommands": [".gm on"],
+      "gmCommands": [""],
       "teleport": { "mapId": 1, "x": 1629.4, "y": -4373.4, "z": 34.2 }
     }
   ],

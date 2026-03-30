@@ -61,10 +61,12 @@ public class RagefireChasmTests
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
-    // All RFC accounts — TESTBOT1 is raid leader, RFCBOT2-10 are members
+    // All RFC accounts — RFCBOT1 is FG raid leader, RFCBOT2-10 are BG members.
+    // Dedicated accounts (not shared with TESTBOT1/2) to avoid cross-test state pollution.
+    // GM level 6 for setup commands. Never .gm on — bots stay at HP=1 under damage (immortal).
     private static readonly string[] RfcAccounts =
     [
-        "TESTBOT1", "RFCBOT2", "RFCBOT3", "RFCBOT4", "RFCBOT5",
+        "RFCBOT1", "RFCBOT2", "RFCBOT3", "RFCBOT4", "RFCBOT5",
         "RFCBOT6", "RFCBOT7", "RFCBOT8", "RFCBOT9", "RFCBOT10"
     ];
 
@@ -538,7 +540,7 @@ public class RagefireChasmTests
     /// <summary>Map account name to character class from RagefireChasm.settings.json config.</summary>
     private static string? GetCharacterClass(string accountName) => accountName.ToUpperInvariant() switch
     {
-        "TESTBOT1" => "Warrior",
+        "RFCBOT1" => "Warrior",
         "RFCBOT2" => "Shaman",
         "RFCBOT3" => "Druid",
         "RFCBOT4" => "Priest",

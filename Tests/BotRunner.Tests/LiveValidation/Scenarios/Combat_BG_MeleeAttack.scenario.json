@@ -9,7 +9,7 @@
     {
       "account": "$BG",
       "cleanSlate": true,
-      "gmCommands": [".gm on"],
+      "gmCommands": [""],
       "learnSpells": [6673],
       "addItems": [
         { "id": 25, "count": 1 },
