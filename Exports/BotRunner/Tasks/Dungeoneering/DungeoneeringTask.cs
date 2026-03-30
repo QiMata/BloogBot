@@ -32,13 +32,13 @@ public class DungeoneeringTask : BotTask, IBotTask
     // Configuration
     private const float WaypointReachDistance = 5f;
     private const float HostilePullRange = 25f;       // Deliberate pull (standing still to clear area)
-    private const float AggroCheckRange = 12f;         // While navigating — only pull mobs this close
+    private const float AggroCheckRange = 15f;         // While navigating — pull mobs this close
     private const float FollowDistance = 15f;
     private const float FollowStopDistance = 8f;
-    private const float GroupPaceDistance = 30f;    // Leader waits if fewer than half the group is within this range
-    private const int RestHealthPercent = 30;       // Low threshold — warriors can't eat without food
-    private const int RestManaPercent = 30;        // Low threshold — proceed earlier in dungeons
-    private const int StuckTimeoutMs = 10000;
+    private const float GroupPaceDistance = 40f;    // Leader waits if fewer than half the group is within this range
+    private const int RestHealthPercent = 10;       // Very low — GM immortal bots don't need rest
+    private const int RestManaPercent = 10;         // Very low — proceed without resting
+    private const int StuckTimeoutMs = 8000;
 
     private readonly bool _isLeader;
     private readonly List<Position> _waypoints;
@@ -88,18 +88,16 @@ public class DungeoneeringTask : BotTask, IBotTask
                 ObjectManager.Hostiles.Count(), ObjectManager.Aggressors.Count(), player.MapId);
         }
 
-        // Combat interrupts navigation — but only for the LEADER.
-        // Followers keep following/navigating even when aggroed, because:
-        //   1. The DungeoneeringCoordinator handles combat via heal/DPS overlay actions
-        //   2. Mobs at the entrance aggro followers but often evade (position desync),
-        //      creating a permanent combat state that blocks all movement
-        //   3. Followers that stop to fight never catch up to the leader
-        // Leader stops to fight because they control the pace of dungeon advancement.
+        // Leader combat: stop and fight aggressors. Mark skull target for the raid.
         if (_isLeader && ObjectManager.Aggressors.Any())
         {
-            // Only push a new PvERotation if one isn't already on the stack.
             if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
             {
+                var aggressor = ObjectManager.Aggressors
+                    .OrderBy(a => player.Position.DistanceTo(a.Position))
+                    .First();
+                ObjectManager.SetTarget(aggressor.Guid);
+                ObjectManager.SetRaidTarget(aggressor, TargetMarker.Skull);
                 ClearNavigation();
                 BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
             }
@@ -307,15 +305,44 @@ public class DungeoneeringTask : BotTask, IBotTask
 
     private void HandleFollowLeader(IWoWPlayer player)
     {
-        // Followers navigate the same waypoint path as the leader.
-        // Previous approach: follow PartyLeader by GUID. This fails because:
-        //   - Coordinator may promote a BG bot as dungeoneering leader, but the
-        //     game's raid leader GUID (PartyLeader) is still the FG bot (TESTBOT1)
-        //   - All followers see TESTBOT1 at the entrance and STOP next to it
-        //   - The actual dungeoneering leader (RFCBOT2) advances alone
-        // Fix: followers navigate waypoints autonomously. The coordinator handles
-        // combat overlay (heal/DPS) via separate actions.
-        HandleNavigateToWaypoint(player);
+        // Followers fight aggressors (mobs attacking them) then resume following.
+        if (ObjectManager.Aggressors.Any())
+        {
+            if (BotTasks.Count <= 1 || BotTasks.Peek() == this)
+            {
+                var aggressor = ObjectManager.Aggressors.OrderBy(a => player.Position.DistanceTo(a.Position)).First();
+                ObjectManager.SetTarget(aggressor.Guid);
+                ClearNavigation();
+                BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
+            }
+            return;
+        }
+
+        // Find the party leader (raid leader) to follow.
+        var leader = ObjectManager.PartyMembers
+            .Where(m => m.Position != null && m.Health > 0)
+            .OrderBy(m => player.Position.DistanceTo(m.Position))
+            .FirstOrDefault();
+
+        // If no leader visible, navigate waypoints as fallback
+        if (leader?.Position == null)
+        {
+            HandleNavigateToWaypoint(player);
+            return;
+        }
+
+        var distToLeader = player.Position.DistanceTo(leader.Position);
+
+        if (distToLeader > FollowDistance)
+        {
+            TryNavigateToward(leader.Position, allowDirectFallback: true);
+        }
+        else if (distToLeader < FollowStopDistance)
+        {
+            ObjectManager.StopAllMovement();
+            ClearNavigation();
+        }
+        // Between stop and follow distance — hold position
     }
 
     private void HandleComplete()
