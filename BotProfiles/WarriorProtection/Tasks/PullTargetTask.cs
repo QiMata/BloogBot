@@ -86,8 +86,17 @@ namespace WarriorProtection.Tasks
                 ObjectManager.StopAllMovement();
 
                 if (!ObjectManager.Player.IsCasting)
-                    ObjectManager.CastSpell("Shoot Bow");
-
+                {
+                    // Try thrown weapon first (Crude Throwing Axe), fall back to bow/gun
+                    if (ObjectManager.IsSpellReady("Throw"))
+                        ObjectManager.CastSpell("Throw");
+                    else if (ObjectManager.IsSpellReady("Shoot Bow"))
+                        ObjectManager.CastSpell("Shoot Bow");
+                    else if (ObjectManager.IsSpellReady("Shoot Gun"))
+                        ObjectManager.CastSpell("Shoot Gun");
+                    else if (ObjectManager.IsSpellReady("Shoot Crossbow"))
+                        ObjectManager.CastSpell("Shoot Crossbow");
+                }
             }
             else
             {

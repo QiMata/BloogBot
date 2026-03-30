@@ -1,15 +1,19 @@
 using BotRunner.Interfaces;
-using GameData.Core.Models;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarriorFury.Tasks
 {
     public class PullTargetTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
+        private bool _threwRanged;
+        private int _waitTicks;
+
         public void Update()
         {
-            if (ObjectManager.GetTarget(ObjectManager.Player).TappedByOther)
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target == null || target.TappedByOther)
             {
                 ObjectManager.StopAllMovement();
                 BotTasks.Pop();
@@ -24,21 +28,67 @@ namespace WarriorFury.Tasks
                 return;
             }
 
-            float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            if (distanceToTarget < 25 && distanceToTarget > 8 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
-            {
-                ObjectManager.CastSpell(Charge);
-            }
+            float distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
+            bool isDungeon = ObjectManager.Player.MapId != 0 && ObjectManager.Player.MapId != 1;
 
-            if (distanceToTarget < 3)
+            if (isDungeon)
             {
-                ObjectManager.StopAllMovement();
-                BotTasks.Pop();
-                BotTasks.Push(new PvERotationTask(BotContext));
-                return;
-            }
+                if (!_threwRanged && distanceToTarget < 30 && distanceToTarget > 5)
+                {
+                    ObjectManager.StopAllMovement();
+                    if (ObjectManager.IsSpellReady("Throw"))
+                    {
+                        ObjectManager.CastSpell("Throw");
+                        _threwRanged = true;
+                        return;
+                    }
+                }
 
-            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                if (_threwRanged)
+                {
+                    _waitTicks++;
+                    ObjectManager.StopAllMovement();
+                    if (_waitTicks > 30 || distanceToTarget < 5)
+                    {
+                        BotTasks.Pop();
+                        BotTasks.Push(new PvERotationTask(BotContext));
+                        return;
+                    }
+                    return;
+                }
+
+                if (distanceToTarget > 25)
+                {
+                    NavigateToward(target.Position);
+                    return;
+                }
+
+                if (distanceToTarget < 5)
+                {
+                    ObjectManager.StopAllMovement();
+                    BotTasks.Pop();
+                    BotTasks.Push(new PvERotationTask(BotContext));
+                    return;
+                }
+
+                NavigateToward(target.Position);
+            }
+            else
+            {
+                if (distanceToTarget < 25 && distanceToTarget > 8 && !ObjectManager.Player.IsCasting
+                    && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(target))
+                    ObjectManager.CastSpell(Charge);
+
+                if (distanceToTarget < 3)
+                {
+                    ObjectManager.StopAllMovement();
+                    BotTasks.Pop();
+                    BotTasks.Push(new PvERotationTask(BotContext));
+                    return;
+                }
+
+                NavigateToward(target.Position);
+            }
         }
     }
 }
