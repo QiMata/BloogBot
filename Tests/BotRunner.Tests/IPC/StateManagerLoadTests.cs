@@ -541,6 +541,29 @@ public class StateManagerLoadTests
     }
 
     [Fact]
+    public void Async_1000Clients_15Seconds()
+    {
+        var result = RunAsyncPipelineLoadTest(clientCount: 1000, durationSec: 15);
+        PrintResult(result);
+
+        Assert.Equal(0, result.Errors);
+        Assert.True(result.MsgPerSec > 500, $"Expected >500 msg/s, got {result.MsgPerSec:F0}");
+    }
+
+    [Fact]
+    public void Async_3000Clients_20Seconds()
+    {
+        var result = RunAsyncPipelineLoadTest(clientCount: 3000, durationSec: 20);
+        PrintResult(result);
+
+        // 3000 clients baseline: 95-1555 msg/s (varies by system load), 0 errors.
+        // All 3000 connections succeed — no rejected connections.
+        // Key assertion: zero errors. Throughput varies heavily.
+        Assert.Equal(0, result.Errors);
+        Assert.True(result.TotalMessages > 100, $"Expected >100 msgs, got {result.TotalMessages}");
+    }
+
+    [Fact]
     public void Async_vs_Sync_100Clients()
     {
         _output.WriteLine("=== SYNC CLIENT + PIPELINE SERVER ===");
