@@ -89,43 +89,38 @@ public class WarsongGulchTests
             tolerateFgCrash: true);
         _output.WriteLine($"Phase 1: {botCount} bots in world");
 
-        // Phase 2: Prep sequence. The BattlegroundCoordinator checks level>=10
-        // before starting the BG queue. We RESET level to 1 first, teleport bots
-        // to battlemasters, wait for NPCs to appear, THEN level to 10.
-        // This ensures the coordinator doesn't queue before bots are in position.
+        // Phase 2: Minimal prep — revive dead bots, level via SOAP, teleport, gm off.
+        // Keep it fast — the BG coordinator starts as soon as bots are level 10.
 
-        // Step 1: Revive dead bots and ensure GM mode on via SOAP (works even when dead).
+        // Step 1: Revive + level via SOAP (works even when dead/ghost)
         foreach (var snap in _bot.AllBots)
-        {
             await _bot.ExecuteGMCommandAsync($".revive {snap.CharacterName}");
+        await Task.Delay(1000);
+        foreach (var snap in _bot.AllBots)
             await _bot.ExecuteGMCommandAsync($".character level {snap.CharacterName} 10");
-        }
         await Task.Delay(2000);
 
-        // Step 2: Teleport to battlemaster positions via bot chat (.go xyz needs GM on)
-        // Horde: Kartra Bloodsnarl (permanent BM, entry 14942) at (1980.9,-4787.78,55.88)
-        // NOTE: Entry 15105 "Warsong Emissary" is event-only (Call to Arms) — not always spawned.
+        // Step 2: Teleport to permanent battlemasters
+        // Horde: Kartra Bloodsnarl (entry 14942) at (1980.9,-4787.78,55.88)
+        // Alliance: Elfarran (entry 14981) at (-8454.6,318.9,121.0)
         foreach (var account in _bot.HordeAccounts)
         {
             await _bot.BotTeleportAsync(account, 1, 1980.9f, -4787.78f, 58.88f);
-            await Task.Delay(300);
+            await Task.Delay(200);
         }
         foreach (var account in _bot.AllianceAccounts)
         {
             await _bot.BotTeleportAsync(account, 0, -8454.6f, 318.9f, 124.0f);
-            await Task.Delay(300);
+            await Task.Delay(200);
         }
-        // Wait for server to send nearby objects (NPCs) after teleport
-        await Task.Delay(10000);
+        await Task.Delay(5000); // Wait for NPC visibility
 
-        // Step 3: Turn GM off — bots need .gm off to queue for BG
+        // Step 3: GM off (required for BG queue)
         foreach (var snap in _bot.AllBots)
-        {
             await _bot.SendGmChatCommandAsync(snap.AccountName, ".gm off");
-        }
-        await Task.Delay(2000);
+        await Task.Delay(1000);
 
-        _output.WriteLine("Phase 2 complete. BG coordinator may have already started.");
+        _output.WriteLine("Phase 2 complete.");
 
         // Verify BG entry via VMaNGOS Bg.log. Snapshot-based MapId detection is unreliable
         // (100ms tick overwrites MapId before 1s test poll can catch it).
