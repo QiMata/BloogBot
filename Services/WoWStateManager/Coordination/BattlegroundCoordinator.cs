@@ -96,23 +96,28 @@ public class BattlegroundCoordinator
     private ActionMessage? HandleWaitingForBots(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Wait for all bots to have valid ObjectManager
-        var ready = snapshots.Values.Count(s => s.IsObjectManagerValid);
+        // Wait for all bots to be in-world with valid ObjectManager AND level >= 10
+        // (fixture handles leveling/teleporting — coordinator waits for that to complete)
+        var ready = snapshots.Values.Count(s =>
+            s.IsObjectManagerValid
+            && (s.Player?.Unit?.GameObject?.Level ?? 0) >= 10);
         var total = _memberAccounts.Count + 1;
 
-        if (ready < total && _tickCount < 60) // ~30s
+        if (ready < total && _tickCount < 120) // ~60s for fixture prep
         {
-            if (_tickCount % 10 == 1)
-                _logger.LogInformation("BG_COORD: Waiting for bots: {Ready}/{Total}", ready, total);
+            if (_tickCount % 20 == 1)
+                _logger.LogInformation("BG_COORD: Waiting for bots (level>=10): {Ready}/{Total}", ready, total);
             return null;
         }
 
         if (ready < 2)
         {
-            _logger.LogWarning("BG_COORD: Only {Ready} bots ready, need at least 2", ready);
+            if (_tickCount % 20 == 1)
+                _logger.LogWarning("BG_COORD: Only {Ready} bots ready (level>=10), need at least 2", ready);
             return null;
         }
 
+        _logger.LogInformation("BG_COORD: {Ready}/{Total} bots ready. Starting BG queue.", ready, total);
         TransitionTo(CoordState.QueueForBattleground);
         return null;
     }
