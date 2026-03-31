@@ -140,7 +140,24 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // No battlemaster visible — navigate toward known battlemaster position.
+        // No battlemaster visible — wait a few seconds for nearby objects to populate
+        // (server sends SMSG_UPDATE_OBJECT after teleport, but it takes time).
+        if (!Wait.For("bm_search", 3000, true))
+            return;
+
+        // DIAG: log ObjectManager unit state
+        var allUnits = ObjectManager.Units.ToList();
+        var withFlags = allUnits.Where(u => ((uint)u.NpcFlags & BattlemasterFlag) != 0).ToList();
+        Log.Information("[BG-QUEUE] DIAG: ObjectManager has {Total} units, {WithFlag} with BM flag, player at ({X:F0},{Y:F0},{Z:F0}) map={Map}",
+            allUnits.Count, withFlags.Count, player.Position.X, player.Position.Y, player.Position.Z, player.MapId);
+        if (withFlags.Count > 0)
+        {
+            foreach (var u in withFlags)
+                Log.Information("[BG-QUEUE] DIAG:   BM unit: {Name} (0x{Guid:X}) flags=0x{Flags:X} at ({X:F0},{Y:F0},{Z:F0})",
+                    u.Name, u.Guid, (uint)u.NpcFlags, u.Position?.X, u.Position?.Y, u.Position?.Z);
+        }
+
+        // Still no battlemaster — navigate toward known position.
         // guid=0 queue is rejected by VMaNGOS PassiveAnticheat ("invalid BG type").
         // The bot must interact with the actual NPC to queue properly.
         var factionStr = player.Race switch

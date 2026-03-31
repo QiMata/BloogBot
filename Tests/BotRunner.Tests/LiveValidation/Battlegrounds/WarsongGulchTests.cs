@@ -73,14 +73,6 @@ public class WarsongGulchTests
         // IMPORTANT: Level to 10 LAST so the BattlegroundCoordinator (which checks level>=10
         // before sending JoinBattleground) won't start queuing until bots are at their positions.
 
-        // Step 1: Remove Deserter debuff — .die + .revive clears all debuffs
-        foreach (var snap in _bot.AllBots)
-        {
-            await _bot.SendGmChatCommandAsync(snap.AccountName, ".die");
-            await _bot.SendGmChatCommandAsync(snap.AccountName, ".revive");
-        }
-        await Task.Delay(1000);
-
         // Teleport Horde to WSG Battlemaster (Warsong Emissary) in Orgrimmar
         foreach (var account in _bot.HordeAccounts)
         {
@@ -93,7 +85,9 @@ public class WarsongGulchTests
             await _bot.BotTeleportAsync(account, 0, -8454.6f, 318.9f, 124.0f);
             await Task.Delay(300);
         }
-        await Task.Delay(3000);
+        // Wait for server to send nearby objects (NPCs) to all bots after teleport.
+        // The battlemaster NPC must be visible in ObjectManager.Units before queueing.
+        await Task.Delay(10000);
 
         // Step 2: NOW level to 10 and turn GM off — this triggers the coordinator
         foreach (var snap in _bot.AllBots)

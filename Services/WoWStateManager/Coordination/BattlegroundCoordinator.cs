@@ -110,15 +110,16 @@ public class BattlegroundCoordinator
             if (_tickCount % 20 == 1)
                 _logger.LogInformation("BG_COORD: Waiting for bots (level>=10): {Ready}/{Total}", ready, total);
 
-            // Hard timeout: after 3 minutes, proceed with whatever we have (minimum 4 per faction for BG)
-            if ((DateTime.UtcNow - _stateEnteredAt).TotalSeconds > 180 && ready >= 4)
-            {
-                _logger.LogWarning("BG_COORD: Timeout waiting for all bots. Proceeding with {Ready}/{Total}", ready, total);
-            }
-            else
-            {
+            // Accept N-1 bots (FG bot may crash, leaving 19/20)
+            // Also hard timeout after 60s — proceed with at least 4 bots per faction (min for BG)
+            var closeEnough = ready >= total - 1;
+            var timedOut = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds > 60 && ready >= 4;
+
+            if (!closeEnough && !timedOut)
                 return null;
-            }
+
+            if (timedOut && !closeEnough)
+                _logger.LogWarning("BG_COORD: Timeout waiting for all bots. Proceeding with {Ready}/{Total}", ready, total);
         }
 
         _logger.LogInformation("BG_COORD: {Ready}/{Total} bots ready. Starting BG queue.", ready, total);
