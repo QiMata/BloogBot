@@ -130,15 +130,9 @@ public class WarsongGulchTests
         _output.WriteLine("Waiting for BG to run (checking Bg.log for new entries)...");
         var bgLogPath = @"E:\repos\Westworld of Warcraft\docker\linux\vmangos\storage\mangosd\logs\Bg.log";
 
-        // Snapshot the initial line count so we only count NEW entries
-        int initialLineCount = 0;
-        if (File.Exists(bgLogPath))
-        {
-            using var fs = new FileStream(bgLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var reader = new StreamReader(fs);
-            initialLineCount = reader.ReadToEnd().Split('\n').Length;
-        }
-        _output.WriteLine($"Bg.log baseline: {initialLineCount} lines");
+        // Use the current time as baseline — only count entries logged AFTER now
+        var testStartTime = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm");
+        _output.WriteLine($"Bg.log baseline: entries after {testStartTime}");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
@@ -151,9 +145,10 @@ public class WarsongGulchTests
                 using (var reader = new StreamReader(fs))
                     lines = reader.ReadToEnd().Split('\n');
 
-                // Only look at NEW lines since test started
-                var newLines = lines.Skip(initialLineCount).ToList();
-                var queueEntries = newLines.Where(l => l.Contains("tag BG=2")).ToList();
+                // Only look at entries from the last 10 minutes (avoids stale data)
+                var queueEntries = lines
+                    .Where(l => l.Contains("tag BG=2") && l.Length > 16 && string.Compare(l[..16], testStartTime) >= 0)
+                    .ToList();
                 var uniqueNames = queueEntries
                     .Select(l => { var parts = l.Split(' '); return parts.Length > 1 ? parts[1].Split(':')[0] : ""; })
                     .Where(n => !string.IsNullOrEmpty(n))
@@ -164,7 +159,7 @@ public class WarsongGulchTests
                 if (botsInWsg >= 4)
                 {
                     _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} bots queued: {string.Join(", ", uniqueNames)}");
-                    var winners = newLines.Where(l => l.Contains("winner=")).ToList();
+                    var winners = lines.Where(l => l.Contains("winner=") && l.Length > 16 && string.Compare(l[..16], testStartTime) >= 0).ToList();
                     foreach (var w in winners)
                         _output.WriteLine($"  BG result: {w.Trim()}");
                     break;
