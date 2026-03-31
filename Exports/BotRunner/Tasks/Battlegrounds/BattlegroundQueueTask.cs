@@ -163,13 +163,25 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // No battlemaster visible — wait a few seconds for nearby objects to populate
-        if (!Wait.For("bm_search", 3000, true))
-            return;
-
-        // Still no battlemaster — navigate toward known position.
+        // No battlemaster visible yet. If we're already close to the known position
+        // (e.g., test fixture teleported us there), just wait for the NPC to appear
+        // in ObjectManager — don't navigate away.
         if (bmData != null)
         {
+            var distToKnown = player.Position.DistanceTo(bmData.Position);
+            if (distToKnown < 30f)
+            {
+                // We're near the NPC spawn — keep waiting for SMSG_UPDATE_OBJECT to populate it.
+                // The server sends NPC data within a few seconds of the player arriving.
+                if (!Wait.For("bm_wait_nearby", 2000, true))
+                    return;
+                Log.Debug("[BG-QUEUE] Waiting for battlemaster NPC near {City} ({Dist:F0}y away)", bmData.City, distToKnown);
+                return; // Retry on next tick — don't navigate
+            }
+
+            // Far from known position — navigate toward it
+            if (!Wait.For("bm_navigate", 3000, true))
+                return;
             Log.Information("[BG-QUEUE] No battlemaster visible — navigating to {City} ({X:F0},{Y:F0})",
                 bmData.City, bmData.Position.X, bmData.Position.Y);
             TryNavigateToward(bmData.Position, allowDirectFallback: true);
