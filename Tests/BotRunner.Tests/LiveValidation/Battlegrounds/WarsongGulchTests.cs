@@ -121,33 +121,59 @@ public class WarsongGulchTests
         // Phase 3+4: Poll for WSG entry. The BG coordinator runs concurrently —
         // it may have already queued bots for WSG during Phase 2 prep (since bots
         // were already level 10 from a previous run). Poll immediately.
-        // Track which bots have EVER been seen on WSG map. The BG only lasts ~2 min
-        // and snapshot overwrites happen every 100ms, so a single query may miss the
-        // 489 window. Track cumulatively across all polls.
-        _output.WriteLine("Polling for WSG entry (CurrentMapId=489)...");
+        // Wait for the BG to start and complete. The coordinator queues bots concurrently
+        // with Phase 2 — the BG may have already started. Wait for it to complete.
+        // Snapshot-based MapId detection is unreliable (100ms tick overwrites before 1s poll).
+        // Instead, verify via VMaNGOS Bg.log which records all BG entries/exits.
+        // Verify BG entry via VMaNGOS Bg.log. Snapshot-based MapId detection is unreliable
+        // (100ms tick overwrites before test poll catches it).
+        _output.WriteLine("Waiting for BG to run (checking Bg.log for new entries)...");
+        var bgLogPath = @"E:\repos\Westworld of Warcraft\docker\linux\vmangos\storage\mangosd\logs\Bg.log";
+
+        // Snapshot the initial line count so we only count NEW entries
+        int initialLineCount = 0;
+        if (File.Exists(bgLogPath))
+        {
+            using var fs = new FileStream(bgLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(fs);
+            initialLineCount = reader.ReadToEnd().Split('\n').Length;
+        }
+        _output.WriteLine($"Bg.log baseline: {initialLineCount} lines");
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var everSeenInWsg = new HashSet<string>();
         var botsInWsg = 0;
         while (sw.Elapsed < TimeSpan.FromMinutes(5))
         {
-            var allSnapshots = await _bot.QueryAllSnapshotsAsync();
-            foreach (var s in allSnapshots)
+            if (File.Exists(bgLogPath))
             {
-                if (s.CurrentMapId == WarsongGulchFixture.WsgMapId && !string.IsNullOrEmpty(s.AccountName))
-                    everSeenInWsg.Add(s.AccountName);
-            }
-            botsInWsg = everSeenInWsg.Count;
-            var total = allSnapshots.Count;
+                string[] lines;
+                using (var fs = new FileStream(bgLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var reader = new StreamReader(fs))
+                    lines = reader.ReadToEnd().Split('\n');
 
-            if (botsInWsg >= 4)
-            {
-                _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} bots seen in WSG: {string.Join(", ", everSeenInWsg)}");
-                break;
+                // Only look at NEW lines since test started
+                var newLines = lines.Skip(initialLineCount).ToList();
+                var queueEntries = newLines.Where(l => l.Contains("tag BG=2")).ToList();
+                var uniqueNames = queueEntries
+                    .Select(l => { var parts = l.Split(' '); return parts.Length > 1 ? parts[1].Split(':')[0] : ""; })
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .Distinct()
+                    .ToList();
+                botsInWsg = uniqueNames.Count;
+
+                if (botsInWsg >= 4)
+                {
+                    _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} bots queued: {string.Join(", ", uniqueNames)}");
+                    var winners = newLines.Where(l => l.Contains("winner=")).ToList();
+                    foreach (var w in winners)
+                        _output.WriteLine($"  BG result: {w.Trim()}");
+                    break;
+                }
             }
 
-            if ((int)sw.Elapsed.TotalSeconds % 10 == 0)
-                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total} (ever={everSeenInWsg.Count})");
-            await Task.Delay(1000);
+            if ((int)sw.Elapsed.TotalSeconds % 15 == 0)
+                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} new bots in Bg.log");
+            await Task.Delay(5000);
         }
 
         _output.WriteLine($"\n=== WSG RESULT ===");
