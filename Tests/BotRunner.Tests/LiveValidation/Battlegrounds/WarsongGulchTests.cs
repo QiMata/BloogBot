@@ -116,34 +116,12 @@ public class WarsongGulchTests
         }
         await Task.Delay(2000);
 
-        _output.WriteLine("Phase 2: Reset→teleport→level→gm off complete");
+        _output.WriteLine("Phase 2 complete. BG coordinator may have already started.");
 
-        // Phase 3: Verify positions
-        await _bot.RefreshSnapshotsAsync();
-        foreach (var snap in _bot.AllBots)
-        {
-            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-            _output.WriteLine($"  {snap.AccountName}: map={mapId}, pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
-        }
-
-        // Phase 4: BattlegroundCoordinator takes over — it sends JoinBattleground to each bot.
-        // Wait for bots to enter WSG map 489.
-        _output.WriteLine("\nPhase 4: Waiting for BattlegroundCoordinator to queue and enter WSG...");
-
-        // Debug: print initial mapIds for all bots
-        await _bot.RefreshSnapshotsAsync();
-        foreach (var snap in _bot.AllBots)
-        {
-            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-            _output.WriteLine($"  [PRE-BG] {snap.AccountName}: map={mapId} pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}) valid={snap.IsObjectManagerValid}");
-        }
-
-        // NOTE: Can't use WaitForProgressAsync here because it reads AllBots
-        // which filters by IsHydratedInWorldSnapshot. After BG transfer, bots
-        // have IsObjectManagerValid=false (transitioning) so they're filtered out.
-        // Instead, query ALL snapshots directly and check MapId.
+        // Phase 3+4: Poll for WSG entry. The BG coordinator runs concurrently —
+        // it may have already queued bots for WSG during Phase 2 prep (since bots
+        // were already level 10 from a previous run). Poll immediately.
+        _output.WriteLine("Polling for WSG entry (CurrentMapId=489)...");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
         while (sw.Elapsed < TimeSpan.FromMinutes(5))
@@ -154,12 +132,13 @@ public class WarsongGulchTests
 
             if (botsInWsg >= 4)
             {
-                _output.WriteLine($"[WSGEntry] Complete at {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
+                _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
                 break;
             }
 
-            _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
-            await Task.Delay(5000);
+            if ((int)sw.Elapsed.TotalSeconds % 10 == 0)
+                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
+            await Task.Delay(1000);  // Poll every second to catch the BG window
         }
 
         _output.WriteLine($"\n=== WSG RESULT ===");
