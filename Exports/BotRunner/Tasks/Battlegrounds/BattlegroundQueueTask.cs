@@ -121,8 +121,8 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
     private void HandleFindBattlemaster(IWoWPlayer player)
     {
-        // Find nearby NPC with UNIT_NPC_FLAG_BATTLEMASTER (0x100000 = bit 20)
-        const uint BattlemasterFlag = 0x100000;
+        // Find nearby NPC with UNIT_NPC_FLAG_BATTLEMASTER (0x800 = 2048)
+        const uint BattlemasterFlag = 0x800;
 
         _bmNpc = ObjectManager.Units
             .Where(u => u.Health > 0
@@ -140,27 +140,25 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // No battlemaster visible — try queuing directly with guid=0 (queue from anywhere).
-        // VMaNGOS may or may not support this. If it doesn't, navigate toward the known position.
-        Log.Information("[BG-QUEUE] No battlemaster NPC visible — trying direct queue with guid=0");
-        if (_bgClient != null)
+        // No battlemaster visible — navigate toward known battlemaster position.
+        // guid=0 queue is rejected by VMaNGOS PassiveAnticheat ("invalid BG type").
+        // The bot must interact with the actual NPC to queue properly.
+        var factionStr = player.Race switch
         {
-            _bgClient.JoinQueueAsync((uint)_bgType, 0, false, CancellationToken.None)
-                .GetAwaiter().GetResult();
-            SetState(BgState.WaitForInvite);
+            Race.Orc or Race.Undead or Race.Tauren or Race.Troll =>
+                DungeonEntryData.DungeonFaction.Horde,
+            _ => DungeonEntryData.DungeonFaction.Alliance
+        };
+        var bmData = BattlemasterData.FindBattlemaster(_bgType, factionStr);
+        if (bmData != null)
+        {
+            Log.Information("[BG-QUEUE] No battlemaster visible — navigating to {City} ({X:F0},{Y:F0})",
+                bmData.City, bmData.Position.X, bmData.Position.Y);
+            TryNavigateToward(bmData.Position, allowDirectFallback: true);
         }
         else
         {
-            // No client and no NPC — navigate toward known position
-            var factionStr = player.Race switch
-            {
-                Race.Orc or Race.Undead or Race.Tauren or Race.Troll =>
-                    DungeonEntryData.DungeonFaction.Horde,
-                _ => DungeonEntryData.DungeonFaction.Alliance
-            };
-            var bmData = BattlemasterData.FindBattlemaster(_bgType, factionStr);
-            if (bmData != null)
-                TryNavigateToward(bmData.Position, allowDirectFallback: true);
+            Log.Warning("[BG-QUEUE] No battlemaster data for bgType={BgType}", _bgType);
         }
     }
 
@@ -202,12 +200,13 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         ObjectManager.InteractWithNpcAsync(_bmGuid, CancellationToken.None)
             .GetAwaiter().GetResult();
 
-        // Queue for the BG — use the agent factory's BG component
+        // Queue for the BG via the battlemaster NPC — pass NPC GUID (required by VMaNGOS anticheat)
         var bgAgent = _bgClient;
         if (bgAgent != null)
         {
-            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN for bgType={BgType}", _bgType);
-            bgAgent.JoinQueueAsync((uint)_bgType, 0, false, CancellationToken.None)
+            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN for bgType={BgType} via NPC 0x{Guid:X}",
+                _bgType, _bmGuid);
+            bgAgent.JoinQueueAsync((uint)_bgType, 0, false, CancellationToken.None, battleMasterGuid: _bmGuid)
                 .GetAwaiter().GetResult();
             SetState(BgState.WaitForInvite);
         }

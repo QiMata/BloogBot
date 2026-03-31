@@ -75,15 +75,18 @@ public class WarsongGulchTests
         }
         await Task.Delay(2000);
 
-        // Teleport Horde to Orgrimmar, Alliance to Stormwind
+        // Teleport Horde to WSG Battlemaster (Warsong Emissary) in Orgrimmar
+        // VMaNGOS creature entry 15105 at (1665.8, -4344.9, 61.3)
         foreach (var account in _bot.HordeAccounts)
         {
-            await _bot.BotTeleportAsync(account, 1, 1629.4f, -4373.4f, 34.2f);
+            await _bot.BotTeleportAsync(account, 1, 1665.8f, -4344.9f, 64.3f);
             await Task.Delay(300);
         }
+        // Teleport Alliance to WSG Battlemaster (Elfarran) in Stormwind
+        // VMaNGOS creature entry 14981 at (-8454.6, 318.9, 121.0)
         foreach (var account in _bot.AllianceAccounts)
         {
-            await _bot.BotTeleportAsync(account, 0, -8757f, 400f, 105f);
+            await _bot.BotTeleportAsync(account, 0, -8454.6f, 318.9f, 124.0f);
             await Task.Delay(300);
         }
         await Task.Delay(3000);

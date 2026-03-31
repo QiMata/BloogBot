@@ -112,17 +112,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <param name="bgTypeId">Battleground type ID.</param>
         /// <param name="instanceId">Specific instance ID, or 0 for any.</param>
         /// <param name="asGroup">Whether to join as a group.</param>
-        public async Task JoinQueueAsync(uint bgTypeId, uint instanceId = 0, bool asGroup = false, CancellationToken cancellationToken = default)
+        /// <param name="battleMasterGuid">GUID of the battlemaster NPC. Use 0 for queue-from-anywhere (may be rejected by anticheat).</param>
+        public async Task JoinQueueAsync(uint bgTypeId, uint instanceId = 0, bool asGroup = false,
+            CancellationToken cancellationToken = default, ulong battleMasterGuid = 0)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Joining BG queue: BgType={BgType} Instance={Instance} AsGroup={AsGroup}", bgTypeId, instanceId, asGroup);
+                _logger.LogDebug("Joining BG queue: BgType={BgType} Instance={Instance} AsGroup={AsGroup} GUID={Guid:X}",
+                    bgTypeId, instanceId, asGroup, battleMasterGuid);
 
                 // CMSG_BATTLEMASTER_JOIN: uint64 battleMasterGuid + uint32 bgTypeId + uint32 instanceId + uint8 joinAsGroup
-                // battleMasterGuid is 0 when joining from anywhere (e.g., minimap queue)
                 var payload = new byte[8 + 4 + 4 + 1];
-                BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(0, 8), 0UL); // battlemaster guid (0 = any)
+                BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(0, 8), battleMasterGuid);
                 BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), bgTypeId);
                 BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), instanceId);
                 payload[16] = (byte)(asGroup ? 1 : 0);

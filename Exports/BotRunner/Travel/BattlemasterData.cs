@@ -36,12 +36,12 @@ public static class BattlemasterData
     // =========================================================================
 
     public static readonly BattlemasterLocation OrgrimmarWsg = new(
-        NpcName: "Brakgul Deathbringer",
+        NpcName: "Warsong Emissary",
         NpcEntry: 15105,
         BgType: BattlegroundType.WarsongGulch,
         Faction: DungeonEntryData.DungeonFaction.Horde,
         MapId: 1,
-        Position: new Position(1702f, -4422f, 22f),
+        Position: new Position(1665.8f, -4344.9f, 61.3f),
         City: "Orgrimmar");
 
     public static readonly BattlemasterLocation OrgrimmarAb = new(
@@ -72,7 +72,7 @@ public static class BattlemasterData
         BgType: BattlegroundType.WarsongGulch,
         Faction: DungeonEntryData.DungeonFaction.Alliance,
         MapId: 0,
-        Position: new Position(-8757f, 400f, 102f),
+        Position: new Position(-8454.6f, 318.9f, 121.0f),
         City: "Stormwind");
 
     public static readonly BattlemasterLocation StormwindAb = new(
