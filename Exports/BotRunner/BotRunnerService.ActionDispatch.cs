@@ -814,6 +814,65 @@ namespace BotRunner
                         break;
                     }
 
+                    case CharacterAction.JoinBattleground:
+                    {
+                        // Params: [0] = bgTypeId (int), [1] = expectedMapId (int)
+                        var bgTypeId = (int)actionEntry.Item2[0];
+                        var expectedMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0u;
+
+                        builder.Do("Queue BG Join Task", time =>
+                        {
+                            // Get BG network client from agent factory
+                            WoWSharpClient.Networking.ClientComponents.BattlegroundNetworkClientComponent? bgClient = null;
+                            var factory = _agentFactoryAccessor?.Invoke();
+                            if (factory != null)
+                            {
+                                bgClient = factory.BattlegroundAgent;
+                            }
+
+                            _botTasks.Push(new Tasks.Battlegrounds.BattlegroundQueueTask(
+                                context,
+                                (BotRunner.Travel.BattlemasterData.BattlegroundType)bgTypeId,
+                                expectedMapId,
+                                bgClient));
+
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+                    case CharacterAction.AcceptBattleground:
+                    {
+                        builder.Do("Accept BG Invite", time =>
+                        {
+                            var factory = _agentFactoryAccessor?.Invoke();
+                            var bgClient = factory?.BattlegroundAgent;
+                            if (bgClient != null)
+                            {
+                                bgClient.AcceptInviteAsync().GetAwaiter().GetResult();
+                                Log.Information("[BOT RUNNER] BG invite accepted");
+                            }
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+                    case CharacterAction.LeaveBattleground:
+                    {
+                        builder.Do("Leave BG", time =>
+                        {
+                            var factory = _agentFactoryAccessor?.Invoke();
+                            var bgClient = factory?.BattlegroundAgent;
+                            if (bgClient != null)
+                            {
+                                bgClient.LeaveAsync().GetAwaiter().GetResult();
+                                Log.Information("[BOT RUNNER] Left battleground");
+                            }
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
                     default:
                         break;
                 }

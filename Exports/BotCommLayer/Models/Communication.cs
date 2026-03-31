@@ -69,7 +69,7 @@ namespace Communication {
             "RGVsdGEYESABKAgSGAoQc25hcHNob3RTZXF1ZW5jZRgSIAEoDRIUCgxiYXNl",
             "U2VxdWVuY2UYEyABKA0iTwoITG9nRW50cnkSDQoFbGV2ZWwYASABKAkSEAoI",
             "Y2F0ZWdvcnkYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRIRCgl0aW1lc3RhbXAY",
-            "BCABKAkqpAsKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdPVE8QARIRCg1J",
+            "BCABKAkq7AsKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdPVE8QARIRCg1J",
             "TlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQKEFNFTEVDVF9U",
             "QVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNMSU5FX1FVRVNU",
             "EAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FVRVNUEAgSDwoL",
@@ -101,16 +101,18 @@ namespace Communication {
             "GwoXU1RBUlRfUEhZU0lDU19SRUNPUkRJTkcQRhIaChZTVE9QX1BIWVNJQ1Nf",
             "UkVDT1JESU5HEEcSFwoTU1RBUlRfRFVOR0VPTkVFUklORxBIEhMKD0NPTlZF",
             "UlRfVE9fUkFJRBBJEhgKFENIQU5HRV9SQUlEX1NVQkdST1VQEEoSEQoNRk9M",
-            "TE9XX1RBUkdFVBBLKi8KDUJvdFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAA",
-            "Eg4KCkJBQ0tHUk9VTkQQASp2Cg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAA",
-            "EgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRS",
-            "QVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00Q",
-            "BSo7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRAB",
-            "Eg8KC0lOX1BST0dSRVNTEAIqrAEKEkJvdENvbm5lY3Rpb25TdGF0ZRIUChBC",
-            "T1RfRElTQ09OTkVDVEVEEAASFgoSQk9UX0FVVEhFTlRJQ0FUSU5HEAESEwoP",
-            "Qk9UX0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVSSU5HX1dPUkxEEAMSEAoM",
-            "Qk9UX0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVSUklORxAFEhMKD0JPVF9M",
-            "T0dHSU5HX09VVBAGYgZwcm90bzM="));
+            "TE9XX1RBUkdFVBBLEhUKEUpPSU5fQkFUVExFR1JPVU5EEEwSFwoTQUNDRVBU",
+            "X0JBVFRMRUdST1VORBBNEhYKEkxFQVZFX0JBVFRMRUdST1VORBBOKi8KDUJv",
+            "dFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASp2",
+            "Cg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoR",
+            "Q09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JF",
+            "RUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3Vs",
+            "dBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAIq",
+            "rAEKEkJvdENvbm5lY3Rpb25TdGF0ZRIUChBCT1RfRElTQ09OTkVDVEVEEAAS",
+            "FgoSQk9UX0FVVEhFTlRJQ0FUSU5HEAESEwoPQk9UX0NIQVJfU0VMRUNUEAIS",
+            "FgoSQk9UX0VOVEVSSU5HX1dPUkxEEAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQ",
+            "Qk9UX1RSQU5TRkVSUklORxAFEhMKD0JPVF9MT0dHSU5HX09VVBAGYgZwcm90",
+            "bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -208,6 +210,9 @@ namespace Communication {
     [pbr::OriginalName("CONVERT_TO_RAID")] ConvertToRaid = 73,
     [pbr::OriginalName("CHANGE_RAID_SUBGROUP")] ChangeRaidSubgroup = 74,
     [pbr::OriginalName("FOLLOW_TARGET")] FollowTarget = 75,
+    [pbr::OriginalName("JOIN_BATTLEGROUND")] JoinBattleground = 76,
+    [pbr::OriginalName("ACCEPT_BATTLEGROUND")] AcceptBattleground = 77,
+    [pbr::OriginalName("LEAVE_BATTLEGROUND")] LeaveBattleground = 78,
   }
 
   public enum BotRunnerType {

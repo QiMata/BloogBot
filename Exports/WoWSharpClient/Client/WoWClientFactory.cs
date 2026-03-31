@@ -475,7 +475,8 @@ namespace WoWSharpClient.Client
             IGossipNetworkClientComponent GossipAgent,
             IFriendNetworkClientComponent FriendAgent,
             IIgnoreNetworkClientComponent IgnoreAgent,
-            ITradeNetworkClientComponent TradeAgent
+            ITradeNetworkClientComponent TradeAgent,
+            BattlegroundNetworkClientComponent BattlegroundAgent
         ) CreateAllNetworkClientComponents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);

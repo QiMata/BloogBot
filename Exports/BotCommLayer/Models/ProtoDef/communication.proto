@@ -111,6 +111,9 @@ enum ActionType {
     CONVERT_TO_RAID = 73;
     CHANGE_RAID_SUBGROUP = 74;
     FOLLOW_TARGET = 75;
+    JOIN_BATTLEGROUND = 76;
+    ACCEPT_BATTLEGROUND = 77;
+    LEAVE_BATTLEGROUND = 78;
 }
 
 message ActionMap {

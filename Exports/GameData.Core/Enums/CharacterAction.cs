@@ -90,4 +90,7 @@ public enum CharacterAction
     ConvertToRaid,      // Convert the current party to a raid group (leader only).
     ChangeRaidSubgroup, // Move a player to a specific raid subgroup (0-7). Params: string playerName, int subGroup.
     FollowTarget,       // Continuously follow another player by GUID, maintaining follow distance. Params: ulong targetGuid, float distance.
+    JoinBattleground,   // Queue for a battleground via battlemaster NPC interaction. Params: int bgTypeId, int expectedMapId.
+    AcceptBattleground, // Accept a pending BG invite.
+    LeaveBattleground,  // Leave the current battleground.
 }

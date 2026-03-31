@@ -142,6 +142,11 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         ICharacterInitNetworkClientComponent CharacterInitAgent { get; }
 
+        /// <summary>
+        /// Gets the battleground network agent for BG queue, join, and scoreboard operations.
+        /// </summary>
+        BattlegroundNetworkClientComponent BattlegroundAgent { get; }
+
         #endregion
     }
 }

@@ -457,5 +457,22 @@ namespace WoWSharpClient.Networking.ClientComponents
                 return _characterInitAgent;
             }
         }
+
+        private BattlegroundNetworkClientComponent? _battlegroundAgent;
+        public BattlegroundNetworkClientComponent BattlegroundAgent
+        {
+            get
+            {
+                if (_battlegroundAgent == null)
+                {
+                    EnsureLazyAvailable();
+                    _battlegroundAgent = new BattlegroundNetworkClientComponent(
+                        _worldClient!,
+                        _loggerFactory?.CreateLogger<BattlegroundNetworkClientComponent>()
+                            ?? new ConsoleLogger<BattlegroundNetworkClientComponent>());
+                }
+                return _battlegroundAgent;
+            }
+        }
     }
 }

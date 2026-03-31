@@ -91,6 +91,9 @@ namespace BotRunner
             Communication.ActionType.ConvertToRaid => CharacterAction.ConvertToRaid,
             Communication.ActionType.ChangeRaidSubgroup => CharacterAction.ChangeRaidSubgroup,
             Communication.ActionType.FollowTarget => CharacterAction.FollowTarget,
+            Communication.ActionType.JoinBattleground => CharacterAction.JoinBattleground,
+            Communication.ActionType.AcceptBattleground => CharacterAction.AcceptBattleground,
+            Communication.ActionType.LeaveBattleground => CharacterAction.LeaveBattleground,
             _ => null,
         };
 

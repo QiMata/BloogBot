@@ -728,7 +728,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             IGossipNetworkClientComponent GossipAgent,
             IFriendNetworkClientComponent FriendAgent,
             IIgnoreNetworkClientComponent IgnoreAgent,
-            ITradeNetworkClientComponent TradeAgent
+            ITradeNetworkClientComponent TradeAgent,
+            BattlegroundNetworkClientComponent BattlegroundAgent
         ) CreateAllNetworkClientComponents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return (
@@ -757,7 +758,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 CreateGossipNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateFriendNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateIgnoreNetworkClientComponentForClient(worldClient, loggerFactory),
-                CreateTradeNetworkClientComponentForClient(worldClient, loggerFactory)
+                CreateTradeNetworkClientComponentForClient(worldClient, loggerFactory),
+                new BattlegroundNetworkClientComponent(worldClient, loggerFactory?.CreateLogger<BattlegroundNetworkClientComponent>() ?? new ConsoleLogger<BattlegroundNetworkClientComponent>())
             );
         }
 
