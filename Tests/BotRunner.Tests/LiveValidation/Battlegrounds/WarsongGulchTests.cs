@@ -139,6 +139,44 @@ public class WarsongGulchTests
             _bot.AllianceAccounts.Contains(s.AccountName) &&
             (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == 0);
         _output.WriteLine($"Alliance bots on Eastern Kingdoms: {allyOnMap0}/{_bot.AllianceAccounts.Length}");
+
+        // Send JoinBattleground action to all bots
+        // WSG type=2, expected map=489
+        foreach (var snap in _bot.AllBots)
+        {
+            _output.WriteLine($"Sending JoinBattleground to {snap.AccountName}");
+            var action = new Communication.ActionMessage
+            {
+                ActionType = Communication.ActionType.JoinBattleground,
+            };
+            action.Parameters.Add(new Communication.RequestParameter { IntParam = 2 }); // WSG
+            action.Parameters.Add(new Communication.RequestParameter { IntParam = 489 }); // expected map
+            await _bot.SendActionAsync(snap.AccountName, action);
+            await Task.Delay(200);
+        }
+
+        // Wait for bots to enter WSG (map 489)
+        _output.WriteLine("\nWaiting for bots to enter WSG...");
+        var botsInWsg = await WaitForProgressAsync(
+            phaseName: "WSGEntry",
+            maxTimeout: TimeSpan.FromMinutes(5),
+            staleTimeout: TimeSpan.FromSeconds(60),
+            pollInterval: TimeSpan.FromSeconds(5),
+            evaluate: snapshots =>
+            {
+                var onWsg = snapshots.Count(s =>
+                    (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
+                var fingerprint = $"wsg={onWsg}/{snapshots.Count}";
+                return (onWsg >= 10, onWsg, fingerprint); // Need at least 10 for BG to start
+            });
+
+        _output.WriteLine($"\n=== WSG ENTRY RESULT ===");
+        _output.WriteLine($"Bots in WSG: {botsInWsg}");
+        foreach (var snap in _bot.AllBots)
+        {
+            var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            _output.WriteLine($"  {snap.AccountName}: map={mapId}");
+        }
     }
 
     private async Task<TResult> WaitForProgressAsync<TResult>(
