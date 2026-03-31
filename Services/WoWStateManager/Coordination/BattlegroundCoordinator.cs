@@ -96,25 +96,29 @@ public class BattlegroundCoordinator
     private ActionMessage? HandleWaitingForBots(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Wait for all bots to be in-world with valid ObjectManager AND level >= 10
-        // (fixture handles leveling/teleporting — coordinator waits for that to complete)
+        // Wait for ALL bots to be in-world with valid ObjectManager AND level >= 10.
+        // Fixture handles leveling/teleporting — coordinator must wait for that to complete.
+        // Don't transition early — if we queue before all bots are ready, some will
+        // have their actions dropped by BotRunnerService (HasEnteredWorld=false).
         var ready = snapshots.Values.Count(s =>
             s.IsObjectManagerValid
             && (s.Player?.Unit?.GameObject?.Level ?? 0) >= 10);
         var total = _memberAccounts.Count + 1;
 
-        if (ready < total && _tickCount < 120) // ~60s for fixture prep
+        if (ready < total)
         {
             if (_tickCount % 20 == 1)
                 _logger.LogInformation("BG_COORD: Waiting for bots (level>=10): {Ready}/{Total}", ready, total);
-            return null;
-        }
 
-        if (ready < 2)
-        {
-            if (_tickCount % 20 == 1)
-                _logger.LogWarning("BG_COORD: Only {Ready} bots ready (level>=10), need at least 2", ready);
-            return null;
+            // Hard timeout: after 3 minutes, proceed with whatever we have (minimum 4 per faction for BG)
+            if ((DateTime.UtcNow - _stateEnteredAt).TotalSeconds > 180 && ready >= 4)
+            {
+                _logger.LogWarning("BG_COORD: Timeout waiting for all bots. Proceeding with {Ready}/{Total}", ready, total);
+            }
+            else
+            {
+                return null;
+            }
         }
 
         _logger.LogInformation("BG_COORD: {Ready}/{Total} bots ready. Starting BG queue.", ready, total);
@@ -125,16 +129,32 @@ public class BattlegroundCoordinator
     private ActionMessage? HandleQueueForBattleground(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Send JoinBattleground action to each bot (once per bot)
-        if (!_queueSent.TryAdd(requestingAccount, 0))
-            return null; // Already sent
+        // Already sent to this bot — skip
+        if (_queueSent.ContainsKey(requestingAccount))
+            return null;
 
-        _logger.LogInformation("BG_COORD: Sending JOIN_BATTLEGROUND to '{Account}' (bgType={BgType})",
-            requestingAccount, _bgTypeId);
+        // Only send JoinBattleground to bots that are actually world-ready.
+        // Bots still loading (HasEnteredWorld=false, Guid=0) will have their actions dropped
+        // by BotRunnerService — so we must NOT mark them as queued until they're ready.
+        if (snapshots.TryGetValue(requestingAccount, out var snap)
+            && snap.IsObjectManagerValid
+            && (snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != _bgMapId) // not already in BG
+        {
+            _queueSent.TryAdd(requestingAccount, 0);
 
-        var action = new ActionMessage { ActionType = ActionType.JoinBattleground };
-        action.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
-        action.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
+            _logger.LogInformation("BG_COORD: Sending JOIN_BATTLEGROUND to '{Account}' (bgType={BgType})",
+                requestingAccount, _bgTypeId);
+
+            var action = new ActionMessage { ActionType = ActionType.JoinBattleground };
+            action.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
+            action.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
+
+            return action;
+        }
+
+        // Bot not ready yet — log periodically
+        if (_tickCount % 20 == 1)
+            _logger.LogInformation("BG_COORD: Waiting for '{Account}' to be world-ready before queueing", requestingAccount);
 
         // Check if all bots have been queued
         var allQueued = _queueSent.ContainsKey(_leaderAccount)
@@ -142,11 +162,11 @@ public class BattlegroundCoordinator
 
         if (allQueued)
         {
-            _logger.LogInformation("BG_COORD: All bots queued. Waiting for invite.");
+            _logger.LogInformation("BG_COORD: All {Count} bots queued. Waiting for invite.", _queueSent.Count);
             TransitionTo(CoordState.WaitForInvite);
         }
 
-        return action;
+        return null;
     }
 
     private ActionMessage? HandleWaitForInvite(string requestingAccount,

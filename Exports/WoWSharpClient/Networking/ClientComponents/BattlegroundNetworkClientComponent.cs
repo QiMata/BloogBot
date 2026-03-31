@@ -150,21 +150,27 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Sends CMSG_BATTLEFIELD_PORT with action=1 to accept a battleground invite.
+        /// VMaNGOS 1.12.1 format (BattleGroundHandler.cpp:383):
+        ///   uint32 mapId + uint8 action (1=accept, 0=leave)
         /// </summary>
         public async Task AcceptInviteAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Accepting BG invite");
 
-                // CMSG_BATTLEFIELD_PORT: uint8 action (1=accept)
-                var payload = new byte[1];
-                payload[0] = 1;
+                // Use the mapId from the last SMSG_BATTLEFIELD_STATUS
+                var mapId = CurrentBgTypeId ?? 489u; // fallback to WSG
+                _logger.LogDebug("Accepting BG invite: mapId={MapId}", mapId);
+
+                // CMSG_BATTLEFIELD_PORT: uint32 mapId + uint8 action (1=accept, 0=leave)
+                var payload = new byte[5];
+                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), mapId);
+                payload[4] = 1; // accept
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_PORT, payload, cancellationToken);
 
-                _logger.LogInformation("BG invite accepted");
+                _logger.LogInformation("BG invite accepted (mapId={MapId})", mapId);
             }
             catch (Exception ex)
             {
@@ -265,40 +271,71 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Parses SMSG_BATTLEFIELD_STATUS (0x2D4).
-        /// Format: uint32 queueSlot + uint32 bgMapId + uint32 unkn1 + uint32 unkn2 +
-        ///         uint32 clientInstanceId + uint8 isRatedBg + uint32 statusId
-        ///         If statusId == 2 (WaitJoin): + uint32 mapId + uint32 timeToAccept
+        /// VMaNGOS 1.12.1 format (BattleGroundMgr.cpp:BuildBattleGroundStatusPacket):
+        ///
+        /// statusId == 0 (None):
+        ///   uint32 queueSlot + uint32 0
+        ///
+        /// statusId != 0:
+        ///   uint32 queueSlot + uint32 bgMapId + uint8 bracketId + uint32 clientInstanceId + uint32 statusId
+        ///   + variable fields depending on statusId:
+        ///     STATUS_WAIT_QUEUE (1): uint32 avgWaitTime + uint32 timeInQueue
+        ///     STATUS_WAIT_JOIN  (2): uint32 timeToRemove
+        ///     STATUS_IN_PROGRESS(3): uint32 timeToAutoLeave + uint32 elapsedTime
         /// </summary>
         private BattlegroundStatus ParseBattlefieldStatus(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                // Minimum: 4+4+4+4+4+1+4 = 25 bytes
-                if (span.Length < 25)
+
+                // statusId == 0 (None) packet is only 8 bytes: uint32 queueSlot + uint32 0
+                if (span.Length < 8)
                     return new BattlegroundStatus(0, 0, BattlegroundStatusId.None, null, null);
 
                 int offset = 0;
                 uint queueSlot = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+
+                // Check if this is a "None" status (short packet)
+                if (span.Length <= 8)
+                {
+                    // uint32 queueSlot + uint32 0 — no BG info
+                    return new BattlegroundStatus(queueSlot, 0, BattlegroundStatusId.None, null, null);
+                }
+
+                // Full packet: queueSlot(4) + mapId(4) + bracketId(1) + instanceId(4) + statusId(4) = 17 bytes min
+                if (span.Length < 17)
+                    return new BattlegroundStatus(queueSlot, 0, BattlegroundStatusId.None, null, null);
+
                 uint bgMapId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
-                offset += 4; // unkn1
-                offset += 4; // unkn2
-                offset += 4; // clientInstanceId
-                offset += 1; // isRatedBg
+                byte bracketId = span[offset]; offset += 1;  // uint8, NOT uint32
+                uint clientInstanceId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
                 uint statusId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
 
                 uint? mapId = null;
                 uint? timeToAcceptMs = null;
 
-                if ((BattlegroundStatusId)statusId == BattlegroundStatusId.WaitJoin && offset + 8 <= span.Length)
+                switch ((BattlegroundStatusId)statusId)
                 {
-                    mapId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
-                    timeToAcceptMs = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4));
+                    case BattlegroundStatusId.Queued: // STATUS_WAIT_QUEUE
+                        // uint32 avgWaitTime + uint32 timeInQueue
+                        break;
+                    case BattlegroundStatusId.WaitJoin: // STATUS_WAIT_JOIN
+                        // uint32 timeToRemove (time to accept invite)
+                        if (offset + 4 <= span.Length)
+                        {
+                            timeToAcceptMs = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4));
+                            mapId = bgMapId; // BG map is the bgMapId field
+                        }
+                        break;
+                    case BattlegroundStatusId.InProgress: // STATUS_IN_PROGRESS
+                        // uint32 timeToAutoLeave + uint32 elapsedTime
+                        break;
                 }
 
                 return new BattlegroundStatus(queueSlot, bgMapId, (BattlegroundStatusId)statusId, mapId, timeToAcceptMs);
             }
-            catch
+            catch (Exception ex)
             {
                 return new BattlegroundStatus(0, 0, BattlegroundStatusId.None, null, null);
             }
