@@ -195,12 +195,16 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // Target and interact with the battlemaster
+        // Target and interact with the battlemaster — opens the BG queue dialog
         ObjectManager.SetTarget(_bmGuid);
         ObjectManager.InteractWithNpcAsync(_bmGuid, CancellationToken.None)
             .GetAwaiter().GetResult();
 
-        // Queue for the BG via the battlemaster NPC — pass NPC GUID (required by VMaNGOS anticheat)
+        // Wait for the gossip/BG dialog to open before sending queue packet.
+        // VMaNGOS expects CMSG_BATTLEMASTER_JOIN to come AFTER gossip interaction.
+        Thread.Sleep(1000);
+
+        // Queue for the BG via the battlemaster NPC — pass NPC GUID
         var bgAgent = _bgClient;
         if (bgAgent != null)
         {
