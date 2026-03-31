@@ -342,7 +342,11 @@ namespace WoWStateManager.Listeners
                 var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
 
-                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _characterSettings, _soapClient, _logger);
+                // WWOW_COORDINATOR_SKIP_PREP: when set to "1", the coordinator skips
+                // all prep states (level, spells, gear, teleport) and starts at
+                // FormGroup_Inviting. Used when the test fixture handles prep.
+                var skipPrep = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_SKIP_PREP") == "1";
+                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _characterSettings, _soapClient, _logger, skipPrep);
             }
 
             var action = _dungeoneeringCoordinator.GetAction(accountName, CurrentActivityMemberList);

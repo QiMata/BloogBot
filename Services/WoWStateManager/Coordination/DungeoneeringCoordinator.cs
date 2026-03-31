@@ -124,12 +124,23 @@ public class DungeoneeringCoordinator
 
     public CoordState State => _state;
 
+    /// <summary>
+    /// Create a dungeoneering coordinator.
+    /// </summary>
+    /// <param name="leaderAccount">Account name of the raid leader.</param>
+    /// <param name="allAccounts">All bot account names (including leader).</param>
+    /// <param name="allSettings">Character settings for all bots.</param>
+    /// <param name="soapClient">SOAP client for GM commands. Null = bot chat only.</param>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="skipPrep">If true, skip all prep states (level, spells, gear, teleport)
+    /// and start directly at FormGroup_Inviting. Use when the test fixture handles prep.</param>
     public DungeoneeringCoordinator(
         string leaderAccount,
         IEnumerable<string> allAccounts,
         List<CharacterSettings> allSettings,
         MangosSOAPClient? soapClient,
-        ILogger logger)
+        ILogger logger,
+        bool skipPrep = false)
     {
         _leaderAccount = leaderAccount;
         _memberAccounts = allAccounts
@@ -139,8 +150,15 @@ public class DungeoneeringCoordinator
         _soapClient = soapClient;
         _logger = logger;
 
-        _logger.LogInformation("DUNGEON_COORD: Initialized — Leader='{Leader}', Members=[{Members}], SOAP={HasSoap}",
-            leaderAccount, string.Join(", ", _memberAccounts), soapClient != null);
+        if (skipPrep)
+        {
+            _state = CoordState.FormGroup_Inviting;
+            _stateEnteredAt = DateTime.UtcNow;
+            _logger.LogInformation("DUNGEON_COORD: Initialized with skipPrep=true — starting at FormGroup_Inviting");
+        }
+
+        _logger.LogInformation("DUNGEON_COORD: Initialized — Leader='{Leader}', Members=[{Members}], SOAP={HasSoap}, State={State}",
+            leaderAccount, string.Join(", ", _memberAccounts), soapClient != null, _state);
     }
 
     public ActionMessage? GetAction(
