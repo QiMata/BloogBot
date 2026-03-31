@@ -109,7 +109,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Sends CMSG_BATTLEMASTER_JOIN to queue for a battleground.
         /// </summary>
-        /// <param name="bgTypeId">Battleground type ID.</param>
+        /// <param name="bgMapId">Battleground type ID.</param>
         /// <param name="instanceId">Specific instance ID, or 0 for any.</param>
         /// <param name="asGroup">Whether to join as a group.</param>
         /// <param name="bgMapId">The BG's MAP ID (489=WSG, 529=AB, 30=AV) — NOT the BG type ID.
@@ -135,11 +135,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEMASTER_JOIN, payload, cancellationToken);
 
-                _logger.LogInformation("BG queue join sent: BgType={BgType}", bgTypeId);
+                _logger.LogInformation("BG queue join sent: BgType={BgType}", bgMapId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to join BG queue: BgType={BgType}", bgTypeId);
+                _logger.LogError(ex, "Failed to join BG queue: BgType={BgType}", bgMapId);
                 throw;
             }
             finally
@@ -265,7 +265,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Parses SMSG_BATTLEFIELD_STATUS (0x2D4).
-        /// Format: uint32 queueSlot + uint32 bgTypeId + uint32 unkn1 + uint32 unkn2 +
+        /// Format: uint32 queueSlot + uint32 bgMapId + uint32 unkn1 + uint32 unkn2 +
         ///         uint32 clientInstanceId + uint8 isRatedBg + uint32 statusId
         ///         If statusId == 2 (WaitJoin): + uint32 mapId + uint32 timeToAccept
         /// </summary>
@@ -280,7 +280,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 int offset = 0;
                 uint queueSlot = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
-                uint bgTypeId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                uint bgMapId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
                 offset += 4; // unkn1
                 offset += 4; // unkn2
                 offset += 4; // clientInstanceId
@@ -296,7 +296,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     timeToAcceptMs = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4));
                 }
 
-                return new BattlegroundStatus(queueSlot, bgTypeId, (BattlegroundStatusId)statusId, mapId, timeToAcceptMs);
+                return new BattlegroundStatus(queueSlot, bgMapId, (BattlegroundStatusId)statusId, mapId, timeToAcceptMs);
             }
             catch
             {
@@ -306,7 +306,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Parses SMSG_BATTLEFIELD_LIST (0x23D).
-        /// Format: uint64 battleMasterGuid + uint32 bgTypeId + uint32 count + count * uint32 instanceIds
+        /// Format: uint64 battleMasterGuid + uint32 bgMapId + uint32 count + count * uint32 instanceIds
         /// </summary>
         private BattlegroundList ParseBattlefieldList(ReadOnlyMemory<byte> payload)
         {
@@ -319,7 +319,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 int offset = 0;
                 ulong battleMasterGuid = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)); offset += 8;
-                uint bgTypeId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                uint bgMapId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
                 uint count = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
 
                 var instanceIds = new List<uint>((int)Math.Min(count, 100));
@@ -329,7 +329,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     offset += 4;
                 }
 
-                return new BattlegroundList(battleMasterGuid, bgTypeId, instanceIds);
+                return new BattlegroundList(battleMasterGuid, bgMapId, instanceIds);
             }
             catch
             {
