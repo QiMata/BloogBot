@@ -549,7 +549,7 @@ namespace WoWSharpClient.Tests.Agent
         public void CreateAllNetworkClientComponents_WithLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent, battlegroundAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(targetingAgent);
@@ -610,7 +610,7 @@ namespace WoWSharpClient.Tests.Agent
         public void CreateAllNetworkClientComponents_WithoutLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, null);
+            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent, battlegroundAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(targetingAgent);
