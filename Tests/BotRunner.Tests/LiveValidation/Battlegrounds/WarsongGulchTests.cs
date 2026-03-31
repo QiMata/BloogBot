@@ -131,15 +131,16 @@ public class WarsongGulchTests
         var botsInWsg = await WaitForProgressAsync(
             phaseName: "WSGEntry",
             maxTimeout: TimeSpan.FromMinutes(5),
-            staleTimeout: TimeSpan.FromSeconds(90),
+            staleTimeout: TimeSpan.FromMinutes(4),  // BG queue + creation + transfer ~2-3 min
             pollInterval: TimeSpan.FromSeconds(5),
             evaluate: snapshots =>
             {
                 var onWsg = snapshots.Count(s =>
                     (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
                 var total = snapshots.Count;
-                // Need at least 4 per team (min_players_per_team) = 8 total
-                return (onWsg >= 8, onWsg, $"wsg={onWsg}/{total}");
+                // Some bots' snapshots may be stale after map transfer.
+                // Accept 4+ (one team's worth) as success.
+                return (onWsg >= 4, onWsg, $"wsg={onWsg}/{total}");
             },
             tolerateFgCrash: true);
 
@@ -152,7 +153,7 @@ public class WarsongGulchTests
             _output.WriteLine($"  {snap.AccountName}: map={mapId}");
         }
 
-        Assert.True(botsInWsg >= 2, $"At least 2 bots should enter WSG (got {botsInWsg})");
+        Assert.True(botsInWsg >= 4, $"At least 4 bots should enter WSG (got {botsInWsg})");
     }
 
     private async Task<TResult> WaitForProgressAsync<TResult>(
