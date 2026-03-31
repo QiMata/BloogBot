@@ -99,7 +99,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 |---|------|--------|
 | 28.1 | **ALL tests: strict bot count assertions** — Every test config specifies exact bot count. ALL bots must connect. Any missing bot, crash, or disconnect is an automatic failure and must be investigated. No partial-count workarounds. `Assert.Equal(expectedCount, actualCount)` everywhere. | Open |
 | 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Removed lines 72-77. Teleports directly to quest area now. | **Done** (bea79f70) |
-| 28.3 | **EquipmentEquipTests: use .unequip instead of .reset items** — `.reset items` clears ALL inventory. Use targeted `.unequip` for mainhand slot only. More surgical, less state pollution. | Open |
+| 28.3 | **EquipmentEquipTests: targeted slot clear** — VMaNGOS has no `.unequip` command. `.reset items` is the only option to clear mainhand. Server limitation, not test issue. | Won't Fix |
 | 28.4 | **All DungeonInstanceFixture-based tests: strict bot count** — Every dungeon test must Assert.Equal on expected bot count. Crash = failure = investigate. | Open |
 | 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | Open |
 | 28.6 | **DeathCorpseRunTests: document CRASH-001 more clearly** — The FG ghost movement crash (0x00619CDF) is well-documented but uses a hardcoded `Skip.If(true)`. Add a binary investigation note for future fix attempts. | Open |
