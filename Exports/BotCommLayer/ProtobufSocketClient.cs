@@ -309,9 +309,16 @@ namespace BotCommLayer
             await _asyncLock.WaitAsync(ct);
             try
             {
+                // If stream is null from a previous failed reconnect, try to reconnect first
+                if (_stream == null && _ipAddress != null)
+                {
+                    _logger?.LogWarning("Stream null — reconnecting to {Ip}:{Port}...", _ipAddress, _port);
+                    await ConnectAsync(ct);
+                }
+
                 return await SendMessageInternalAsync(request, ct);
             }
-            catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+            catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or InvalidOperationException)
             {
                 if (_ipAddress != null)
                 {
@@ -379,7 +386,7 @@ namespace BotCommLayer
             _client?.Dispose();
             _client = new TcpClient();
 
-            const int maxRetries = 5;
+            const int maxRetries = 8;
             const int baseDelayMs = 200;
 
             for (int attempt = 1; attempt <= maxRetries; attempt++)
@@ -394,7 +401,9 @@ namespace BotCommLayer
                 }
                 catch (SocketException) when (attempt < maxRetries)
                 {
-                    await Task.Delay(baseDelayMs * (1 << (attempt - 1)), ct);
+                    // Add jitter to prevent thundering herd from 20+ bots reconnecting simultaneously
+                    var jitter = Random.Shared.Next(0, baseDelayMs);
+                    await Task.Delay(baseDelayMs * (1 << (attempt - 1)) + jitter, ct);
                 }
             }
 

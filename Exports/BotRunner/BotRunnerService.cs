@@ -184,7 +184,10 @@ namespace BotRunner
                     // at the login screen, which falsely triggers IsInMapTransition).
                     if (_objectManager.HasEnteredWorld && _objectManager.IsInMapTransition)
                     {
-                        await Task.Delay(500, cancellationToken);
+                        // Add jitter (500-1500ms) to prevent thundering herd when
+                        // 20+ bots resume from map transition simultaneously
+                        var jitter = 500 + Random.Shared.Next(0, 1000);
+                        await Task.Delay(jitter, cancellationToken);
                         continue;
                     }
 
@@ -197,19 +200,20 @@ namespace BotRunner
                         incomingActivityMemberState = await _characterStateUpdateClient
                             .SendMemberStateUpdateAsync(_activitySnapshot, cancellationToken);
                     }
-                    catch (ObjectDisposedException)
-                    {
-                        // Socket was disposed (StateManager restart or connection reset).
-                        // Continue the tick with null state — bot keeps running autonomously
-                        // with its current behavior tree until the connection is restored.
-                    }
-                    catch (System.IO.IOException)
-                    {
-                        // Connection reset or broken pipe — same recovery as above.
-                    }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
                         break;
+                    }
+                    catch (Exception ex) when (
+                        ex is ObjectDisposedException  // Socket disposed (StateManager restart)
+                        || ex is System.IO.IOException // Connection reset or broken pipe
+                        || ex is System.Net.Sockets.SocketException // Connection refused/reset
+                        || ex is InvalidOperationException // Reconnect failed after retries
+                        || ex is TimeoutException)     // Reconnect budget exceeded
+                    {
+                        // Connection to StateManager lost — bot keeps running autonomously
+                        // with its current behavior tree until the connection is restored.
+                        // ProtobufSocketClient handles reconnect internally on next send.
                     }
 
                     var playerWorldReady = _objectManager.HasEnteredWorld

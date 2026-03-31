@@ -73,10 +73,11 @@ public class WarsongGulchTests
         // IMPORTANT: Level to 10 LAST so the BattlegroundCoordinator (which checks level>=10
         // before sending JoinBattleground) won't start queuing until bots are at their positions.
 
-        // Step 1: Remove Deserter debuff and teleport to battlemaster positions
+        // Step 1: Remove Deserter debuff — .die + .revive clears all debuffs
         foreach (var snap in _bot.AllBots)
         {
-            await _bot.SendGmChatCommandAsync(snap.AccountName, ".unaura 26013");
+            await _bot.SendGmChatCommandAsync(snap.AccountName, ".die");
+            await _bot.SendGmChatCommandAsync(snap.AccountName, ".revive");
         }
         await Task.Delay(1000);
 
