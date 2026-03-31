@@ -305,7 +305,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | # | Task | Spec |
 |---|------|------|
 | 25.5 | **Create WSG accounts + settings** — `WarsongGulchFixture` generates 20-bot settings JSON dynamically. 10 Horde (1 FG + 9 BG) + 10 Alliance (10 BG). | **Done** (1464e7d) |
-| 25.6 | **WSG queue + entry test** — 19 BG bots enter WSG map 489 successfully. FG bot (WoW.exe) crashes during BG map transfer (known FG crash issue). Test needs FG crash tolerance. | **In Progress** — BG flow works, FG crash blocks test pass |
+| 25.6 | **WSG queue + entry test** — BG flow works: 19 BG bots queue, get invited, accept, transfer to WSG map 489 (confirmed via SMSG_NEW_WORLD). **Blocker**: state update socket (port 5002) dies during map transfer → snapshot MapId stays stale → test assertion fails. Fix: CharacterStateUpdateClient reconnect logic needs to survive cross-map teleports. FG bot crashes during BG transfer (known issue, tolerated). | **In Progress** — BG entry works, snapshot pipeline breaks |
 | 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | Open |
 | 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | Open |
 
