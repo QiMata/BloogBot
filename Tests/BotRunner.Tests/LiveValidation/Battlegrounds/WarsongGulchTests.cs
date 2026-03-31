@@ -54,6 +54,12 @@ public class WarsongGulchTests
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
+        // Capture Bg.log baseline BEFORE any bot activity starts.
+        // The BG coordinator may queue bots during Phase 2 prep.
+        var bgLogPath = @"E:\repos\Westworld of Warcraft\docker\linux\vmangos\storage\mangosd\logs\Bg.log";
+        var testStartTime = DateTime.UtcNow.AddSeconds(-5).ToString("yyyy-MM-dd HH:mm"); // 5s margin
+        _output.WriteLine($"Bg.log baseline: entries after {testStartTime}");
+
         // Sanity check: protobuf roundtrip for CurrentMapId
         {
             var testSnap = new Communication.WoWActivitySnapshot { AccountName = "ROUNDTRIP", CurrentMapId = 489 };
@@ -127,12 +133,7 @@ public class WarsongGulchTests
         // Instead, verify via VMaNGOS Bg.log which records all BG entries/exits.
         // Verify BG entry via VMaNGOS Bg.log. Snapshot-based MapId detection is unreliable
         // (100ms tick overwrites before test poll catches it).
-        _output.WriteLine("Waiting for BG to run (checking Bg.log for new entries)...");
-        var bgLogPath = @"E:\repos\Westworld of Warcraft\docker\linux\vmangos\storage\mangosd\logs\Bg.log";
-
-        // Use the current time as baseline — only count entries logged AFTER now
-        var testStartTime = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm");
-        _output.WriteLine($"Bg.log baseline: entries after {testStartTime}");
+        _output.WriteLine("Polling Bg.log for BG entries...");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
