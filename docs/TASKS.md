@@ -43,7 +43,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 | Slot | Account | Role | Class | Race | Gender | Runner |
 |------|---------|------|-------|------|--------|--------|
-| 1 | TESTBOT1 | Main Tank / Raid Leader | Warrior | Orc | Female | Foreground |
+| 1 | RFCBOT1 | Main Tank / Raid Leader | Warrior | Orc | Female | Foreground |
 | 2 | RFCBOT2 | Off-Tank | Shaman | Orc | Female | Background |
 | 3 | RFCBOT3 | Healer | Druid | Tauren | Male | Background |
 | 4 | RFCBOT4 | Healer | Priest | Undead | Male | Background |
