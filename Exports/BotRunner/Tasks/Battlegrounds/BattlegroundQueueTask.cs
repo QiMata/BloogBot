@@ -121,7 +121,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
     private void HandleFindBattlemaster(IWoWPlayer player)
     {
-        // Find nearby NPC with UNIT_NPC_FLAG_BATTLEMASTER (0x800 = 2048)
+        // Strategy 1: Find by UNIT_NPC_FLAG_BATTLEMASTER (0x800)
         const uint BattlemasterFlag = 0x800;
 
         _bmNpc = ObjectManager.Units
@@ -131,35 +131,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             .OrderBy(u => player.Position.DistanceTo(u.Position))
             .FirstOrDefault();
 
-        if (_bmNpc != null)
-        {
-            _bmGuid = _bmNpc.Guid;
-            Log.Information("[BG-QUEUE] Found battlemaster: {Name} (0x{Guid:X}) at {Dist:F0}y",
-                _bmNpc.Name, _bmGuid, player.Position.DistanceTo(_bmNpc.Position));
-            SetState(BgState.MoveToBattlemaster);
-            return;
-        }
-
-        // No battlemaster visible — wait a few seconds for nearby objects to populate
-        // (server sends SMSG_UPDATE_OBJECT after teleport, but it takes time).
-        if (!Wait.For("bm_search", 3000, true))
-            return;
-
-        // DIAG: log ObjectManager unit state
-        var allUnits = ObjectManager.Units.ToList();
-        var withFlags = allUnits.Where(u => ((uint)u.NpcFlags & BattlemasterFlag) != 0).ToList();
-        Log.Information("[BG-QUEUE] DIAG: ObjectManager has {Total} units, {WithFlag} with BM flag, player at ({X:F0},{Y:F0},{Z:F0}) map={Map}",
-            allUnits.Count, withFlags.Count, player.Position.X, player.Position.Y, player.Position.Z, player.MapId);
-        if (withFlags.Count > 0)
-        {
-            foreach (var u in withFlags)
-                Log.Information("[BG-QUEUE] DIAG:   BM unit: {Name} (0x{Guid:X}) flags=0x{Flags:X} at ({X:F0},{Y:F0},{Z:F0})",
-                    u.Name, u.Guid, (uint)u.NpcFlags, u.Position?.X, u.Position?.Y, u.Position?.Z);
-        }
-
-        // Still no battlemaster — navigate toward known position.
-        // guid=0 queue is rejected by VMaNGOS PassiveAnticheat ("invalid BG type").
-        // The bot must interact with the actual NPC to queue properly.
+        // Resolve known battlemaster position for this faction
         var factionStr = player.Race switch
         {
             Race.Orc or Race.Undead or Race.Tauren or Race.Troll =>
@@ -167,6 +139,35 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             _ => DungeonEntryData.DungeonFaction.Alliance
         };
         var bmData = BattlemasterData.FindBattlemaster(_bgType, factionStr);
+
+        // Strategy 2: If NpcFlags aren't populated yet (common after teleport),
+        // find the nearest NPC within 10y of the known battlemaster position.
+        // UNIT_NPC_FLAGS is a "dynamic" field that may not arrive in the initial
+        // SMSG_CREATE_OBJECT — it comes in a later SMSG_UPDATE_OBJECT tick.
+        if (_bmNpc == null && bmData != null)
+        {
+            _bmNpc = ObjectManager.Units
+                .Where(u => u.Health > 0
+                    && u.Position != null
+                    && u.Position.DistanceTo(bmData.Position) < 10f)
+                .OrderBy(u => u.Position.DistanceTo(bmData.Position))
+                .FirstOrDefault();
+        }
+
+        if (_bmNpc != null)
+        {
+            _bmGuid = _bmNpc.Guid;
+            Log.Information("[BG-QUEUE] Found battlemaster: {Name} (0x{Guid:X}) at {Dist:F0}y flags=0x{Flags:X}",
+                _bmNpc.Name, _bmGuid, player.Position.DistanceTo(_bmNpc.Position), (uint)_bmNpc.NpcFlags);
+            SetState(BgState.MoveToBattlemaster);
+            return;
+        }
+
+        // No battlemaster visible — wait a few seconds for nearby objects to populate
+        if (!Wait.For("bm_search", 3000, true))
+            return;
+
+        // Still no battlemaster — navigate toward known position.
         if (bmData != null)
         {
             Log.Information("[BG-QUEUE] No battlemaster visible — navigating to {City} ({X:F0},{Y:F0})",
