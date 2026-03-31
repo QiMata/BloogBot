@@ -45,8 +45,8 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     private ulong _bmGuid;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private int _actionAttempts;
-    private const double StateTimeoutSec = 30.0;
-    private const double InviteTimeoutSec = 120.0; // BG queue can take up to 2 min
+    private const double StateTimeoutSec = 60.0;
+    private const double InviteTimeoutSec = 300.0; // BG queue can take up to 5 min
 
     /// <summary>
     /// Create a BG queue task.
@@ -131,10 +131,27 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             .OrderBy(u => player.Position.DistanceTo(u.Position))
             .FirstOrDefault();
 
-        if (_bmNpc == null)
+        if (_bmNpc != null)
         {
-            Log.Debug("[BG-QUEUE] No battlemaster NPC found nearby");
-            // Navigate toward known battlemaster position as fallback
+            _bmGuid = _bmNpc.Guid;
+            Log.Information("[BG-QUEUE] Found battlemaster: {Name} (0x{Guid:X}) at {Dist:F0}y",
+                _bmNpc.Name, _bmGuid, player.Position.DistanceTo(_bmNpc.Position));
+            SetState(BgState.MoveToBattlemaster);
+            return;
+        }
+
+        // No battlemaster visible — try queuing directly with guid=0 (queue from anywhere).
+        // VMaNGOS may or may not support this. If it doesn't, navigate toward the known position.
+        Log.Information("[BG-QUEUE] No battlemaster NPC visible — trying direct queue with guid=0");
+        if (_bgClient != null)
+        {
+            _bgClient.JoinQueueAsync((uint)_bgType, 0, false, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            SetState(BgState.WaitForInvite);
+        }
+        else
+        {
+            // No client and no NPC — navigate toward known position
             var factionStr = player.Race switch
             {
                 Race.Orc or Race.Undead or Race.Tauren or Race.Troll =>
@@ -143,16 +160,8 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             };
             var bmData = BattlemasterData.FindBattlemaster(_bgType, factionStr);
             if (bmData != null)
-            {
                 TryNavigateToward(bmData.Position, allowDirectFallback: true);
-            }
-            return;
         }
-
-        _bmGuid = _bmNpc.Guid;
-        Log.Information("[BG-QUEUE] Found battlemaster: {Name} (0x{Guid:X}) at {Dist:F0}y",
-            _bmNpc.Name, _bmGuid, player.Position.DistanceTo(_bmNpc.Position));
-        SetState(BgState.MoveToBattlemaster);
     }
 
     private void HandleMoveToBattlemaster(IWoWPlayer player)
