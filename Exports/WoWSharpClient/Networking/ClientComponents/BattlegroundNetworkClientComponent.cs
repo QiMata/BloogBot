@@ -112,20 +112,24 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <param name="bgTypeId">Battleground type ID.</param>
         /// <param name="instanceId">Specific instance ID, or 0 for any.</param>
         /// <param name="asGroup">Whether to join as a group.</param>
-        /// <param name="battleMasterGuid">GUID of the battlemaster NPC. Use 0 for queue-from-anywhere (may be rejected by anticheat).</param>
-        public async Task JoinQueueAsync(uint bgTypeId, uint instanceId = 0, bool asGroup = false,
+        /// <param name="bgMapId">The BG's MAP ID (489=WSG, 529=AB, 30=AV) — NOT the BG type ID.
+        /// VMaNGOS reads this field as mapId and converts to BG type internally via GetBattleGroundTypeIdByMapId.</param>
+        /// <param name="battleMasterGuid">GUID of the battlemaster NPC. Required by VMaNGOS anticheat.</param>
+        public async Task JoinQueueAsync(uint bgMapId, uint instanceId = 0, bool asGroup = false,
             CancellationToken cancellationToken = default, ulong battleMasterGuid = 0)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Joining BG queue: BgType={BgType} Instance={Instance} AsGroup={AsGroup} GUID={Guid:X}",
-                    bgTypeId, instanceId, asGroup, battleMasterGuid);
+                _logger.LogDebug("Joining BG queue: MapId={MapId} Instance={Instance} AsGroup={AsGroup} GUID={Guid:X}",
+                    bgMapId, instanceId, asGroup, battleMasterGuid);
 
-                // CMSG_BATTLEMASTER_JOIN: uint64 battleMasterGuid + uint32 bgTypeId + uint32 instanceId + uint8 joinAsGroup
+                // CMSG_BATTLEMASTER_JOIN: uint64 guid + uint32 mapId + uint32 instanceId + uint8 joinAsGroup
+                // IMPORTANT: The second field is the BG MAP ID (489, 529, 30), NOT the BG type enum (2, 3, 1).
+                // VMaNGOS BattleGroundHandler.cpp:106 reads this as mapId and converts via GetBattleGroundTypeIdByMapId.
                 var payload = new byte[8 + 4 + 4 + 1];
                 BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(0, 8), battleMasterGuid);
-                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), bgTypeId);
+                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), bgMapId);
                 BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), instanceId);
                 payload[16] = (byte)(asGroup ? 1 : 0);
 

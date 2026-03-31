@@ -208,9 +208,11 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         var bgAgent = _bgClient;
         if (bgAgent != null)
         {
-            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN for bgType={BgType} via NPC 0x{Guid:X}",
-                _bgType, _bmGuid);
-            bgAgent.JoinQueueAsync((uint)_bgType, 0, false, CancellationToken.None, battleMasterGuid: _bmGuid)
+            // Send BG MAP ID (not type ID) — VMaNGOS reads this field as mapId
+            // and converts internally via GetBattleGroundTypeIdByMapId
+            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN mapId={MapId} via NPC 0x{Guid:X}",
+                _expectedBgMapId, _bmGuid);
+            bgAgent.JoinQueueAsync(_expectedBgMapId, 0, false, CancellationToken.None, battleMasterGuid: _bmGuid)
                 .GetAwaiter().GetResult();
             SetState(BgState.WaitForInvite);
         }
