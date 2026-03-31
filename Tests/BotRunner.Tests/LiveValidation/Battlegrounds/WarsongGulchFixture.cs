@@ -53,9 +53,11 @@ public class WarsongGulchFixture : LiveBotFixture, IAsyncLifetime
 
     async Task IAsyncLifetime.InitializeAsync()
     {
-        // DISABLE dungeoneering coordinator — WSG doesn't use it.
-        // The coordinator teleports everyone to RFC which is wrong for BG tests.
-        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
+        // Use BattlegroundCoordinator instead of DungeoneeringCoordinator
+        Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
+        Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
+        Environment.SetEnvironmentVariable("WWOW_BG_TYPE", "2");  // WSG
+        Environment.SetEnvironmentVariable("WWOW_BG_MAP", "489"); // WSG map
         SkipGroupCleanup = true;
 
         var settingsPath = GenerateSettingsFile();

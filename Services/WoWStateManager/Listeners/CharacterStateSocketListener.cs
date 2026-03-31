@@ -49,6 +49,7 @@ namespace WoWStateManager.Listeners
         private readonly ProgressionPlanner _progressionPlanner;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
+        private BattlegroundCoordinator? _battlegroundCoordinator;
 
         /// <summary>
         /// Checked at use-time (not construction-time) so tests can toggle it
@@ -299,12 +300,18 @@ namespace WoWStateManager.Listeners
                 return;
             }
 
-            // Use DungeoneeringCoordinator for 3+ bots, CombatCoordinator for exactly 2
-            if (_characterSettings.Count > 2)
+            // Select coordinator based on WWOW_COORDINATOR_MODE env var or bot count
+            var coordMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE")?.ToLowerInvariant();
+
+            if (coordMode == "battleground")
+            {
+                InjectBattlegroundActions(accountName, response);
+            }
+            else if (_characterSettings.Count > 2 && coordMode != "none")
             {
                 InjectDungeoneeringActions(accountName, response);
             }
-            else
+            else if (coordMode != "none")
             {
                 InjectCombatActions(accountName, response);
             }
@@ -337,6 +344,30 @@ namespace WoWStateManager.Listeners
             }
 
             var action = _dungeoneeringCoordinator.GetAction(accountName, CurrentActivityMemberList);
+            if (action != null)
+            {
+                response.CurrentAction = action;
+            }
+        }
+
+        private void InjectBattlegroundActions(string accountName, WoWActivitySnapshot response)
+        {
+            if (_battlegroundCoordinator == null)
+            {
+                var leaderAccount = _characterSettings.First().AccountName;
+                var allAccounts = _characterSettings.Select(cs => cs.AccountName);
+
+                // Parse BG type from env var (default WSG=2, map=489)
+                var bgTypeStr = Environment.GetEnvironmentVariable("WWOW_BG_TYPE") ?? "2";
+                var bgMapStr = Environment.GetEnvironmentVariable("WWOW_BG_MAP") ?? "489";
+                uint.TryParse(bgTypeStr, out var bgType);
+                uint.TryParse(bgMapStr, out var bgMap);
+
+                _battlegroundCoordinator = new BattlegroundCoordinator(
+                    leaderAccount, allAccounts, bgType, bgMap, _logger);
+            }
+
+            var action = _battlegroundCoordinator.GetAction(accountName, CurrentActivityMemberList);
             if (action != null)
             {
                 response.CurrentAction = action;

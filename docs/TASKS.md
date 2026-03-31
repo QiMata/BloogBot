@@ -91,6 +91,19 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 ---
 
+## P30 — Coordinator Refactor: Separate Prep from Coordination
+
+**Goal:** DungeoneeringCoordinator currently handles BOTH fixture prep (leveling, spells, gear, teleport) AND coordination (group formation, dungeon entry, combat). This violates separation of concerns — prep belongs in the test fixture, coordination belongs in the coordinator. BattlegroundCoordinator already follows the correct pattern (fixture preps, coordinator coordinates).
+
+| # | Task | Status |
+|---|------|--------|
+| 30.1 | **Extract DungeoneeringCoordinator prep into RfcBotFixture** — Move `.character level`, `.reset spells/talents/items`, `.learn`, `.setskill`, `.additem`, `.go xyz` Orgrimmar teleport from coordinator states (PrepareCharacters, LearnSpellsViaChat, AddItemsViaChat, EquipGear, TeleportToOrgrimmar) into RfcBotFixture.InitializeAsync. Coordinator starts at FormGroup_Inviting. | Open |
+| 30.2 | **Simplify DungeoneeringCoordinator to match BattlegroundCoordinator pattern** — States: WaitingForBots → FormGroup → TeleportToDungeon → DispatchDungeoneering → InProgress. No prep states. Fixture handles all GM setup. | Open |
+| 30.3 | **Create generic `CoordinatorFixtureBase`** — Shared base for RFC, WSG, AB, AV fixtures. Handles: account creation, leveling, gear, spells, teleport to activity location. Derived fixtures set class composition, locations, and coordinator mode. | Open |
+| 30.4 | **All coordinator tests follow pattern**: fixture does prep → coordinator does coordination → test asserts outcome. No coordinator should send `.learn` or `.character level`. | Open |
+
+---
+
 ## P28 — Test Audit & Cleanup
 
 **Goal:** Clean up existing LiveValidation tests that have accumulated unnecessary teleporting and convoluted workarounds. ALL bots in every config MUST connect — any crash, disconnect, or missing bot is an automatic failure that triggers investigation. No workarounds for missing bots. Tests must have TIGHT assertions that fail fast on any disruption.
