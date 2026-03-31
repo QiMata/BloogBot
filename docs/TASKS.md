@@ -97,8 +97,8 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 | # | Task | Status |
 |---|------|--------|
-| 30.1 | **Extract DungeoneeringCoordinator prep into RfcBotFixture** — Move `.character level`, `.reset spells/talents/items`, `.learn`, `.setskill`, `.additem`, `.go xyz` Orgrimmar teleport from coordinator states (PrepareCharacters, LearnSpellsViaChat, AddItemsViaChat, EquipGear, TeleportToOrgrimmar) into RfcBotFixture.InitializeAsync. Coordinator starts at FormGroup_Inviting. | Open |
-| 30.2 | **Simplify DungeoneeringCoordinator to match BattlegroundCoordinator pattern** — States: WaitingForBots → FormGroup → TeleportToDungeon → DispatchDungeoneering → InProgress. No prep states. Fixture handles all GM setup. | Open |
+| 30.1 | **Extract DungeoneeringCoordinator prep into RfcBotFixture** — Added `PrepareBotsForRfcAsync()` with SOAP revive+level, chat `.learn`/`.additem`/`.reset`, teleport to Org. Added `skipPrep` constructor param + `WWOW_COORDINATOR_SKIP_PREP` env var. Coordinator starts at FormGroup_Inviting when skipPrep=true. | **Done** (dcd20741) |
+| 30.2 | **Simplify DungeoneeringCoordinator to match BattlegroundCoordinator pattern** — With skipPrep, coordinator states are: FormGroup_Inviting → ConvertToRaid → InvitingRest → Verify → TeleportToRFC → WaitForRFCSettle → DispatchDungeoneering → DungeonInProgress. Prep states still exist for backward compat. | **Done** (c30c308d) |
 | 30.3 | **Create generic `CoordinatorFixtureBase`** — Shared base for RFC, WSG, AB, AV fixtures. Handles: account creation, leveling, gear, spells, teleport to activity location. Derived fixtures set class composition, locations, and coordinator mode. | Open |
 | 30.4 | **All coordinator tests follow pattern**: fixture does prep → coordinator does coordination → test asserts outcome. No coordinator should send `.learn` or `.character level`. | Open |
 
