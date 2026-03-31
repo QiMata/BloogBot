@@ -94,12 +94,13 @@ public class WarsongGulchTests
                 return (count >= WarsongGulchFixture.TotalBotCount, count, $"bots={count}");
             });
 
-        // Ensure GM mode is OFF for all bots (GM level 6 may auto-enable on some builds)
+        // Level all bots to 10 (WSG minimum) and ensure GM mode OFF
         foreach (var snap in _bot.AllBots)
         {
+            await _bot.SendGmChatCommandAsync(snap.AccountName, ".character level 10");
             await _bot.SendGmChatCommandAsync(snap.AccountName, ".gm off");
         }
-        await Task.Delay(1000);
+        await Task.Delay(2000);
 
         // Teleport Horde bots to Orgrimmar BG master area
         foreach (var account in _bot.HordeAccounts)
