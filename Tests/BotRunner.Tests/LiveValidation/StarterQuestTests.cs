@@ -69,13 +69,8 @@ public class StarterQuestTests
     {
         await _bot.EnsureCleanSlateAsync(account, label);
 
-        // Pre-flight: teleport to Orgrimmar first to stabilize zone state.
-        // In full suite runs, prior tests may leave the bot far away causing
-        // long cross-zone teleport + FG client area loading delays.
-        _output.WriteLine($"  [{label}] Pre-flight: teleporting to Orgrimmar safe zone.");
-        await _bot.BotTeleportAsync(account, MapId, 1629f, -4373f, 12f);
-        await _bot.WaitForTeleportSettledAsync(account, 1629f, -4373f);
-
+        // Teleport directly to quest area — no pre-flight Orgrimmar stop needed.
+        // EnsureCleanSlateAsync already handles position reset.
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
         try

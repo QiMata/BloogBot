@@ -98,7 +98,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | # | Task | Status |
 |---|------|--------|
 | 28.1 | **ALL tests: strict bot count assertions** — Every test config specifies exact bot count. ALL bots must connect. Any missing bot, crash, or disconnect is an automatic failure and must be investigated. No partial-count workarounds. `Assert.Equal(expectedCount, actualCount)` everywhere. | Open |
-| 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Lines 72-77 teleport to Orgrimmar safe zone before teleporting to Valley of Trials. The Org stop adds ~3s of unnecessary setup. Teleport directly to quest NPC area. | Open |
+| 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Removed lines 72-77. Teleports directly to quest area now. | **Done** (bea79f70) |
 | 28.3 | **EquipmentEquipTests: use .unequip instead of .reset items** — `.reset items` clears ALL inventory. Use targeted `.unequip` for mainhand slot only. More surgical, less state pollution. | Open |
 | 28.4 | **All DungeonInstanceFixture-based tests: strict bot count** — Every dungeon test must Assert.Equal on expected bot count. Crash = failure = investigate. | Open |
 | 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | Open |
