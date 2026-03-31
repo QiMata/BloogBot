@@ -305,7 +305,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | # | Task | Spec |
 |---|------|------|
 | 25.5 | **Create WSG accounts + settings** — Reduced to 10 bots (5v5) to prevent test host OOM. SOAP revive+level for dead bots from previous runs. | **Done** (eee6513f) |
-| 25.6 | **WSG queue + entry test** — BG FLOW FULLY WORKS: both factions queue (permanent NPCs), receive invites, accept, transfer to map 489, BG runs for ~2min. Server Bg.log confirms all bots enter and BG completes. **Test assertion blocker**: snapshot CurrentMapId=489 overwrites within 100ms (bot tick rate) before 1s test poll catches it. Added `currentMapId` top-level proto field + cumulative tracking. Need server-side "was in BG" flag or SMSG_NEW_WORLD log-based assertion. | **In Progress** — BG works, assertion timing |
+| 25.6 | **WSG queue + entry test** — **PASSING.** 10 bots (5v5): find permanent BMs, queue, get invited, accept, transfer to WSG map 489. Assertion via captured StateManager stdout (SMSG_NEW_WORLD map=489 events). Fixed: event-only NPC → permanent BM, packed GUID fallback, SOAP revive, `currentMapId` proto field, `GetCapturedOutput()` for test assertions. | **Done** (86e00d04) |
 | 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | Open |
 | 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | Open |
 
