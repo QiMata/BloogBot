@@ -81,6 +81,17 @@ public partial class LiveBotFixture
     }
 
 
+    /// <summary>
+    /// Query ALL snapshots from StateManager without IsHydratedInWorldSnapshot filtering.
+    /// Used by BG tests where bots in map transition have IsObjectManagerValid=false
+    /// but still have valid MapId data that needs to be asserted.
+    /// </summary>
+    public async Task<List<WoWActivitySnapshot>> QueryAllSnapshotsAsync()
+    {
+        if (_stateManagerClient == null) return [];
+        return await _stateManagerClient.QuerySnapshotsAsync();
+    }
+
     private void LogSnapshotMessages()
     {
         // Surface chat/error messages from snapshots to test output (via ITestOutputHelper so they appear in xUnit output)

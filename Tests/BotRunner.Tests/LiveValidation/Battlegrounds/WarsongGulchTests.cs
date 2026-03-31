@@ -128,21 +128,28 @@ public class WarsongGulchTests
             _output.WriteLine($"  [PRE-BG] {snap.AccountName}: map={mapId} pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}) valid={snap.IsObjectManagerValid}");
         }
 
-        var botsInWsg = await WaitForProgressAsync(
-            phaseName: "WSGEntry",
-            maxTimeout: TimeSpan.FromMinutes(5),
-            staleTimeout: TimeSpan.FromMinutes(4),  // BG queue + creation + transfer ~2-3 min
-            pollInterval: TimeSpan.FromSeconds(5),
-            evaluate: snapshots =>
+        // NOTE: Can't use WaitForProgressAsync here because it reads AllBots
+        // which filters by IsHydratedInWorldSnapshot. After BG transfer, bots
+        // have IsObjectManagerValid=false (transitioning) so they're filtered out.
+        // Instead, query ALL snapshots directly and check MapId.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var botsInWsg = 0;
+        while (sw.Elapsed < TimeSpan.FromMinutes(5))
+        {
+            var allSnapshots = await _bot.QueryAllSnapshotsAsync();
+            botsInWsg = allSnapshots.Count(s =>
+                (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
+            var total = allSnapshots.Count;
+
+            if (botsInWsg >= 4)
             {
-                var onWsg = snapshots.Count(s =>
-                    (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
-                var total = snapshots.Count;
-                // Some bots' snapshots may be stale after map transfer.
-                // Accept 4+ (one team's worth) as success.
-                return (onWsg >= 4, onWsg, $"wsg={onWsg}/{total}");
-            },
-            tolerateFgCrash: true);
+                _output.WriteLine($"[WSGEntry] Complete at {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
+                break;
+            }
+
+            _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
+            await Task.Delay(5000);
+        }
 
         _output.WriteLine($"\n=== WSG RESULT ===");
         _output.WriteLine($"Bots in WSG: {botsInWsg}");
