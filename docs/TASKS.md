@@ -666,7 +666,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 9.1 | **Create `BotContext` class** — Encapsulates all per-bot state: `IObjectManager`, `IWoWEventEmitter`, `MovementController`, `WoWClient`, `IWorldClient`, `IAgentFactory`, `PathfindingClient`. Replaces static `WoWSharpObjectManager.Instance` with injected context. File: `Exports/WoWSharpClient/BotContext.cs`. | Open |
+| 9.1 | **`BotContext` class** — Created with all per-bot state (WoWClient, ObjectManager, EventEmitter, SplineController, MovementController, PathfindingClient). `FromCurrentSingletons()` bridge for migration. | **Done** (c183e27d) |
 | 9.2 | **Refactor `WoWSharpObjectManager`** — Remove `private static WoWSharpObjectManager _instance` and `public static Instance` property. Change `private static readonly List<WoWObject> _objects` and `_objectsLock` to instance fields. Constructor becomes public, takes `WoWClient` + `PathfindingClient` + `ILogger`. Keep a `[Obsolete] static Instance` shim during migration that delegates to a thread-local or ambient context. | Open |
 | 9.3 | **Refactor `WoWSharpEventEmitter`** — Remove singleton. Make instance-based. Each `BotContext` owns one. All 100+ event subscriptions scoped to their bot. Update all callers from `WoWSharpEventEmitter.Instance.OnX += handler` to `_context.Events.OnX += handler`. | Open |
 | 9.4 | **Refactor `SplineController`** — Remove `public static readonly SplineController Instance`. Make per-bot. Each `BotContext` owns one. Verify no shared mutable state beyond per-GUID spline tracking. | Open |
