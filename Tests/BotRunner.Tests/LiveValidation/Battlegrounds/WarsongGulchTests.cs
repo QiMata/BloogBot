@@ -121,24 +121,33 @@ public class WarsongGulchTests
         // Phase 3+4: Poll for WSG entry. The BG coordinator runs concurrently —
         // it may have already queued bots for WSG during Phase 2 prep (since bots
         // were already level 10 from a previous run). Poll immediately.
+        // Track which bots have EVER been seen on WSG map. The BG only lasts ~2 min
+        // and snapshot overwrites happen every 100ms, so a single query may miss the
+        // 489 window. Track cumulatively across all polls.
         _output.WriteLine("Polling for WSG entry (CurrentMapId=489)...");
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var everSeenInWsg = new HashSet<string>();
         var botsInWsg = 0;
         while (sw.Elapsed < TimeSpan.FromMinutes(5))
         {
             var allSnapshots = await _bot.QueryAllSnapshotsAsync();
-            botsInWsg = allSnapshots.Count(s => s.CurrentMapId == WarsongGulchFixture.WsgMapId);
+            foreach (var s in allSnapshots)
+            {
+                if (s.CurrentMapId == WarsongGulchFixture.WsgMapId && !string.IsNullOrEmpty(s.AccountName))
+                    everSeenInWsg.Add(s.AccountName);
+            }
+            botsInWsg = everSeenInWsg.Count;
             var total = allSnapshots.Count;
 
             if (botsInWsg >= 4)
             {
-                _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
+                _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} bots seen in WSG: {string.Join(", ", everSeenInWsg)}");
                 break;
             }
 
             if ((int)sw.Elapsed.TotalSeconds % 10 == 0)
-                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total}");
-            await Task.Delay(1000);  // Poll every second to catch the BG window
+                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: wsg={botsInWsg}/{total} (ever={everSeenInWsg.Count})");
+            await Task.Delay(1000);
         }
 
         _output.WriteLine($"\n=== WSG RESULT ===");
