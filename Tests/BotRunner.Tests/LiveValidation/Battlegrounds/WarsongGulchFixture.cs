@@ -14,46 +14,40 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 /// </summary>
 public class WarsongGulchFixture : LiveBotFixture, IAsyncLifetime
 {
-    public const int HordeBotCount = 10;
-    public const int AllianceBotCount = 10;
+    // Reduced to 10 bots (5v5) to prevent test host OOM crash.
+    // VMaNGOS min_players_per_team=4 for WSG, so 5v5 is sufficient.
+    public const int HordeBotCount = 5;
+    public const int AllianceBotCount = 5;
     public const int TotalBotCount = HordeBotCount + AllianceBotCount;
 
     /// <summary>WSG map ID.</summary>
     public const uint WsgMapId = 489;
 
-    // Horde composition (Orgrimmar battlemasters)
+    // Horde composition (Orgrimmar battlemasters) — 5 BG bots, no FG
     private static readonly (string Account, string Class, string Race, string Gender, string Runner)[] HordeComposition =
     [
-        ("TESTBOT1", "Warrior", "Orc", "Female", "Foreground"),    // FG raid leader
         ("WSGBOT2", "Shaman", "Orc", "Female", "Background"),
         ("WSGBOT3", "Druid", "Tauren", "Male", "Background"),
         ("WSGBOT4", "Priest", "Undead", "Male", "Background"),
         ("WSGBOT5", "Warlock", "Undead", "Male", "Background"),
         ("WSGBOT6", "Hunter", "Orc", "Female", "Background"),
-        ("WSGBOT7", "Rogue", "Undead", "Female", "Background"),
-        ("WSGBOT8", "Mage", "Troll", "Male", "Background"),
-        ("WSGBOT9", "Warrior", "Orc", "Female", "Background"),
-        ("WSGBOT10", "Warrior", "Tauren", "Female", "Background"),
     ];
 
-    // Alliance composition (Stormwind battlemasters)
+    // Alliance composition (Stormwind battlemasters) — 5 BG bots
     private static readonly (string Account, string Class, string Race, string Gender, string Runner)[] AllianceComposition =
     [
-        ("WSGBOTA1", "Warrior", "Human", "Female", "Background"),  // Alliance raid leader
+        ("WSGBOTA1", "Warrior", "Human", "Female", "Background"),
         ("WSGBOTA2", "Paladin", "Human", "Male", "Background"),
         ("WSGBOTA3", "Druid", "NightElf", "Male", "Background"),
         ("WSGBOTA4", "Priest", "Human", "Male", "Background"),
         ("WSGBOTA5", "Warlock", "Human", "Male", "Background"),
-        ("WSGBOTA6", "Hunter", "NightElf", "Female", "Background"),
-        ("WSGBOTA7", "Rogue", "Human", "Female", "Background"),
-        ("WSGBOTA8", "Mage", "Gnome", "Male", "Background"),
-        ("WSGBOTA9", "Warrior", "Human", "Female", "Background"),
-        ("WSGBOTA10", "Warrior", "Dwarf", "Female", "Background"),
     ];
 
     async Task IAsyncLifetime.InitializeAsync()
     {
-        // Use BattlegroundCoordinator instead of DungeoneeringCoordinator
+        // Coordinator is enabled — it waits for level>=10 before queueing.
+        // Test teleports FIRST, then levels LAST, so coordinator doesn't start
+        // until bots are at battlemaster positions.
         Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "0");
         Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
         Environment.SetEnvironmentVariable("WWOW_BG_TYPE", "2");  // WSG

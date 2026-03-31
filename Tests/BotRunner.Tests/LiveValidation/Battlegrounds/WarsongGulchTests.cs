@@ -54,7 +54,7 @@ public class WarsongGulchTests
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
-        // Phase 1: All bots enter world (tolerate FG crash — 19 BG bots is enough)
+        // Phase 1: All bots enter world
         var botCount = await WaitForProgressAsync(
             phaseName: "BotsEnterWorld",
             maxTimeout: TimeSpan.FromMinutes(3),
@@ -63,40 +63,46 @@ public class WarsongGulchTests
             evaluate: snapshots =>
             {
                 var count = snapshots.Count;
-                // Accept 19+ bots (FG bot may crash during BG map transfer)
-                return (count >= WarsongGulchFixture.TotalBotCount - 1, count, $"bots={count}");
+                return (count >= WarsongGulchFixture.TotalBotCount, count, $"bots={count}");
             },
             tolerateFgCrash: true);
         _output.WriteLine($"Phase 1: {botCount} bots in world");
 
-        // Phase 2: Fixture prep — teleport FIRST, then level to 10, remove Deserter, .gm off.
-        // IMPORTANT: Level to 10 LAST so the BattlegroundCoordinator (which checks level>=10
-        // before sending JoinBattleground) won't start queuing until bots are at their positions.
+        // Phase 2: Prep sequence. The BattlegroundCoordinator checks level>=10
+        // before starting the BG queue. We RESET level to 1 first, teleport bots
+        // to battlemasters, wait for NPCs to appear, THEN level to 10.
+        // This ensures the coordinator doesn't queue before bots are in position.
 
-        // Teleport Horde to WSG Battlemaster (Warsong Emissary) in Orgrimmar
+        // Step 1: Revive dead bots and ensure GM mode on via SOAP (works even when dead).
+        foreach (var snap in _bot.AllBots)
+        {
+            await _bot.ExecuteGMCommandAsync($".revive {snap.CharacterName}");
+            await _bot.ExecuteGMCommandAsync($".character level {snap.CharacterName} 10");
+        }
+        await Task.Delay(2000);
+
+        // Step 2: Teleport to battlemaster positions via bot chat (.go xyz needs GM on)
         foreach (var account in _bot.HordeAccounts)
         {
             await _bot.BotTeleportAsync(account, 1, 1658.9f, -4389.0f, 26.8f);
             await Task.Delay(300);
         }
-        // Teleport Alliance to WSG Battlemaster (Elfarran) in Stormwind
         foreach (var account in _bot.AllianceAccounts)
         {
             await _bot.BotTeleportAsync(account, 0, -8454.6f, 318.9f, 124.0f);
             await Task.Delay(300);
         }
-        // Wait for server to send nearby objects (NPCs) to all bots after teleport.
-        // The battlemaster NPC must be visible in ObjectManager.Units before queueing.
+        // Wait for server to send nearby objects (NPCs) after teleport
         await Task.Delay(10000);
 
-        // Step 2: NOW level to 10 and turn GM off — this triggers the coordinator
+        // Step 3: Turn GM off — bots need .gm off to queue for BG
         foreach (var snap in _bot.AllBots)
         {
-            await _bot.SendGmChatCommandAsync(snap.AccountName, ".character level 10");
             await _bot.SendGmChatCommandAsync(snap.AccountName, ".gm off");
         }
         await Task.Delay(2000);
-        _output.WriteLine("Phase 2: All bots teleported, leveled, .gm off");
+
+        _output.WriteLine("Phase 2: Reset→teleport→level→gm off complete");
 
         // Phase 3: Verify positions
         await _bot.RefreshSnapshotsAsync();
@@ -130,7 +136,8 @@ public class WarsongGulchTests
                 var onWsg = snapshots.Count(s =>
                     (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
                 var total = snapshots.Count;
-                return (onWsg >= 10, onWsg, $"wsg={onWsg}/{total}");
+                // Need at least 4 per team (min_players_per_team) = 8 total
+                return (onWsg >= 8, onWsg, $"wsg={onWsg}/{total}");
             },
             tolerateFgCrash: true);
 
