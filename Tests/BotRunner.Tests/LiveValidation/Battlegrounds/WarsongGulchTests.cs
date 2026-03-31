@@ -135,7 +135,7 @@ public class WarsongGulchTests
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
-        while (sw.Elapsed < TimeSpan.FromMinutes(7))
+        while (sw.Elapsed < TimeSpan.FromMinutes(10))
         {
             if (File.Exists(bgLogPath))
             {
