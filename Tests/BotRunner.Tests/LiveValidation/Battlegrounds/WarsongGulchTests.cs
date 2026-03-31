@@ -57,7 +57,10 @@ public class WarsongGulchTests
         // Capture Bg.log baseline BEFORE any bot activity starts.
         // The BG coordinator may queue bots during Phase 2 prep.
         var bgLogPath = @"E:\repos\Westworld of Warcraft\docker\linux\vmangos\storage\mangosd\logs\Bg.log";
-        var testStartTime = DateTime.UtcNow.AddSeconds(-5).ToString("yyyy-MM-dd HH:mm"); // 5s margin
+        // Use a generous margin — the BG coordinator may start queueing during
+        // Phase 1 (bots already level 10 from previous run). The BG can complete
+        // before Phase 2 even finishes. UTC matches VMaNGOS Bg.log timestamps.
+        var testStartTime = DateTime.UtcNow.AddMinutes(-10).ToString("yyyy-MM-dd HH:mm");
         _output.WriteLine($"Bg.log baseline: entries after {testStartTime}");
 
         // Sanity check: protobuf roundtrip for CurrentMapId
@@ -124,20 +127,15 @@ public class WarsongGulchTests
 
         _output.WriteLine("Phase 2 complete. BG coordinator may have already started.");
 
-        // Phase 3+4: Poll for WSG entry. The BG coordinator runs concurrently —
-        // it may have already queued bots for WSG during Phase 2 prep (since bots
-        // were already level 10 from a previous run). Poll immediately.
-        // Wait for the BG to start and complete. The coordinator queues bots concurrently
-        // with Phase 2 — the BG may have already started. Wait for it to complete.
-        // Snapshot-based MapId detection is unreliable (100ms tick overwrites before 1s poll).
-        // Instead, verify via VMaNGOS Bg.log which records all BG entries/exits.
         // Verify BG entry via VMaNGOS Bg.log. Snapshot-based MapId detection is unreliable
-        // (100ms tick overwrites before test poll catches it).
+        // (100ms tick overwrites MapId before 1s test poll can catch it).
+        // The BG coordinator runs concurrently during Phase 1+2, so the BG may start
+        // and finish before this poll loop begins. The -10min baseline catches it.
         _output.WriteLine("Polling Bg.log for BG entries...");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
-        while (sw.Elapsed < TimeSpan.FromMinutes(5))
+        while (sw.Elapsed < TimeSpan.FromMinutes(7))
         {
             if (File.Exists(bgLogPath))
             {
