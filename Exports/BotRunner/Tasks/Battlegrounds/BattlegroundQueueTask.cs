@@ -144,11 +144,13 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         // find the nearest NPC within 10y of the known battlemaster position.
         // UNIT_NPC_FLAGS is a "dynamic" field that may not arrive in the initial
         // SMSG_CREATE_OBJECT — it comes in a later SMSG_UPDATE_OBJECT tick.
+        // Filter: creature GUIDs have high bytes set (0xF1...), player GUIDs are low numbers.
         if (_bmNpc == null && bmData != null)
         {
             _bmNpc = ObjectManager.Units
                 .Where(u => u.Health > 0
                     && u.Position != null
+                    && u.Guid > 0x1000  // Filter out player GUIDs (low numbers)
                     && u.Position.DistanceTo(bmData.Position) < 10f)
                 .OrderBy(u => u.Position.DistanceTo(bmData.Position))
                 .FirstOrDefault();
