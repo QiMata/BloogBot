@@ -35,13 +35,18 @@ public static class BattlemasterData
     // HORDE BATTLEMASTERS — Orgrimmar
     // =========================================================================
 
+    /// <summary>
+    /// Warsong Emissary in Orgrimmar Valley of Honor.
+    /// VMaNGOS creature entry 15105, npc_flags=2049 (GOSSIP|BATTLEMASTER).
+    /// Multiple spawn positions — this one is near the Valley of Honor pond.
+    /// </summary>
     public static readonly BattlemasterLocation OrgrimmarWsg = new(
         NpcName: "Warsong Emissary",
         NpcEntry: 15105,
         BgType: BattlegroundType.WarsongGulch,
         Faction: DungeonEntryData.DungeonFaction.Horde,
         MapId: 1,
-        Position: new Position(1665.8f, -4344.9f, 61.3f),
+        Position: new Position(1658.9f, -4389.0f, 23.8f),
         City: "Orgrimmar");
 
     public static readonly BattlemasterLocation OrgrimmarAb = new(

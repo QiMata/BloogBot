@@ -75,15 +75,16 @@ public class WarsongGulchTests
         }
         await Task.Delay(2000);
 
-        // Teleport Horde to WSG Battlemaster (Warsong Emissary) in Orgrimmar
-        // VMaNGOS creature entry 15105 at (1665.8, -4344.9, 61.3)
+        // Teleport Horde DIRECTLY to WSG Battlemaster (Warsong Emissary) in Orgrimmar
+        // VMaNGOS creature entry 15105 spawns at multiple positions — using (1658.9,-4389.0,23.8)
+        // which is in the Valley of Honor area. Z+3 for ground snap safety.
         foreach (var account in _bot.HordeAccounts)
         {
-            await _bot.BotTeleportAsync(account, 1, 1665.8f, -4344.9f, 64.3f);
+            await _bot.BotTeleportAsync(account, 1, 1658.9f, -4389.0f, 26.8f);
             await Task.Delay(300);
         }
-        // Teleport Alliance to WSG Battlemaster (Elfarran) in Stormwind
-        // VMaNGOS creature entry 14981 at (-8454.6, 318.9, 121.0)
+        // Teleport Alliance DIRECTLY to WSG Battlemaster (Elfarran) in Stormwind
+        // VMaNGOS creature entry 14981 spawns at (-8454.6,318.9,121.0). Z+3.
         foreach (var account in _bot.AllianceAccounts)
         {
             await _bot.BotTeleportAsync(account, 0, -8454.6f, 318.9f, 124.0f);
