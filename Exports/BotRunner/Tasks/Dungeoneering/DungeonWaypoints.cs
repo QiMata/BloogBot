@@ -63,9 +63,87 @@ public static class DungeonWaypoints
     /// Get dungeon waypoints by map ID.
     /// Returns null if no waypoint data exists for the given dungeon.
     /// </summary>
+    /// <summary>
+    /// Wailing Caverns (map 43) — branching dungeon in the Barrens.
+    /// Route follows the main path hitting bosses in order:
+    ///   1. Lady Anacondra (serpent cave, left branch)
+    ///   2. Lord Cobrahn (fang chamber)
+    ///   3. Kresh (turtle, pools area)
+    ///   4. Lord Pythas (vine terrace)
+    ///   5. Skum (deep pool)
+    ///   6. Lord Serpentis (upper terrace)
+    ///   7. Verdan the Everliving (final chamber)
+    ///   8. Mutanus the Devourer (escort event, after Disciple of Naralex)
+    /// </summary>
+    public static IReadOnlyList<Position> WailingCaverns { get; } =
+    [
+        // Entrance — inside the instance portal
+        new Position(-163f, 132f, -73f),
+
+        // First corridor — deviate raptors and serpents
+        new Position(-120f, 160f, -78f),
+        new Position(-82f, 194f, -91f),
+
+        // Lady Anacondra's area (first boss)
+        new Position(-37f, 233f, -89f),
+
+        // Path toward Lord Cobrahn
+        new Position(-67f, 265f, -87f),
+        new Position(-84f, 320f, -87f),
+
+        // Lord Cobrahn's chamber (second boss)
+        new Position(-107f, 347f, -85f),
+
+        // Kresh area — pools
+        new Position(-128f, 393f, -95f),
+        new Position(-115f, 441f, -92f),
+
+        // Lord Pythas — vine terrace
+        new Position(-66f, 478f, -87f),
+        new Position(-38f, 514f, -82f),
+
+        // Skum — deep pool area
+        new Position(4f, 549f, -83f),
+
+        // Lord Serpentis — upper terrace
+        new Position(-19f, 600f, -73f),
+
+        // Verdan the Everliving — final chamber
+        new Position(-36f, 639f, -68f),
+    ];
+
+    /// <summary>
+    /// Shadowfang Keep (map 33) — linear multi-floor keep.
+    /// </summary>
+    public static IReadOnlyList<Position> ShadowfangKeep { get; } =
+    [
+        // Courtyard entrance
+        new Position(-229f, 2108f, 76f),
+
+        // Stable area — wolves and worgen
+        new Position(-227f, 2130f, 80f),
+        new Position(-233f, 2173f, 80f),
+
+        // Inner keep — ascending staircases
+        new Position(-193f, 2192f, 80f),
+        new Position(-175f, 2164f, 97f),
+
+        // Commander Springvale area
+        new Position(-146f, 2168f, 127f),
+
+        // Upper floors — ascending through the keep
+        new Position(-141f, 2184f, 147f),
+        new Position(-155f, 2207f, 167f),
+
+        // Arugal's chamber (final boss)
+        new Position(-148f, 2220f, 191f),
+    ];
+
     public static IReadOnlyList<Position>? GetWaypointsForMap(uint mapId) => mapId switch
     {
         389 => RagefireChasm,
+        43 => WailingCaverns,
+        33 => ShadowfangKeep,
         _ => null,
     };
 }
