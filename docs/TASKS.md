@@ -304,8 +304,8 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 
 | # | Task | Spec |
 |---|------|------|
-| 25.5 | **Create WSG accounts + settings** — `WarsongGulchFixture` generates 20-bot settings JSON dynamically. 10 Horde (1 FG + 9 BG) + 10 Alliance (10 BG). | **Done** (1464e7d) |
-| 25.6 | **WSG queue + entry test** — BG queue/invite/accept/transfer ALL WORK (19 bots enter map 489, confirmed SMSG_NEW_WORLD). Three remaining issues: (1) NpcFlags not populated in initial SMSG_CREATE_OBJECT — added proximity-based NPC search fallback. (2) Snapshot MapId not updating after BG transfer — socket reconnect improved but needs verification. (3) Lingering BG state between test runs requires server restart. FG crash tolerated. | **In Progress** — core flow works, test assertion needs fixing |
+| 25.5 | **Create WSG accounts + settings** — Reduced to 10 bots (5v5) to prevent test host OOM. SOAP revive+level for dead bots from previous runs. | **Done** (eee6513f) |
+| 25.6 | **WSG queue + entry test** — Alliance 5 bots: find NPC (flags=0x801), queue, server accepts. Horde 5 bots: NPC exists in DB but ObjectManager doesn't receive NpcFlags from server → proximity search finds no creature GUIDs near position. **Next**: investigate why VMaNGOS sends NpcFlags for Alliance BM but not Horde BM (both entry 15105). Also: snapshot MapId needs to propagate after BG transfer. | **In Progress** — Alliance works, Horde NPC visibility gap |
 | 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | Open |
 | 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | Open |
 
