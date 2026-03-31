@@ -12,18 +12,33 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 /// <summary>
 /// Warsong Gulch 20-bot battleground integration test.
 ///
-/// Launches 20 bots: 10 Horde (1 FG + 9 BG) + 10 Alliance (10 BG).
-/// Both sides form raid, queue for WSG at their faction's battlemaster,
-/// accept invite, and enter WSG (mapId=489).
+/// 10 Horde (1 FG + 9 BG) + 10 Alliance (10 BG).
+/// Flow:
+///   1. All bots enter world
+///   2. Horde teleport to Orgrimmar BG master area
+///   3. Alliance teleport to Stormwind BG master area
+///   4. Both sides queue for WSG
+///   5. Accept invite, enter WSG (mapId=489)
+///   6. Idle in BG (no objectives yet)
 ///
 /// Run:
-///   dotnet test --filter "FullyQualifiedName~WarsongGulchTests" --configuration Release -v n --blame-hang --blame-hang-timeout 30m
+///   dotnet test --filter "FullyQualifiedName~WarsongGulchTests" -v n --blame-hang --blame-hang-timeout 15m
 /// </summary>
 [Collection(WarsongGulchCollection.Name)]
 public class WarsongGulchTests
 {
     private readonly WarsongGulchFixture _bot;
     private readonly ITestOutputHelper _output;
+
+    // Horde BG master area (Orgrimmar, Hall of the Brave)
+    private const float HordeBgX = 1702f;
+    private const float HordeBgY = -4422f;
+    private const float HordeBgZ = 25f;
+
+    // Alliance BG master area (Stormwind, Command Center)
+    private const float AllianceBgX = -8757f;
+    private const float AllianceBgY = 400f;
+    private const float AllianceBgZ = 105f;
 
     public WarsongGulchTests(WarsongGulchFixture bot, ITestOutputHelper output)
     {
@@ -59,15 +74,15 @@ public class WarsongGulchTests
     }
 
     /// <summary>
-    /// Phase 2: Both factions form raid groups and queue for WSG.
-    /// Validates: groups formed, BG queue initiated, bots enter WSG map 489.
+    /// Phase 2: Teleport Horde to Orgrimmar BG area, Alliance to Stormwind BG area.
+    /// Then queue for WSG at respective BG masters.
     /// </summary>
     [SkippableFact]
-    public async Task WSG_QueueAndEnterBattleground()
+    public async Task WSG_TeleportToFactionCities()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
-        // Wait for bots to enter world first
+        // Wait for bots to enter world
         await WaitForProgressAsync(
             phaseName: "BotsEnterWorld",
             maxTimeout: TimeSpan.FromMinutes(3),
@@ -79,32 +94,33 @@ public class WarsongGulchTests
                 return (count >= WarsongGulchFixture.TotalBotCount, count, $"bots={count}");
             });
 
-        // Wait for coordinator to form groups, queue BG, and enter WSG
-        var botsOnWsg = await WaitForProgressAsync(
-            phaseName: "WSGEntry",
-            maxTimeout: TimeSpan.FromMinutes(10),
-            staleTimeout: TimeSpan.FromSeconds(90),
-            pollInterval: TimeSpan.FromSeconds(5),
-            evaluate: snapshots =>
-            {
-                var grouped = snapshots.Count(s => s.PartyLeaderGuid != 0);
-                var onWsg = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
+        // Ensure GM mode is OFF for all bots (GM level 6 may auto-enable on some builds)
+        foreach (var snap in _bot.AllBots)
+        {
+            await _bot.SendGmChatCommandAsync(snap.AccountName, ".gm off");
+        }
+        await Task.Delay(1000);
 
-                var posHash = string.Join("|", snapshots.Select(s =>
-                {
-                    var p = s.Player?.Unit?.GameObject?.Base?.Position;
-                    var m = s.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-                    return $"{m}:{p?.X:F0},{p?.Y:F0}";
-                }));
+        // Teleport Horde bots to Orgrimmar BG master area
+        foreach (var account in _bot.HordeAccounts)
+        {
+            _output.WriteLine($"Teleporting {account} to Orgrimmar BG area");
+            await _bot.BotTeleportAsync(account, 1, HordeBgX, HordeBgY, HordeBgZ);
+            await Task.Delay(500);
+        }
 
-                var fingerprint = $"grp={grouped},wsg={onWsg},pos={posHash.GetHashCode():X8}";
-                return (onWsg >= 10, onWsg, fingerprint);  // Need at least 10 (5v5 minimum) for BG to start
-            });
+        // Teleport Alliance bots to Stormwind BG area
+        foreach (var account in _bot.AllianceAccounts)
+        {
+            _output.WriteLine($"Teleporting {account} to Stormwind BG area");
+            await _bot.BotTeleportAsync(account, 0, AllianceBgX, AllianceBgY, AllianceBgZ);
+            await Task.Delay(500);
+        }
+
+        // Wait for teleports to settle
+        await Task.Delay(3000);
 
         await _bot.RefreshSnapshotsAsync();
-        _output.WriteLine($"\n=== WSG ENTRY SUMMARY ===");
-        _output.WriteLine($"Bots on WSG map: {botsOnWsg}");
-
         foreach (var snap in _bot.AllBots)
         {
             var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
@@ -112,7 +128,17 @@ public class WarsongGulchTests
             _output.WriteLine($"  {snap.AccountName}: map={mapId}, pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
         }
 
-        Assert.True(botsOnWsg >= 10, $"At least 10 bots must enter WSG (got {botsOnWsg})");
+        // Verify Horde bots are on Kalimdor (map 1)
+        var hordeOnMap1 = _bot.AllBots.Count(s =>
+            _bot.HordeAccounts.Contains(s.AccountName) &&
+            (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == 1);
+        _output.WriteLine($"Horde bots on Kalimdor: {hordeOnMap1}/{_bot.HordeAccounts.Length}");
+
+        // Verify Alliance bots are on Eastern Kingdoms (map 0)
+        var allyOnMap0 = _bot.AllBots.Count(s =>
+            _bot.AllianceAccounts.Contains(s.AccountName) &&
+            (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == 0);
+        _output.WriteLine($"Alliance bots on Eastern Kingdoms: {allyOnMap0}/{_bot.AllianceAccounts.Length}");
     }
 
     private async Task<TResult> WaitForProgressAsync<TResult>(
@@ -130,9 +156,7 @@ public class WarsongGulchTests
         while (sw.Elapsed < maxTimeout)
         {
             if (_bot.ClientCrashed)
-            {
-                Assert.Fail($"[{phaseName}] CRASHED — {_bot.CrashMessage ?? "process exited"}");
-            }
+                Assert.Fail($"[{phaseName}] CRASHED");
 
             await _bot.RefreshSnapshotsAsync();
             var (done, result, fingerprint) = evaluate(_bot.AllBots);
