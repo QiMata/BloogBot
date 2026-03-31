@@ -194,6 +194,11 @@ namespace BotRunner
                     PopulateSnapshotFromObjectManager();
                     CaptureTransformFrame();
 
+                    // DIAG: log MapId in snapshot for BG transfer debugging
+                    var snapMapId = _activitySnapshot?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+                    if (snapMapId == 489 && _tickCount % 10 == 0)
+                        Log.Information("[BG-DIAG] Snapshot contains MapId=489 at tick {Tick}", _tickCount);
+
                     Communication.WoWActivitySnapshot? incomingActivityMemberState = null;
                     try
                     {

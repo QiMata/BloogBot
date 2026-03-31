@@ -141,7 +141,9 @@ namespace WoWStateManager.Listeners
 
             // Store the incoming state update from the bot
             CurrentActivityMemberList[accountName] = request;
-            _logger.LogDebug($"Updated state for account '{accountName}'");
+            var storedMapId = request.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            if (storedMapId == 489)
+                _logger.LogWarning("STORED MapId=489 for account '{Account}'", accountName);
 
             // Build the response — start with the stored snapshot
             var response = CurrentActivityMemberList[accountName];

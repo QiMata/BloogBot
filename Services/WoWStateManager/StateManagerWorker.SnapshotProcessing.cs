@@ -85,7 +85,9 @@ namespace WoWStateManager
                 // Filtered: return snapshot for specific account
                 if (snapshots.TryGetValue(query.AccountName, out var snapshot))
                 {
-                    response.Snapshots.Add(snapshot);
+                    // Clone to prevent race conditions — the live snapshot object
+                    // is modified by concurrent bot ticks during serialization.
+                    response.Snapshots.Add(snapshot.Clone());
                     _logger.LogDebug($"Snapshot query: returning snapshot for '{query.AccountName}'");
                 }
                 else
@@ -96,10 +98,9 @@ namespace WoWStateManager
             }
             else
             {
-                // Unfiltered: return all snapshots
+                // Unfiltered: return all snapshots (cloned to avoid race conditions)
                 foreach (var kvp in snapshots)
-                    response.Snapshots.Add(kvp.Value);
-                _logger.LogDebug($"Snapshot query: returning {response.Snapshots.Count} snapshots");
+                    response.Snapshots.Add(kvp.Value.Clone());
             }
 
             if (response.Response != ResponseResult.Failure)
