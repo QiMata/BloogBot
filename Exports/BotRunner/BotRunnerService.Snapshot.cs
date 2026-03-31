@@ -72,6 +72,12 @@ namespace BotRunner
                 && _objectManager.Player != null
                 && !inMapTransition;
 
+            // Top-level MapId for reliable BG transfer detection.
+            // This bypasses the deep nesting (Player.Unit.GameObject.Base.MapId)
+            // that may be unreliable during protobuf serialization with nested sub-messages.
+            if (_objectManager.Player is GameData.Core.Interfaces.IWoWPlayer mapPlayer)
+                _activitySnapshot.CurrentMapId = (uint)mapPlayer.MapId;
+
             // Always flush message buffers (even during login — captures GM command errors)
             FlushMessageBuffers();
 

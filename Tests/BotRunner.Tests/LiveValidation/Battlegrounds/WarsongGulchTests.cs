@@ -54,6 +54,18 @@ public class WarsongGulchTests
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
 
+        // Sanity check: protobuf roundtrip for CurrentMapId
+        {
+            var testSnap = new Communication.WoWActivitySnapshot { AccountName = "ROUNDTRIP", CurrentMapId = 489 };
+            var testResp = new Communication.StateChangeResponse();
+            testResp.Snapshots.Add(testSnap);
+            var bytes = Google.Protobuf.MessageExtensions.ToByteArray(testResp);
+            var decoded = Communication.StateChangeResponse.Parser.ParseFrom(bytes);
+            var mapId = decoded.Snapshots[0].CurrentMapId;
+            _output.WriteLine($"[PROTO-ROUNDTRIP] CurrentMapId: {mapId} (expect 489), bytes={bytes.Length}");
+            Assert.Equal(489u, mapId);
+        }
+
         // Phase 1: All bots enter world
         var botCount = await WaitForProgressAsync(
             phaseName: "BotsEnterWorld",
@@ -137,8 +149,7 @@ public class WarsongGulchTests
         while (sw.Elapsed < TimeSpan.FromMinutes(5))
         {
             var allSnapshots = await _bot.QueryAllSnapshotsAsync();
-            botsInWsg = allSnapshots.Count(s =>
-                (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == WarsongGulchFixture.WsgMapId);
+            botsInWsg = allSnapshots.Count(s => s.CurrentMapId == WarsongGulchFixture.WsgMapId);
             var total = allSnapshots.Count;
 
             if (botsInWsg >= 4)

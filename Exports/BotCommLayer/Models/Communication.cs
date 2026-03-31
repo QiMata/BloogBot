@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-            "IAEoCUgAQgsKCXBhcmFtZXRlciLuBAoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
+            "IAEoCUgAQgsKCXBhcmFtZXRlciKEBQoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -67,52 +67,52 @@ namespace Communication {
             "bXVuaWNhdGlvbi5Cb3RDb25uZWN0aW9uU3RhdGUSHAoUaXNPYmplY3RNYW5h",
             "Z2VyVmFsaWQYDyABKAgSFwoPaXNNYXBUcmFuc2l0aW9uGBAgASgIEg8KB2lz",
             "RGVsdGEYESABKAgSGAoQc25hcHNob3RTZXF1ZW5jZRgSIAEoDRIUCgxiYXNl",
-            "U2VxdWVuY2UYEyABKA0iTwoITG9nRW50cnkSDQoFbGV2ZWwYASABKAkSEAoI",
-            "Y2F0ZWdvcnkYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRIRCgl0aW1lc3RhbXAY",
-            "BCABKAkq7AsKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdPVE8QARIRCg1J",
-            "TlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQKEFNFTEVDVF9U",
-            "QVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNMSU5FX1FVRVNU",
-            "EAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FVRVNUEAgSDwoL",
-            "VFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIPCgtPRkZFUl9UUkFE",
-            "RRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVNEA0SEAoMQUNDRVBU",
-            "X1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVOQ0hBTlRfVFJBREUQ",
-            "EBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVfTEVBREVSEBISFQoR",
-            "UFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xPT1RfTUFOQUdFUhAU",
-            "EhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xPT1QQFhISCg5MT09U",
-            "X1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAYEg0KCUxPT1RfUEFT",
-            "UxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUNDRVBUX0dST1VQX0lO",
-            "VklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwSDwoLS0lDS19QTEFZ",
-            "RVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRfR1JPVVAQHxIWChJT",
-            "VEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5HRURfQVRUQUNLECES",
-            "FQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FUVEFDSxAjEg4KCkNB",
-            "U1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0VfSVRFTRAmEg4KCkVR",
-            "VUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxERVNUUk9ZX0lURU0Q",
-            "KRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxArEgwKCEJVWV9JVEVN",
-            "ECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVNEC4SDwoLUkVQQUlS",
-            "X0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoMRElTTUlTU19CVUZG",
-            "EDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVMT0dJThA0EgoKBkxP",
-            "R09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBERUxFVEVfQ0hBUkFD",
-            "VEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBTRRA5EhIKDlJF",
-            "TEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsSDwoLU0tJTl9D",
-            "T1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hBVBA+Eg4KClNF",
-            "VF9GQUNJTkcQPxIQCgxWSVNJVF9WRU5ET1IQQBIRCg1WSVNJVF9UUkFJTkVS",
-            "EEESFwoTVklTSVRfRkxJR0hUX01BU1RFUhBCEhEKDVNUQVJUX0ZJU0hJTkcQ",
-            "QxIZChVTVEFSVF9HQVRIRVJJTkdfUk9VVEUQRBIOCgpDSEVDS19NQUlMEEUS",
-            "GwoXU1RBUlRfUEhZU0lDU19SRUNPUkRJTkcQRhIaChZTVE9QX1BIWVNJQ1Nf",
-            "UkVDT1JESU5HEEcSFwoTU1RBUlRfRFVOR0VPTkVFUklORxBIEhMKD0NPTlZF",
-            "UlRfVE9fUkFJRBBJEhgKFENIQU5HRV9SQUlEX1NVQkdST1VQEEoSEQoNRk9M",
-            "TE9XX1RBUkdFVBBLEhUKEUpPSU5fQkFUVExFR1JPVU5EEEwSFwoTQUNDRVBU",
-            "X0JBVFRMRUdST1VORBBNEhYKEkxFQVZFX0JBVFRMRUdST1VORBBOKi8KDUJv",
-            "dFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASp2",
-            "Cg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoR",
-            "Q09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JF",
-            "RUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3Vs",
-            "dBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAIq",
-            "rAEKEkJvdENvbm5lY3Rpb25TdGF0ZRIUChBCT1RfRElTQ09OTkVDVEVEEAAS",
-            "FgoSQk9UX0FVVEhFTlRJQ0FUSU5HEAESEwoPQk9UX0NIQVJfU0VMRUNUEAIS",
-            "FgoSQk9UX0VOVEVSSU5HX1dPUkxEEAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQ",
-            "Qk9UX1RSQU5TRkVSUklORxAFEhMKD0JPVF9MT0dHSU5HX09VVBAGYgZwcm90",
-            "bzM="));
+            "U2VxdWVuY2UYEyABKA0SFAoMY3VycmVudE1hcElkGBQgASgNIk8KCExvZ0Vu",
+            "dHJ5Eg0KBWxldmVsGAEgASgJEhAKCGNhdGVnb3J5GAIgASgJEg8KB21lc3Nh",
+            "Z2UYAyABKAkSEQoJdGltZXN0YW1wGAQgASgJKuwLCgpBY3Rpb25UeXBlEggK",
+            "BFdBSVQQABIICgRHT1RPEAESEQoNSU5URVJBQ1RfV0lUSBACEhEKDVNFTEVD",
+            "VF9HT1NTSVAQAxIUChBTRUxFQ1RfVEFYSV9OT0RFEAQSEAoMQUNDRVBUX1FV",
+            "RVNUEAUSEQoNREVDTElORV9RVUVTVBAGEhEKDVNFTEVDVF9SRVdBUkQQBxIS",
+            "Cg5DT01QTEVURV9RVUVTVBAIEg8KC1RSQUlOX1NLSUxMEAkSEAoMVFJBSU5f",
+            "VEFMRU5UEAoSDwoLT0ZGRVJfVFJBREUQCxIOCgpPRkZFUl9HT0xEEAwSDgoK",
+            "T0ZGRVJfSVRFTRANEhAKDEFDQ0VQVF9UUkFERRAOEhEKDURFQ0xJTkVfVFJB",
+            "REUQDxIRCg1FTkNIQU5UX1RSQURFEBASEgoOTE9DS1BJQ0tfVFJBREUQERIS",
+            "Cg5QUk9NT1RFX0xFQURFUhASEhUKEVBST01PVEVfQVNTSVNUQU5UEBMSGAoU",
+            "UFJPTU9URV9MT09UX01BTkFHRVIQFBISCg5TRVRfR1JPVVBfTE9PVBAVEg8K",
+            "C0FTU0lHTl9MT09UEBYSEgoOTE9PVF9ST0xMX05FRUQQFxITCg9MT09UX1JP",
+            "TExfR1JFRUQQGBINCglMT09UX1BBU1MQGRIVChFTRU5EX0dST1VQX0lOVklU",
+            "RRAaEhcKE0FDQ0VQVF9HUk9VUF9JTlZJVEUQGxIYChRERUNMSU5FX0dST1VQ",
+            "X0lOVklURRAcEg8KC0tJQ0tfUExBWUVSEB0SDwoLTEVBVkVfR1JPVVAQHhIR",
+            "Cg1ESVNCQU5EX0dST1VQEB8SFgoSU1RBUlRfTUVMRUVfQVRUQUNLECASFwoT",
+            "U1RBUlRfUkFOR0VEX0FUVEFDSxAhEhUKEVNUQVJUX1dBTkRfQVRUQUNLECIS",
+            "DwoLU1RPUF9BVFRBQ0sQIxIOCgpDQVNUX1NQRUxMECQSDQoJU1RPUF9DQVNU",
+            "ECUSDAoIVVNFX0lURU0QJhIOCgpFUVVJUF9JVEVNECcSEAoMVU5FUVVJUF9J",
+            "VEVNECgSEAoMREVTVFJPWV9JVEVNECkSDQoJTU9WRV9JVEVNECoSDwoLU1BM",
+            "SVRfU1RBQ0sQKxIMCghCVVlfSVRFTRAsEhAKDEJVWUJBQ0tfSVRFTRAtEg0K",
+            "CVNFTExfSVRFTRAuEg8KC1JFUEFJUl9JVEVNEC8SFAoQUkVQQUlSX0FMTF9J",
+            "VEVNUxAwEhAKDERJU01JU1NfQlVGRhAxEg0KCVJFU1VSUkVDVBAyEgkKBUNS",
+            "QUZUEDMSCQoFTE9HSU4QNBIKCgZMT0dPVVQQNRIUChBDUkVBVEVfQ0hBUkFD",
+            "VEVSEDYSFAoQREVMRVRFX0NIQVJBQ1RFUhA3Eg8KC0VOVEVSX1dPUkxEEDgS",
+            "DwoLTE9PVF9DT1JQU0UQORISCg5SRUxFQVNFX0NPUlBTRRA6EhMKD1JFVFJJ",
+            "RVZFX0NPUlBTRRA7Eg8KC1NLSU5fQ09SUFNFEDwSDwoLR0FUSEVSX05PREUQ",
+            "PRINCglTRU5EX0NIQVQQPhIOCgpTRVRfRkFDSU5HED8SEAoMVklTSVRfVkVO",
+            "RE9SEEASEQoNVklTSVRfVFJBSU5FUhBBEhcKE1ZJU0lUX0ZMSUdIVF9NQVNU",
+            "RVIQQhIRCg1TVEFSVF9GSVNISU5HEEMSGQoVU1RBUlRfR0FUSEVSSU5HX1JP",
+            "VVRFEEQSDgoKQ0hFQ0tfTUFJTBBFEhsKF1NUQVJUX1BIWVNJQ1NfUkVDT1JE",
+            "SU5HEEYSGgoWU1RPUF9QSFlTSUNTX1JFQ09SRElORxBHEhcKE1NUQVJUX0RV",
+            "TkdFT05FRVJJTkcQSBITCg9DT05WRVJUX1RPX1JBSUQQSRIYChRDSEFOR0Vf",
+            "UkFJRF9TVUJHUk9VUBBKEhEKDUZPTExPV19UQVJHRVQQSxIVChFKT0lOX0JB",
+            "VFRMRUdST1VORBBMEhcKE0FDQ0VQVF9CQVRUTEVHUk9VTkQQTRIWChJMRUFW",
+            "RV9CQVRUTEVHUk9VTkQQTiovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVHUk9V",
+            "TkQQABIOCgpCQUNLR1JPVU5EEAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggKBE5B",
+            "TUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAISEAoM",
+            "RVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJPVElD",
+            "SVNNEAUqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZBSUxV",
+            "UkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0aW9uU3RhdGUS",
+            "FAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5USUNBVElORxAB",
+            "EhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklOR19XT1JMRBAD",
+            "EhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJTkcQBRITCg9C",
+            "T1RfTE9HR0lOR19PVVQQBmIGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -125,7 +125,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LogEntry), global::Communication.LogEntry.Parser, new[]{ "Level", "Category", "Message", "Timestamp" }, null, null, null, null)
           }));
     }
@@ -2986,6 +2986,7 @@ namespace Communication {
       isDelta_ = other.isDelta_;
       snapshotSequence_ = other.snapshotSequence_;
       baseSequence_ = other.baseSequence_;
+      currentMapId_ = other.currentMapId_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3255,6 +3256,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "currentMapId" field.</summary>
+    public const int CurrentMapIdFieldNumber = 20;
+    private uint currentMapId_;
+    /// <summary>
+    /// Current map ID (top-level for reliable BG transfer detection)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint CurrentMapId {
+      get { return currentMapId_; }
+      set {
+        currentMapId_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3289,6 +3305,7 @@ namespace Communication {
       if (IsDelta != other.IsDelta) return false;
       if (SnapshotSequence != other.SnapshotSequence) return false;
       if (BaseSequence != other.BaseSequence) return false;
+      if (CurrentMapId != other.CurrentMapId) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3315,6 +3332,7 @@ namespace Communication {
       if (IsDelta != false) hash ^= IsDelta.GetHashCode();
       if (SnapshotSequence != 0) hash ^= SnapshotSequence.GetHashCode();
       if (BaseSequence != 0) hash ^= BaseSequence.GetHashCode();
+      if (CurrentMapId != 0) hash ^= CurrentMapId.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3397,6 +3415,10 @@ namespace Communication {
         output.WriteRawTag(152, 1);
         output.WriteUInt32(BaseSequence);
       }
+      if (CurrentMapId != 0) {
+        output.WriteRawTag(160, 1);
+        output.WriteUInt32(CurrentMapId);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3471,6 +3493,10 @@ namespace Communication {
         output.WriteRawTag(152, 1);
         output.WriteUInt32(BaseSequence);
       }
+      if (CurrentMapId != 0) {
+        output.WriteRawTag(160, 1);
+        output.WriteUInt32(CurrentMapId);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3529,6 +3555,9 @@ namespace Communication {
       }
       if (BaseSequence != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(BaseSequence);
+      }
+      if (CurrentMapId != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(CurrentMapId);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -3602,6 +3631,9 @@ namespace Communication {
       }
       if (other.BaseSequence != 0) {
         BaseSequence = other.BaseSequence;
+      }
+      if (other.CurrentMapId != 0) {
+        CurrentMapId = other.CurrentMapId;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -3710,6 +3742,10 @@ namespace Communication {
             BaseSequence = input.ReadUInt32();
             break;
           }
+          case 160: {
+            CurrentMapId = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -3815,6 +3851,10 @@ namespace Communication {
           }
           case 152: {
             BaseSequence = input.ReadUInt32();
+            break;
+          }
+          case 160: {
+            CurrentMapId = input.ReadUInt32();
             break;
           }
         }

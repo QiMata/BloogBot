@@ -202,6 +202,7 @@ message WoWActivitySnapshot {
     bool isDelta = 17;                          // If true, only populated fields have changed since last full snapshot
     uint32 snapshotSequence = 18;               // Monotonic sequence number for delta ordering
     uint32 baseSequence = 19;                   // Sequence number of the full snapshot this delta is based on
+    uint32 currentMapId = 20;                   // Current map ID (top-level for reliable BG transfer detection)
 }
 
 // Structured log entry for named pipe IPC (replaces JSON serialization).

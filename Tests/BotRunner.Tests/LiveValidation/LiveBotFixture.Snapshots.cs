@@ -89,7 +89,13 @@ public partial class LiveBotFixture
     public async Task<List<WoWActivitySnapshot>> QueryAllSnapshotsAsync()
     {
         if (_stateManagerClient == null) return [];
-        return await _stateManagerClient.QuerySnapshotsAsync();
+        var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
+        // DIAG: log CurrentMapId for each snapshot
+        var map489 = snapshots.Count(s => s.CurrentMapId == 489);
+        var deepMap489 = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == 489);
+        if (map489 > 0 || deepMap489 > 0)
+            _testOutput?.WriteLine($"  [QUERY-DIAG] {snapshots.Count} snapshots: {map489} with CurrentMapId=489, {deepMap489} with deep MapId=489");
+        return snapshots;
     }
 
     private void LogSnapshotMessages()
