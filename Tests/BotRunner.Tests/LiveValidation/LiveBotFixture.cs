@@ -139,6 +139,9 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Whether any managed child process (StateManager, WoW.exe, PathfindingService) has crashed.</summary>
     public bool ClientCrashed => _serviceFixture.ClientCrashed;
 
+    /// <summary>Get all captured StateManager output lines for test assertions.</summary>
+    public IReadOnlyCollection<string> GetStateManagerOutput() => _serviceFixture.GetCapturedOutput();
+
     /// <summary>Descriptive crash message, if any.</summary>
     public string? CrashMessage => _serviceFixture.CrashMessage;
 

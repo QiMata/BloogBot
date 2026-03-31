@@ -122,46 +122,28 @@ public class WarsongGulchTests
 
         _output.WriteLine("Phase 2 complete.");
 
-        // Verify BG entry via VMaNGOS Bg.log. Snapshot-based MapId detection is unreliable
-        // (100ms tick overwrites MapId before 1s test poll can catch it).
-        // The BG coordinator runs concurrently during Phase 1+2, so the BG may start
-        // and finish before this poll loop begins. The -10min baseline catches it.
-        _output.WriteLine("Polling Bg.log for BG entries...");
+        // Verify BG entry by checking StateManager stdout for SMSG_NEW_WORLD map=489.
+        // This is captured by BotServiceFixture in real-time and is the most reliable
+        // proof that bots entered WSG. Bg.log has Docker flush timing issues.
+        _output.WriteLine("Waiting for SMSG_NEW_WORLD map=489 in StateManager output...");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var botsInWsg = 0;
-        while (sw.Elapsed < TimeSpan.FromMinutes(12))
+        while (sw.Elapsed < TimeSpan.FromMinutes(10))
         {
-            if (File.Exists(bgLogPath))
+            // Check StateManager output for transfer evidence
+            var output = _bot.GetStateManagerOutput();
+            botsInWsg = output.Count(line =>
+                line.Contains("SMSG_NEW_WORLD") && line.Contains("map=489"));
+
+            if (botsInWsg >= 4)
             {
-                string[] lines;
-                using (var fs = new FileStream(bgLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var reader = new StreamReader(fs))
-                    lines = reader.ReadToEnd().Split('\n');
-
-                // Only look at entries from the last 10 minutes (avoids stale data)
-                var queueEntries = lines
-                    .Where(l => l.Contains("tag BG=2") && l.Length > 16 && string.Compare(l[..16], testStartTime) >= 0)
-                    .ToList();
-                var uniqueNames = queueEntries
-                    .Select(l => { var parts = l.Split(' '); return parts.Length > 1 ? parts[1].Split(':')[0] : ""; })
-                    .Where(n => !string.IsNullOrEmpty(n))
-                    .Distinct()
-                    .ToList();
-                botsInWsg = uniqueNames.Count;
-
-                if (botsInWsg >= 4)
-                {
-                    _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} bots queued: {string.Join(", ", uniqueNames)}");
-                    var winners = lines.Where(l => l.Contains("winner=") && l.Length > 16 && string.Compare(l[..16], testStartTime) >= 0).ToList();
-                    foreach (var w in winners)
-                        _output.WriteLine($"  BG result: {w.Trim()}");
-                    break;
-                }
+                _output.WriteLine($"[WSGEntry] PASS at {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} SMSG_NEW_WORLD map=489 events detected");
+                break;
             }
 
-            if ((int)sw.Elapsed.TotalSeconds % 15 == 0)
-                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} new bots in Bg.log");
+            if ((int)sw.Elapsed.TotalSeconds % 30 == 0)
+                _output.WriteLine($"[WSGEntry] {sw.Elapsed.TotalSeconds:F0}s: {botsInWsg} transfers detected");
             await Task.Delay(5000);
         }
 

@@ -41,6 +41,10 @@ public class BotServiceFixture : IAsyncLifetime
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
     private readonly List<int> _managedWoWPids = [];
+    private readonly System.Collections.Concurrent.ConcurrentBag<string> _capturedOutput = [];
+
+    /// <summary>Get all captured StateManager output lines for test assertions.</summary>
+    public IReadOnlyCollection<string> GetCapturedOutput() => _capturedOutput;
 
     /// <summary>
     /// Per-service log manager. Created when a test name is set via <see cref="SetTestName"/>.
@@ -946,6 +950,9 @@ public class BotServiceFixture : IAsyncLifetime
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
+                    // Capture ALL output lines for test assertions (e.g., SMSG_NEW_WORLD detection)
+                    _capturedOutput.Add(e.Data);
+
                     // Write ALL lines to per-service log files (no filtering)
                     ServiceLogs?.ClassifyAndWrite(e.Data);
 
