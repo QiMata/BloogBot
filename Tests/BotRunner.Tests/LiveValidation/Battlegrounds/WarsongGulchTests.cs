@@ -82,9 +82,11 @@ public class WarsongGulchTests
         await Task.Delay(2000);
 
         // Step 2: Teleport to battlemaster positions via bot chat (.go xyz needs GM on)
+        // Horde: Kartra Bloodsnarl (permanent BM, entry 14942) at (1980.9,-4787.78,55.88)
+        // NOTE: Entry 15105 "Warsong Emissary" is event-only (Call to Arms) — not always spawned.
         foreach (var account in _bot.HordeAccounts)
         {
-            await _bot.BotTeleportAsync(account, 1, 1658.9f, -4389.0f, 26.8f);
+            await _bot.BotTeleportAsync(account, 1, 1980.9f, -4787.78f, 58.88f);
             await Task.Delay(300);
         }
         foreach (var account in _bot.AllianceAccounts)

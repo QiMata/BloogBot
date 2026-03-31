@@ -156,6 +156,19 @@ public class BattlegroundQueueTask : BotTask, IBotTask
                 .FirstOrDefault();
         }
 
+        // Strategy 3: If the NPC isn't in ObjectManager at all (VMaNGOS may not send
+        // the creature to headless clients in certain zones), use the known packed GUID
+        // from the spawn database to interact directly. Skip MoveToBattlemaster since
+        // we're already at the NPC position.
+        if (_bmNpc == null && bmData != null && player.Position.DistanceTo(bmData.Position) < 15f)
+        {
+            _bmGuid = bmData.PackedGuid;
+            Log.Information("[BG-QUEUE] Using known packed GUID 0x{Guid:X} for {NpcName} (NPC not in ObjectManager)",
+                _bmGuid, bmData.NpcName);
+            SetState(BgState.InteractAndQueue);
+            return;
+        }
+
         if (_bmNpc != null)
         {
             _bmGuid = _bmNpc.Guid;
