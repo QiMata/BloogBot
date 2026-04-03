@@ -330,7 +330,9 @@ public class BotServiceFixture : IAsyncLifetime
 
                     // Check PathfindingService (port 5001) — if it crashes mid-suite,
                     // navigation tests will fail with mysterious timeouts.
-                    if (PathfindingServiceReady && !IsPortInUse(5001))
+                    // Use TCP connect check instead of bind check — Docker-forwarded ports
+                    // appear "free" to IsPortInUse even when the container is healthy.
+                    if (PathfindingServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 5001, 2000))
                     {
                         PathfindingServiceReady = false;
                         var msg = $"PathfindingService (port 5001) stopped responding at {DateTime.Now:HH:mm:ss}";
@@ -338,7 +340,7 @@ public class BotServiceFixture : IAsyncLifetime
                     }
 
                     // Check SceneDataService (port 5003)
-                    if (SceneDataServiceReady && !IsPortInUse(5003))
+                    if (SceneDataServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 5003, 2000))
                     {
                         SceneDataServiceReady = false;
                         var msg = $"SceneDataService (port 5003) stopped responding at {DateTime.Now:HH:mm:ss}";
