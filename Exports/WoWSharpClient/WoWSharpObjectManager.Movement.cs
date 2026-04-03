@@ -573,6 +573,7 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
         {
+            ClearPendingWorldEntry();
             ((WoWLocalPlayer)Player).MapId = e.MapId;
 
             Player.Position.X = e.PositionX;

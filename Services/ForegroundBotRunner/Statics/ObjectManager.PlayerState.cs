@@ -12,6 +12,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -261,9 +262,12 @@ namespace ForegroundBotRunner.Statics
             if (++_antiAfkLogCounter % 20 == 1)
             {
                 var readBack = MemoryManager.ReadInt((nint)MemoryAddresses.LastHardwareAction);
-                var logPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "Documents", "BloogBot", "antiafk_log.txt");
+                var logPath = RecordingFileArtifactGate.ResolveDocumentsPath("BloogBot", "antiafk_log.txt");
+                if (string.IsNullOrWhiteSpace(logPath))
+                {
+                    return;
+                }
+
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);

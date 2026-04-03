@@ -45,6 +45,7 @@ namespace BotRunner
                             capsuleRadius: radius,
                             capsuleHeight: height,
                             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                            stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
                             race: _objectManager.Player.Race,
                             gender: _objectManager.Player.Gender);
                     }
@@ -162,6 +163,7 @@ namespace BotRunner
                             capsuleRadius: radius,
                             capsuleHeight: height,
                             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                            stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
                             race: _objectManager.Player.Race,
                             gender: _objectManager.Player.Gender);
                     }

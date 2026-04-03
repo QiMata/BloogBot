@@ -5,6 +5,7 @@
 #include "Vector3.h"
 #include "PhysicsBridge.h"
 #include "SceneQuery.h"
+#include <cfloat>
 #include <vector>
 
 namespace PhysicsCollideSlide

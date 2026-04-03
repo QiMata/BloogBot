@@ -11,9 +11,9 @@ using WoWStateManager.Settings;
 namespace WoWStateManager.Coordination;
 
 /// <summary>
-/// Coordinates N bots for dungeon crawling with full raid preparation.
+/// Coordinates N bots for dungeon crawling after fixture-owned prep is complete.
 ///
-/// Pipeline:
+/// Coordination pipeline:
 ///   WaitingForBots → TeleportToOrgrimmar → WaitForOrgSettle → DisbandAndReset →
 ///   PrepareCharacters → LearnSpellsViaChat → AddItemsViaChat → EquipGear →
 ///   FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress
@@ -130,17 +130,13 @@ public class DungeoneeringCoordinator
     /// <param name="leaderAccount">Account name of the raid leader.</param>
     /// <param name="allAccounts">All bot account names (including leader).</param>
     /// <param name="allSettings">Character settings for all bots.</param>
-    /// <param name="soapClient">SOAP client for GM commands. Null = bot chat only.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="skipPrep">If true, skip all prep states (level, spells, gear, teleport)
-    /// and start directly at FormGroup_Inviting. Use when the test fixture handles prep.</param>
     public DungeoneeringCoordinator(
         string leaderAccount,
         IEnumerable<string> allAccounts,
         List<CharacterSettings> allSettings,
         MangosSOAPClient? soapClient,
-        ILogger logger,
-        bool skipPrep = false)
+        ILogger logger)
     {
         _leaderAccount = leaderAccount;
         _memberAccounts = allAccounts
@@ -150,7 +146,7 @@ public class DungeoneeringCoordinator
         _soapClient = soapClient;
         _logger = logger;
 
-        if (skipPrep)
+        if (_state == CoordState.FormGroup_Inviting)
         {
             _state = CoordState.FormGroup_Inviting;
             _stateEnteredAt = DateTime.UtcNow;
@@ -245,17 +241,13 @@ public class DungeoneeringCoordinator
             if (_tickCount % 10 == 1)
                 _logger.LogInformation("DUNGEON_COORD: Waiting for bots: {Ready}/{Total} members InWorld (tick {Tick})",
                     readyMembers, _memberAccounts.Count, _tickCount);
-            if (_tickCount < 60) // ~30s at 500ms poll
-                return null;
-            _logger.LogWarning("DUNGEON_COORD: Timeout waiting for all members. Proceeding with {Ready}/{Total}.",
-                readyMembers, _memberAccounts.Count);
+            return null;
         }
 
-        _logger.LogInformation("DUNGEON_COORD: {Count}/{Total} members ready. Starting character preparation.",
+        _logger.LogInformation("DUNGEON_COORD: {Count}/{Total} members ready. Starting group formation.",
             readyMembers, _memberAccounts.Count);
 
-        // Step 1: Teleport everyone to Orgrimmar first (clean slate)
-        TransitionTo(CoordState.TeleportToOrgrimmar);
+        TransitionTo(CoordState.FormGroup_Inviting);
         return null;
     }
 
@@ -294,12 +286,7 @@ public class DungeoneeringCoordinator
         // Wait for any unprepared accounts that weren't in world yet
         var unprepared = allAccounts.Count(a => !_preparedAccounts.ContainsKey(a));
         if (unprepared > 0)
-        {
-            _tickCount++;
-            if (_tickCount < 20) // Wait up to ~10s for stragglers
-                return null;
-            _logger.LogWarning("DUNGEON_COORD: {Unprepared} accounts never came InWorld, continuing.", unprepared);
-        }
+            return null;
 
         // Wait for ALL SOAP tasks to complete before proceeding.
         // .character level resets spells, so it MUST finish before .learn via chat.
@@ -809,12 +796,9 @@ public class DungeoneeringCoordinator
             }
         }
 
-        // Require ALL bots on the map, or give up after 60 ticks (~30s)
-        if (onMap >= allAccounts.Count || _tickCount >= 60)
+        // Require ALL bots on the target map before advancing.
+        if (onMap >= allAccounts.Count)
         {
-            if (missingBots.Count > 0)
-                _logger.LogWarning("DUNGEON_COORD: Proceeding with {Missing} bot(s) not on map {Map}: [{Names}]",
-                    missingBots.Count, expectedMapId, string.Join(", ", missingBots));
             TransitionTo(nextState);
         }
 
@@ -914,8 +898,6 @@ public class DungeoneeringCoordinator
                     _phaseStartedAt = DateTime.UtcNow;
                     return MakeAction(ActionType.SendGroupInvite, charName);
                 }
-                // Skip if not in world
-                _inviteIndex++;
                 return null;
 
             case InvitePhase.SendAccept:
@@ -940,21 +922,22 @@ public class DungeoneeringCoordinator
 
                 var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
-                if (isGrouped || waitElapsed > 3.0) // Wait up to 3s
+                if (isGrouped)
                 {
-                    if (isGrouped)
-                        _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped.", memberAccount);
-                    else
-                        _logger.LogWarning("DUNGEON_COORD: '{Account}' not showing as grouped after timeout, continuing.", memberAccount);
-
+                    _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped.", memberAccount);
                     _inviteIndex++;
                     _tickCount = 0;
                     // Phase already set to SendInvite by CompareExchange above
+                }
+                else if (waitElapsed > 3.0)
+                {
+                    _logger.LogWarning("DUNGEON_COORD: '{Account}' not grouped after {Elapsed:F1}s; retrying invite.", memberAccount, waitElapsed);
                 }
                 else
                 {
                     // Not ready yet — restore WaitForGrouped so we check again next tick
                     CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                    return null;
                 }
                 return null;
         }
@@ -995,7 +978,7 @@ public class DungeoneeringCoordinator
         // Wait longer for the conversion to propagate — MaNGOS needs time to update
         // all clients' group state. Without this, batch 2 invites are sent before
         // the server fully transitions the group to raid mode, causing silent failures.
-        if (_tickCount < 10 && grouped < PARTY_SIZE_LIMIT)
+        if (grouped < PARTY_SIZE_LIMIT)
         {
             if (_tickCount % 5 == 0)
                 _logger.LogInformation("DUNGEON_COORD: Waiting for raid conversion: {Grouped}/{Expected} batch 1 members still grouped",
@@ -1041,7 +1024,6 @@ public class DungeoneeringCoordinator
                     _phaseStartedAt = DateTime.UtcNow;
                     return MakeAction(ActionType.SendGroupInvite, charName);
                 }
-                _inviteIndex++;
                 return null;
 
             case InvitePhase.SendAccept:
@@ -1064,20 +1046,21 @@ public class DungeoneeringCoordinator
 
                 var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
-                if (isGrouped || waitElapsed > 3.0)
+                if (isGrouped)
                 {
-                    if (isGrouped)
-                        _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped [batch 2].", memberAccount);
-                    else
-                        _logger.LogWarning("DUNGEON_COORD: '{Account}' not showing as grouped after {Elapsed:F1}s [batch 2], continuing.", memberAccount, waitElapsed);
-
+                    _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped [batch 2].", memberAccount);
                     _inviteIndex++;
                     // Phase already set to SendInvite by CompareExchange above
+                }
+                else if (waitElapsed > 3.0)
+                {
+                    _logger.LogWarning("DUNGEON_COORD: '{Account}' not grouped after {Elapsed:F1}s [batch 2]; retrying invite.", memberAccount, waitElapsed);
                 }
                 else
                 {
                     // Not ready yet — restore WaitForGrouped so we check again next tick
                     CurrentInvitePhase = InvitePhase.WaitForGrouped;
+                    return null;
                 }
                 return null;
         }
@@ -1105,6 +1088,9 @@ public class DungeoneeringCoordinator
         var grouped = snapshots.Values.Count(s => s.PartyLeaderGuid != 0);
         _logger.LogInformation("DUNGEON_COORD: Group verify: {Grouped}/{Total} bots grouped.",
             grouped, snapshots.Count);
+
+        if (grouped < _memberAccounts.Count + 1)
+            return null;
 
         // Skip subgroup organization — it can desync raid membership in Vanilla.
         // All bots stay in default subgroup 0. Buff coverage is less optimal but raid stays intact.

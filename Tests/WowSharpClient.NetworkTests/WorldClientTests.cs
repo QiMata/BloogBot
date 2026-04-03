@@ -1,5 +1,6 @@
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Client;
+using WoWSharpClient;
 using GameData.Core.Enums;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -169,6 +171,38 @@ namespace WowSharpClient.NetworkTests
             // Assert
             Assert.True(worldClient.IsAuthenticated);
             Assert.True(authSuccessCalled);
+        }
+
+        [Fact]
+        public async Task AuthResponse_Success_FiresWorldSessionStart()
+        {
+            WoWSharpEventEmitter.Instance.Reset();
+            try
+            {
+                using var connection = new InMemoryConnection();
+                using var framer = new WoWMessageFramer();
+                var encryptor = new NoEncryption();
+                var codec = new WoWPacketCodec();
+                var router = new MessageRouter<Opcode>();
+
+                using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+                var worldSessionStarted = false;
+                EventHandler handler = (_, _) => worldSessionStarted = true;
+                WoWSharpEventEmitter.Instance.OnWorldSessionStart += handler;
+
+                var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+                await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+                connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_AUTH_RESPONSE, [0x0C]));
+                await Task.Delay(200);
+
+                Assert.True(worldSessionStarted);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.Reset();
+            }
         }
 
         [Fact]
@@ -534,6 +568,46 @@ namespace WowSharpClient.NetworkTests
             Assert.Equal(testPayload, receivedPayloads[0]);
         }
 
+        [Fact]
+        public async Task TriggerCinematic_SendsCompleteCinematicAfterWatchDelay()
+        {
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var originalDelay = GetIntroCinematicWatchDelay();
+            SetIntroCinematicWatchDelay(TimeSpan.FromMilliseconds(10));
+            try
+            {
+                await worldClient.ConnectAsync("testuser", "127.0.0.1", [0x01, 0x02, 0x03, 0x04]);
+
+                connection.InjectIncomingData(CreateWoWPacket(
+                    Opcode.SMSG_TRIGGER_CINEMATIC,
+                    BitConverter.GetBytes(3u)));
+
+                byte[][]? sentData = null;
+                await WaitForConditionAsync(() =>
+                {
+                    sentData = connection.GetSentData();
+                    return sentData.Length >= 1;
+                }, timeoutMs: 1000);
+
+                var sentPacket = Assert.Single(sentData!);
+                var (decodedOpcode, decodedPayload) = ParseCmsgPacket(sentPacket);
+
+                Assert.Equal(Opcode.CMSG_COMPLETE_CINEMATIC, decodedOpcode);
+                Assert.Empty(decodedPayload);
+            }
+            finally
+            {
+                SetIntroCinematicWatchDelay(originalDelay);
+            }
+        }
+
         /// <summary>
         /// Creates an SMSG-format packet for injection: size(2 BE) + opcode(2 LE) + payload.
         /// </summary>
@@ -570,5 +644,29 @@ namespace WowSharpClient.NetworkTests
 
             return ms.ToArray();
         }
+
+        private static async Task WaitForConditionAsync(Func<bool> condition, int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (condition())
+                    return;
+
+                await Task.Delay(10);
+            }
+
+            Assert.True(condition());
+        }
+
+        private static TimeSpan GetIntroCinematicWatchDelay()
+            => (TimeSpan)(typeof(WorldClient)
+                .GetProperty("IntroCinematicWatchDelay", BindingFlags.Static | BindingFlags.NonPublic)!
+                .GetValue(null) ?? TimeSpan.Zero);
+
+        private static void SetIntroCinematicWatchDelay(TimeSpan delay)
+            => typeof(WorldClient)
+                .GetProperty("IntroCinematicWatchDelay", BindingFlags.Static | BindingFlags.NonPublic)!
+                .SetValue(null, delay);
     }
 }

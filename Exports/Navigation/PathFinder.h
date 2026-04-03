@@ -96,7 +96,11 @@ public:
 
 	// option setters - use optional
 	void setUseStrightPath(bool useStraightPath) { m_useStraightPath = useStraightPath; };
-	void setPathLengthLimit(float distance) { m_pointPathLimit = std::min<unsigned int>(unsigned int(distance / SMOOTH_PATH_STEP_SIZE), MAX_POINT_PATH_LENGTH); };
+	void setPathLengthLimit(float distance)
+	{
+		const auto requestedLimit = static_cast<unsigned int>(distance / SMOOTH_PATH_STEP_SIZE);
+		m_pointPathLimit = std::min<unsigned int>(requestedLimit, MAX_POINT_PATH_LENGTH);
+	};
 
 	// result getters
 	Vector3 getStartPosition()      const { return m_startPosition; }

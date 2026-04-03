@@ -14,12 +14,26 @@ namespace WoWSharpClient.Movement;
 /// </summary>
 public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, SceneGridResponse>, IDisposable
 {
+    private const int SceneDataConnectTimeoutMs = 1500;
+    private const int SceneDataReadTimeoutMs = 30000;
+    private const int SceneDataWriteTimeoutMs = 10000;
+    private static readonly TimeSpan SceneDataRetryDelay = TimeSpan.FromSeconds(2);
     private readonly ILogger _logger;
-    private readonly HashSet<string> _loadedGrids = new();
     private const float GridSize = 200f; // yards per grid tile
+    private readonly Dictionary<uint, string> _loadedRegionKeys = new();
+    internal static Func<uint, float, float, bool>? TestEnsureSceneDataAroundOverride { get; set; }
+    internal static Func<SceneGridRequest, SceneGridResponse>? TestSendRequestOverride { get; set; }
+    internal static Func<DateTime>? TestUtcNowOverride { get; set; }
+    private DateTime _nextRetryUtc = DateTime.MinValue;
 
     public SceneDataClient(string ipAddress, int port, ILogger logger)
-        : base(ipAddress, port, logger)
+        : base(ipAddress, port, logger, connectImmediately: false)
+    {
+        _logger = logger;
+    }
+
+    internal SceneDataClient(ILogger logger)
+        : base()
     {
         _logger = logger;
     }
@@ -36,55 +50,96 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
         float gridMaxX = gridMinX + GridSize;
         float gridMaxY = gridMinY + GridSize;
 
-        string gridKey = $"{mapId}_{gridMinX:F0}_{gridMinY:F0}";
-        if (_loadedGrids.Contains(gridKey))
+        string gridKey = $"{mapId}_{gridMinX:F0}_{gridMinY:F0}_{gridMaxX:F0}_{gridMaxY:F0}";
+        return EnsureSceneDataBounds(mapId, gridMinX, gridMinY, gridMaxX, gridMaxY, gridKey);
+    }
+
+    /// <summary>
+    /// Request scene data for the area around a position in one bounded swap.
+    /// The local Navigation scene cache is replaced with a 3x3 neighborhood so the
+    /// bot keeps only nearby collision data resident.
+    /// </summary>
+    public bool EnsureSceneDataAround(uint mapId, float x, float y)
+    {
+        if (TestEnsureSceneDataAroundOverride != null)
+            return TestEnsureSceneDataAroundOverride(mapId, x, y);
+
+        float gridMinX = MathF.Floor(x / GridSize) * GridSize;
+        float gridMinY = MathF.Floor(y / GridSize) * GridSize;
+        float minX = gridMinX - GridSize;
+        float minY = gridMinY - GridSize;
+        float maxX = gridMinX + (2 * GridSize);
+        float maxY = gridMinY + (2 * GridSize);
+        string regionKey = $"{mapId}_{minX:F0}_{minY:F0}_{maxX:F0}_{maxY:F0}";
+
+        return EnsureSceneDataBounds(mapId, minX, minY, maxX, maxY, regionKey);
+    }
+
+    private bool EnsureSceneDataBounds(uint mapId, float minX, float minY, float maxX, float maxY, string regionKey)
+    {
+        if (_loadedRegionKeys.TryGetValue(mapId, out var loadedRegionKey)
+            && string.Equals(loadedRegionKey, regionKey, StringComparison.Ordinal))
+        {
             return true;
+        }
+
+        var now = GetUtcNow();
+        if (now < _nextRetryUtc)
+        {
+            _logger.LogDebug("[SceneData] Skipping region {Key} until retry window opens at {RetryUtc:O}",
+                regionKey, _nextRetryUtc);
+            return false;
+        }
 
         try
         {
             var request = new SceneGridRequest
             {
                 MapId = mapId,
-                MinX = gridMinX,
-                MinY = gridMinY,
-                MaxX = gridMaxX,
-                MaxY = gridMaxY,
+                MinX = minX,
+                MinY = minY,
+                MaxX = maxX,
+                MaxY = maxY,
             };
 
-            var response = SendMessage(request);
+            var response = TestSendRequestOverride != null
+                ? TestSendRequestOverride(request)
+                : SendMessage(request, SceneDataReadTimeoutMs, SceneDataWriteTimeoutMs, SceneDataConnectTimeoutMs);
 
             if (!response.Success || response.TriangleCount == 0)
             {
-                _logger.LogWarning("[SceneData] No triangles for grid {Key}: {Error}",
-                    gridKey, response.ErrorMessage ?? "empty");
+                if (!response.Success)
+                    MarkRetryAfterFailure(now);
+
+                _logger.LogWarning("[SceneData] No triangles for region {Key}: {Error}",
+                    regionKey, response.ErrorMessage ?? "empty");
                 return false;
             }
 
             // Inject triangles into local Navigation.dll SceneCache
-            InjectTrianglesIntoLocalCache(mapId, gridMinX, gridMinY, gridMaxX, gridMaxY, response);
-            _loadedGrids.Add(gridKey);
+            InjectTrianglesIntoLocalCache(mapId, minX, minY, maxX, maxY, response);
+            _loadedRegionKeys[mapId] = regionKey;
+            _nextRetryUtc = DateTime.MinValue;
 
-            _logger.LogInformation("[SceneData] Loaded grid {Key}: {Count} triangles",
-                gridKey, response.TriangleCount);
+            _logger.LogInformation("[SceneData] Loaded region {Key}: {Count} triangles",
+                regionKey, response.TriangleCount);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SceneData] Failed to request grid {Key}", gridKey);
+            MarkRetryAfterFailure(now);
+            _logger.LogError(ex, "[SceneData] Failed to request region {Key}", regionKey);
             return false;
         }
     }
 
-    /// <summary>
-    /// Request scene data for the area around a position (current grid + neighbors).
-    /// </summary>
-    public void EnsureSceneDataAround(uint mapId, float x, float y)
+    private void MarkRetryAfterFailure(DateTime now)
     {
-        // Load current grid + 8 neighbors (3x3 grid)
-        for (float dx = -GridSize; dx <= GridSize; dx += GridSize)
-            for (float dy = -GridSize; dy <= GridSize; dy += GridSize)
-                EnsureSceneDataAt(mapId, x + dx, y + dy);
+        _nextRetryUtc = now + SceneDataRetryDelay;
     }
+
+    private static DateTime GetUtcNow()
+        => TestUtcNowOverride?.Invoke() ?? DateTime.UtcNow;
 
     private void InjectTrianglesIntoLocalCache(uint mapId, float minX, float minY, float maxX, float maxY,
         SceneGridResponse response)

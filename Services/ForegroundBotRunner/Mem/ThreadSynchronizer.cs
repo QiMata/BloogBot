@@ -6,6 +6,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using ForegroundBotRunner.Diagnostics;
 using ForegroundBotRunner.Mem.Hooks;
 using Serilog;
 
@@ -198,16 +199,19 @@ namespace ForegroundBotRunner.Mem
             // Cache the log directory FIRST — before any DiagLogStatic calls.
             // This avoids Process.GetCurrentProcess().MainModule calls later (which
             // throw Win32Exception on WoW's main thread and flood first-chance handler).
-            try
+            if (RecordingFileArtifactGate.IsEnabled())
             {
-                string wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
-                _cachedLogDir = Path.Combine(wowDir, "WWoWLogs");
-                Directory.CreateDirectory(_cachedLogDir);
-            }
-            catch
-            {
-                _cachedLogDir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
-                try { Directory.CreateDirectory(_cachedLogDir); } catch { }
+                try
+                {
+                    string wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+                    _cachedLogDir = Path.Combine(wowDir, "WWoWLogs");
+                    Directory.CreateDirectory(_cachedLogDir);
+                }
+                catch
+                {
+                    _cachedLogDir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+                    try { Directory.CreateDirectory(_cachedLogDir); } catch { }
+                }
             }
 
             EnumWindows(FindWindowProc, nint.Zero);
@@ -320,6 +324,11 @@ namespace ForegroundBotRunner.Mem
         // Process.GetCurrentProcess() calls on WoW's main thread.
         private static void DiagLogStatic(string message)
         {
+            if (!RecordingFileArtifactGate.IsEnabled())
+            {
+                return;
+            }
+
             try
             {
                 var dir = _cachedLogDir;
@@ -341,6 +350,11 @@ namespace ForegroundBotRunner.Mem
         /// </summary>
         private static void CrashTrace(string message)
         {
+            if (!RecordingFileArtifactGate.IsEnabled())
+            {
+                return;
+            }
+
             try
             {
                 var dir = _cachedLogDir ?? Path.Combine(AppContext.BaseDirectory, "WWoWLogs");

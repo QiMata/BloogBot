@@ -11,8 +11,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Threading;
+using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
 using WoWSharpClient.Client;
@@ -55,7 +55,9 @@ namespace WoWSharpClient
         private WoWClient _woWClient;
 
         private PathfindingClient _pathfindingClient;
-        private IPhysicsClient _physicsClient;
+        private IPhysicsClient? _physicsClient;
+        private SceneDataClient? _sceneDataClient;
+        private bool _useLocalPhysics;
 
         // Movement controller - handles all movement logic
         private MovementController _movementController;
@@ -93,7 +95,9 @@ namespace WoWSharpClient
             WoWClient wowClient,
             PathfindingClient pathfindingClient,
             ILogger<WoWSharpObjectManager> logger,
-            IPhysicsClient? physicsClient = null
+            IPhysicsClient? physicsClient = null,
+            SceneDataClient? sceneDataClient = null,
+            bool useLocalPhysics = false
         )
         {
             WoWSharpEventEmitter.Instance.Reset();
@@ -103,7 +107,13 @@ namespace WoWSharpClient
 
             _logger = logger;
             _pathfindingClient = pathfindingClient;
-            _physicsClient = physicsClient ?? pathfindingClient;
+            _useLocalPhysics = useLocalPhysics;
+            _physicsClient = useLocalPhysics
+                ? physicsClient
+                : sceneDataClient != null
+                    ? physicsClient
+                    : physicsClient ?? pathfindingClient;
+            _sceneDataClient = sceneDataClient;
             _woWClient = wowClient;
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
@@ -115,6 +125,8 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnWorldSessionEnd += EventEmitter_OnWorldSessionEnd;
             WoWSharpEventEmitter.Instance.OnCharacterListLoaded +=
                 EventEmitter_OnCharacterListLoaded;
+            WoWSharpEventEmitter.Instance.OnCharacterCreateResponse +=
+                EventEmitter_OnCharacterCreateResponse;
             WoWSharpEventEmitter.Instance.OnChatMessage += EventEmitter_OnChatMessage;
             WoWSharpEventEmitter.Instance.OnForceMoveRoot += EventEmitter_OnForceMoveRoot;
             WoWSharpEventEmitter.Instance.OnForceMoveUnroot += EventEmitter_OnForceMoveUnroot;
@@ -156,14 +168,34 @@ namespace WoWSharpClient
         private void InitializeMovementController()
         {
             // Initialize movement controller when we have a player
-            if (Player != null && _woWClient != null && _physicsClient != null)
+            if (Player != null
+                && _woWClient != null
+                && (_useLocalPhysics || _physicsClient != null || _sceneDataClient != null))
             {
                 _movementController = new MovementController(
                     _woWClient,
                     _physicsClient,
-                    (WoWLocalPlayer)Player
+                    (WoWLocalPlayer)Player,
+                    _sceneDataClient
                 );
+                _movementController.OnStuckRecoveryRequired += HandleMovementControllerStuckRecovery;
             }
+        }
+
+        private int _movementStuckRecoveryGeneration;
+
+        public int MovementStuckRecoveryGeneration => Volatile.Read(ref _movementStuckRecoveryGeneration);
+
+        private void HandleMovementControllerStuckRecovery(int level, Position position)
+        {
+            var generation = Interlocked.Increment(ref _movementStuckRecoveryGeneration);
+            Log.Warning(
+                "[NAV-DIAG] MovementController stuck recovery signaled level={Level} generation={Generation} pos=({X:F1},{Y:F1},{Z:F1})",
+                level,
+                generation,
+                position.X,
+                position.Y,
+                position.Z);
         }
 
 
@@ -350,6 +382,11 @@ namespace WoWSharpClient
 
 
         public bool HasEnteredWorld { get; internal set; }
+        internal static TimeSpan WorldEntryRetryDelay { get; set; } = TimeSpan.FromSeconds(10);
+        internal bool HasPendingWorldEntry => Interlocked.Read(ref _pendingWorldEntryGuid) != 0;
+        internal ulong PendingWorldEntryGuid => unchecked((ulong)Interlocked.Read(ref _pendingWorldEntryGuid));
+        private long _pendingWorldEntryGuid;
+        private long _pendingWorldEntryAttemptId;
 
         internal readonly object SpellLock = new();
 
@@ -503,8 +540,16 @@ namespace WoWSharpClient
             // we wait for SMSG_LOGIN_VERIFY_WORLD / object hydration.
             PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
-
-            _ = _woWClient.EnterWorldAsync(characterGuid);
+            if (_woWClient.WorldClient != null)
+            {
+                Interlocked.Exchange(ref _pendingWorldEntryGuid, unchecked((long)characterGuid));
+                _ = _woWClient.EnterWorldAsync(characterGuid);
+                SchedulePendingWorldEntryRetry(characterGuid);
+            }
+            else
+            {
+                ClearPendingWorldEntry();
+            }
 
             InitializeMovementController();
         }
@@ -513,6 +558,7 @@ namespace WoWSharpClient
         {
             StopGameLoop();
             HasEnteredWorld = false;
+            ClearPendingWorldEntry();
             _isInControl = false;
             _isBeingTeleported = false;
             _movementController = null;
@@ -533,6 +579,38 @@ namespace WoWSharpClient
 
             Log.Information("[WorldSession] Reset state from {Source}; preservePlayerGuid={Preserve}; guid=0x{Guid:X}",
                 source, preservePlayerGuid, _playerGuid.FullGuid);
+        }
+
+        private void SchedulePendingWorldEntryRetry(ulong characterGuid)
+        {
+            var attemptId = Interlocked.Increment(ref _pendingWorldEntryAttemptId);
+            Task.Delay(WorldEntryRetryDelay).ContinueWith(_ =>
+            {
+                if (Interlocked.Read(ref _pendingWorldEntryAttemptId) != attemptId)
+                    return;
+
+                var pendingGuid = unchecked((ulong)Interlocked.Read(ref _pendingWorldEntryGuid));
+                if (pendingGuid == 0 || pendingGuid != characterGuid)
+                    return;
+
+                if (_woWClient.WorldClient == null)
+                {
+                    ClearPendingWorldEntry();
+                    return;
+                }
+
+                Log.Warning("[WorldSession] Enter world timed out for guid 0x{Guid:X}. Retrying CMSG_PLAYER_LOGIN.",
+                    characterGuid);
+
+                _ = _woWClient.EnterWorldAsync(characterGuid);
+                SchedulePendingWorldEntryRetry(characterGuid);
+            });
+        }
+
+        private void ClearPendingWorldEntry()
+        {
+            Interlocked.Exchange(ref _pendingWorldEntryGuid, 0);
+            Interlocked.Increment(ref _pendingWorldEntryAttemptId);
         }
 
 
@@ -825,6 +903,20 @@ namespace WoWSharpClient
 
 
         public void JoinBattleGroundQueue() { }
+
+        public void AcceptBattlegroundInvite()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.BattlegroundAgent != null)
+                _ = factory.BattlegroundAgent.AcceptInviteAsync();
+        }
+
+        public void LeaveBattleground()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.BattlegroundAgent != null)
+                _ = factory.BattlegroundAgent.LeaveAsync();
+        }
 
 
         public void ResetInstances() { }

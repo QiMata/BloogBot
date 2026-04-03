@@ -4,22 +4,29 @@ using GameData.Core.Enums;
 using System;
 using System.IO;
 using System.Linq; // Access MovementFlags for sanitization
+using System.Collections.Generic;
 
 namespace PathfindingService.Repository
 {
     public class Physics
     {
-        private const string DLL_NAME = "Navigation.dll";
+        private const string DLL_NAME = "Navigation";
+        private static readonly string[] NativeLibraryFileNames = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ["Navigation.dll", "Navigation"]
+            : ["libNavigation.so", "Navigation"];
         private static bool _dllLoaded = false;
         private static bool _mapsPreloaded = false;
         private static readonly object _loadLock = new object();
+        private static List<uint> _preloadedMapIds = [];
+
+        public static IReadOnlyList<uint> PreloadedMapIds => _preloadedMapIds;
 
         // ===============================
         // NATIVE LIBRARY HELPER
         // ===============================
         
         /// <summary>
-        /// Ensures the Navigation.dll is loaded before any P/Invoke calls.
+        /// Ensures the native Navigation library is loaded before any P/Invoke calls.
         /// Call this at the start of the application to get better error messages.
         /// </summary>
         public static void EnsureNativeLibraryLoaded()
@@ -31,14 +38,17 @@ namespace PathfindingService.Repository
                 var baseDir = AppContext.BaseDirectory;
                 var cwdDir = Directory.GetCurrentDirectory();
                 
-                var searchPaths = new[]
-                {
-                    Path.Combine(baseDir, DLL_NAME),
-                    Path.Combine(cwdDir, DLL_NAME),
-                    DLL_NAME  // System path
-                };
+                var searchPaths = NativeLibraryFileNames
+                    .SelectMany(fileName => new[]
+                    {
+                        Path.Combine(baseDir, fileName),
+                        Path.Combine(cwdDir, fileName),
+                        fileName // System path
+                    })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
 
-                Console.WriteLine($"[Physics] Looking for {DLL_NAME}...");
+                Console.WriteLine($"[Physics] Looking for {DLL_NAME} native library...");
                 Console.WriteLine($"[Physics]   AppContext.BaseDirectory: {baseDir}");
                 Console.WriteLine($"[Physics]   Current Directory: {cwdDir}");
 
@@ -91,7 +101,7 @@ namespace PathfindingService.Repository
                 throw new DllNotFoundException(
                     $"Unable to find or load '{DLL_NAME}'. " +
                     $"Searched in: {string.Join(", ", searchPaths.Select(p => Path.IsPathRooted(p) ? p : Path.GetFullPath(p)))}. " +
-                    $"Make sure the Navigation C++ project is built and the DLL is in the application directory or in PATH.");
+                    "Make sure the Navigation native library is built and in the application directory or loader path.");
             }
         }
 
@@ -99,20 +109,27 @@ namespace PathfindingService.Repository
         {
             if (_mapsPreloaded) return;
             Console.WriteLine($"[Physics]   Preloading navigation maps...");
+
+            var dataRoot = ResolveDataRoot();
+            if (!string.IsNullOrWhiteSpace(dataRoot))
+            {
+                Console.WriteLine($"[Physics]   Using data root: {dataRoot}");
+                SetDataDirectory(dataRoot);
+            }
+
+            var mapIds = DiscoverMapIds(dataRoot);
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            Console.WriteLine($"[Physics]   Loading map 0 (Eastern Kingdoms)...");
-            PreloadMap(0);
-            Console.WriteLine($"[Physics]   Map 0 loaded in {sw.Elapsed.TotalSeconds:F1}s");
-            sw.Restart();
-            Console.WriteLine($"[Physics]   Loading map 1 (Kalimdor)...");
-            PreloadMap(1);
-            Console.WriteLine($"[Physics]   Map 1 loaded in {sw.Elapsed.TotalSeconds:F1}s");
-            sw.Restart();
-            Console.WriteLine($"[Physics]   Loading map 389 (Ragefire Chasm)...");
-            PreloadMap(389);
-            Console.WriteLine($"[Physics]   Map 389 loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            foreach (var mapId in mapIds)
+            {
+                sw.Restart();
+                Console.WriteLine($"[Physics]   Loading map {mapId}...");
+                PreloadMap(mapId);
+                Console.WriteLine($"[Physics]   Map {mapId} loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            }
+
+            _preloadedMapIds = mapIds;
             _mapsPreloaded = true;
-            Console.WriteLine($"[Physics]   All maps preloaded successfully!");
+            Console.WriteLine($"[Physics]   All maps preloaded successfully! Count={_preloadedMapIds.Count}");
         }
 
         // ===============================
@@ -121,6 +138,9 @@ namespace PathfindingService.Repository
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PreloadMap(uint mapId);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern void SetDataDirectory(string dataDir);
 
         // Removed legacy PhysicsStep import
         //[DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
@@ -193,6 +213,76 @@ namespace PathfindingService.Repository
 
             output.moveFlags = (uint)outFlags;
             return output;
+        }
+
+        private static string? ResolveDataRoot()
+        {
+            var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+            if (!string.IsNullOrWhiteSpace(dataDir) && Directory.Exists(dataDir))
+                return Path.GetFullPath(dataDir);
+
+            var baseDir = AppContext.BaseDirectory;
+            var candidates = new[]
+            {
+                Path.Combine(baseDir, "Data"),
+                Path.Combine(baseDir, "..", "Data"),
+                Path.Combine(baseDir, "..", "..", "Data"),
+                Path.Combine(baseDir, "..", "..", "..", "Data"),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                var resolved = Path.GetFullPath(candidate);
+                if (Directory.Exists(resolved))
+                    return resolved;
+            }
+
+            return null;
+        }
+
+        private static List<uint> DiscoverMapIds(string? dataRoot)
+        {
+            var ids = new HashSet<uint>();
+
+            if (!string.IsNullOrWhiteSpace(dataRoot))
+            {
+                AddIdsFromDirectory(Path.Combine(dataRoot, "scenes"), "*.scene", ParseWholeStem, ids);
+                AddIdsFromDirectory(Path.Combine(dataRoot, "mmaps"), "*.mmap", ParseWholeStem, ids);
+                AddIdsFromDirectory(Path.Combine(dataRoot, "maps"), "*.map", ParseFirstThreeDigits, ids);
+            }
+
+            if (ids.Count == 0)
+            {
+                ids.Add(0);
+                ids.Add(1);
+                ids.Add(389);
+            }
+
+            return ids.OrderBy(id => id).ToList();
+        }
+
+        private static void AddIdsFromDirectory(string directory, string pattern, Func<string, uint?> parser, HashSet<uint> ids)
+        {
+            if (!Directory.Exists(directory))
+                return;
+
+            foreach (var file in Directory.GetFiles(directory, pattern))
+            {
+                var id = parser(Path.GetFileNameWithoutExtension(file));
+                if (id.HasValue)
+                    ids.Add(id.Value);
+            }
+        }
+
+        private static uint? ParseWholeStem(string stem)
+            => uint.TryParse(stem, out var mapId) ? mapId : null;
+
+        private static uint? ParseFirstThreeDigits(string stem)
+        {
+            if (stem.Length < 3)
+                return null;
+
+            return uint.TryParse(stem[..3], out var mapId) ? mapId : null;
         }
     }
 

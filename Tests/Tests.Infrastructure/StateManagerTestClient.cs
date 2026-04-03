@@ -22,16 +22,24 @@ public class StateManagerTestClient : IDisposable
 {
     private readonly string _host;
     private readonly int _port;
+    private readonly TimeSpan _defaultRequestTimeout;
+    private readonly TimeSpan _fullSnapshotRequestTimeout;
     private TcpClient? _tcp;
     private NetworkStream? _stream;
     private ulong _nextId = 1;
     private readonly object _lock = new();
     private readonly SemaphoreSlim _requestGate = new(1, 1);
 
-    public StateManagerTestClient(string host = "127.0.0.1", int port = 8088)
+    public StateManagerTestClient(
+        string host = "127.0.0.1",
+        int port = 8088,
+        TimeSpan? defaultRequestTimeout = null,
+        TimeSpan? fullSnapshotRequestTimeout = null)
     {
         _host = host;
         _port = port;
+        _defaultRequestTimeout = defaultRequestTimeout ?? TimeSpan.FromSeconds(30);
+        _fullSnapshotRequestTimeout = fullSnapshotRequestTimeout ?? TimeSpan.FromMinutes(2);
     }
 
     /// <summary>
@@ -66,7 +74,11 @@ public class StateManagerTestClient : IDisposable
             }
         };
 
-        var response = await SendRequestAsync(request, ct);
+        var requestTimeout = string.IsNullOrEmpty(accountName)
+            ? _fullSnapshotRequestTimeout
+            : _defaultRequestTimeout;
+
+        var response = await SendRequestAsync(request, ct, requestTimeout);
         return response.Snapshots.ToList();
     }
 
@@ -86,7 +98,23 @@ public class StateManagerTestClient : IDisposable
             }
         };
 
-        var response = await SendRequestAsync(request, ct);
+        var response = await SendRequestAsync(request, ct, _defaultRequestTimeout);
+        return response.Response;
+    }
+
+    public async Task<ResponseResult> SetCoordinatorEnabledAsync(bool enabled, CancellationToken ct = default)
+    {
+        var request = new AsyncRequest
+        {
+            Id = Interlocked.Increment(ref _nextId),
+            StateChange = new StateChangeRequest
+            {
+                ChangeType = StateChangeType.CoordinatorEnabled,
+                RequestParameter = new RequestParameter { IntParam = enabled ? 1 : 0 }
+            }
+        };
+
+        var response = await SendRequestAsync(request, ct, _defaultRequestTimeout);
         return response.Response;
     }
 
@@ -132,7 +160,7 @@ public class StateManagerTestClient : IDisposable
         return [];
     }
 
-    private async Task<StateChangeResponse> SendRequestAsync(AsyncRequest request, CancellationToken ct)
+    private async Task<StateChangeResponse> SendRequestAsync(AsyncRequest request, CancellationToken ct, TimeSpan requestTimeout)
     {
         if (_stream == null)
             throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
@@ -140,7 +168,7 @@ public class StateManagerTestClient : IDisposable
         // Per-request timeout: prevent indefinite hangs when StateManager is overloaded
         // (e.g. 10 BG bots hammering port 5002 while we query port 8088).
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
+        timeoutCts.CancelAfter(requestTimeout);
         var linked = timeoutCts.Token;
 
         await _requestGate.WaitAsync(linked);
@@ -153,7 +181,7 @@ public class StateManagerTestClient : IDisposable
             // Per-request timeout hit — reconnect and retry once
             await ReconnectAsync(ct);
             using var retryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            retryCts.CancelAfter(TimeSpan.FromSeconds(30));
+            retryCts.CancelAfter(requestTimeout);
             return await SendRequestCoreAsync(request, retryCts.Token);
         }
         catch (IOException) when (!ct.IsCancellationRequested)

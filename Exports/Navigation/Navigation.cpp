@@ -7,13 +7,20 @@
 #include <filesystem>
 #include <new>
 #include <stdio.h>
+#include <cstdlib>
+#include <cstring>
+
+#if defined(_WIN32)
 #define NOMINMAX
 #include <windows.h>
+#endif
 
 #include "DetourCommon.h"
 using namespace std;
 
+#if defined(_WIN32)
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#endif
 
 Navigation* Navigation::s_singletonInstance = NULL;
 
@@ -351,29 +358,34 @@ std::vector<NavPoly> Navigation::CapsuleOverlapSweep(uint32_t mapId,
 
 string Navigation::GetMmapsPath()
 {
-	// Check for WWOW_DATA_DIR using Win32 process environment (not CRT cache).
+	const auto sep = std::filesystem::path::preferred_separator;
+	const auto normalizeWithSeparator = [sep](std::string value)
 	{
-		char envDataRoot[1024] = { 0 };
-		DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", envDataRoot, sizeof(envDataRoot));
-		if (len > 0 && len < sizeof(envDataRoot))
-		{
-			std::string dataRoot = envDataRoot;
-			if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-				dataRoot += '\\';
-			std::string mmapsPath = dataRoot + "mmaps\\";
-			if (std::filesystem::exists(mmapsPath))
-				return mmapsPath;
-		}
+		if (!value.empty() && value.back() != '/' && value.back() != '\\')
+			value.push_back(sep);
+		return value;
+	};
+
+	// Check WWOW_DATA_DIR first.
+	if (const char* envDataRoot = std::getenv("WWOW_DATA_DIR"))
+	{
+		std::string dataRoot = normalizeWithSeparator(envDataRoot);
+		std::string mmapsPath = dataRoot + "mmaps";
+		mmapsPath = normalizeWithSeparator(mmapsPath);
+		if (std::filesystem::exists(mmapsPath))
+			return mmapsPath;
 	}
 
 	// Prefer current working directory if mmaps is present there.
 	{
-		std::string cwdMmaps = (std::filesystem::current_path() / "mmaps").string() + "\\";
+		std::string cwdMmaps = (std::filesystem::current_path() / "mmaps").string();
+		cwdMmaps = normalizeWithSeparator(cwdMmaps);
 		if (std::filesystem::exists(cwdMmaps))
 			return cwdMmaps;
 	}
 
-	// Fall back to DLL-relative path.
+#if defined(_WIN32)
+	// Fall back to DLL-relative path on Windows.
 	WCHAR dllPath[MAX_PATH] = { 0 };
 	GetModuleFileNameW((HINSTANCE)&__ImageBase, dllPath, _countof(dllPath));
 	std::wstring ws(dllPath);
@@ -388,6 +400,8 @@ string Navigation::GetMmapsPath()
 
 	string pathToMmap = pathAndFile.substr(0, lastOccur + 1);
 	pathToMmap.append("mmaps\\");
-
 	return pathToMmap;
+#else
+	return std::string("mmaps") + sep;
+#endif
 }

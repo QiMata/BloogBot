@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner
 {
@@ -32,15 +33,15 @@ namespace ForegroundBotRunner
         private static readonly object DiagLogLock = new();
         static MovementScenarioRunner()
         {
-            string wowDir;
-            try { wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory; }
-            catch { wowDir = AppContext.BaseDirectory; }
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "scenario_runner.log");
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("scenario_runner.log");
         }
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try { lock (DiagLogLock) { File.AppendAllText(DiagnosticLogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n"); } } catch { }
         }
 
@@ -178,7 +179,10 @@ namespace ForegroundBotRunner
 
         public async Task RunAllScenariosAsync(CancellationToken ct)
         {
-            try { File.WriteAllText(DiagnosticLogPath, $"=== Scenario Runner Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                try { File.WriteAllText(DiagnosticLogPath, $"=== Scenario Runner Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
+            }
             DiagLog("Starting all scenarios");
             _logger.LogInformation("=== AUTOMATED MOVEMENT RECORDING: Starting all scenarios ===");
 

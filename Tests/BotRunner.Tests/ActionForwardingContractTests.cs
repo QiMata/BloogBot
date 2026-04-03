@@ -94,6 +94,25 @@ public class ActionForwardingContractTests
     }
 
     [Fact]
+    public void StateChangeRequest_CoordinatorEnabled_RoundTrips()
+    {
+        var request = new AsyncRequest
+        {
+            StateChange = new StateChangeRequest
+            {
+                ChangeType = StateChangeType.CoordinatorEnabled,
+                RequestParameter = new RequestParameter { IntParam = 1 }
+            }
+        };
+
+        var bytes = request.ToByteArray();
+        var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
+
+        Assert.Equal(StateChangeType.CoordinatorEnabled, deserialized.StateChange.ChangeType);
+        Assert.Equal(1, deserialized.StateChange.RequestParameter.IntParam);
+    }
+
+    [Fact]
     public void ActionForwardRequest_EmptyAccountName_SerializesCorrectly()
     {
         var request = new AsyncRequest
@@ -180,6 +199,16 @@ public class ActionForwardingContractTests
         var result = (bool)method!.Invoke(null, args)!;
         reason = (string)args[1]!;
         return result;
+    }
+
+    private static WoWActivitySnapshot InvokeHandleRequest(CharacterStateSocketListener listener, WoWActivitySnapshot request)
+    {
+        var method = typeof(CharacterStateSocketListener).GetMethod(
+            "HandleRequest",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        return Assert.IsType<WoWActivitySnapshot>(method!.Invoke(listener, [request]));
     }
 
     [Fact]
@@ -304,12 +333,54 @@ public class ActionForwardingContractTests
     // ===== EnqueueAction contract tests (queue logic) =====
 
     private static CharacterStateSocketListener CreateListener(params string[] accountNames)
+        => CreateListener(null, accountNames);
+
+    private static CharacterStateSocketListener CreateListener(ILogger<CharacterStateSocketListener>? logger, params string[] accountNames)
     {
         var settings = accountNames.Select(a => new CharacterSettings { AccountName = a }).ToList();
         var plannerLogger = NullLoggerFactory.Instance.CreateLogger<WoWStateManager.Progression.ProgressionPlanner>();
         var planner = new WoWStateManager.Progression.ProgressionPlanner(plannerLogger);
-        var logger = NullLoggerFactory.Instance.CreateLogger<CharacterStateSocketListener>();
-        return new CharacterStateSocketListener(settings, "127.0.0.1", 0, null, planner, logger);
+        return new CharacterStateSocketListener(
+            settings,
+            "127.0.0.1",
+            0,
+            null,
+            planner,
+            logger ?? NullLoggerFactory.Instance.CreateLogger<CharacterStateSocketListener>());
+    }
+
+    [Fact]
+    public void HandleRequest_DoesNotWarnForRepeatedBattlegroundMapSnapshots()
+    {
+        var logger = new CapturingLogger<CharacterStateSocketListener>();
+        var listener = CreateListener(logger, "WSGBOT1");
+        var request = new WoWActivitySnapshot
+        {
+            AccountName = "WSGBOT1",
+            CharacterName = "Leader",
+            ScreenState = "InWorld",
+            CurrentMapId = 489,
+            Player = new WoWPlayer
+            {
+                Unit = new WoWUnit
+                {
+                    Health = 100,
+                    MaxHealth = 100,
+                    GameObject = new WoWGameObject
+                    {
+                        Base = new WoWObject { MapId = 489 }
+                    }
+                }
+            }
+        };
+
+        _ = InvokeHandleRequest(listener, request);
+        _ = InvokeHandleRequest(listener, request);
+
+        Assert.DoesNotContain(
+            logger.Entries,
+            entry => entry.Level >= LogLevel.Warning
+                && entry.Message.Contains("MapId=489", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -383,6 +454,18 @@ public class ActionForwardingContractTests
         Assert.Null(ex);
     }
 
+    [Fact]
+    public void SetCoordinatorEnabled_TogglesRuntimeCoordinatorState()
+    {
+        var listener = CreateListener("TESTBOT1");
+
+        var disableResult = listener.SetCoordinatorEnabled(false);
+        var enableResult = listener.SetCoordinatorEnabled(true);
+
+        Assert.True(disableResult);
+        Assert.True(enableResult);
+    }
+
     // ===== ActionType coverage =====
 
     [Theory]
@@ -404,5 +487,33 @@ public class ActionForwardingContractTests
         var deserialized = ActionMessage.Parser.ParseFrom(bytes);
 
         Assert.Equal(actionType, deserialized.ActionType);
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 }

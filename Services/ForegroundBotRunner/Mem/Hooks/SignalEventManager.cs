@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Mem.Hooks
 {
@@ -29,19 +30,11 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         static SignalEventManager()
         {
-            string wowDir;
-            try
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("signal_event_manager.log");
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
             {
-                wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+                try { File.WriteAllText(DiagnosticLogPath, $"=== SignalEventManager Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
             }
-            catch
-            {
-                wowDir = AppContext.BaseDirectory;
-            }
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "signal_event_manager.log");
-            try { File.WriteAllText(DiagnosticLogPath, $"=== SignalEventManager Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
 
             // DEFERRED: Hooks inject assembly into WoW's event functions, which interferes
             // with the world server handshake if done before world entry.
@@ -82,6 +75,11 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (DiagnosticLogLock)

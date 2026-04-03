@@ -19,6 +19,10 @@ namespace BotRunner.Clients
         private readonly int _queryTimeoutMs;
         private readonly int _physicsTimeoutMs;
         private int _consecutiveFailures;
+        private DateTime _physicsBackoffUntilUtc = DateTime.MinValue;
+
+        internal const int PhysicsFailureBackoffBaseMs = 250;
+        internal const int PhysicsFailureBackoffMaxMs = 2_000;
 
         public PathfindingClient()
             : this(
@@ -220,11 +224,15 @@ namespace BotRunner.Clients
         /// </summary>
         public virtual PhysicsOutput PhysicsStep(PhysicsInput physicsInput)
         {
+            if (UtcNow < _physicsBackoffUntilUtc)
+                return HoldPosition(physicsInput);
+
             try
             {
                 var request = new PathfindingRequest { Step = physicsInput };
                 var response = SendRequest(request, _physicsTimeoutMs);
                 _consecutiveFailures = 0;
+                _physicsBackoffUntilUtc = DateTime.MinValue;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
                 // Guard against empty/unexpected response (oneof not set → Step is null)
@@ -240,6 +248,7 @@ namespace BotRunner.Clients
             catch (Exception ex)
             {
                 _consecutiveFailures++;
+                _physicsBackoffUntilUtc = UtcNow.AddMilliseconds(ComputePhysicsFailureBackoffMs(_consecutiveFailures));
                 if (_consecutiveFailures <= 3)
                     _logger?.LogWarning("PathfindingService physics call failed ({Count}): {Msg}", _consecutiveFailures, ex.Message);
                 else if (_consecutiveFailures == 4)
@@ -386,6 +395,17 @@ namespace BotRunner.Clients
 
         protected virtual PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)
             => SendMessage(request, timeoutMs, timeoutMs);
+
+        protected virtual DateTime UtcNow => DateTime.UtcNow;
+
+        private static int ComputePhysicsFailureBackoffMs(int consecutiveFailures)
+        {
+            if (consecutiveFailures <= 0)
+                return 0;
+
+            var exponent = Math.Min(consecutiveFailures - 1, 3);
+            return Math.Min(PhysicsFailureBackoffBaseMs * (1 << exponent), PhysicsFailureBackoffMaxMs);
+        }
 
         private static Game.Position ToProto(Position p) => new() { X = p.X, Y = p.Y, Z = p.Z };
     }

@@ -35,6 +35,7 @@ namespace BotRunner.Tests.LiveValidation;
 public partial class LiveBotFixture : IAsyncLifetime
 {
     private const string CombatTestAccount = "COMBATTEST";
+    private const string RecordingArtifactsEnvVar = "WWOW_ENABLE_RECORDING_ARTIFACTS";
 
     public IntegrationTestConfig Config { get; } = IntegrationTestConfig.FromEnvironment();
 
@@ -61,6 +62,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private bool _fgResponsive = true;
     private string? _presetSettingsPath;
+    private string? _previousRecordingArtifactsFlag;
 
     /// <summary>
     /// When true, <see cref="EnsureCleanCharacterStateAsync"/> skips group disbanding.
@@ -136,7 +138,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Initialize per-service logging for a specific test name.</summary>
     public void SetTestName(string testName) => _serviceFixture.SetTestName(testName);
 
-    /// <summary>Whether any managed child process (StateManager, WoW.exe, PathfindingService) has crashed.</summary>
+    /// <summary>Whether any StateManager-managed process (StateManager or WoW.exe) has crashed.</summary>
     public bool ClientCrashed => _serviceFixture.ClientCrashed;
 
     /// <summary>Get all captured StateManager output lines for test assertions.</summary>
@@ -396,6 +398,9 @@ public partial class LiveBotFixture : IAsyncLifetime
     {
         try
         {
+            _previousRecordingArtifactsFlag = Environment.GetEnvironmentVariable(RecordingArtifactsEnvVar);
+            Environment.SetEnvironmentVariable(RecordingArtifactsEnvVar, "1");
+
             // Live corpse-flow tests must own the release step via explicit client action.
             // Disable BotRunner auto-release so death setup remains deterministic.
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK", "1");
@@ -1113,6 +1118,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     {
         _stateManagerClient?.Dispose();
         await _serviceFixture.DisposeAsync();
+        Environment.SetEnvironmentVariable(RecordingArtifactsEnvVar, _previousRecordingArtifactsFlag);
         _loggerFactory.Dispose();
     }
 
@@ -1122,13 +1128,37 @@ public partial class LiveBotFixture : IAsyncLifetime
 
 
     /// <summary>Forward an action to a specific bot.</summary>
-    public async Task<ResponseResult> SendActionAsync(string accountName, ActionMessage action)
+    public Task<ResponseResult> SendActionAsync(string accountName, ActionMessage action)
+        => SendActionAsync(accountName, action, emitOutput: true);
+
+    protected Task<ResponseResult> SendSilentActionAsync(string accountName, ActionMessage action)
+        => SendActionAsync(accountName, action, emitOutput: false);
+
+    protected async Task<ResponseResult> SendActionAsync(string accountName, ActionMessage action, bool emitOutput)
     {
-        if (_stateManagerClient == null) return ResponseResult.Failure;
+        if (_stateManagerClient == null)
+            return ResponseResult.Failure;
+
         var result = await _stateManagerClient.ForwardActionAsync(accountName, action);
-        var actionLog = $"[ACTION-FWD] [{accountName}] {action.ActionType} => {result}";
-        _logger.LogInformation("{Message}", actionLog);
-        _testOutput?.WriteLine(actionLog);
+        if (emitOutput)
+        {
+            var actionLog = $"[ACTION-FWD] [{accountName}] {action.ActionType} => {result}";
+            _logger.LogInformation("{Message}", actionLog);
+            _testOutput?.WriteLine(actionLog);
+        }
+
+        return result;
+    }
+
+    protected async Task<ResponseResult> SetCoordinatorEnabledAsync(bool enabled)
+    {
+        if (_stateManagerClient == null)
+            return ResponseResult.Failure;
+
+        var result = await _stateManagerClient.SetCoordinatorEnabledAsync(enabled);
+        var state = enabled ? "enabled" : "disabled";
+        _logger.LogInformation("[COORD] runtime coordinator => {State} ({Result})", state, result);
+        _testOutput?.WriteLine($"[COORD] runtime coordinator => {state} ({result})");
         return result;
     }
 
@@ -1186,6 +1216,19 @@ public partial class LiveBotFixture : IAsyncLifetime
         bool ObservedCorpseState = false,
         Game.Position? ObservedCorpsePosition = null,
         bool UsedCorpsePositionFallback = false);
+
+
+    public sealed record PoolGameObjectSpawnState(
+        uint PoolEntry,
+        string? PoolDescription,
+        uint Guid,
+        uint Entry,
+        int Map,
+        float X,
+        float Y,
+        float Z,
+        bool HasRespawnTimer,
+        DateTime? RespawnAtUtc);
 
 
     /// <summary>
@@ -1329,6 +1372,132 @@ public partial class LiveBotFixture : IAsyncLifetime
         catch (Exception ex)
         {
             _logger.LogWarning("[MySQL] Failed to query nearby gameobject spawns: {Error}", ex.Message);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Query all gameobject spawn rows for the child pools under a master pool entry.
+    /// Read-only DB access only; used to explain live pooled-spawn behavior when a local slice has no visible node.
+    /// </summary>
+    public async Task<List<(uint poolEntry, string? poolDescription, uint entry, int map, float x, float y, float z)>> QueryMasterPoolChildSpawnsAsync(
+        uint masterPoolEntry)
+    {
+        var results = new List<(uint, string?, uint, int, float, float, float)>();
+
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT
+                    pp.pool_id,
+                    pt.description,
+                    g.id,
+                    g.map,
+                    g.position_x,
+                    g.position_y,
+                    g.position_z
+                FROM pool_pool pp
+                INNER JOIN pool_template pt ON pt.entry = pp.pool_id
+                INNER JOIN pool_gameobject pg ON pg.pool_entry = pp.pool_id
+                INNER JOIN gameobject g ON g.guid = pg.guid
+                WHERE pp.mother_pool = @masterPoolEntry
+                ORDER BY pp.pool_id, g.guid";
+            cmd.Parameters.AddWithValue("@masterPoolEntry", masterPoolEntry);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add((
+                    Convert.ToUInt32(reader.GetValue(0)),
+                    reader.IsDBNull(1) ? null : reader.GetString(1),
+                    Convert.ToUInt32(reader.GetValue(2)),
+                    reader.GetInt32(3),
+                    reader.GetFloat(4),
+                    reader.GetFloat(5),
+                    reader.GetFloat(6)));
+            }
+
+            _logger.LogInformation("[MySQL] Found {Count} child-pool spawn rows under master pool {MasterPoolEntry}",
+                results.Count, masterPoolEntry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[MySQL] Failed to query master pool child spawns: {Error}", ex.Message);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Query all gameobject rows for the child pools under a master pool entry, including
+    /// whether each specific guid currently has a persisted respawn timer.
+    /// </summary>
+    public async Task<List<PoolGameObjectSpawnState>> QueryMasterPoolChildSpawnStatesAsync(uint masterPoolEntry)
+    {
+        var results = new List<PoolGameObjectSpawnState>();
+
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT
+                    pp.pool_id,
+                    pt.description,
+                    g.guid,
+                    g.id,
+                    g.map,
+                    g.position_x,
+                    g.position_y,
+                    g.position_z,
+                    gr.respawn_time
+                FROM pool_pool pp
+                INNER JOIN pool_template pt ON pt.entry = pp.pool_id
+                INNER JOIN pool_gameobject pg ON pg.pool_entry = pp.pool_id
+                INNER JOIN gameobject g ON g.guid = pg.guid
+                LEFT JOIN characters.gameobject_respawn gr
+                    ON gr.guid = g.guid
+                   AND gr.map = g.map
+                WHERE pp.mother_pool = @masterPoolEntry
+                ORDER BY pp.pool_id, g.guid";
+            cmd.Parameters.AddWithValue("@masterPoolEntry", masterPoolEntry);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                DateTime? respawnAtUtc = null;
+                if (!reader.IsDBNull(8))
+                {
+                    var respawnUnix = Convert.ToInt64(reader.GetValue(8));
+                    respawnAtUtc = DateTimeOffset.FromUnixTimeSeconds(respawnUnix).UtcDateTime;
+                }
+
+                results.Add(new PoolGameObjectSpawnState(
+                    Convert.ToUInt32(reader.GetValue(0)),
+                    reader.IsDBNull(1) ? null : reader.GetString(1),
+                    Convert.ToUInt32(reader.GetValue(2)),
+                    Convert.ToUInt32(reader.GetValue(3)),
+                    reader.GetInt32(4),
+                    reader.GetFloat(5),
+                    reader.GetFloat(6),
+                    reader.GetFloat(7),
+                    !reader.IsDBNull(8),
+                    respawnAtUtc));
+            }
+
+            _logger.LogInformation("[MySQL] Found {Count} child-pool spawn-state rows under master pool {MasterPoolEntry}",
+                results.Count, masterPoolEntry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[MySQL] Failed to query master pool child spawn states: {Error}", ex.Message);
         }
 
         return results;

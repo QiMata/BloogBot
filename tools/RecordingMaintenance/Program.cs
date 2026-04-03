@@ -358,6 +358,7 @@ internal static class Program
 
         psi.Environment["Logging__LogLevel__Default"] = "Information";
         psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = "1";
+        psi.Environment["WWOW_ENABLE_RECORDING_ARTIFACTS"] = "1";
         psi.Environment["WWOW_AUTOMATED_SCENARIOS"] = scenarioSelection;
         psi.Environment["WWOW_RECORDINGS_DIR"] = recordingsDir;
         psi.Environment["WWOW_SETTINGS_OVERRIDE"] = tempSettingsPath;

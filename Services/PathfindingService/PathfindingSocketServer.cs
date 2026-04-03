@@ -121,9 +121,8 @@ namespace PathfindingService
                 // Diagnostic: verify native pathfinding actually works
                 DiagnoseNativePathfinding(logger);
 
-                // Write "ready" status with loaded maps
-                // Maps 0, 1, 389 are preloaded by Physics.EnsureNativeLibraryLoaded()
-                var loadedMaps = new List<uint> { 0, 1, 389 };
+                // Write "ready" status with the actual discovered preload set.
+                var loadedMaps = Physics.PreloadedMapIds.ToList();
                 WriteStatus(true, "Ready - navigation and physics systems initialized", loadedMaps);
 
                 logger.LogInformation("Navigation and Physics systems initialized.");

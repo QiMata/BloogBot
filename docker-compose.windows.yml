@@ -47,6 +47,26 @@ services:
     depends_on:
       - vmangos-server
 
+  scene-data-service:
+    build:
+      context: .
+      dockerfile: Services/SceneDataService/Dockerfile
+    platform: windows/amd64
+    environment:
+      DOTNET_ENVIRONMENT: Docker
+      WWOW_SCENE_DATA_IP: 0.0.0.0
+      WWOW_SCENE_DATA_PORT: "5003"
+      WWOW_DATA_DIR: C:\wwow-data
+    volumes:
+      - type: bind
+        source: ${WWOW_MANGOS_DATA_DIR:-C:/Mangos/data}
+        target: C:\wwow-data
+        read_only: true
+    ports:
+      - "5003:5003"
+    depends_on:
+      - vmangos-server
+
   background-bot-runner:
     build:
       context: .
@@ -61,8 +81,11 @@ services:
       RealmEndpoint__IpAddress: vmangos-server
       PathfindingService__IpAddress: pathfinding-service
       PathfindingService__Port: "5001"
+      SceneDataService__IpAddress: scene-data-service
+      SceneDataService__Port: "5003"
       CharacterStateListener__IpAddress: ${WWOW_STATE_MANAGER_HOST:-host.docker.internal}
       CharacterStateListener__Port: ${WWOW_STATE_MANAGER_PORT:-5002}
     depends_on:
       - vmangos-server
       - pathfinding-service
+      - scene-data-service

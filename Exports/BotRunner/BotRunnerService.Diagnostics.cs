@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
 
@@ -68,11 +69,27 @@ namespace BotRunner
             switch (action.ActionType)
             {
                 case ActionType.StartPhysicsRecording:
+                    if (!RecordingArtifactsFeature.IsEnabled())
+                    {
+                        Log.Information("[DIAG] Ignoring {ActionType}; set {EnvVar}=1 to enable recording artifacts",
+                            action.ActionType,
+                            RecordingArtifactsFeature.EnvironmentVariableName);
+                        return true;
+                    }
+
                     StartPhysicsRecording();
                     StartTransformRecording();
                     return true;
 
                 case ActionType.StopPhysicsRecording:
+                    if (!RecordingArtifactsFeature.IsEnabled())
+                    {
+                        Log.Information("[DIAG] Ignoring {ActionType}; set {EnvVar}=1 to enable recording artifacts",
+                            action.ActionType,
+                            RecordingArtifactsFeature.EnvironmentVariableName);
+                        return true;
+                    }
+
                     StopPhysicsRecording();
                     StopTransformRecording();
                     return true;
@@ -277,7 +294,8 @@ namespace BotRunner
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
             });
 
             File.WriteAllText(filePath, json);

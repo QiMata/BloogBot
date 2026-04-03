@@ -26,10 +26,14 @@
 #include "MoveMapSharedDefines.h"
 
 #include <set>
-#include <windows.h>
 #include <sstream>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 using namespace std;
 
@@ -55,11 +59,14 @@ namespace MMAP
 		}
 	}
 
+#if defined(_WIN32)
 	EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#endif
 
 	/// Returns the DLL-relative mmaps base path (legacy fallback).
 	static string getDllRelativeMmapsPath()
 	{
+#if defined(_WIN32)
 		WCHAR DllPath[MAX_PATH] = { 0 };
 		GetModuleFileNameW((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
 		wstring ws(DllPath);
@@ -72,6 +79,12 @@ namespace MMAP
 		string basePath = pathAndFile.substr(0, lastOccur + 1);
 		basePath.append("mmaps\\");
 		return basePath;
+#else
+		auto mmapsPath = (std::filesystem::current_path() / "mmaps").string();
+		if (!mmapsPath.empty() && mmapsPath.back() != '/' && mmapsPath.back() != '\\')
+			mmapsPath.push_back(std::filesystem::path::preferred_separator);
+		return mmapsPath;
+#endif
 	}
 
 	/// Builds the full path for a .mmap file given a base mmaps directory.
@@ -170,7 +183,7 @@ namespace MMAP
 
 	unsigned int MMapManager::packTileID(int x, int y)
 	{
-		return unsigned int(x << 16 | y);
+		return static_cast<unsigned int>((x << 16) | (y & 0xFFFF));
 	}
 
 	bool MMapManager::loadMap(unsigned int mapId, int x, int y)

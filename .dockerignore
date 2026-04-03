@@ -1,16 +1,27 @@
-﻿**/bin/
-**/obj/
-**/.vs/
-**/.git/
-**/Release/
-*.user
-*.suo
-*.log
-*.db
-*.tmp
-*.cache
-*.nupkg
-*.snupkg
-.vscode/
-.idea/
-TestResults/
+# Start from deny-all and whitelist only files needed by the Linux service images.
+*
+
+# Root build metadata
+!WestworldOfWarcraft.sln
+!Directory.Build.props
+!Directory.Build.targets
+
+# Service projects
+!Services/
+Services/*
+!Services/PathfindingService/
+!Services/PathfindingService/**
+!Services/SceneDataService/
+!Services/SceneDataService/**
+
+# Shared exports required by restore/build/runtime
+!Exports/
+Exports/*
+!Exports/BotCommLayer/
+!Exports/BotCommLayer/**
+!Exports/GameData.Core/
+!Exports/GameData.Core/**
+!Exports/Navigation/
+!Exports/Navigation/**
+!Exports/WinImports/
+!Exports/WinImports/**

@@ -13,12 +13,14 @@
 
 ## P3 - Fishing Parity (Low Priority)
 
-**FishingTask is implemented and passing live validation for both BG and FG.** Remaining work is packet-level optimization, not core mechanics.
+**Focused FG packet capture and the focused dual Ratchet path test are green on the current binaries, but packet-sequence comparison work is still open.** The focused FG capture still completes end-to-end from the packet-capture dock with packet artifacts and the full fishing contract (`pool_acquired -> in_cast_range_current -> cast_started -> loot_bag_delta -> fishing_loot_success`), and the latest focused dual Ratchet path rerun also completed successfully for both bots. The remaining live risk is now narrower:
+- staged Ratchet pool activation/visibility is still nondeterministic across reruns, and `.pool spawns <child>` attribution remains timing-sensitive even through the newer direct GM/system-message capture path
+- when the dual slice does fall back into local pier search, `FishingTask` now treats `MovementStuckRecoveryGeneration` as authoritative blocked-probe evidence and abandons that local leg after about `1.5s` instead of burning the full `20s` stall window; keep that guard covered while the remaining comparison/instrumentation work stays open
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | Open — packet infra ready |
-| 3.2 | Compare BG fishing packets against FG capture | Blocked on 3.1 |
+| 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | **Done** — focused `Fishing_CaptureForegroundPackets_RatchetStagingCast` passed and recorded `packets_TESTBOT1.csv`, `transform_TESTBOT1.csv`, and `navtrace_TESTBOT1.json` |
+| 3.2 | Compare BG fishing packets against FG capture | Open — focused FG reference and the focused dual runtime path are green on current binaries; the remaining work is actual FG/BG packet-sequence comparison plus authoritative child-pool attribution on nondeterministic reruns |
 | 3.3 | Harden BG fishing parity to match FG packet/timing | Blocked on 3.2 |
 
 ---
@@ -89,21 +91,6 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 - Party sequences: `Exports/BotRunner/BotRunnerService.Sequences.Party.cs`
 - RFC portal: `Exports/BotRunner/Movement/MapTransitionGraph.cs:157`
 
----
-
-## P30 — Coordinator Refactor: Separate Prep from Coordination
-
-**Goal:** DungeoneeringCoordinator currently handles BOTH fixture prep (leveling, spells, gear, teleport) AND coordination (group formation, dungeon entry, combat). This violates separation of concerns — prep belongs in the test fixture, coordination belongs in the coordinator. BattlegroundCoordinator already follows the correct pattern (fixture preps, coordinator coordinates).
-
-| # | Task | Status |
-|---|------|--------|
-| 30.1 | **Extract DungeoneeringCoordinator prep into RfcBotFixture** — Added `PrepareBotsForRfcAsync()` with SOAP revive+level, chat `.learn`/`.additem`/`.reset`, teleport to Org. Added `skipPrep` constructor param + `WWOW_COORDINATOR_SKIP_PREP` env var. Coordinator starts at FormGroup_Inviting when skipPrep=true. | **Done** (dcd20741) |
-| 30.2 | **Simplify DungeoneeringCoordinator to match BattlegroundCoordinator pattern** — With skipPrep, coordinator states are: FormGroup_Inviting → ConvertToRaid → InvitingRest → Verify → TeleportToRFC → WaitForRFCSettle → DispatchDungeoneering → DungeonInProgress. Prep states still exist for backward compat. | **Done** (c30c308d) |
-| 30.3 | **Create generic `CoordinatorFixtureBase`** — Shared base for RFC, WSG, AB, AV fixtures. Handles: account creation, leveling, gear, spells, teleport to activity location. Derived fixtures set class composition, locations, and coordinator mode. | Open |
-| 30.4 | **All coordinator tests follow pattern**: fixture does prep → coordinator does coordination → test asserts outcome. No coordinator should send `.learn` or `.character level`. | Open |
-
----
-
 ## P28 — Test Audit & Cleanup
 
 **Goal:** Clean up existing LiveValidation tests that have accumulated unnecessary teleporting and convoluted workarounds. ALL bots in every config MUST connect — any crash, disconnect, or missing bot is an automatic failure that triggers investigation. No workarounds for missing bots. Tests must have TIGHT assertions that fail fast on any disruption.
@@ -114,7 +101,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 | 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Removed lines 72-77. Teleports directly to quest area now. | **Done** (bea79f70) |
 | 28.3 | **EquipmentEquipTests: targeted slot clear** — VMaNGOS has no `.unequip` command. `.reset items` is the only option to clear mainhand. Server limitation, not test issue. | Won't Fix |
 | 28.4 | **All DungeonInstanceFixture-based tests: strict bot count** — Every dungeon test must Assert.Equal on expected bot count. Crash = failure = investigate. | Open |
-| 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | Open |
+| 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | **Done** (2026-04-01) — `CoordinatorFixtureBase.WaitForExactBotCountAsync` enforces exact counts for all BG fixtures; `CoordinatorStrictCountTests` and live AB rerun verify the gate |
 | 28.6 | **DeathCorpseRunTests CRASH-001** — Already documented at line 71-78 with VA address and investigation doc reference. | **Done** (pre-existing) |
 | 28.7 | **Move OrgrimmarGroundZAnalysisTests** — Moved from LiveValidation/ to Diagnostics/ directory. | **Done** |
 
@@ -252,7 +239,7 @@ ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset()
 
 **Goal:** Verify the system handles 3000 concurrent bot connections (1 FG + 2999 BG) with all race/class combinations evenly distributed. Incrementally scale from 10 → 100 → 500 → 1000 → 3000.
 
-**Architecture:** Each BG bot is a `BackgroundBotRunner` process with `LocalPhysicsClient` (direct P/Invoke). All connect to the same MaNGOS server. StateManager orchestrates all bots. Metrics: connection time, snapshot latency, physics frame rate, memory per bot, CPU utilization.
+**Architecture:** Each BG bot is a `BackgroundBotRunner` process that runs local `Navigation.dll` physics from `SceneDataService` scene slices. `PathfindingService` remains the shared pathing endpoint and a fallback physics path if scene slices are unavailable. All connect to the same MaNGOS server. StateManager orchestrates all bots. Metrics: connection time, snapshot latency, physics frame rate, memory per bot, CPU utilization.
 
 ### Race/Class Distribution (3000 bots)
 
@@ -322,15 +309,19 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 
 ### 25D — Alterac Valley (1 FG + 79 BG, 40v40)
 
-**Setup:** 40 Horde bots (1 FG TESTBOT1 + 39 BG AVBOT2-40) vs 40 Alliance bots (40 BG AVBOTA1-40). Both form raid (8 subgroups × 5), queue, enter AV (mapId=30).
+**Setup target:** 40 Horde bots (1 FG `TESTBOT1` + 39 BG `AVBOT2-40`) vs 40 Alliance bots (1 FG `AVBOTA1` + 39 BG `AVBOTA2-40`). All participants should be level `60`, mounted, and staged with elixirs. Horde FG must be a High Warlord Tauren Warrior. Alliance FG must be a Grand Marshal Paladin. The remaining `78` bots should use next-tier-appropriate level-60 gear/loadouts for their class and role. Both raids form (8 subgroups × 5), queue, enter AV (mapId=`30`), then push cleanly toward their faction's first objective.
 
 | # | Task | Spec |
 |---|------|------|
-| 25.13 | **Create AV accounts + settings** — `AlteracValleyFixture` generates 80-bot settings. 40 Horde (1 FG + 39 BG) + 40 Alliance (40 BG). | **Done** (1464e7d) |
+| 25.13 | **Create AV accounts + settings** — `AlteracValleyFixture` generates 80-bot settings. 40 Horde (1 FG + 39 BG) + 40 Alliance (1 FG + 39 BG). | **Done** (1464e7d) |
 | 25.14 | **AV queue + entry test** — `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`. | **Done** (1464e7d) |
-| 25.15 | **AV tower assault test** — Horde pushes south, assaults Stonehearth Bunker. Assert tower capture via world state updates. | Open |
-| 25.16 | **AV graveyard capture test** — Horde captures Snowfall Graveyard. Assert: GY ownership changes, dead Horde bots respawn at captured GY. | Open |
-| 25.17 | **AV general kill test** — Full AV game: Horde pushes to Vanndar Stormpike, Alliance pushes to Drek'Thar. Assert: one general dies, `SMSG_BATTLEFIELD_STATUS` shows BG winner. Timeout: 60 minutes. | Open |
+| 25.15 | **AV fixture roster/loadout upgrade** — Expand `AlteracValleyFixture` / battleground prep so all `80` bots are level `60`; Horde FG `TESTBOT1` is a High Warlord Tauren Warrior; Alliance FG `AVBOTA1` is a Grand Marshal Paladin; all bots receive epic mounts, baseline elixirs, and class/role-appropriate level-60 gear. Add deterministic fixture/config coverage for the roster contract. | **Done** (2026-04-02) — `AlteracValleyFixture`, `AlteracValleyLoadoutPlan`, and `BattlegroundFixtureConfigurationTests` now enforce the level-60 roster/loadout contract deterministically for all `80` AV participants |
+| 25.16 | **AV first-objective movement test** — After queue/entry and prep, both raids leave cave mounted and push toward their initial objective without losing the raid. Horde route target: Stonehearth Bunker approach. Alliance route target: Iceblood Tower approach. Assert both foreground leaders and the raid bulk reach the first-objective staging area with objective-state packets still flowing. | Open |
+| 25.17 | **AV tower assault test** — Horde pushes south, assaults Stonehearth Bunker. Assert tower capture via world state updates. | Open |
+| 25.18 | **AV graveyard capture test** — Horde captures Snowfall Graveyard. Assert: GY ownership changes, dead Horde bots respawn at captured GY. | Open |
+| 25.19 | **AV general kill test** — Full AV game: Horde pushes to Vanndar Stormpike, Alliance pushes to Drek'Thar. Assert: one general dies, `SMSG_BATTLEFIELD_STATUS` shows BG winner. Timeout: 60 minutes. | Open |
+
+**Current blocker (2026-04-02 benchmark):** the focused `AV_FullyPreparedRaids_MountAndReachFirstObjective` live slice still stalls during `EnterWorld` at `39/80`. On the `64 GB` benchmark host, `BackgroundBotRunner` reached `55` instances with `p95 private=64.8 GB` (about `1.18 GB` per runner) and launch never progressed past `AVBOTA16`. Session 293 now keeps BG local physics on thin injected scene slices instead of allowing implicit full-map `.scene` / VMAP loads, so the next AV rerun should re-measure launch pressure before any new `25.16+` objective work.
 
 ---
 
@@ -1117,8 +1108,162 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-03-28 (session 282)
+- **Last updated:** 2026-04-03 (session 299)
 - **Branch:** `main`
+- **Session 299 — split Pathfinding/SceneData services are live on Linux with mounted data volumes; live matrix still pending completion:**
+  - Validated the current split-service deployment on `docker-compose.vmangos-linux.yml`: `pathfinding-service` and `scene-data-service` are both running, publishing `5001`/`5003`, and serving from mounted `/wwow-data`.
+  - Runtime logs show the expected behavior: Pathfinding preload across the discovered map set and SceneData readiness on `0.0.0.0:5003` with initialized scene/nav coverage.
+  - Fast integration gate stays green (`run-tests.ps1 -Layer 4 -SkipBuild` passed). A full `BotRunner.Tests` `LiveValidation` namespace run was started but interrupted by user request before finishing, so the complete live pass/fail matrix is still in progress.
+  - Validation:
+    - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` -> `pathfinding-service` (`5001`) and `scene-data-service` (`5003`) `Up`
+    - `docker compose -f .\docker-compose.vmangos-linux.yml ps` -> both split services running in compose
+    - `docker logs --tail 80 pathfinding-service` -> active map preload from `/wwow-data`
+    - `docker logs --tail 80 scene-data-service` -> ready and listening at `0.0.0.0:5003`
+    - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -Layer 4 -SkipBuild -TestTimeoutMinutes 15` -> `passed`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=minimal"` -> `interrupted by user`
+- **Session 298 — StateManager launch no longer gates on split external services:**
+  - `Services/WoWStateManager/StateManagerWorker.cs` removed the remaining startup gate that aborted `ApplyDesiredWorkerState(...)` when `PathfindingService` was unavailable.
+  - Startup now probes both `PathfindingService` and `SceneDataService` as external dependencies, logs readiness/unavailability, and continues launching configured WoW clients either way.
+  - This closes the remaining mismatch with the new ownership model: split services are externally managed and no longer part of StateManager’s launch constraints.
+  - Validation:
+    - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateManagerTestClientTimeoutTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+- **Session 297 — StateManager now only manages WoW clients; Pathfinding/SceneData are split external services:**
+  - `Services/WoWStateManager/Program.cs` no longer launches or kills `PathfindingService`/`SceneDataService`; startup now treats both as external dependencies, performs bounded readiness checks, and proceeds to bot/client orchestration.
+  - Added `Services/SceneDataService/Dockerfile` and updated `docker-compose.windows.yml` so `pathfinding-service` and `scene-data-service` run as separate containers; `background-bot-runner` now depends on both and receives both endpoint env overrides.
+  - Updated `Services/WoWStateManager/appsettings.json` and `appsettings.Docker.json` to include `SceneDataService` endpoint defaults for host/container alignment.
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` cleanup ownership now matches that architecture: fixture teardown no longer kills `PathfindingService`/`SceneDataService`, and managed-process crash semantics remain scoped to `StateManager` + `WoW.exe`.
+  - Validation:
+    - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet build Services/SceneDataService/SceneDataService.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateManagerTestClientTimeoutTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+    - `docker compose -f .\docker-compose.windows.yml config` -> `succeeded`
+    - `docker compose -f .\docker-compose.windows.yml --profile bgbot config` -> `succeeded`
+    - `docker info --format "{{.OSType}}"` -> `linux` (runtime deployment of Windows images still blocked on this host)
+    - `docker run --rm mcr.microsoft.com/windows/servercore:ltsc2022 cmd /c echo windows` -> `failed` (`no matching manifest for linux/amd64`)
+- **Session 296 — BG scene-slice clients now defer connect instead of committing to a startup fallback, but the latest AV rerun aborted before EnterWorld:**
+  - `ProtobufSocketClient` now supports deferred initial connection, and `SceneDataClient` uses that path with a bounded connect budget plus retry backoff. `BackgroundBotWorker` no longer decides the whole run off a one-shot `SceneDataService` reachability probe; if the endpoint is configured, the BG runner can keep the intended thin-slice client and connect when the first region request actually happens.
+  - `WoWStateManager` warnings were updated to match that contract. A late `SceneDataService` no longer means "without scene slices" by definition; BG workers will still launch and retry scene-slice acquisition on demand once the service becomes available.
+  - Added focused proof across the transport boundary: `SceneDataClientTests` pin the new retry behavior, `BackgroundPhysicsModeResolverTests` pin the configured-endpoint runtime selection, and `ProtobufSocketPipelineTests.DeferredConnect_ClientCanBeConstructedBeforeServerStarts` proves the deferred client can exist before the socket listener is up.
+  - The shared-tree AV rerun did not yield fresh world-entry evidence. `logs/av_allbotsenterworld_20260403_deferred_scene_client_rerun.log` shows the test host aborted while `PathfindingService` was still preloading maps (`Map 229`), so this session did not yet confirm whether the deferred scene-slice contract moves the AV ceiling.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataClientTests|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BackgroundPhysicsModeResolverTests|FullyQualifiedName~BotRunner.Tests.IPC.ProtobufSocketPipelineTests.DeferredConnect_ClientCanBeConstructedBeforeServerStarts" --logger "console;verbosity=minimal"` -> `passed (14/14)`
+    - `$env:WWOW_BOT_OUTPUT_DIR='E:\repos\Westworld of Warcraft\Bot\Release\net8.0'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --logger "console;verbosity=normal" 2>&1 | Tee-Object -FilePath logs/av_allbotsenterworld_20260403_deferred_scene_client_rerun.log` -> `aborted`; test host crashed during `PathfindingService` preload before AV bring-up
+- **Session 295 — pure-local BG fallback now constructs MovementController, and SceneDataService is reduced to best-effort during AV startup:**
+  - `WoWSharpObjectManager` now remembers `useLocalPhysics` and creates `MovementController` whenever the BG runner requests pure local physics, even if both `_physicsClient` and `_sceneDataClient` are null. That closes the remaining fallback hole where scene-service outages left bots with no per-frame physics loop at all.
+  - Added deterministic proof in `ObjectManagerWorldSessionTests`: `Initialize_UseLocalPhysicsWithoutSceneData_DoesNotFallbackToPathfindingClient` still pins the pure-local contract, and `EnterWorld_UseLocalPhysicsWithoutSceneData_InitializesMovementController` now proves the fallback still constructs the controller needed for local gravity/collision.
+  - `WoWStateManager` still launches `SceneDataService`, but it now waits only `2.5s` before continuing so BG workers can fall back to preloaded local `Navigation.dll` physics instead of spending two minutes blocked on a dead `5003` socket.
+  - Shared-tree live AV evidence moved the blocker accordingly. `AV_FullyPreparedRaids_MountAndReachFirstObjective` now reaches `WoWStateManager READY`, logs `SceneDataService did not become available ... Background bots will use local Navigation.dll physics without scene slices.`, and then stalls later at `[AV:EnterWorld] 40/80` with the entire alliance roster missing. That is a bring-up / launch-pressure problem, not the earlier hover gate.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.Initialize_UseLocalPhysicsWithoutSceneData_DoesNotFallbackToPathfindingClient|FullyQualifiedName~ObjectManagerWorldSessionTests.EnterWorld_UseLocalPhysicsWithoutSceneData_InitializesMovementController" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+    - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet build Services/SceneDataService/SceneDataService.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `$env:WWOW_BOT_OUTPUT_DIR='E:\repos\Westworld of Warcraft\Bot\Release\net8.0'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --logger "console;verbosity=normal"` -> `failed` at `[AV:EnterWorld] STALE - bot count stopped at 40/80 for 123s`; scene-service gating no longer the blocker
+- **Session 294 — post-teleport AV hover regression now keeps bots falling, and BG workers now inherit/use the scene-data endpoint:**
+  - `MovementController` no longer immediately snaps an airborne teleport back to `teleportZ` on the first no-ground frame. Post-teleport settle now allows a real grace window for falling motion before any fallback clamp, which removes the exact hover case where AV bots stayed `+3y` above the battlemaster staging point.
+  - The same post-teleport path now rejects physics contacts that project the player above the teleport target during the settle window. Instead of clearing falling and finalizing mid-air, it resets grounded continuity and keeps the bot in `FALLINGFAR` so local scene data can catch up and the next frame can continue downward.
+  - `WoWStateManager` now forwards `SceneDataService__IpAddress` / `SceneDataService__Port` to spawned `BackgroundBotRunner` processes, and `BackgroundBotWorker` now constructs `SceneDataClient` directly from config/env defaults (`127.0.0.1:5003`) instead of permanently downgrading to shared physics because a one-shot startup reachability probe missed the service.
+  - Added deterministic coverage for the two live hover signatures: `MovementControllerTests.Update_PostTeleport_NoGroundBelow_AllowsGraceFall` proves an air teleport keeps descending during the settle window, and `Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling` proves the controller rejects overhead support and stays in falling motion.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin4 --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_PostTeleport_NoGroundBelow_AllowsGraceFall|FullyQualifiedName~MovementControllerTests.Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+    - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release -o E:\tmp\isolated-background-botrunner2\bin --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release -o E:\tmp\isolated-wowstatemanager\bin --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release -o E:\tmp\isolated-av-live2\bin --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_QueueAndEnterBattleground" --logger "console;verbosity=minimal"` -> initial rerun `skipped` (`_bot.IsReady` false because `BotServiceFixture` still resolved binaries from the wrong output root)
+    - `dotnet test ... --logger "console;verbosity=normal"` with `WWOW_BOT_OUTPUT_DIR=E:\tmp\isolated-av-live2\bin` -> progressed past fixture startup and proved the launcher fix, but the isolated live tree then blocked on missing native/service assets (`Navigation.dll` first, then `Loader.dll` / unavailable `SceneDataService`), so AV queue logic still did not execute end-to-end
+- **Session 293 — BG local physics now stays on thin scene slices instead of implicit full-map loads:**
+  - Added native thin-scene-slice mode to `SceneQuery` and exported it through `Navigation.dll`, so the scene-backed BG local path can stay on explicitly injected nearby geometry instead of auto-loading full-map `.scene` / VMAP data on cache misses.
+  - `MovementController` now enables that mode whenever a `SceneDataClient` is present, disables it for native-local controllers without scene data, and leaves remote/shared controllers alone. That keeps the local in-process physics path aligned with the intended `SceneDataService` design without adding a new hard native-DLL dependency to remote paths.
+  - Added deterministic proof on both sides of the boundary: `SceneSliceModeTests.GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache` proves the native query no longer repopulates full-map cache while slice mode is active, and `MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode` proves the managed controller opts into the mode for scene-backed local physics.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1` -> `succeeded`
+    - `$env:WWOW_DATA_DIR='E:\repos\Westworld of Warcraft\Data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release -o E:\tmp\isolated-nav-physics-tests\bin --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneSliceModeTests.GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin3 --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithoutSceneDataClient_DisablesSceneSliceMode" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+- **Session 292 — AV roster/loadout contract archived out of the active queue:**
+  - Revalidated the existing AV fixture/loadout implementation instead of leaving it as a stale open item. `AlteracValleyFixture` already defines the 80-account level-60 roster, objective-ready loadout prep, epic faction mounts, baseline elixirs, and the foreground leader contracts (`TESTBOT1` High Warlord Tauren Warrior, `AVBOTA1` Grand Marshal Paladin).
+  - `BattlegroundFixtureConfigurationTests` already pin that contract deterministically, including leader classes/races/runner types, faction loadouts, supplemental items, and first-objective assignments for all 80 accounts.
+  - Master task `25.15` is now marked done, and the matching stale open bullets were removed from `Tests/BotRunner.Tests/TASKS.md` and archived in `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
+  - Validation again used an isolated output directory because the shared `Bot\Release\net8.0` tree remains busy from AV/background processes.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release -o E:\tmp\isolated-botrunner-tests\bin --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests" --logger "console;verbosity=minimal"` -> `passed (11/11)`
+- **Session 291 — local scene refresh misses no longer freeze BG bots in mid-air:**
+  - `MovementController.RunPhysics(...)` no longer returns a synthetic hold-position result when `SceneDataClient` cannot refresh the nearby scene slice. BG runners now continue through `NativeLocalPhysics.Step(...)` on the current local scene cache, which keeps gravity and collision sweeps active instead of hovering at the teleport Z.
+  - Added a small WoWSharpClient test seam for this path: `SceneDataClient` now has an internal non-network constructor plus `TestEnsureSceneDataAroundOverride`, which lets deterministic tests force a scene refresh miss without opening a socket.
+  - Added regression coverage in `MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure`, which proves local native physics still advances to a falling state after a failed scene refresh.
+  - The normal `Bot\Release\net8.0` validation path remained locked by the active AV swarm, so the successful verification runs used isolated `-o E:\tmp\...` output directories instead of touching the busy shared output tree.
+  - Practical implication: the next live AV rerun should no longer leave BG bots suspended out of battlemaster range just because a scene-slice refresh missed during the post-teleport settle window.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_RunsRemotePhysicsEveryIdleFrame|FullyQualifiedName~MovementControllerTests.Update_KeepsLocalPhysicsActiveWhileIdle|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_IdleFreefallStillAppliesPhysics" --logger "console;verbosity=minimal"` -> `passed (6/6)`
+    - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release -o E:\tmp\isolated-background-botrunner\bin --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+- **Session 290 — BG runners now use scene-backed in-process physics without `LocalPhysicsClient`:**
+  - Removed the runtime `LocalPhysicsClient` path. `BackgroundBotWorker` now defaults to local in-process physics, connects to `SceneDataService` when available, and initializes `WoWSharpObjectManager` with `sceneDataClient` so `MovementController` steps `Navigation.dll` directly through `NativeLocalPhysics`.
+  - `MovementController` still runs idle physics every frame, but local native steps now marshal `NearbyObjects` into the native `PhysicsInput` so transport models and nearby collidable game objects stay available to local physics. Added deterministic coverage in `MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput`.
+  - Preserved existing callers by restoring the old `WoWSharpObjectManager.Initialize(...)` default: when no scene client is supplied, the object manager still falls back to `PathfindingClient` for physics instead of leaving movement uninitialized.
+  - `PathfindingService` and `SceneDataService` now preload every discovered map from the data directories (`scenes`, `mmaps`, `maps`) rather than a hand-picked subset, which keeps the local scene-backed path and the shared fallback path aligned on available map data.
+  - Practical implication: the next AV resource rerun should measure the scene-backed local path directly, without the extra `LocalPhysicsClient` wrapper or remote per-frame physics dependency.
+  - Validation:
+    - `dotnet build Services/SceneDataService/SceneDataService.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded` (existing `_logger` hiding warning)
+    - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests.Update_RunsRemotePhysicsEveryIdleFrame|FullyQualifiedName~MovementControllerTests.Update_KeepsLocalPhysicsActiveWhileIdle|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_IdleFreefallStillAppliesPhysics" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BackgroundPhysicsModeResolverTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`
+- **Session 289 — AV launch scalability benchmark captured the current resource ceiling:**
+  - Rebuilt `Tests/BotRunner.Tests` in `Release`, then ran the focused live AV slice `AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective` with external process sampling and saved the benchmark bundle to `TestResults\AVBenchmark_20260402_191811`.
+  - The run still fails during `[AV:EnterWorld]`, stalling at `39/80` after `122s` without progress. It never reached queue, mount, or first-objective movement, so the current blocker is still launch/entry scale rather than in-BG coordination.
+  - The launch path does not have a hard cap in `Services/WoWStateManager/StateManagerWorker.cs`; it walks the `CharacterSettings` list sequentially with `100ms + 500ms` delays between worker starts. The observed plateau is therefore not an explicit AV limit in the coordinator/state-manager code.
+  - Resource profile on the `12`-logical-core / `63.93 GB` host: aggregate `CPU p95=79.6%`, `private MB p95=65735.6`, `private MB max=69322.17`, `working set MB max=46622.07`, `handles p95=30884.4`, `threads p95=1143.7`.
+  - `BackgroundBotRunner` dominates the footprint: `max instances=55`, `private MB p95=64790.63`, `working set MB p95=40687.3`, or about `1178 MB` private and `740 MB` working set per runner. Projected to all `78` BG runners, that is about `91.9 GB` private and `57.7 GB` working set before foreground bots and fixed services.
+  - Launch evidence matches the resource ceiling: `54` unique BG login attempts were observed (`AVBOT2-40` plus `AVBOTA2-16`), while `AVBOTA17-40` never started and the failure diagnostics still listed both FG leaders plus the rest of the alliance wave as missing. The run also logged repeated `Enter world timed out ... Retrying CMSG_PLAYER_LOGIN` warnings and a transient `AUTH_LOGON_PROOF` failure under load.
+  - Practical next step: focus the next AV slice on reducing `BackgroundBotRunner` startup/runtime memory and launch pressure before attempting more AV objective/capture live work.
+  - Validation:
+    - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --blame-hang --blame-hang-timeout 60m --logger "trx;LogFileName=av_benchmark.trx" --logger "console;verbosity=normal"` -> `failed ([AV:EnterWorld] STALE at 39/80; benchmark artifacts captured externally in TestResults\AVBenchmark_20260402_191811)`
+- **Session 288 — queued the Alterac Valley level-60 roster/loadout and first-objective expansion:**
+  - Updated `P25 / 25D` so the AV target state is explicit instead of implied: both factions use `40` level-`60` characters, epic mounts, baseline elixirs, and objective-ready loadouts.
+  - Added a new open AV fixture/prep task ahead of the existing live objective work: Horde FG `TESTBOT1` must be a High Warlord Tauren Warrior, Alliance FG `AVBOTA1` must be a Grand Marshal Paladin, and the remaining roster should use next-tier-appropriate level-60 gear per class/role.
+  - Added a new first-objective movement milestone ahead of tower/graveyard/general validation so the queue now matches the actual delivery order: roster/loadout prep first, then cave-to-objective movement proof, then capture/kill assertions.
+  - No code or tests changed in this session; this was a task-tracker update to define the next AV implementation slice clearly.
+- **Session 287 — search-walk now obeys movement-controller stuck recovery, and the focused dual Ratchet path test is green again:**
+  - `FishingTask.SearchForPool(...)` now snapshots the active `MovementStuckRecoveryGeneration` when each probe window opens and treats any newer generation after a short `1.5s` grace as authoritative blocked-probe evidence. Instead of grinding the same upper-pier corner for the full `20s` stall window, the task now emits `search_walk_stalled ... reason=movement_stuck` and advances immediately.
+  - Added deterministic BotRunner coverage in `AtomicBotTaskTests` for the new behavior; the focused `FishingTaskTests|AtomicBotTaskTests` slice is now `30/30` green.
+  - The latest focused dual `Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath` rerun passed on the current binaries in `3m 38s`. FG completed `fishing_loot_success` with loot item `6303`, and BG completed `fishing_loot_success` with loot item `6358`.
+  - Important scope note: this green rerun acquired immediate local pools and never re-entered `search_walk`, so the blocked-corner improvement is currently proven by deterministic coverage plus the earlier live diagnostics that showed repeated stuck-recovery generations on the same last pier probe.
+  - Practical next step: keep the focused FG capture and focused dual path tests as the live baseline, then resume the actual FG/BG packet-sequence comparison work while keeping the staged local-pool attribution instrumentation in view for nondeterministic reruns.
+  - Validation:
+    - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~AtomicBotTaskTests" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath" --logger "console;verbosity=normal"` -> `passed`
+- **Session 286 — FG packet capture stays green, runtime search-walk was tightened again, but the latest dual rerun failed earlier in staged Ratchet visibility:**
+  - `FishingTask.ResolveSearchWaypointTravelTarget(...)` no longer commits to the first snapped local probe step. It now falls back through `8y -> 4y -> 2y` travel steps and only keeps a step target when the pathfinder can actually return a non-empty route from the current pier position.
+  - Added deterministic BotRunner coverage for that behavior in `FishingTaskTests`; the focused `FishingTaskTests` slice is now `20/20` green.
+  - Focused FG packet capture remains the last known green fishing reference: `pool_acquired`, `in_cast_range_current`, `cast_started`, and `fishing_loot_success` all fired and `packets_TESTBOT1.csv` was recorded.
+  - The latest dual `Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath` rerun did not reach the old BG last-leg failure first. It failed earlier in FG stage preparation: near-stage Ratchet children still stayed non-visible, and `.pool spawns <child>` replies continued to drift outside the tracked command window, leaving the local FG child pools classified as `Unknown` while some non-local Barrens children reported spawned objects.
+  - Practical next step: keep the focused FG reference as the completed baseline, but treat authoritative post-update pool activation capture / staged local-pool visibility as the next blocker before judging whether the new shorter-step search-walk logic clears the remaining BG pier leg.
+  - Validation:
+    - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingTaskTests" --logger "console;verbosity=minimal"` -> `passed (20/20)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath" --logger "console;verbosity=normal"` -> `failed earlier in FG stage preparation; BG runtime pier search was not exercised`
+- **Session 285 — VMaNGOS source review corrected the Ratchet pool-command assumptions:**
+  - Pulled `https://github.com/vmangos/core` into `E:\repos\vmangos-core-ref` because the available local cMaNGOS checkout does not match the live server's pool command and respawn schema behavior.
+  - Confirmed in VMaNGOS that `.pool update <pool>` prints the pool's current spawned count before it calls `sPoolMgr.UpdatePool(...)`, so `Pool #2620: 0/1 objects spawned` is pre-update state only and cannot be used as proof that the just-issued refresh succeeded or failed.
+  - Confirmed that child-pool updates reroll through their mother pool, while `.pool update 2628` on the Barrens master pool is not the right primary Ratchet reroll path.
+  - Confirmed that pooled gameobjects are excluded from the static `ObjectMgr` grid and live in `MapPersistentState` pool/grid data instead; server-side "active in pool state" and "currently visible to the client" are different steps.
+  - Practical next step: replace the fishing harness's response-based `.pool update` activation classification with a true post-update signal, then resume the remaining short-pier runtime work.
+- **Session 284 — Ratchet fishing search is now local and bounded, but the last two pier legs still stall:**
+  - `FishingPoolStagePlanner` now keeps staged Ratchet probes local when nearby spawn rows exist and caps far probe travel to `20y` from the dock stage, so the harness no longer asks FG to march almost all the way to the DB node just to stream a pool.
+  - `FishingTask` now refines each search probe onto a better walkable edge through a short radial ground/walkable-point sweep before moving, and deterministic `AtomicBotTaskTests` cover the higher-support probe choice.
+  - The latest clean FG packet-capture rerun still proved the slice is red, but the failure is narrower: FG reached `search_walk waypoint=1/5`, `2/5`, and `3/5`, then stalled on the last two short pier legs (`waypoint=4/5 distance=12.9`, `waypoint=5/5 distance=17.1`) before `search_walk_exhausted`. Separate reruns still fail earlier when local child pools stay invisible from the staged dock positions.
+- **Test baseline (session 284):**
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - Succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolStagePlannerTests|FullyQualifiedName~AtomicBotTaskTests" --logger "console;verbosity=minimal"`
+    - Passed (`9/9`)
+  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CaptureForegroundPackets_RatchetStagingCast" --logger "console;verbosity=normal"`
+    - Failed on two useful edges across the reruns: one direct-probe fallback shrank to `3` local waypoints but still stalled on each probe; the latest clean staged rerun reached `1/5`, `2/5`, `3/5` and then stalled on the final two local pier legs before `search_walk_exhausted`
+- **Next priorities:** keep the staged Ratchet visibility evidence explicit, but treat the remaining last-two-leg pier stalls as the real runtime blocker whenever staging succeeds again.
 - **Session 282 — the old `PhysicsEngine` grounded caller shell is now fully pinned, and the first end-to-end proof attempt is blocked by the fixture rather than missing seams:**
   - Added [EvaluateGroundedDriverSelectedPlaneTailEntrySetup(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/GroundedDriverParity.cpp) and [EvaluateGroundedDriverSelectedPlaneTailRerouteLoopController(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/GroundedDriverParity.cpp), so the production DLL now mirrors the last two open `0x635600` seams: the visible `0x635600..0x6356D2` entry/setup shell and the bounded `0x6357DA..0x6359A9` reroute-loop controller above the already-split reroute-candidate / vertical-fallback leaves.
   - Strengthened [EvaluateGroundedDriverSelectedPlaneTailChooserContract(...)](/E:/repos/Westworld of Warcraft/Exports/Navigation/GroundedDriverParity.cpp) and [WowGroundedDriverSelectedPlaneTailChooserContractTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/WowGroundedDriverSelectedPlaneTailChooserContractTests.cs) so the positive chooser-mutation path is now explicit instead of only the unchanged-buffer case.
@@ -3400,6 +3545,11 @@ if (transportGuid != 0) {
   - Captured the caller-side proof in `docs/physics/0x635734_callsite_disasm.txt`, which closes one important detail for later runtime hookup: `0x6351A0` writes two separate out-state dwords and the caller consumes them separately.
   - Added deterministic coverage in `WowSelectorPairConsumerTests.cs`; focused native build + selector slices passed `19/19`.
   - Practical implication: the next native parity unit is no longer the visible `0x6351A0` tail. It is exposing the selected index plus paired `0xC4E544[index]` payload on the production grounded path and then wiring that exact transaction into runtime wall resolution.
+- **Session 230 — recording artifacts now require explicit opt-in:**
+  - Added `WWOW_ENABLE_RECORDING_ARTIFACTS` and wired it through `BotRunnerService.Diagnostics`, FG/BG packet sidecars, FG `MovementRecorder`, and the FG file-backed diagnostic writers that had been creating `WWoWLogs/*`, `event_log.txt`, and `antiafk_log.txt` by default.
+  - Test and tooling entry points that intentionally capture artifacts now opt in explicitly: `LiveBotFixture`, `StateManagerProcessHelper`, `BotServiceFixture`, and `RecordingMaintenance capture`.
+  - Cleaned the untracked repo output trees that had accumulated excessive snapshots/logs: `Bot/*/Recordings`, `Bot/*/WWoWLogs`, `Bot/*/botrunner_diag.log`, and `TestResults/*`. The canonical `Tests/Navigation.Physics.Tests/Recordings` corpus was left intact.
+  - Validation: `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`, `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPacketTraceRecorderTests" --logger "console;verbosity=minimal"`, `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`, `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RecordingArtifactHelperTests" --logger "console;verbosity=minimal"`, `dotnet build tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`.
 
 ## Physics + BG Movement Full-Parity Checklist (2026-03-25)
 

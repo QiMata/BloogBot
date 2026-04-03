@@ -24,6 +24,11 @@ namespace WoWStateManager
 {
     public partial class StateManagerWorker : BackgroundService
     {
+        internal const int LaunchThrottleActivationBotCount = 16;
+        internal const int MaxPendingStartupBots = 4;
+        internal static readonly TimeSpan LaunchThrottlePollInterval = TimeSpan.FromMilliseconds(250);
+        private static readonly TimeSpan LaunchThrottleLogInterval = TimeSpan.FromSeconds(5);
+
         private readonly ILogger<StateManagerWorker> _logger;
 
         private readonly ILoggerFactory _loggerFactory;
@@ -167,46 +172,127 @@ namespace WoWStateManager
             }
         }
 
-        /// <summary>
-        /// Waits for required services (PathfindingService) to be ready before spawning WoW clients.
-        /// </summary>
-
-
-        /// <summary>
-        /// Waits for required services (PathfindingService) to be ready before spawning WoW clients.
-        /// </summary>
-        private async Task<bool> WaitForRequiredServicesAsync(CancellationToken stoppingToken, TimeSpan timeout)
+        private async Task LogExternalDependencyStatusAsync(CancellationToken stoppingToken)
         {
             var pathfindingIp = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
             var pathfindingPortStr = _configuration["PathfindingService:Port"] ?? "5001";
-
-            if (!int.TryParse(pathfindingPortStr, out var pathfindingPort))
+            if (int.TryParse(pathfindingPortStr, out var pathfindingPort))
             {
-                _logger.LogError($"Invalid PathfindingService port configuration: {pathfindingPortStr}");
-                return false;
+                await LogExternalDependencyStatusAsync(
+                    serviceName: "PathfindingService",
+                    ip: pathfindingIp,
+                    port: pathfindingPort,
+                    stoppingToken: stoppingToken);
+            }
+            else
+            {
+                _logger.LogWarning("Invalid PathfindingService port configuration '{Port}'. Skipping readiness probe.", pathfindingPortStr);
             }
 
-            _logger.LogInformation($"Checking PathfindingService readiness at {pathfindingIp}:{pathfindingPort}...");
-
-            var sw = Stopwatch.StartNew();
-            var checkInterval = TimeSpan.FromSeconds(2);
-
-            while (sw.Elapsed < timeout && !stoppingToken.IsCancellationRequested)
+            var sceneDataIp =
+                _configuration["SceneDataService:IpAddress"]
+                ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
+                ?? "127.0.0.1";
+            var sceneDataPortStr =
+                _configuration["SceneDataService:Port"]
+                ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
+                ?? "5003";
+            if (int.TryParse(sceneDataPortStr, out var sceneDataPort))
             {
-                var isReady = await IsServiceReadyAsync(pathfindingIp, pathfindingPort, TimeSpan.FromSeconds(5));
+                await LogExternalDependencyStatusAsync(
+                    serviceName: "SceneDataService",
+                    ip: sceneDataIp,
+                    port: sceneDataPort,
+                    stoppingToken: stoppingToken);
+            }
+            else
+            {
+                _logger.LogWarning("Invalid SceneDataService port configuration '{Port}'. Skipping readiness probe.", sceneDataPortStr);
+            }
+        }
 
-                if (isReady)
+        private async Task LogExternalDependencyStatusAsync(
+            string serviceName,
+            string ip,
+            int port,
+            CancellationToken stoppingToken)
+        {
+            if (stoppingToken.IsCancellationRequested)
+                return;
+
+            var isReady = await IsServiceReadyAsync(ip, port, TimeSpan.FromSeconds(2));
+            if (isReady)
+            {
+                _logger.LogInformation("{ServiceName} reachable at {Ip}:{Port} (external dependency).", serviceName, ip, port);
+                return;
+            }
+
+            _logger.LogWarning(
+                "{ServiceName} is not reachable at {Ip}:{Port}; continuing bot launch because this service is externally managed.",
+                serviceName,
+                ip,
+                port);
+        }
+
+        internal static bool IsWorldReadyForLaunchProgress(WoWActivitySnapshot? snapshot)
+            => snapshot?.IsObjectManagerValid == true;
+
+        internal static int CountPendingStartupBots(
+            IEnumerable<Settings.CharacterSettings> configuredSettings,
+            IReadOnlyDictionary<string, WoWActivitySnapshot> snapshots,
+            ISet<string> managedAccounts)
+        {
+            var pending = 0;
+            foreach (var characterSettings in configuredSettings)
+            {
+                if (!characterSettings.ShouldRun || !managedAccounts.Contains(characterSettings.AccountName))
+                    continue;
+
+                snapshots.TryGetValue(characterSettings.AccountName, out var snapshot);
+                if (!IsWorldReadyForLaunchProgress(snapshot))
+                    pending++;
+            }
+
+            return pending;
+        }
+
+        private async Task WaitForLaunchThrottleAsync(
+            IReadOnlyList<Settings.CharacterSettings> configuredSettings,
+            string nextAccountName,
+            CancellationToken stoppingToken)
+        {
+            if (configuredSettings.Count < LaunchThrottleActivationBotCount)
+                return;
+
+            var lastLogAt = DateTime.MinValue;
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                HashSet<string> managedAccounts;
+                lock (_managedServicesLock)
                 {
-                    _logger.LogInformation($"PathfindingService is READY at {pathfindingIp}:{pathfindingPort} (checked in {sw.Elapsed.TotalSeconds:F1}s)");
-                    return true;
+                    managedAccounts = _managedServices.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 }
 
-                _logger.LogDebug($"PathfindingService not ready yet, waiting... ({sw.Elapsed.TotalSeconds:F0}s elapsed)");
-                await Task.Delay(checkInterval, stoppingToken);
-            }
+                var pendingStartupBots = CountPendingStartupBots(
+                    configuredSettings,
+                    _activityMemberSocketListener.CurrentActivityMemberList,
+                    managedAccounts);
 
-            _logger.LogWarning($"PathfindingService at {pathfindingIp}:{pathfindingPort} is NOT ready after {timeout.TotalSeconds:F0}s");
-            return false;
+                if (pendingStartupBots < MaxPendingStartupBots)
+                    return;
+
+                if (DateTime.UtcNow - lastLogAt >= LaunchThrottleLogInterval)
+                {
+                    _logger.LogInformation(
+                        "Launch throttle waiting before starting {Account}: {Pending}/{Limit} managed bots are still not world-ready.",
+                        nextAccountName,
+                        pendingStartupBots,
+                        MaxPendingStartupBots);
+                    lastLogAt = DateTime.UtcNow;
+                }
+
+                await Task.Delay(LaunchThrottlePollInterval, stoppingToken);
+            }
         }
 
 
@@ -214,16 +300,9 @@ namespace WoWStateManager
         {
             _logger.LogInformation($"ApplyDesiredWorkerState called. CharacterSettings count: {StateManagerSettings.Instance.CharacterSettings.Count}");
 
-            // Wait for PathfindingService to be ready before spawning any WoW clients
-            // This prevents race conditions where WoW starts but services aren't available
-            var serviceTimeout = TimeSpan.FromSeconds(30);
-            var pathfindingReady = await WaitForRequiredServicesAsync(stoppingToken, serviceTimeout);
-
-            if (!pathfindingReady)
-            {
-                _logger.LogError("PathfindingService is not ready after {Timeout}s — aborting bot startup. Navigation requires PathfindingService on port 5001.", serviceTimeout.TotalSeconds);
-                return false;
-            }
+            // PathfindingService/SceneDataService are externally managed now.
+            // Probe them for diagnostics, but do not gate WoW client launch.
+            await LogExternalDependencyStatusAsync(stoppingToken);
 
             // 62d: Deduplicate CharacterSettings by AccountName to prevent double-launch races
             var seenAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -261,6 +340,8 @@ namespace WoWStateManager
                     _logger.LogDebug($"Account {accountName} already managed, skipping");
                     continue;
                 }
+
+                await WaitForLaunchThrottleAsync(deduplicatedSettings, accountName, stoppingToken);
 
                 _logger.LogInformation($"Setting up new bot for account: {accountName} (RunnerType: {characterSettings.RunnerType})");
 

@@ -38,6 +38,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             capsuleRadius: radius,
             capsuleHeight: height,
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ctx.ObjectManager, start, end),
+            stuckRecoveryGenerationProvider: () => ctx.ObjectManager.MovementStuckRecoveryGeneration,
             race: player?.Race ?? 0,
             gender: player?.Gender ?? 0);
     }

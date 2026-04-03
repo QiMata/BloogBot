@@ -1,3 +1,5 @@
+extern alias wowsharp;
+
 using BotRunner.Clients;
 using GameData.Core.Enums;
 using GameData.Core.Models;
@@ -9,6 +11,7 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
 using WoWSharpClient.Parsers;
+using MovementPhysicsClient = wowsharp::BotRunner.Clients.IPhysicsClient;
 
 namespace WoWSharpClient.Tests.Movement
 {
@@ -834,21 +837,436 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(Opcode.MSG_MOVE_START_FORWARD, _sentPackets[0].opcode);
         }
 
-        // ======== NO-OP WHEN IDLE ========
+        // ======== IDLE PHYSICS ========
 
         [Fact]
-        public void Update_NoPhysicsOrPackets_WhenIdleAndPreviouslyIdle()
+        public void Update_RunsRemotePhysicsEveryIdleFrame()
         {
-            // Both current and last flags are NONE — early return
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             _controller.Update(0.05f, 1000);
             _controller.Update(0.05f, 1500);
             _controller.Update(0.05f, 2000);
 
-            // Physics should not be called (optimization path)
-            _mockPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Never());
+            _mockPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(3));
             Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Update_KeepsLocalPhysicsActiveWhileIdle()
+        {
+            var mockLocalPhysics = new Mock<MovementPhysicsClient>();
+            mockLocalPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ,
+                    Orientation = input.Facing,
+                    Pitch = input.SwimPitch,
+                    NewVelX = 0,
+                    NewVelY = 0,
+                    NewVelZ = 0,
+                    IsGrounded = true,
+                    GroundZ = input.PosZ,
+                    GroundNx = 0,
+                    GroundNy = 0,
+                    GroundNz = 1,
+                    MovementFlags = input.MovementFlags,
+                    FallTime = 0,
+                });
+
+            var controller = new MovementController(_mockClient.Object, mockLocalPhysics.Object, _player);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            controller.Update(0.05f, 1000);
+            controller.Update(0.05f, 1500);
+            controller.Update(0.05f, 2000);
+
+            mockLocalPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(3));
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput()
+        {
+            NativePhysics.PhysicsInput? capturedNativeInput = null;
+            NativePhysics.DynamicObjectInfo[]? capturedNearbyObjects = null;
+
+            var transport = new WoWGameObject(new HighGuid(0xF120000000000201ul))
+            {
+                Position = new Position(100f, 200f, 50f),
+                Facing = MathF.PI / 2f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+
+            var nearbyDoor = new WoWGameObject(new HighGuid(0xF120000000000202ul))
+            {
+                Position = new Position(112f, 212f, 55f),
+                Facing = 0.35f,
+                DisplayId = 711,
+                ScaleX = 1.15f,
+                TypeId = (uint)GameObjectType.Door,
+            };
+
+            var snapshot = ReplaceTrackedObjects(transport, nearbyDoor);
+            var controller = new MovementController(_mockClient.Object, physics: null, _player);
+
+            try
+            {
+                NativeLocalPhysics.TestStepOverride = input =>
+                {
+                    capturedNativeInput = input;
+                    capturedNearbyObjects = NativeLocalPhysics.ReadNearbyObjectsForTest(input);
+                    return new NativePhysics.PhysicsOutput
+                    {
+                        X = input.X,
+                        Y = input.Y,
+                        Z = input.Z,
+                        Orientation = input.Orientation,
+                        Pitch = input.Pitch,
+                        Vx = 0f,
+                        Vy = 0f,
+                        Vz = 0f,
+                        MoveFlags = input.MoveFlags,
+                        GroundZ = input.Z,
+                        GroundNx = 0f,
+                        GroundNy = 0f,
+                        GroundNz = 1f,
+                    };
+                };
+
+                _player.Transport = transport;
+                _player.TransportGuid = transport.Guid;
+                _player.Position = new Position(110f, 210f, 55f);
+                _player.Facing = 2.2f;
+                _player.TransportOffset = new Position(10f, -10f, 5f);
+                _player.TransportOrientation = _player.Facing - transport.Facing;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
+
+                controller.Update(0.1f, 3000);
+
+                Assert.NotNull(capturedNativeInput);
+                Assert.Equal(transport.Guid, capturedNativeInput!.Value.TransportGuid);
+                Assert.NotNull(capturedNearbyObjects);
+                Assert.Equal(2, capturedNearbyObjects!.Length);
+                Assert.Contains(capturedNearbyObjects, obj => obj.Guid == transport.Guid && obj.DisplayId == transport.DisplayId);
+                Assert.Contains(capturedNearbyObjects, obj => obj.Guid == nearbyDoor.Guid && obj.DisplayId == nearbyDoor.DisplayId);
+            }
+            finally
+            {
+                NativeLocalPhysics.TestStepOverride = null;
+                NativeLocalPhysics.TestClearSceneCacheOverride = null;
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure()
+        {
+            var sceneSliceModeEnabled = false;
+
+            try
+            {
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = enabled => sceneSliceModeEnabled = enabled;
+                var sceneDataClient = new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>());
+                var controller = new MovementController(_mockClient.Object, physics: null, _player, sceneDataClient);
+                var stepCallCount = 0;
+
+                SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => false;
+                NativeLocalPhysics.TestStepOverride = input =>
+                {
+                    stepCallCount++;
+                    return new NativePhysics.PhysicsOutput
+                    {
+                        X = input.X,
+                        Y = input.Y,
+                        Z = input.Z - 1.5f,
+                        Orientation = input.Orientation,
+                        Pitch = input.Pitch,
+                        Vx = 0f,
+                        Vy = 0f,
+                        Vz = -5f,
+                        MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                        FallTime = 50u,
+                        GroundZ = -50001f,
+                        GroundNx = 0f,
+                        GroundNy = 0f,
+                        GroundNz = 1f,
+                    };
+                };
+
+                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                _player.Position = new Position(100f, 200f, 53f);
+
+                controller.Update(0.05f, 1000);
+
+                Assert.True(sceneSliceModeEnabled);
+                Assert.Equal(1, stepCallCount);
+                Assert.Equal(51.5f, _player.Position.Z);
+                Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+                Assert.Single(_sentPackets);
+                Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+            }
+            finally
+            {
+                SceneDataClient.TestEnsureSceneDataAroundOverride = null;
+                NativeLocalPhysics.TestStepOverride = null;
+                NativeLocalPhysics.TestClearSceneCacheOverride = null;
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
+            }
+        }
+
+        [Fact]
+        public void Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode()
+        {
+            bool? enabled = null;
+
+            try
+            {
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = value => enabled = value;
+
+                _ = new MovementController(
+                    _mockClient.Object,
+                    physics: null,
+                    _player,
+                    new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
+
+                Assert.True(enabled);
+            }
+            finally
+            {
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
+            }
+        }
+
+        [Fact]
+        public void Update_LocalNativePhysics_WithoutSceneDataClient_DisablesSceneSliceMode()
+        {
+            bool? enabled = null;
+
+            try
+            {
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = value => enabled = value;
+
+                _ = new MovementController(
+                    _mockClient.Object,
+                    physics: null,
+                    _player);
+
+                Assert.False(enabled);
+            }
+            finally
+            {
+                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
+            }
+        }
+
+        [Fact]
+        public void Update_IdleAirTeleportDoesNotSkipRemotePhysics()
+        {
+            var callCount = 0;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input =>
+                {
+                    callCount++;
+                    if (callCount == 1)
+                    {
+                        return new PhysicsOutput
+                        {
+                            NewPosX = input.PosX,
+                            NewPosY = input.PosY,
+                            NewPosZ = input.PosZ,
+                            Orientation = input.Facing,
+                            Pitch = input.SwimPitch,
+                            NewVelX = 0f,
+                            NewVelY = 0f,
+                            NewVelZ = 0f,
+                            IsGrounded = true,
+                            GroundZ = input.PosZ,
+                            GroundNx = 0f,
+                            GroundNy = 0f,
+                            GroundNz = 1f,
+                            MovementFlags = input.MovementFlags,
+                            FallTime = 0f,
+                        };
+                    }
+
+                    return new PhysicsOutput
+                    {
+                        NewPosX = input.PosX,
+                        NewPosY = input.PosY,
+                        NewPosZ = input.PosZ - 1.5f,
+                        Orientation = input.Facing,
+                        Pitch = input.SwimPitch,
+                        NewVelX = 0f,
+                        NewVelY = 0f,
+                        NewVelZ = -5f,
+                        IsGrounded = false,
+                        GroundZ = -50001f,
+                        GroundNx = 0f,
+                        GroundNy = 0f,
+                        GroundNz = 1f,
+                        MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                        FallTime = 50f,
+                    };
+                });
+
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
+
+            // Simulate a small external teleport straight up while idle.
+            _player.Position = new Position(100f, 200f, 53f);
+            _controller.Update(0.05f, 1500);
+
+            _mockPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(2));
+            Assert.Equal(51.5f, _player.Position.Z);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+        }
+
+        [Fact]
+        public void Update_PostTeleport_NoGroundBelow_AllowsGraceFall()
+        {
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ - 1.5f,
+                    Orientation = input.Facing,
+                    Pitch = input.SwimPitch,
+                    NewVelX = 0f,
+                    NewVelY = 0f,
+                    NewVelZ = -5f,
+                    IsGrounded = false,
+                    GroundZ = -50001f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50f,
+                });
+
+            _player.Position = new Position(100f, 200f, 123.89f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Reset(teleportDestZ: 123.89f);
+            _sentPackets.Clear();
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.Equal(122.39f, _player.Position.Z, 2);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.True(_controller.NeedsGroundSnap);
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling()
+        {
+            var callCount = 0;
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input =>
+                {
+                    callCount++;
+                    if (callCount == 1)
+                    {
+                        return new PhysicsOutput
+                        {
+                            NewPosX = input.PosX,
+                            NewPosY = input.PosY,
+                            NewPosZ = input.PosZ + 7f,
+                            Orientation = input.Facing,
+                            Pitch = input.SwimPitch,
+                            NewVelX = 0f,
+                            NewVelY = 0f,
+                            NewVelZ = 0f,
+                            IsGrounded = true,
+                            GroundZ = input.PosZ + 7f,
+                            GroundNx = 0f,
+                            GroundNy = 0f,
+                            GroundNz = 1f,
+                            MovementFlags = input.MovementFlags,
+                            FallTime = 0f,
+                        };
+                    }
+
+                    return new PhysicsOutput
+                    {
+                        NewPosX = input.PosX,
+                        NewPosY = input.PosY,
+                        NewPosZ = input.PosZ - 1f,
+                        Orientation = input.Facing,
+                        Pitch = input.SwimPitch,
+                        NewVelX = 0f,
+                        NewVelY = 0f,
+                        NewVelZ = -5f,
+                        IsGrounded = false,
+                        GroundZ = -50001f,
+                        GroundNx = 0f,
+                        GroundNy = 0f,
+                        GroundNz = 1f,
+                        MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                        FallTime = 50f,
+                    };
+                });
+
+            _player.Position = new Position(100f, 200f, 123.89f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Reset(teleportDestZ: 123.89f);
+            _sentPackets.Clear();
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.Equal(123.89f, _player.Position.Z, 2);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.True(_controller.NeedsGroundSnap);
+
+            _controller.Update(0.05f, 1050);
+
+            Assert.Equal(122.89f, _player.Position.Z, 2);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.True(_controller.NeedsGroundSnap);
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Update_IdleFreefallStillAppliesPhysics()
+        {
+            _mockPhysics
+                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
+                .Returns<PhysicsInput>(input => new PhysicsOutput
+                {
+                    NewPosX = input.PosX,
+                    NewPosY = input.PosY,
+                    NewPosZ = input.PosZ - 1.5f,
+                    IsGrounded = false,
+                    GroundZ = -50001f,
+                    GroundNx = 0,
+                    GroundNy = 0,
+                    GroundNz = 1,
+                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50,
+                });
+
+            _player.Position = new Position(100f, 200f, 50f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.Equal(48.5f, _player.Position.Z);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
 
         // ======== GROUND SNAPPING & PHYSICS POSITION ========

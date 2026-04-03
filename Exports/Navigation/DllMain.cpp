@@ -13,8 +13,6 @@
 #include "DetourPathCorridor.h"
 #include "VMapLog.h"
 
-#define NOMINMAX
-#include <windows.h>
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -22,10 +20,43 @@
 #include <unordered_map>
 #include <filesystem>
 #include <vector>
-#include <crtdbg.h>
 #include <cstdio>
 #include <csignal>
 #include <cstdlib>
+#include <cstring>
+
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#include <crtdbg.h>
+#endif
+
+#if !defined(_WIN32)
+#ifndef __declspec
+#define __declspec(x) __attribute__((visibility("default")))
+#endif
+
+#ifndef __try
+#define __try try
+#endif
+
+#ifndef __except
+#define __except(x) catch (...)
+#endif
+
+#ifndef EXCEPTION_EXECUTE_HANDLER
+#define EXCEPTION_EXECUTE_HANDLER 1
+#endif
+
+static inline unsigned long GetExceptionCode()
+{
+    return 0;
+}
+
+static inline void OutputDebugStringA(const char*)
+{
+}
+#endif
 
 // Global mutex for ALL Navigation.dll operations.
 // The entire C++ layer (PhysicsEngine, VMapManager, dtNavMeshQuery, DynamicObjectRegistry,
@@ -55,6 +86,27 @@ static std::mutex g_initMutex;
 static std::unique_ptr<MapLoader> g_mapLoader;
 static VMAP::VMapManager2* g_vmapManager = nullptr;
 
+static std::string ReadDataRootFromEnvironment()
+{
+    const char* env = std::getenv("WWOW_DATA_DIR");
+    if (!env || !env[0])
+        return {};
+
+    std::string dataRoot = env;
+    if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+        dataRoot += '/';
+    return dataRoot;
+}
+
+static void SetDataRootEnvironment(const std::string& root)
+{
+#if defined(_WIN32)
+    SetEnvironmentVariableA("WWOW_DATA_DIR", root.c_str());
+#else
+    setenv("WWOW_DATA_DIR", root.c_str(), 1);
+#endif
+}
+
 void InitializeAllSystems()
 {
     std::lock_guard<std::mutex> lock(g_initMutex);
@@ -69,17 +121,7 @@ void InitializeAllSystems()
     // broken (groundZ=0 for every frame, no horizontal movement).
 
     // --- Data root ---
-    std::string dataRoot;
-    {
-        char buf[512] = {0};
-        DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
-        if (len > 0 && len < sizeof(buf))
-        {
-            dataRoot = buf;
-            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                dataRoot += '/';
-        }
-    }
+    std::string dataRoot = ReadDataRootFromEnvironment();
 
     // --- MapLoader (optional, for terrain data) ---
     try
@@ -295,9 +337,18 @@ extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
     __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
+extern "C" __declspec(dllexport) void SetSceneSliceMode(bool enabled)
+{
+    __try
+    {
+        SceneQuery::SetSceneSliceMode(enabled);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
 // Set the data directory for all subsystems (MapLoader, VMapManager, SceneQuery).
-// Must be called before PreloadMap. Used by SceneDataService and LocalPhysicsClient
-// to configure the data root when WWOW_DATA_DIR may not be set in the environment.
+// Must be called before PreloadMap. Used by SceneDataService and in-process bot
+// physics to configure the data root when WWOW_DATA_DIR may not be set.
 extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
 {
     __try
@@ -310,7 +361,7 @@ extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
             root += '/';
 
         // Set the native environment variable so InitializeAllSystems picks it up
-        SetEnvironmentVariableA("WWOW_DATA_DIR", root.c_str());
+        SetDataRootEnvironment(root);
 
         // If already initialized, update SceneQuery scenes dir directly
         SceneQuery::SetScenesDir(root + "scenes/");
@@ -1457,6 +1508,7 @@ extern "C" __declspec(dllexport) void CorridorDestroy(uint32_t handle)
     }
 }
 
+#if defined(_WIN32)
 // DLL Entry Point
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
@@ -1489,3 +1541,4 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     }
     return TRUE;
 }
+#endif

@@ -2,6 +2,7 @@ using ForegroundBotRunner.Mem;
 using System;
 using System.IO;
 using System.Text;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -14,19 +15,18 @@ namespace ForegroundBotRunner.Statics
         private static readonly string LogPath;
         private static readonly object LogLock = new();
         private static readonly bool Enabled =
-            string.Equals(Environment.GetEnvironmentVariable("WWOW_LOGIN_STATE_MONITOR"), "1", StringComparison.Ordinal);
+            RecordingFileArtifactGate.IsEnabled()
+            && string.Equals(Environment.GetEnvironmentVariable("WWOW_LOGIN_STATE_MONITOR"), "1", StringComparison.Ordinal);
         private static int _snapshotCount = 0;
         private static DateTime _startTime = DateTime.Now;
 
         static LoginStateMonitor()
         {
-            string wowDir;
-            try { wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory; }
-            catch { wowDir = AppContext.BaseDirectory; }
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            LogPath = Path.Combine(logsDir, "login_state_monitor.log");
-            try { File.WriteAllText(LogPath, $"=== Login State Monitor Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n\n"); } catch { }
+            LogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("login_state_monitor.log");
+            if (!string.IsNullOrWhiteSpace(LogPath))
+            {
+                try { File.WriteAllText(LogPath, $"=== Login State Monitor Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n\n"); } catch { }
+            }
         }
 
         /// <summary>

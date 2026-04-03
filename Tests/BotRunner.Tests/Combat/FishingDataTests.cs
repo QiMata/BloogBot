@@ -255,6 +255,19 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(poolPosition.Z, castTarget.Z, 3);
         }
 
+        [Fact]
+        public void GetPoolCastTarget_WhenPlayerIsAlreadyClose_ClampsInsetToKeepTargetAwayFromFeet()
+        {
+            var playerPosition = new Position(0f, 0f, 0f);
+            var poolPosition = new Position(12.9f, 0f, 0f);
+
+            var castTarget = FishingData.GetPoolCastTarget(playerPosition, poolPosition, 4f);
+
+            Assert.Equal(FishingData.MinimumPoolCastTargetDistanceFromPlayer, playerPosition.DistanceTo(castTarget), 3);
+            Assert.True(castTarget.X > 0f);
+            Assert.True(castTarget.X < poolPosition.X);
+        }
+
         private static Mock<IObjectManager> CreateEmptyObjectManager()
         {
             var om = new Mock<IObjectManager>();

@@ -16,12 +16,13 @@ namespace BotCommLayer
         private readonly TcpListener _server;
         private bool _isRunning;
         protected readonly ILogger _logger;
+        private long _clientHandlerThreadSequence;
 
         public ProtobufSocketServer(string ipAddress, int port, ILogger logger)
         {
             _logger = logger;
             _server = new TcpListener(IPAddress.Parse(ipAddress), port);
-            _server.Start(50); // Backlog of 50 — handles 10+ simultaneous bot reconnects
+            _server.Start(256); // AV-scale reconnect bursts can exceed 80 concurrent clients.
             _isRunning = true;
 
             Thread serverThread = new(Run)
@@ -38,13 +39,24 @@ namespace BotCommLayer
                 try
                 {
                     TcpClient client = _server.AcceptTcpClient();
-                    ThreadPool.QueueUserWorkItem(_ => HandleClient(client));
+                    StartClientHandler(client);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError($"Server error: {ex}");
                 }
             }
+        }
+
+        private void StartClientHandler(TcpClient client)
+        {
+            var threadId = Interlocked.Increment(ref _clientHandlerThreadSequence);
+            var clientThread = new Thread(() => HandleClient(client))
+            {
+                IsBackground = true,
+                Name = $"{GetType().Name}-Client-{threadId}"
+            };
+            clientThread.Start();
         }
 
         /// <summary>

@@ -63,6 +63,40 @@ services:
       - ./docker/linux/vmangos/storage/mangosd/logs:/opt/vmangos/storage/logs
       - ./docker/linux/vmangos/storage/mangosd/honor:/opt/vmangos/storage/honor
 
+  pathfinding-service:
+    build:
+      context: .
+      dockerfile: Services/PathfindingService/Dockerfile
+    container_name: pathfinding-service
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Docker
+      WWOW_DATA_DIR: /wwow-data
+    networks:
+      - gameserver-net
+    ports:
+      - "5001:5001"
+    volumes:
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+
+  scene-data-service:
+    build:
+      context: .
+      dockerfile: Services/SceneDataService/Dockerfile
+    container_name: scene-data-service
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Docker
+      WWOW_SCENE_DATA_IP: 0.0.0.0
+      WWOW_SCENE_DATA_PORT: "5003"
+      WWOW_DATA_DIR: /wwow-data
+    networks:
+      - gameserver-net
+    ports:
+      - "5003:5003"
+    volumes:
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+
 networks:
   gameserver-net:
     external: true

@@ -10,12 +10,15 @@ namespace ForegroundBotRunner.Tests;
 
 public sealed class ForegroundPacketTraceRecorderTests
 {
+    private const string RecordingArtifactsEnvVar = "WWOW_ENABLE_RECORDING_ARTIFACTS";
+
     private static readonly string RecordingDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WWoW", "PhysicsRecordings");
 
     [Fact]
     public void StartStopRecording_WritesStableCsvWithCapturedPackets()
     {
+        using var envScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
         using var loggerFactory = LoggerFactory.Create(_ => { });
         using var recorder = new ForegroundPacketTraceRecorder(loggerFactory);
         var account = $"TRACE_{Guid.NewGuid():N}";
@@ -44,6 +47,7 @@ public sealed class ForegroundPacketTraceRecorderTests
     [Fact]
     public void RestartRecording_ReplacesPriorStableArtifact()
     {
+        using var envScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
         using var loggerFactory = LoggerFactory.Create(_ => { });
         using var recorder = new ForegroundPacketTraceRecorder(loggerFactory);
         var account = $"TRACE_{Guid.NewGuid():N}";
@@ -66,6 +70,24 @@ public sealed class ForegroundPacketTraceRecorderTests
         TryDelete(path);
     }
 
+    [Fact]
+    public void StartStopRecording_DoesNotWriteCsvWhenFeatureFlagDisabled()
+    {
+        using var envScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, null);
+        using var loggerFactory = LoggerFactory.Create(_ => { });
+        using var recorder = new ForegroundPacketTraceRecorder(loggerFactory);
+        var account = $"TRACE_{Guid.NewGuid():N}";
+        var path = Path.Combine(RecordingDir, $"packets_{account}.csv");
+
+        TryDelete(path);
+
+        recorder.StartRecording(account);
+        PacketLogger.RecordInboundPacket((ushort)Opcode.MSG_MOVE_HEARTBEAT, 18);
+        recorder.StopRecording(account);
+
+        Assert.False(File.Exists(path));
+    }
+
     private static void TryDelete(string path)
     {
         try
@@ -75,6 +97,24 @@ public sealed class ForegroundPacketTraceRecorderTests
         }
         catch
         {
+        }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _originalValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _originalValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _originalValue);
         }
     }
 }

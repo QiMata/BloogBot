@@ -14,15 +14,6 @@ namespace BotRunner.Tasks.Battlegrounds;
 /// <summary>
 /// Task that navigates to a battlemaster NPC, interacts to queue for a battleground,
 /// waits for the invite, and accepts to enter the BG.
-///
-/// Flow:
-///   1. FindBattlemaster — locate the NPC by NpcFlags (UNIT_NPC_FLAG_BATTLEMASTER = 0x100000)
-///   2. MoveToBattlemaster — pathfind within interact range
-///   3. InteractAndQueue — right-click NPC, send CMSG_BATTLEMASTER_JOIN
-///   4. WaitForInvite — poll for SMSG_BATTLEFIELD_STATUS with WaitJoin
-///   5. AcceptInvite — send CMSG_BATTLEFIELD_PORT (accept)
-///   6. WaitForEntry — wait for mapId to change to the BG map
-///   7. Done — pop task
 /// </summary>
 public class BattlegroundQueueTask : BotTask, IBotTask
 {
@@ -46,16 +37,12 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private int _actionAttempts;
     private const double StateTimeoutSec = 60.0;
-    private const double InviteTimeoutSec = 300.0; // BG queue can take up to 5 min
+    private const double InviteTimeoutSec = 300.0;
 
-    /// <summary>
-    /// Create a BG queue task.
-    /// </summary>
-    /// <param name="botContext">Bot context.</param>
-    /// <param name="bgType">Which battleground to queue for.</param>
-    /// <param name="expectedBgMapId">The instance map ID (489=WSG, 529=AB, 30=AV).</param>
-    /// <param name="bgClient">The BG network client for sending queue/accept packets. Nullable for FG bots.</param>
-    public BattlegroundQueueTask(IBotContext botContext, BattlemasterData.BattlegroundType bgType, uint expectedBgMapId,
+    public BattlegroundQueueTask(
+        IBotContext botContext,
+        BattlemasterData.BattlegroundType bgType,
+        uint expectedBgMapId,
         BattlegroundNetworkClientComponent? bgClient = null)
         : base(botContext)
     {
@@ -75,7 +62,6 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // Timeout per state (except WaitForInvite which has a longer timeout)
         var timeout = _state == BgState.WaitForInvite ? InviteTimeoutSec : StateTimeoutSec;
         if ((DateTime.UtcNow - _stateEnteredAt).TotalSeconds > timeout)
         {
@@ -84,10 +70,9 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // Already in the BG map — done
         if (player.MapId == _expectedBgMapId)
         {
-            Log.Information("[BG-QUEUE] Already on BG map {MapId} — done!", _expectedBgMapId);
+            Log.Information("[BG-QUEUE] Already on BG map {MapId} - done!", _expectedBgMapId);
             ObjectManager.StopAllMovement();
             PopTask("already_in_bg");
             return;
@@ -102,7 +87,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
                 HandleMoveToBattlemaster(player);
                 break;
             case BgState.InteractAndQueue:
-                HandleInteractAndQueue(player);
+                HandleInteractAndQueue();
                 break;
             case BgState.WaitForInvite:
                 HandleWaitForInvite();
@@ -121,50 +106,60 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
     private void HandleFindBattlemaster(IWoWPlayer player)
     {
-        // Strategy 1: Find by UNIT_NPC_FLAG_BATTLEMASTER (0x800)
-        const uint BattlemasterFlag = 0x800;
-
-        _bmNpc = ObjectManager.Units
-            .Where(u => u.Health > 0
-                && u.Position != null
-                && ((uint)u.NpcFlags & BattlemasterFlag) != 0)
-            .OrderBy(u => player.Position.DistanceTo(u.Position))
-            .FirstOrDefault();
-
-        // Resolve known battlemaster position for this faction
-        var factionStr = player.Race switch
+        var faction = player.Race switch
         {
-            Race.Orc or Race.Undead or Race.Tauren or Race.Troll =>
-                DungeonEntryData.DungeonFaction.Horde,
+            Race.Orc or Race.Undead or Race.Tauren or Race.Troll => DungeonEntryData.DungeonFaction.Horde,
             _ => DungeonEntryData.DungeonFaction.Alliance
         };
-        var bmData = BattlemasterData.FindBattlemaster(_bgType, factionStr);
+        var bmData = BattlemasterData.FindBattlemaster(_bgType, faction);
 
-        // Strategy 2: If NpcFlags aren't populated yet (common after teleport),
-        // find the nearest NPC within 10y of the known battlemaster position.
-        // UNIT_NPC_FLAGS is a "dynamic" field that may not arrive in the initial
-        // SMSG_CREATE_OBJECT — it comes in a later SMSG_UPDATE_OBJECT tick.
-        // Filter: creature GUIDs have high bytes set (0xF1...), player GUIDs are low numbers.
-        if (_bmNpc == null && bmData != null)
+        if (bmData != null)
+        {
+            const uint battlemasterFlag = (uint)NPCFlags.UNIT_NPC_FLAG_BATTLEMASTER;
+
+            _bmNpc = ObjectManager.Units
+                .Where(u => u.Health > 0
+                    && u.Position != null
+                    && u.Entry == bmData.NpcEntry
+                    && ((uint)u.NpcFlags & battlemasterFlag) != 0)
+                .OrderBy(u => u.Position!.DistanceTo(bmData.Position))
+                .ThenBy(u => player.Position.DistanceTo(u.Position))
+                .FirstOrDefault();
+
+            if (_bmNpc == null)
+            {
+                // npc_flags can lag after teleports, but the creature entry is stable.
+                _bmNpc = ObjectManager.Units
+                    .Where(u => u.Health > 0
+                        && u.Position != null
+                        && u.Entry == bmData.NpcEntry
+                        && u.Position.DistanceTo(bmData.Position) < 30f)
+                    .OrderBy(u => u.Position!.DistanceTo(bmData.Position))
+                    .ThenBy(u => player.Position.DistanceTo(u.Position))
+                    .FirstOrDefault();
+            }
+        }
+        else
+        {
+            Log.Warning("[BG-QUEUE] No battlemaster data for bgType={BgType}, faction={Faction}; falling back to nearest battlemaster flag",
+                _bgType, faction);
+        }
+
+        if (_bmNpc == null && bmData == null)
         {
             _bmNpc = ObjectManager.Units
                 .Where(u => u.Health > 0
                     && u.Position != null
-                    && u.Guid > 0x1000  // Filter out player GUIDs (low numbers)
-                    && u.Position.DistanceTo(bmData.Position) < 10f)
-                .OrderBy(u => u.Position.DistanceTo(bmData.Position))
+                    && ((uint)u.NpcFlags & (uint)NPCFlags.UNIT_NPC_FLAG_BATTLEMASTER) != 0)
+                .OrderBy(u => player.Position.DistanceTo(u.Position))
                 .FirstOrDefault();
         }
 
-        // Strategy 3: If the NPC isn't in ObjectManager at all (VMaNGOS may not send
-        // the creature to headless clients in certain zones), use the known packed GUID
-        // from the spawn database to interact directly. Skip MoveToBattlemaster since
-        // we're already at the NPC position.
         if (_bmNpc == null && bmData != null && player.Position.DistanceTo(bmData.Position) < 15f)
         {
             _bmGuid = bmData.PackedGuid;
-            Log.Information("[BG-QUEUE] Using known packed GUID 0x{Guid:X} for {NpcName} (NPC not in ObjectManager)",
-                _bmGuid, bmData.NpcName);
+            Log.Information("[BG-QUEUE] Using known packed GUID 0x{Guid:X} for {NpcName} ({NpcTitle}, entry={Entry})",
+                _bmGuid, bmData.NpcName, bmData.NpcTitle, bmData.NpcEntry);
             SetState(BgState.InteractAndQueue);
             return;
         }
@@ -172,33 +167,35 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         if (_bmNpc != null)
         {
             _bmGuid = _bmNpc.Guid;
-            Log.Information("[BG-QUEUE] Found battlemaster: {Name} (0x{Guid:X}) at {Dist:F0}y flags=0x{Flags:X}",
-                _bmNpc.Name, _bmGuid, player.Position.DistanceTo(_bmNpc.Position), (uint)_bmNpc.NpcFlags);
+            var source = ((uint)_bmNpc.NpcFlags & (uint)NPCFlags.UNIT_NPC_FLAG_BATTLEMASTER) != 0 ? "npc_flags" : "entry";
+            Log.Information("[BG-QUEUE] Found battlemaster: {Name} ({NpcTitle}, entry={Entry}, 0x{Guid:X}) at {Dist:F0}y via {Source} flags=0x{Flags:X}",
+                _bmNpc.Name,
+                bmData?.NpcTitle ?? "unknown title",
+                _bmNpc.Entry,
+                _bmGuid,
+                player.Position.DistanceTo(_bmNpc.Position),
+                source,
+                (uint)_bmNpc.NpcFlags);
             SetState(BgState.MoveToBattlemaster);
             return;
         }
 
-        // No battlemaster visible yet. If we're already close to the known position
-        // (e.g., test fixture teleported us there), just wait for the NPC to appear
-        // in ObjectManager — don't navigate away.
         if (bmData != null)
         {
             var distToKnown = player.Position.DistanceTo(bmData.Position);
             if (distToKnown < 30f)
             {
-                // We're near the NPC spawn — keep waiting for SMSG_UPDATE_OBJECT to populate it.
-                // The server sends NPC data within a few seconds of the player arriving.
                 if (!Wait.For("bm_wait_nearby", 2000, true))
                     return;
-                Log.Debug("[BG-QUEUE] Waiting for battlemaster NPC near {City} ({Dist:F0}y away)", bmData.City, distToKnown);
-                return; // Retry on next tick — don't navigate
+                Log.Debug("[BG-QUEUE] Waiting for {NpcName} ({NpcTitle}) near {City} ({Dist:F0}y away)",
+                    bmData.NpcName, bmData.NpcTitle, bmData.City, distToKnown);
+                return;
             }
 
-            // Far from known position — navigate toward it
             if (!Wait.For("bm_navigate", 3000, true))
                 return;
-            Log.Information("[BG-QUEUE] No battlemaster visible — navigating to {City} ({X:F0},{Y:F0})",
-                bmData.City, bmData.Position.X, bmData.Position.Y);
+            Log.Information("[BG-QUEUE] No battlemaster visible - navigating to {NpcName} ({NpcTitle}) in {City} ({X:F0},{Y:F0})",
+                bmData.NpcName, bmData.NpcTitle, bmData.City, bmData.Position.X, bmData.Position.Y);
             TryNavigateToward(bmData.Position, allowDirectFallback: true);
         }
         else
@@ -227,10 +224,17 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         NavigateToward(_bmNpc.Position);
     }
 
-    private void HandleInteractAndQueue(IWoWPlayer player)
+    private void HandleInteractAndQueue()
     {
         if (!Wait.For("bg_interact", 1500, true))
             return;
+
+        if (ShouldWaitForLeaderGroupQueue())
+        {
+            Log.Information("[BG-QUEUE] Grouped member detected - waiting for leader queue instead of interacting.");
+            SetState(BgState.WaitForInvite);
+            return;
+        }
 
         _actionAttempts++;
         if (_actionAttempts > 5)
@@ -240,48 +244,50 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             return;
         }
 
-        // Target and interact with the battlemaster — opens the BG queue dialog
+        var joinAsGroup = ShouldQueueAsGroup();
         ObjectManager.SetTarget(_bmGuid);
         ObjectManager.InteractWithNpcAsync(_bmGuid, CancellationToken.None)
             .GetAwaiter().GetResult();
 
-        // Wait for the gossip/BG dialog to open before sending queue packet.
-        // VMaNGOS expects CMSG_BATTLEMASTER_JOIN to come AFTER gossip interaction.
-        Thread.Sleep(1000);
+        Thread.Sleep(500);
 
-        // Queue for the BG via the battlemaster NPC — pass NPC GUID
-        var bgAgent = _bgClient;
-        if (bgAgent != null)
+        var gossipFrame = ObjectManager.GossipFrame;
+        if (gossipFrame?.IsOpen == true)
         {
-            // Send BG MAP ID (not type ID) — VMaNGOS reads this field as mapId
-            // and converts internally via GetBattleGroundTypeIdByMapId
-            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN mapId={MapId} via NPC 0x{Guid:X}",
-                _expectedBgMapId, _bmGuid);
-            bgAgent.JoinQueueAsync(_expectedBgMapId, 0, false, CancellationToken.None, battleMasterGuid: _bmGuid)
+            Log.Information("[BG-QUEUE] Selecting battlemaster gossip option on NPC 0x{Guid:X}", _bmGuid);
+            gossipFrame.SelectFirstGossipOfType(DialogType.battlemaster);
+            Thread.Sleep(500);
+        }
+
+        if (_bgClient != null)
+        {
+            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN mapId={MapId} via NPC 0x{Guid:X} asGroup={AsGroup}",
+                _expectedBgMapId, _bmGuid, joinAsGroup);
+            _bgClient.JoinQueueAsync(_expectedBgMapId, 0, joinAsGroup, CancellationToken.None, battleMasterGuid: _bmGuid)
                 .GetAwaiter().GetResult();
             SetState(BgState.WaitForInvite);
         }
         else
         {
-            // Fallback: interact and hope the server queues via the gossip flow
-            Log.Warning("[BG-QUEUE] No BattlegroundNetworkClient — using NPC interaction only");
+            Log.Information("[BG-QUEUE] No BattlegroundNetworkClient - using foreground battlemaster UI path (asGroup={AsGroup})",
+                joinAsGroup);
+            ObjectManager.JoinBattleGroundQueue();
             SetState(BgState.WaitForInvite);
         }
     }
 
     private void HandleWaitForInvite()
     {
-        // Check if BG network client has received an invite
-        var bgAgent = _bgClient;
-        if (bgAgent != null)
+        if (_bgClient != null)
         {
-            var bgState = bgAgent.CurrentState;
+            var bgState = _bgClient.CurrentState;
             if (bgState == WoWSharpClient.Networking.ClientComponents.BattlegroundState.Invited)
             {
                 Log.Information("[BG-QUEUE] BG invite received!");
                 SetState(BgState.AcceptInvite);
                 return;
             }
+
             if (bgState == WoWSharpClient.Networking.ClientComponents.BattlegroundState.InBattleground)
             {
                 Log.Information("[BG-QUEUE] Already in BG!");
@@ -289,12 +295,13 @@ public class BattlegroundQueueTask : BotTask, IBotTask
                 return;
             }
         }
-
-        // Also check by position — if mapId changed, we're in
-        if (ObjectManager.Player?.MapId == _expectedBgMapId)
+        else if (Wait.For("bg_accept_fg", 1000, true))
         {
-            SetState(BgState.Done);
+            ObjectManager.AcceptBattlegroundInvite();
         }
+
+        if (ObjectManager.Player?.MapId == _expectedBgMapId)
+            SetState(BgState.Done);
     }
 
     private void HandleAcceptInvite()
@@ -302,11 +309,10 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         if (!Wait.For("bg_accept", 1000, true))
             return;
 
-        var bgAgent = _bgClient;
-        if (bgAgent != null)
+        if (_bgClient != null)
         {
             Log.Information("[BG-QUEUE] Accepting BG invite");
-            bgAgent.AcceptInviteAsync(CancellationToken.None).GetAwaiter().GetResult();
+            _bgClient.AcceptInviteAsync(CancellationToken.None).GetAwaiter().GetResult();
             SetState(BgState.WaitForEntry);
         }
         else
@@ -329,10 +335,49 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     {
         if (_state != newState)
         {
-            Log.Debug("[BG-QUEUE] {Old} → {New}", _state, newState);
+            Log.Debug("[BG-QUEUE] {Old} -> {New}", _state, newState);
             _state = newState;
             _stateEnteredAt = DateTime.UtcNow;
             _actionAttempts = 0;
         }
+    }
+
+    private bool ShouldQueueAsGroup()
+    {
+        if (RequiresIndividualQueue())
+            return false;
+
+        var player = ObjectManager.Player;
+        if (player == null)
+            return false;
+
+        if (ObjectManager.PartyLeaderGuid != player.Guid)
+            return false;
+
+        return ObjectManager.Party1Guid != 0
+            || ObjectManager.Party2Guid != 0
+            || ObjectManager.Party3Guid != 0
+            || ObjectManager.Party4Guid != 0
+            || ObjectManager.PartyMembers.Skip(1).Any();
+    }
+
+    private bool ShouldWaitForLeaderGroupQueue()
+    {
+        if (RequiresIndividualQueue())
+            return false;
+
+        var player = ObjectManager.Player;
+        if (player == null)
+            return false;
+
+        var leaderGuid = ObjectManager.PartyLeaderGuid;
+        return leaderGuid != 0 && leaderGuid != player.Guid;
+    }
+
+    private bool RequiresIndividualQueue()
+    {
+        // VMaNGOS AV queuing is not reliable via one leader-side group join for the full staged raid.
+        // Each AV participant needs to talk to the battlemaster and send their own queue request.
+        return _bgType == BattlemasterData.BattlegroundType.AlteracValley;
     }
 }

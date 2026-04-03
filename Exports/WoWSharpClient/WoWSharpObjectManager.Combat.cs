@@ -192,19 +192,19 @@ namespace WoWSharpClient
         }
 
 
-        // Fishing spell IDs that require TARGET_FLAG_DEST_LOCATION instead of TARGET_FLAG_SELF.
+        // Vanilla fishing casts do not carry an explicit unit or destination payload.
         // Fishing casts a bobber at a location in front of the player — self-targeting causes NOT_FISHABLE.
+        // The foreground client emits spellId + targetFlags(0) and derives bobber placement from facing.
+        // Mirror that shape here so BG fishing matches the authenticated client packet flow.
         private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
-        // Ratchet's known-good shoreline casts land the bobber around 14y out.
-        // Pushing it closer keeps GAMEOBJ_USE comfortably inside interaction range.
-        private const float FishingBobberDistance = 14f; // yards in front of player
+        private const float FishingBobberDistance = 14f;
 
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
         {
             if (_woWClient == null) return;
 
             // Fishing spells need location-based targeting — calculate bobber position from facing
-            if (!castOnSelf && _fishingSpellIds.Contains(spellId) && Player?.Position != null)
+            if (false && !castOnSelf && _fishingSpellIds.Contains(spellId) && Player?.Position != null)
             {
                 var facing = Player.Facing;
                 var pos = Player.Position;
@@ -217,16 +217,18 @@ namespace WoWSharpClient
                 return;
             }
 
+            var forceNoTarget = _fishingSpellIds.Contains(spellId);
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
             w.Write((uint)spellId);
 
-            if (castOnSelf || _currentTargetGuid == 0 || _currentTargetGuid == PlayerGuid.FullGuid)
+            if (castOnSelf || forceNoTarget || _currentTargetGuid == 0 || _currentTargetGuid == PlayerGuid.FullGuid)
             {
-                // TARGET_FLAG_SELF = 0x0000 - server uses caster as target
-                // Also use self-targeting when the current target is the player's own GUID
+                // targetFlags = 0 means "no explicit target payload".
+                // This is the packet shape used by self-only spells and vanilla fishing casts.
                 w.Write((ushort)0x0000);
-                Log.Information("[CastSpell] spell={SpellId} targetSelf (guid=0x{Guid:X})", spellId, _currentTargetGuid);
+                Log.Information("[CastSpell] spell={SpellId} targetFlags=0x0000 currentTarget=0x{Guid:X} fishing={IsFishing}",
+                    spellId, _currentTargetGuid, forceNoTarget);
             }
             else
             {

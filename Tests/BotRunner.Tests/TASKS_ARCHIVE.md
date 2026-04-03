@@ -2,6 +2,50 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-03) - RFC coordinator-only prep pattern
+
+- [x] Keep RFC fixture prep-owned and coordinator-owned responsibilities separate all the way through the test lifecycle.
+- [x] Ensure RFC coordinator coverage proves the coordinator does not emit setup/prep chat commands.
+- Completion notes:
+  - `RfcBotFixture` now disables the coordinator during prep, clears stale group state up front, performs revive/level/spell/gear/Orgrimmar staging, and only then re-enables the coordinator.
+  - `DungeoneeringCoordinator` now moves from `WaitingForBots` directly into group formation, which keeps the RFC coordinator path out of the old `.learn` / `.character level` prep flow.
+  - `CoordinatorStrictCountTests` now pin the contract deterministically: RFC waits for every bot before forming the group, and the coordinator-driven group/teleport flow never emits `.learn`, `.character level`, `.reset`, or `.additem`.
+
+## Archived Snapshot (2026-04-02) - Alterac Valley roster/loadout contract
+
+- [x] Expand `AlteracValleyFixture` from minimum-level queue prep to a level-`60` objective-ready roster contract.
+- [x] Encode Horde FG `TESTBOT1` as a High Warlord Tauren Warrior and Alliance FG `AVBOTA1` as a Grand Marshal Paladin, then cover that contract in deterministic fixture configuration tests.
+- [x] Add level-`60` class/role-appropriate gear, epic mounts, and baseline elixir staging for all `80` AV participants; non-FG bots should use next-tier-appropriate loadouts.
+- Completion notes:
+  - `AlteracValleyFixture` already stages the full 80-account AV roster with `TargetLevel=60`, objective-ready loadout prep, batch application of item sets/weapons/elixirs, and mounted first-objective dispatch helpers.
+  - `AlteracValleyLoadoutPlan` now acts as the deterministic source of truth for honor-rank loadouts, faction mounts, baseline elixirs, and first-objective assignments for every AV account.
+  - `BattlegroundFixtureConfigurationTests` proves the leader contracts and the roster/loadout contract deterministically (`11/11` green in an isolated output), so this work is no longer an active implementation item.
+
+## Archived Snapshot (2026-04-02) - Focused FG fishing packet capture
+
+- [x] Capture a focused FG Ratchet fishing packet reference once the task-owned fishing flow can complete end-to-end.
+- Completion notes:
+  - The focused live `Fishing_CaptureForegroundPackets_RatchetStagingCast` slice passed and emitted `packets_TESTBOT1.csv`, `transform_TESTBOT1.csv`, and `navtrace_TESTBOT1.json`.
+  - The successful FG packet reference included `FishingTask pool_acquired`, `FishingTask in_cast_range_current`, `FishingTask cast_started`, and `FishingTask fishing_loot_success`.
+  - This closes the FG reference portion of the fishing parity work; the remaining open work lives in the dual FG/BG parity slice, which is still blocked first on staged Ratchet pool activation/visibility and then on the remaining BG local-pier runtime route when staging succeeds.
+
+## Archived Snapshot (2026-04-02) - Ratchet master-pool activation mapping
+
+- [x] Map Barrens master-pool `2628` activation in-process so live failures can distinguish "local Ratchet children were never selected by the master pool" from "the selected child pool was active but never streamed/approached correctly."
+- Completion notes:
+  - Added `FishingPoolActivationAnalyzer` plus deterministic tests so the live harness now classifies `NoChildPoolsSpawned`, `MasterPoolSelectedNonLocal`, `LocalPoolSpawnedOnlyOnDirectProbe`, and `LocalPoolSpawnedButInvisible`.
+  - April 2 live evidence now covers both local failure modes: some staged refreshes reported a local Ratchet child pool as spawned but still invisible from the dock stages, and other reruns showed the local Ratchet child pools only becoming spawnable on direct child-pool probes after the staged refresh path stayed empty.
+  - The remaining open work is no longer "map the master pool." It is stabilizing local staged visibility and then fixing the post-staging `FishingTask` pier search-walk failure.
+
+## Archived Snapshot (2026-04-02) - Ratchet Fishing Harness
+
+- [x] Keep the Ratchet fishing harness honest: refresh the actual nearby child pools, try the local stage fallbacks in a fixed order, and fail with explicit "no local pool active" evidence before blaming pier/pathfinding.
+- Completion notes:
+  - `FishingProfessionTests` now refreshes the full local Ratchet child-pool set (`2620/2619/2627/2618/2626/2617/2621`) instead of assuming `.pool update 2628` alone is enough.
+  - Both bots now use fixed local stage candidates before dispatching `StartFishing` (`FG: packet-capture -> parity`, `BG: parity -> packet-capture`), and the test refuses to attribute a failure to pathfinding until one of those stages actually surfaces a visible pool.
+  - The live failure path now emits the full Barrens master-pool `2628` child-site map (`2607..2627`) directly in the xUnit output so future passes can compare local Ratchet children against the full master footprint without manual DB queries.
+  - Latest live evidence is now more precise: some reruns still keep both local stages empty, while other reruns show local Ratchet children as staged-spawned or direct-probe-spawnable without ever becoming visible from the dock stages.
+
 ## Archived Snapshot (2026-02-23 09:27:22) - Tests/BotRunner.Tests/TASKS.md
 
 # BotRunner.Tests Tasks

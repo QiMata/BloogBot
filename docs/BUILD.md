@@ -167,6 +167,7 @@ BloogBot/
 | `WWOW_CHARACTER_GENDER` | *(optional)* | Override character gender (e.g. `Male`) |
 | `WWOW_WAIT_DEBUG` | *(unset)* | Set to `1` to pause on startup and wait for debugger attachment |
 | `WWOW_INJECT_LOG_DIR` | `<BaseDirectory>/WWoWLogs` | Override directory for injection diagnostic logs |
+| `WWOW_ENABLE_RECORDING_ARTIFACTS` | *(unset)* | Set to `1` to allow packet/snapshot recording artifacts and FG file-backed recording diagnostics; default keeps those files disabled |
 | `WWOW_DISABLE_PACKET_HOOKS` | *(unset)* | Set to `1` to skip SignalEventManager + PacketLogger hook installation. **Required** to prevent FG crash during cross-map transfers (dungeon teleports). Also configurable via `appsettings.json` `Injection:DisablePacketHooks` |
 | `WWOW_LOGIN_STATE_MONITOR` | *(unset)* | Set to `1` to enable login state monitor polling |
 | `LOADER_ALLOC_CONSOLE` | *(unset)* | Set to `1` to allocate a console window for Loader.dll diagnostics. Also configurable via `appsettings.json` `Injection:AllocateConsole` |

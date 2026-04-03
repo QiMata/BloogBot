@@ -18,6 +18,7 @@ public class FgCharacterSelectScreen(
 {
     private DateTime? _charSelectFirstSeen;
     private static readonly TimeSpan CharListGracePeriod = TimeSpan.FromSeconds(2);
+    private int _characterCreateAttempts;
 
     /// <summary>
     /// Snapshot of MaxCharacterCount taken during HasReceivedCharacterList.
@@ -71,6 +72,12 @@ public class FgCharacterSelectScreen(
         set { }
     }
 
+    public bool IsCharacterCreationPending { get; private set; }
+
+    public DateTime LastCharacterListRequestUtc { get; private set; }
+
+    public int CharacterCreateAttempts => _characterCreateAttempts;
+
     public List<CharacterSelect> CharacterSelects
     {
         get
@@ -98,7 +105,30 @@ public class FgCharacterSelectScreen(
 
     public void RefreshCharacterListFromServer()
     {
-        // WoW.exe handles this automatically
+        // WoW.exe handles this automatically.
+        LastCharacterListRequestUtc = DateTime.UtcNow;
+    }
+
+    public void MarkCharacterListLoaded()
+    {
+        _charSelectFirstSeen = null;
+        _hasLoggedGracePeriod = false;
+        IsCharacterCreationPending = false;
+        if (_lastSnapshotCharCount > 0)
+            _characterCreateAttempts = 0;
+    }
+
+    public void ResetCharacterListRequest()
+    {
+        _charSelectFirstSeen = null;
+        _hasLoggedGracePeriod = false;
+        IsCharacterCreationPending = false;
+    }
+
+    public bool ShouldRetryCharacterListRequest(TimeSpan retryAfter, DateTime utcNow)
+    {
+        // WoW.exe owns the foreground character-list flow.
+        return false;
     }
 
     /// <summary>Tracks the current step in the multi-phase character creation flow.</summary>
@@ -206,6 +236,8 @@ public class FgCharacterSelectScreen(
                     luaCall("if CharacterCreateGenderButtonMale then CharacterCreateGenderButtonMale:Click() end");
                 luaCall($"if CharacterCreateNameEdit then CharacterCreateNameEdit:SetText(\"{name}\") end");
                 luaCall($"if CreateCharacter then CreateCharacter(\"{name}\") end");
+                IsCharacterCreationPending = true;
+                _characterCreateAttempts++;
                 _createCharStep++;
                 break;
 

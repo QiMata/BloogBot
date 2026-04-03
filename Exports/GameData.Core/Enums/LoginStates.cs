@@ -18,6 +18,9 @@ public enum LoginStates
     /// <summary>Creating a new character</summary>
     charcreate,
 
+    /// <summary>Playing a cinematic/movie</summary>
+    movie,
+
     /// <summary>Unknown state (fallback)</summary>
     unknown
 }

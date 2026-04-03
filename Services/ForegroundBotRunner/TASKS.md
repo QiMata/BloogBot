@@ -37,15 +37,37 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-03-25 (session 181)`
-- Pass result: `delta shipped`
+- Last updated: `2026-04-01 (session 230)`
+- Pass result: `recording artifacts and FG file-backed diagnostics are now explicit opt-in`
 - Last delta:
+  - Session 230 stopped the foreground runner from creating packet/snapshot sidecars and `WWoWLogs`/`Documents/BloogBot` diagnostics unless `WWOW_ENABLE_RECORDING_ARTIFACTS=1`. That gate now covers `MovementRecorder`, `ForegroundPacketTraceRecorder`, `ForegroundBotWorker` startup logs, loader/startup logs, `ThreadSynchronizer` crash traces, `SignalEventManager`, `PacketLogger`, `ConnectionStateMachine`, `NativeLibraryHelper`, `WoWEventHandler`, `LoginStateMonitor`, and the anti-AFK debug log.
+  - The automated/live recording paths still work because the test/tool entry points now enable the env var intentionally before launching FG capture flows.
+  - Removed the untracked repo output trees that had been inflating from repeated captures: `Bot/*/Recordings`, `Bot/*/WWoWLogs`, `Bot/*/botrunner_diag.log`, and `TestResults/*`. The canonical replay corpus stayed under `Tests/Navigation.Physics.Tests/Recordings`.
   - Session 181 fixed the automated recording movement path instead of letting scenario captures fall back to Lua. `ObjectManager.StartMovement(...)` / `StopMovement(...)` now dispatch `Functions.SetControlBit(...)` through `ThreadSynchronizer.RunOnMainThread(...)`, which cleared the repeated `SetControlBitSafeFunction(...)` `NullReferenceException` seen in `injection_firstchance.log` during the Undercity capture scenarios.
   - `Memory.cs` now logs memory-read failures without dereferencing a null `InnerException`, which restored correct FG metadata reads during capture (`Race=Orc`, `Gender=Female`) instead of the earlier `Race=None` / `Gender=None` noise caused by the logging path itself.
   - Fresh packet-backed FG captures now exist for the native lower-route and west-elevator-up Undercity scenarios: `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`. `RecordingMaintenance capture` also now auto-cleans duplicate `Bot/*/Recordings` trees after each run so repeated FG capture passes stop inflating disk usage.
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementScenarioRunnerTests|FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `13 passed`
   - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- capture --scenarios 13_undercity_lower_route,14_undercity_elevator_west_up --timeout-minutes 8 --configuration Release` -> succeeded; produced `Urgzuga_Undercity_2026-03-25_10-00-52` and `Urgzuga_Undercity_2026-03-25_10-01-09`
+  - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPacketTraceRecorderTests" --logger "console;verbosity=minimal"` -> `passed (3/3)`
   - Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/RecordingFileArtifactGate.cs`
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPacketTraceRecorder.cs`
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
+  - `Services/ForegroundBotRunner/Loader.cs`
+  - `Services/ForegroundBotRunner/MovementRecorder.cs`
+  - `Services/ForegroundBotRunner/MovementScenarioRunner.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/NativeLibraryHelper.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/SignalEventManager.cs`
+  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs`
+  - `Services/ForegroundBotRunner/Program.cs`
+  - `Services/ForegroundBotRunner/Statics/LoginStateMonitor.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.PlayerState.cs`
+  - `Services/ForegroundBotRunner/Statics/WoWEventHandler.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPacketTraceRecorderTests.cs`
   - `Services/ForegroundBotRunner/Mem/Memory.cs`
   - `Services/ForegroundBotRunner/Mem/Functions.cs`
   - `Services/ForegroundBotRunner/MovementScenarioRunner.cs`
@@ -53,7 +75,7 @@
   - `Services/ForegroundBotRunner/TASKS.md`
   - `Tools/RecordingMaintenance/Program.cs`
   - Next command:
-  - `dotnet run --project Tools/RecordingMaintenance/RecordingMaintenance.csproj -- summary`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPacketTraceRecorderTests" --logger "console;verbosity=minimal"`
   - `ObjectManager` now exposes live foreground `QuestGreetingFrame` and `TradeFrame` wrappers instead of returning interface defaults, which closes the last remaining FG interaction-frame gaps tracked in this file.
   - Added foreground implementations for `DepositExcessItemsAsync`, `PostAuctionItemsAsync`, and `CraftAvailableRecipesAsync`; those flows now drive the injected client through coarse Lua/UI automation instead of inherited no-op defaults.
   - Added deterministic FG interaction-frame coverage for quest-greeting enumeration/selection and trade-window offer/accept flows, and fixed the quest-greeting Lua probe so the count/read paths stay distinct.

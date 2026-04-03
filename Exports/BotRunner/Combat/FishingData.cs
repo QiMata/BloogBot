@@ -27,6 +27,7 @@ namespace BotRunner.Combat
 
         // Fishing bobber display IDs (vanilla 1.12.1)
         public const uint BobberDisplayId = 668;
+        internal const float MinimumPoolCastTargetDistanceFromPlayer = 12f;
 
         // Lure item IDs
         public const uint ShinyBauble = 6529;      // +25 fishing for 10 min
@@ -267,6 +268,8 @@ namespace BotRunner.Combat
         /// <summary>
         /// Pulls the cast target slightly back from the pool center toward the player. This keeps the
         /// bobber in open water while still landing close enough to the pool to fish it.
+        /// When the player is already close to the pool, clamp the inset so the target does not
+        /// collapse back into a near-feet cast that the server rejects before channel start.
         /// </summary>
         public static Position GetPoolCastTarget(Position playerPosition, Position poolPosition, float insetFromPool)
         {
@@ -276,7 +279,9 @@ namespace BotRunner.Combat
             if (planarDistance <= 0.01f || insetFromPool <= 0f)
                 return new Position(poolPosition.X, poolPosition.Y, poolPosition.Z);
 
-            var scale = MathF.Min(insetFromPool, planarDistance) / planarDistance;
+            var maxInsetBeforeNearFeetCast = MathF.Max(0f, planarDistance - MinimumPoolCastTargetDistanceFromPlayer);
+            var inset = MathF.Min(insetFromPool, maxInsetBeforeNearFeetCast);
+            var scale = MathF.Min(inset, planarDistance) / planarDistance;
             return new Position(
                 poolPosition.X + (dx * scale),
                 poolPosition.Y + (dy * scale),

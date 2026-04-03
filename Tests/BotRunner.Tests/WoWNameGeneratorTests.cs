@@ -45,6 +45,33 @@ namespace BotRunner.Tests
             Assert.True(names.Count > 1, $"Generated only {names.Count} unique name(s) in 50 attempts");
         }
 
+        [Fact]
+        public void GenerateName_WithAccountSeed_IsDeterministic()
+        {
+            var first = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA8");
+            var second = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA8");
+
+            Assert.Equal(first, second);
+        }
+
+        [Fact]
+        public void GenerateName_WithDifferentAccountSeeds_ReturnsDifferentNames()
+        {
+            var first = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA8");
+            var second = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA9");
+
+            Assert.NotEqual(first, second);
+        }
+
+        [Fact]
+        public void GenerateName_WithRetrySeedVariation_ReturnsDifferentNames()
+        {
+            var first = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA8");
+            var retry = WoWNameGenerator.GenerateName(Race.NightElf, Gender.Female, "ABBOTA8:1");
+
+            Assert.NotEqual(first, retry);
+        }
+
         // ======== ParseRaceCode ========
 
         [Theory]

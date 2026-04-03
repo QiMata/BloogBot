@@ -38,6 +38,13 @@ internal static class AtomicTaskTestHelpers
         pathfinding
             .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
             .Returns(true);
+        pathfinding
+            .Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+            .Returns((uint _, Position position, float __) => (1u, position));
+        pathfinding
+            .Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+            .Returns((uint _, Position[] positions, float __) =>
+                positions.Select(_ => (groundZ: 0f, found: false)).ToArray());
         configurePathfinding?.Invoke(pathfinding);
 
         // Wire 7-parameter GetPath to delegate to the 4-parameter overload (which
@@ -116,6 +123,26 @@ internal static class AtomicTaskTestHelpers
             ?? throw new InvalidOperationException("FishingTask._stateEnteredAt field not found.");
 
         stateEnteredAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
+    }
+
+    internal static void RewindFishingTaskSearchWaypoint(FishingTask task, int elapsedMs)
+    {
+        var searchWaypointEnteredAtField = typeof(FishingTask).GetField(
+            "_searchWaypointEnteredAt",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("FishingTask._searchWaypointEnteredAt field not found.");
+
+        searchWaypointEnteredAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
+    }
+
+    internal static void RewindFishingTaskApproachProgress(FishingTask task, int elapsedMs)
+    {
+        var approachProgressAtField = typeof(FishingTask).GetField(
+            "_approachProgressAt",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("FishingTask._approachProgressAt field not found.");
+
+        approachProgressAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
     }
 }
 
@@ -268,10 +295,21 @@ public class FishingTaskTests
     [Fact]
     public void Update_WithVisiblePool_MovesTowardFishingRange()
     {
-        // Player placed 60y from pool — well outside approach arrival radius (5y).
-        // FishingTask should navigate toward the pool approach position.
-        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
-        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-1030f, -3880f, 4f));
+        // With a visible pool and a resolved shoreline sample outside the arrival radius,
+        // FishingTask should move toward the approach position instead of casting in place.
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isApproachCandidate = Math.Abs(position.X + 30f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 0f, found: isApproachCandidate);
+                        })
+                        .ToArray());
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-45f, 0f, 0f));
         player.Setup(p => p.SkillInfo).Returns(
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
@@ -281,7 +319,7 @@ public class FishingTaskTests
             guid: 0xAA11UL,
             entry: 180582,
             typeId: (uint)GameObjectType.FishingHole,
-            pos: new Position(-975.7f, -3835.2f, 0f));
+            pos: new Position(0f, 0f, 0f));
 
         om.Setup(o => o.Player).Returns(player.Object);
         om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
@@ -297,9 +335,1148 @@ public class FishingTaskTests
         task.Update();
         task.Update();
 
-        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            position.X < 0f
+            && Math.Abs(position.Y) < 0.5f
+            && Math.Abs(position.Z) < 0.1f)), Times.AtLeastOnce);
         om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
         om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithVisibleCastablePool_CastsFromCurrentPositionWithoutWalkingToApproach()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isApproachCandidate = Math.Abs(position.X + 30f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 0f, found: isApproachCandidate);
+                        })
+                        .ToArray());
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-14.5f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA13UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(0f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank2, -1, false), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask in_cast_range_current", StringComparison.Ordinal))), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithVisiblePoolAtOuterNearRange_DoesNotUseCurrentPositionFastPath()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isApproachCandidate = Math.Abs(position.X + 30f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 0f, found: isApproachCandidate);
+                        })
+                        .ToArray());
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-21.8f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA14UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(0f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank2, -1, false), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask in_cast_range_current", StringComparison.Ordinal))), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_IgnoresFarPoolAndKeepsFollowingSearchWaypoints()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA50UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(10f, 0f, 0f),
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 8f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.DoesNotContain(diagnostics, message => message.Contains("search_walk_found_pool", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("pool_acquired", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_OutsideTightArrivalRadius_KeepsClosingOnCurrentWaypoint()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var currentPosition = new Position(2f, 0f, 0f);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA52UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(10f, 0f, 0f),
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 10f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.DoesNotContain(diagnostics, message => message.Contains("search_walk waypoint=1/2", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithFarWaypoint_UsesIntermediateTravelTarget()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5AUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 8f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithUnreachableFullStride_UsesShorterReachableStep()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint _, Position start, Position end, bool __) =>
+                    Math.Abs(end.X) <= 4.1f
+                        ? [start, end]
+                        : []);
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5CUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 4f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_UsesValidatedProbeCorridorInsteadOfCuttingDirectlyToStrideTarget()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint _, Position start, Position end, bool __) =>
+                    Math.Abs(end.X - 8f) <= 0.1f
+                        ? [start, new Position(2f, 0f, 0f), new Position(4f, 0f, 0f), end]
+                        : []);
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5DUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 2f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        om.Verify(o => o.SetNavigationPath(It.Is<Position[]>(path =>
+            path.Length == 3
+            && Math.Abs(path[0].X - 2f) < 0.01f
+            && Math.Abs(path[1].X - 4f) < 0.01f
+            && Math.Abs(path[2].X - 8f) < 0.01f)), Times.AtLeastOnce);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_RejectsProbeCorridorThatDropsOffCurrentSupportLayer()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint _, Position start, Position end, bool __) =>
+                {
+                    if (Math.Abs(end.X - 8f) <= 0.1f)
+                    {
+                        return
+                        [
+                            start,
+                            new Position(2f, 0f, -3.1f),
+                            new Position(4f, 0f, -3.1f),
+                            end
+                        ];
+                    }
+
+                    if (Math.Abs(end.X - 4f) <= 0.1f)
+                        return [start, end];
+
+                    return [];
+                });
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5EUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 4f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 2f) < 0.01f
+            && Math.Abs(position.Z + 3.1f) < 0.01f)), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithUnreachableWaypoint_SkipsUnsafeDirectFallback()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns(Array.Empty<Position>());
+            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns(false);
+        });
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA53UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f),
+            new Position(40f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        Assert.Contains(diagnostics, message => message.Contains("search_walk_unreachable waypoint=1/2", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithProbePathRejectedBySupportLayerGuard_SkipsWaypointWithoutRequeryingNavigation()
+    {
+        var probePath = new[]
+        {
+            new Position(0f, 0f, 1.2f),
+            new Position(2f, 0f, 1.7f),
+            new Position(4f, -0.5f, 1.9f),
+            new Position(7f, 1.5f, 3.7f),
+            new Position(7.5f, 2.8f, 4.2f),
+            new Position(7.0f, 5.0f, 5.2f),
+            new Position(6.5f, 5.2f, 5.7f),
+            new Position(10f, 6f, 5.3f)
+        };
+
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns(probePath);
+            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns(false);
+        });
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 1.2f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5CUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 1.2f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 1.2f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.SetNavigationPath(It.IsAny<Position[]>()), Times.Never);
+        Assert.Contains(diagnostics, message => message.Contains("search_walk_unreachable waypoint=1/1", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithCandidateThatDoesNotAdvanceTowardWaypoint_SkipsWaypointWithoutGrindingNearCurrentPosition()
+    {
+        var nearCurrentCandidate = new Position(0.4f, 0.1f, 5f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    if (position.X < 10f)
+                        return (1u, nearCurrentCandidate);
+
+                    return (1u, position);
+                });
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint _, Position start, Position end, bool __) =>
+                    end.X < 10f
+                        ? new[]
+                        {
+                            new Position(start.X, start.Y, start.Z),
+                            nearCurrentCandidate
+                        }
+                        : Array.Empty<Position>());
+            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns(false);
+        });
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5DUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 5f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 5f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.SetNavigationPath(It.IsAny<Position[]>()), Times.Never);
+        Assert.Contains(diagnostics, message => message.Contains("search_walk_unreachable waypoint=1/1", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithStalledWaypoint_SkipsToNextProbe()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var currentPosition = new Position(0f, 0f, 0f);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA55UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f),
+            new Position(40f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Invocations.Clear();
+        AtomicTaskTestHelpers.RewindFishingTaskSearchWaypoint(task, 21000);
+        task.Update();
+        currentPosition = new Position(32f, 0f, 0f);
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - 40f) < 0.01f
+            && Math.Abs(position.Y) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Contains(diagnostics, message => message.Contains("search_walk_stalled waypoint=1/2", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WhenMovementStuckRecoverySignals_SkipsCurrentProbeBeforeFullTimeout()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var currentPosition = new Position(0f, 0f, 0f);
+        var stuckRecoveryGeneration = 0;
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA56UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+        om.Setup(o => o.MovementStuckRecoveryGeneration).Returns(() => stuckRecoveryGeneration);
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f),
+            new Position(0f, 20f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Invocations.Clear();
+        stuckRecoveryGeneration = 1;
+        AtomicTaskTestHelpers.RewindFishingTaskSearchWaypoint(task, 2000);
+
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X) < 0.01f
+            && Math.Abs(position.Y - 8f) < 0.01f
+            && Math.Abs(position.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Contains(diagnostics, message =>
+            message.Contains("search_walk_stalled waypoint=1/2", StringComparison.Ordinal)
+            && message.Contains("reason=movement_stuck", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithProgressOnCurrentWaypoint_ResetsStallTimer()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var diagnostics = new List<string>();
+        ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(message => diagnostics.Add(message));
+
+        var currentPosition = new Position(0f, 0f, 0f);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA5BUL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 0f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        currentPosition = new Position(12f, 0f, 0f);
+        AtomicTaskTestHelpers.RewindFishingTaskSearchWaypoint(task, 21000);
+        om.Invocations.Clear();
+        task.Update();
+
+        Assert.DoesNotContain(diagnostics, message => message.Contains("search_walk_stalled", StringComparison.Ordinal));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_SnapsWaypointToNearestWalkablePointBeforeNavigating()
+    {
+        var snappedWaypoint = new Position(16f, 4f, 5f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    var shouldSnap = Math.Abs(position.X - 20f) < 0.01f && Math.Abs(position.Y) < 0.01f;
+                    return shouldSnap ? (1u, snappedWaypoint) : (1u, position);
+                });
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(10f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA54UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 5f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 5f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - snappedWaypoint.X) < 0.01f
+            && Math.Abs(position.Y - snappedWaypoint.Y) < 0.01f
+            && Math.Abs(position.Z - snappedWaypoint.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithLowerSupportSample_SnapsAgainstReferenceLayerInsteadOfDroppingBelowPier()
+    {
+        var lowerSupportCandidate = new Position(20f, 0f, 1.5f);
+        var upperPierCandidate = new Position(20f, 0f, 5.2f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isProbeCenter = Math.Abs(position.X - 20f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 1.5f, found: isProbeCenter);
+                        })
+                        .ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    if (Math.Abs(position.X - 20f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return position.Z >= 4.5f
+                            ? (1u, upperPierCandidate)
+                            : (1u, lowerSupportCandidate);
+
+                    return (1u, position);
+                });
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(10f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA56UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 5f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 5f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - upperPierCandidate.X) < 0.01f
+            && Math.Abs(position.Y - upperPierCandidate.Y) < 0.01f
+            && Math.Abs(position.Z - upperPierCandidate.Z) < 0.01f)), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - lowerSupportCandidate.X) < 0.01f
+            && Math.Abs(position.Y - lowerSupportCandidate.Y) < 0.01f
+            && Math.Abs(position.Z - lowerSupportCandidate.Z) < 0.01f)), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_SearchWalk_WithLowerAndHigherProbeCandidates_PrefersHigherWalkableEdge()
+    {
+        var lowCandidate = new Position(19.5f, 0f, 2f);
+        var highCandidate = new Position(21.5f, 0f, 5.5f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isCenterSample = Math.Abs(position.X - 20f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            var isHigherEdgeSample = Math.Abs(position.X - 22f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 5f, found: isCenterSample || isHigherEdgeSample);
+                        })
+                        .ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    if (Math.Abs(position.X - 20f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return (1u, lowCandidate);
+                    if (Math.Abs(position.X - 22f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return (1u, highCandidate);
+                    return (1u, position);
+                });
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(14f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var farPool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA57UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(80f, 0f, 5f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([farPool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object,
+        [
+            new Position(20f, 0f, 5f)
+        ]);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 16000);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            position.X > 21f
+            && Math.Abs(position.Y) < 0.01f
+            && position.Z >= 5f)), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - lowCandidate.X) < 0.01f
+            && Math.Abs(position.Y - lowCandidate.Y) < 0.01f
+            && Math.Abs(position.Z - lowCandidate.Z) < 0.01f)), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithLowerAndHigherWalkablePierCandidates_PrefersHigherSupportEdge()
+    {
+        var lowCandidate = new Position(-25f, 0f, 2f);
+        var highCandidate = new Position(-28f, 0f, 5f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isLowSample = Math.Abs(position.X + 25f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            var isHighSample = Math.Abs(position.X + 28f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 5f, found: isLowSample || isHighSample);
+                        })
+                        .ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    if (Math.Abs(position.X + 25f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return (1u, lowCandidate);
+                    if (Math.Abs(position.X + 28f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return (1u, highCandidate);
+                    return (1u, position);
+                });
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-35f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA55UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(0f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            position.X < -23f
+            && Math.Abs(position.Y) < 0.5f
+            && Math.Abs(position.Z - highCandidate.Z) < 0.01f)), Times.AtLeastOnce);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithLowerPierSample_ApproachSnapStaysOnCurrentSupportLayer()
+    {
+        var lowerSupportCandidate = new Position(-25f, 0f, 1.4f);
+        var upperPierCandidate = new Position(-25f, 0f, 5.1f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isApproachSample = Math.Abs(position.X + 25f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 1.4f, found: isApproachSample);
+                        })
+                        .ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) =>
+                {
+                    if (Math.Abs(position.X + 25f) < 0.25f && Math.Abs(position.Y) < 0.25f)
+                        return position.Z >= 4.5f
+                            ? (1u, upperPierCandidate)
+                            : (1u, lowerSupportCandidate);
+
+                    return (1u, position);
+                });
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-35f, 0f, 5f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA56UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(0f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - upperPierCandidate.X) < 0.01f
+            && Math.Abs(position.Y - upperPierCandidate.Y) < 0.01f
+            && Math.Abs(position.Z - upperPierCandidate.Z) < 0.01f)), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            Math.Abs(position.X - lowerSupportCandidate.X) < 0.01f
+            && Math.Abs(position.Y - lowerSupportCandidate.Y) < 0.01f
+            && Math.Abs(position.Z - lowerSupportCandidate.Z) < 0.01f)), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithOppositeSidePierCandidate_PrefersPlayerSideApproach()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions
+                        .Select(position =>
+                        {
+                            var isPlayerSideCandidate = Math.Abs(position.X + 37f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            var isOppositeSideCandidate = Math.Abs(position.X - 10f) < 0.25f && Math.Abs(position.Y) < 0.25f;
+                            return (groundZ: 0f, found: isPlayerSideCandidate || isOppositeSideCandidate);
+                        })
+                        .ToArray());
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-45f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA51UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(0f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            position.X < 0f
+            && Math.Abs(position.Y) < 0.5f
+            && Math.Abs(position.Z) < 0.1f)), Times.AtLeastOnce);
         Assert.Single(stack);
     }
 
@@ -319,7 +1496,6 @@ public class FishingTaskTests
         player.Setup(p => p.MainhandIsEnchanted).Returns(true);
         player.Setup(p => p.IsMoving).Returns(false);
         var poolPosition = new Position(20f, 0f, 0f);
-        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, poolPosition, 4f);
         var pool = AtomicTaskTestHelpers.CreateGameObject(
             guid: 0xAA12UL,
             entry: 180582,
@@ -349,15 +1525,57 @@ public class FishingTaskTests
         task.Update();
 
         om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
-        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
-        om.Verify(o => o.CastSpellAtLocation(
-            (int)FishingData.FishingRank2,
-            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
-            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
-            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank2, -1, false), Times.Once);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
         ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
             message.Contains("FishingTask cast_started", StringComparison.Ordinal)
-            && message.Contains($"target=({expectedCastTarget.X:F1},{expectedCastTarget.Y:F1},{expectedCastTarget.Z:F1})", StringComparison.Ordinal))), Times.Once);
+            && message.Contains("mode=fishing_cast", StringComparison.Ordinal))), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WhileWaitingToCast_DoesNotResendStopAndFacingEveryTick()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var poolPosition = new Position(20f, 0f, 0f);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA12UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: poolPosition);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Invocations.Clear();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 100);
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.Face(It.IsAny<Position>()), Times.Once);
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
         Assert.Single(stack);
     }
 
@@ -412,6 +1630,143 @@ public class FishingTaskTests
         task.Update();
 
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_AfterCastRetry_RepositionsAwayFromRejectedApproach()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions.Select(position =>
+                    {
+                        var isCurrentApproach = MathF.Abs(position.X - 1f) < 0.6f && MathF.Abs(position.Y) < 0.6f;
+                        var isAlternateApproach = MathF.Abs(position.X - 4f) < 0.6f && MathF.Abs(position.Y) < 0.6f;
+                        return (groundZ: 0f, found: isCurrentApproach || isAlternateApproach);
+                    }).ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) => (1u, position));
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        player.Setup(p => p.ChannelingId).Returns(0u);
+        player.Setup(p => p.IsChanneling).Returns(false);
+
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA14UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(20f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 5001);
+        task.Update();
+
+        om.Invocations.Clear();
+        task.Update();
+        task.Update();
+
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask reject_approach", StringComparison.Ordinal))), Times.Once);
+        om.Verify(o => o.MoveToward(It.Is<Position>(position =>
+            position.DistanceTo2D(new Position(1f, 0f, 0f)) > 2f)), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WhenApproachStalls_RepositionsAwayFromRejectedApproachTarget()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.BatchGetGroundZ(It.IsAny<uint>(), It.IsAny<Position[]>(), It.IsAny<float>()))
+                .Returns((uint _, Position[] positions, float __) =>
+                    positions.Select(position =>
+                    {
+                        var isInitialApproach = MathF.Abs(position.X - 4f) < 0.6f && MathF.Abs(position.Y) < 0.6f;
+                        var isAlternateApproach = MathF.Abs(position.X - 9f) < 0.6f && MathF.Abs(position.Y) < 0.6f;
+                        return (groundZ: 0f, found: isInitialApproach || isAlternateApproach);
+                    }).ToArray());
+            pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
+                .Returns((uint _, Position position, float __) => (1u, position));
+            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns((uint _, Position fromPosition, Position __) => fromPosition.X > 2f);
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        player.Setup(p => p.ChannelingId).Returns(0u);
+        player.Setup(p => p.IsChanneling).Returns(false);
+
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA15UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(20f, 0f, 0f));
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Invocations.Clear();
+        AtomicTaskTestHelpers.RewindFishingTaskApproachProgress(task, 13000);
+        task.Update();
+        task.Update();
+        task.Update();
+
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask reject_approach", StringComparison.Ordinal)
+            && message.Contains("reason=approach_stalled", StringComparison.Ordinal))), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask retry reason=approach_stalled", StringComparison.Ordinal))), Times.Once);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
         om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
         Assert.Single(stack);
     }
@@ -466,7 +1821,6 @@ public class FishingTaskTests
             entry: 180582,
             typeId: (uint)GameObjectType.FishingHole,
             pos: new Position(-975.7f, -3835.2f, 0f));
-        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
         var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
         var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
 
@@ -506,12 +1860,8 @@ public class FishingTaskTests
         // 5: ResolveAndCast → casts
         task.Update();
 
-        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
-        om.Verify(o => o.CastSpellAtLocation(
-            (int)FishingData.FishingRank1,
-            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
-            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
-            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
 
         channelingId = FishingData.FishingRank1;
         isChanneling = true;
@@ -537,7 +1887,7 @@ public class FishingTaskTests
     }
 
     [Fact]
-    public void Update_BagDeltaWithoutLootWindow_DoesNotPopSuccess()
+    public void Update_BagDeltaAfterFishingWithoutLootWindow_PopsSuccess()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
         // Player at exactly 24y from pool (DesiredPoolDistance) on same Z → within approach arrival radius.
@@ -552,7 +1902,6 @@ public class FishingTaskTests
             entry: 180582,
             typeId: (uint)GameObjectType.FishingHole,
             pos: new Position(-975.7f, -3835.2f, 0f));
-        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
         var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
         var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
 
@@ -590,12 +1939,8 @@ public class FishingTaskTests
         // 5: ResolveAndCast → casts
         task.Update();
 
-        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
-        om.Verify(o => o.CastSpellAtLocation(
-            (int)FishingData.FishingRank1,
-            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
-            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
-            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
 
         channelingId = FishingData.FishingRank1;
         isChanneling = true;
@@ -608,8 +1953,9 @@ public class FishingTaskTests
         task.Update();
 
         ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
-            message.Contains("fishing_loot_success", StringComparison.Ordinal))), Times.Never);
-        Assert.Single(stack);
+            message.Contains("FishingTask loot_bag_delta", StringComparison.Ordinal)
+            || message.Contains("FishingTask fishing_loot_success", StringComparison.Ordinal))), Times.AtLeastOnce);
+        Assert.Empty(stack);
     }
 }
 

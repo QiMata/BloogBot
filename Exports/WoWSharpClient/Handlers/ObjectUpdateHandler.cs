@@ -808,7 +808,6 @@ namespace WoWSharpClient.Handlers
             EItemFields field
         )
         {
-            Log.Error($"[ReadItemField] {field}");
             if (field <= EItemFields.ITEM_FIELD_OWNER + 0x01)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadBytes(4);
             else if (field <= EItemFields.ITEM_FIELD_CONTAINED + 0x01)
@@ -841,7 +840,10 @@ namespace WoWSharpClient.Handlers
             else if (field == EItemFields.ITEM_FIELD_MAXDURABILITY)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else
+            {
+                Log.Debug("[ReadItemField] Unrecognized item field {Field}", field);
                 reader.ReadUInt32(); // consume unrecognized item field (e.g. enchantment sub-slots 23-42)
+            }
         }
 
         private static void ReadContainerField(

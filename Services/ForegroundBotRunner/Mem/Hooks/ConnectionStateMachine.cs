@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using Serilog;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Mem.Hooks
 {
@@ -121,23 +122,16 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         static ConnectionStateMachine()
         {
-            string wowDir;
-            try
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("connection_state.log");
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
             {
-                wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName)
-                    ?? AppContext.BaseDirectory;
+                try
+                {
+                    File.WriteAllText(DiagnosticLogPath,
+                        $"=== ConnectionStateMachine Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+                }
+                catch { }
             }
-            catch { wowDir = AppContext.BaseDirectory; }
-
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "connection_state.log");
-            try
-            {
-                File.WriteAllText(DiagnosticLogPath,
-                    $"=== ConnectionStateMachine Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
-            }
-            catch { }
         }
 
         /// <summary>Current connection state.</summary>
@@ -294,6 +288,11 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (DiagnosticLogLock)

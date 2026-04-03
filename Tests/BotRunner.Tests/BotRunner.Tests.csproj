@@ -12,12 +12,12 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="Moq" Version="4.20.69" />
     <PackageReference Include="MySql.Data" Version="9.0.0" />
@@ -31,12 +31,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Services\WoWStateManager\WoWStateManager.csproj" />
+    <ProjectReference Include="..\..\Services\BackgroundBotRunner\BackgroundBotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
     <ProjectReference Include="..\..\Services\DecisionEngineService\DecisionEngineService.csproj" />
+    <ProjectReference Include="..\..\Services\SceneDataService\SceneDataService.csproj" />
     <ProjectReference Include="..\..\BotProfiles\BotProfiles.csproj" />
     <!-- Build-order only: PathfindingService is x64 and runs as a separate process.
          We need it built but don't load its assembly in the x86 test host. -->

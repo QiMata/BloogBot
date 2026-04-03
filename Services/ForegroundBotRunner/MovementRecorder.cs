@@ -17,6 +17,7 @@ using System.Threading;
 using System;
 using System.Linq;
 using System.IO;
+using BotRunner;
 
 namespace ForegroundBotRunner
 {
@@ -160,20 +161,6 @@ namespace ForegroundBotRunner
             return true;
         }
 
-        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.
-        /// Uses AppContext.BaseDirectory to avoid Process.GetCurrentProcess() calls.</summary>
-        private static void CrashTrace(string message)
-        {
-            try
-            {
-                var logPath = Path.Combine(AppContext.BaseDirectory, "WWoWLogs", "crash_trace.log");
-                using var sw = new StreamWriter(logPath, true);
-                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Recorder] {message}");
-                sw.Flush();
-            }
-            catch { }
-        }
-
         public bool IsRecording => _isRecording;
 
         public MovementRecorder(Func<ObjectManager?> getObjectManager, ILoggerFactory loggerFactory)
@@ -275,7 +262,6 @@ namespace ForegroundBotRunner
                 }
             }
 
-            CrashTrace($"Poll: pre-EnsureChatHook isRec={_isRecording} contId={objectManager.ContinentId}");
             EnsureChatHook();
 
             try
@@ -375,6 +361,13 @@ namespace ForegroundBotRunner
 
         public void StartRecording(string? description = null, int frameIntervalMs = DefaultFrameIntervalMs)
         {
+            if (!RecordingArtifactsFeature.IsEnabled())
+            {
+                _logger.LogInformation("Movement recording ignored; set {EnvVar}=1 to enable recording artifacts.",
+                    RecordingArtifactsFeature.EnvironmentVariableName);
+                return;
+            }
+
             if (_isRecording)
             {
                 _logger.LogWarning("Recording is already in progress");
@@ -608,7 +601,6 @@ namespace ForegroundBotRunner
                         resolvedTransport.AnimProgress,
                         playerWorldPos);
                 }
-                CrashTrace($"CaptureFrame: pre-snapshot contId={objectManager!.ContinentId} pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
                 SnapshotNearbyGameObjects(objectManager!, frame, playerWorldPos, frame.TransportGuid, transportSnapshot);
                 SnapshotNearbyUnits(objectManager!, frame, playerWorldPos, unit.Guid);
 

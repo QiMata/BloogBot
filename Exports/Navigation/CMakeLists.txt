@@ -1,7 +1,7 @@
 # Navigation Project CMakeLists.txt
 cmake_minimum_required(VERSION 3.20)
 
-project(Navigation)
+project(Navigation LANGUAGES C CXX)
 
 # Collect source files
 file(GLOB_RECURSE NAVIGATION_SOURCES
@@ -22,8 +22,22 @@ list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "main\\.cpp$")
 list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "cmake_build")
 list(FILTER NAVIGATION_HEADERS EXCLUDE REGEX "cmake_build")
 
-# Create the DLL
+# The service runtime only needs the production exports. Keep native test export
+# objects out of Linux service builds to avoid pulling in Windows-only helpers.
+if(NOT WIN32)
+    list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "TestExports\\.cpp$")
+endif()
+
+# Create the shared library (Navigation.dll on Windows, libNavigation.so on Linux)
 add_library(Navigation SHARED ${NAVIGATION_SOURCES} ${NAVIGATION_HEADERS})
+
+set_target_properties(Navigation PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    C_STANDARD 17
+    C_STANDARD_REQUIRED ON
+    FOLDER "Native"
+)
 
 # Include directories
 target_include_directories(Navigation PRIVATE
@@ -38,58 +52,68 @@ target_include_directories(Navigation PRIVATE
 
 # Preprocessor definitions
 target_compile_definitions(Navigation PRIVATE
-    WIN32
     $<$<CONFIG:Debug>:_DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
     NAVIGATION_EXPORTS
-    _WINDOWS
-    _USRDLL
+    DT_POLYREF64
+    USE_STANDARD_MALLOC
     _CRT_SECURE_NO_WARNINGS
 )
 
+if(WIN32)
+    target_compile_definitions(Navigation PRIVATE
+        WIN32
+        _WINDOWS
+        _USRDLL
+    )
+endif()
+
 # Compiler options
-target_compile_options(Navigation PRIVATE
-    /W3                    # Warning level 3
-    /MP                    # Multi-processor compilation
-    /Zc:strictStrings-     # Disable strict string literal checking
-    /FS                    # Force synchronous PDB writes
-    $<$<CONFIG:Debug>:/ZI> # Debug information format
-    $<$<CONFIG:Release>:/O2> # Optimization level 2 for release
-)
+if(MSVC)
+    target_compile_options(Navigation PRIVATE
+        /W3
+        /MP
+        /Zc:strictStrings-
+        /FS
+        $<$<CONFIG:Debug>:/ZI>
+        $<$<CONFIG:Release>:/O2>
+    )
 
-# Linker options
-target_link_options(Navigation PRIVATE
-    /SUBSYSTEM:$<$<CONFIG:Debug>:CONSOLE>$<$<CONFIG:Release>:WINDOWS>
-    $<$<CONFIG:Debug>:/DEBUG>
-    $<$<CONFIG:Release>:/OPT:REF>
-    $<$<CONFIG:Release>:/OPT:ICF>
-)
+    target_link_options(Navigation PRIVATE
+        /SUBSYSTEM:$<$<CONFIG:Debug>:CONSOLE>$<$<CONFIG:Release>:WINDOWS>
+        $<$<CONFIG:Debug>:/DEBUG>
+        $<$<CONFIG:Release>:/OPT:REF>
+        $<$<CONFIG:Release>:/OPT:ICF>
+    )
 
-# Runtime library
-set_property(TARGET Navigation PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-
-# Output properties
-set_target_properties(Navigation PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    FOLDER "Native"
-)
+    set_property(TARGET Navigation PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+else()
+    target_compile_options(Navigation PRIVATE
+        -fPIC
+        -Wall
+        -Wextra
+        -Wno-unused-parameter
+        -Wno-unused-function
+    )
+endif()
 
 # Windows-specific libraries
-target_link_libraries(Navigation PRIVATE
-    kernel32
-    user32
-    gdi32
-    winspool
-    comdlg32
-    advapi32
-    shell32
-    ole32
-    oleaut32
-    uuid
-    odbc32
-    odbccp32
-)
+if(WIN32)
+    target_link_libraries(Navigation PRIVATE
+        kernel32
+        user32
+        gdi32
+        winspool
+        comdlg32
+        advapi32
+        shell32
+        ole32
+        oleaut32
+        uuid
+        odbc32
+        odbccp32
+    )
+endif()
 
 # Export header for DLL interface
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Navigation.h")

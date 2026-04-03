@@ -89,12 +89,12 @@ namespace WoWStateManager
     public class Program
     {
         private static IConfiguration _configuration;
-        private static Process _pathfindingProcess;
         private static PathfindingServiceState _serviceState = PathfindingServiceState.AlreadyRunning;
 
-        private const int MaxRetries = 120; // 2 minutes max wait for nav/physics to load
+        private const int ExternalServiceMaxRetries = 15; // Keep external dependency waits short when StateManager does not own process launch.
         private const int RetryDelayMs = 1000;
-        private const int QuickCheckDelayMs = 100; // Faster polling when we launched the process
+        private const int SceneDataMaxRetries = 5; // Best-effort only; BG workers can fall back to local preloaded physics.
+        private const int SceneDataRetryDelayMs = 500;
 
         public static PathfindingServiceState ServiceState => _serviceState;
 
@@ -122,7 +122,6 @@ namespace WoWStateManager
             TrySetEnvironmentVariableFromConfig("WWOW_REALMD_CONNECTION_STRING", _configuration.GetConnectionString("Realmd"));
             TrySetEnvironmentVariableFromConfig("WWOW_MANGOS_WORLD_CONNECTION_STRING", _configuration.GetConnectionString("MangosWorld"));
 
-            // Check if PathfindingService is already running
             if (IsPathfindingServiceRunning())
             {
                 _serviceState = PathfindingServiceState.AlreadyRunning;
@@ -130,166 +129,43 @@ namespace WoWStateManager
             }
             else
             {
-                // Launch PathfindingService and track the process
-                _pathfindingProcess = LaunchPathfindingService();
-                if (_pathfindingProcess != null)
-                {
-                    _serviceState = PathfindingServiceState.Launched;
-                    _pathfindingProcess.EnableRaisingEvents = true;
-                    _pathfindingProcess.Exited += OnPathfindingProcessExited;
-                }
+                _serviceState = PathfindingServiceState.ConnectionLost;
+                Console.WriteLine("PathfindingService is not running. StateManager expects it to be managed externally.");
             }
 
-            // Wait for PathfindingService to become available before starting bot profiles
             WaitForPathfindingService();
 
-            try
+            if (IsSceneDataServiceRunning())
             {
-                CreateHostBuilder(args)
-                    .Build()
-                    .Run();
+                Console.WriteLine("SceneDataService is already running.");
             }
-            finally
+            else
             {
-                // Kill PathfindingService if WE launched it (don't kill pre-existing instances)
-                if (_pathfindingProcess != null && _serviceState != PathfindingServiceState.AlreadyRunning)
-                {
-                    try
-                    {
-                        if (!_pathfindingProcess.HasExited)
-                        {
-                            Console.WriteLine($"Stopping PathfindingService (PID: {_pathfindingProcess.Id})...");
-                            _pathfindingProcess.Kill();
-                            _pathfindingProcess.WaitForExit(5000);
-                            Console.WriteLine("PathfindingService stopped.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Warning: Could not stop PathfindingService: {ex.Message}");
-                    }
-                    finally
-                    {
-                        _pathfindingProcess.Dispose();
-                        _pathfindingProcess = null;
-                    }
-                }
+                Console.WriteLine("SceneDataService is not running. StateManager expects it to be managed externally.");
             }
-        }
 
-        private static Process LaunchPathfindingService()
-        {
-            try
-            {
-                // Try same directory first (unified net8.0 output), fall back to ../x64/
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
-                var dllPath = Path.Combine(baseDir, "PathfindingService.dll");
-                var serviceDir = baseDir;
+            WaitForSceneDataService();
 
-                if (!File.Exists(dllPath))
-                {
-                    dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
-                    serviceDir = x64Dir;
-                }
-
-                if (!File.Exists(dllPath))
-                {
-                    Console.WriteLine($"PathfindingService.dll not found at: {Path.Combine(baseDir, "PathfindingService.dll")} or {Path.Combine(x64Dir, "PathfindingService.dll")}");
-                    Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
-                    return null;
-                }
-
-                var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = $"\"{dllPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = !showWindows,
-                    RedirectStandardOutput = !showWindows,
-                    RedirectStandardError = !showWindows,
-                    WorkingDirectory = serviceDir
-                };
-
-                var process = Process.Start(processInfo);
-                Console.WriteLine($"PathfindingService launched from {serviceDir} (PID: {process?.Id}).");
-
-                // Forward PathfindingService stdout/stderr so C++ physics diagnostics are visible
-                if (!showWindows && process != null)
-                {
-                    process.OutputDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                            Console.WriteLine($"[PathfindingService-OUT] {e.Data}");
-                    };
-                    process.ErrorDataReceived += (s, e) =>
-                    {
-                        if (!string.IsNullOrEmpty(e.Data))
-                            Console.WriteLine($"[PathfindingService-ERR] {e.Data}");
-                    };
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
-                }
-                return process;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to launch PathfindingService: {ex.Message}");
-                return null;
-            }
-        }
-
-        private static void OnPathfindingProcessExited(object sender, EventArgs e)
-        {
-            if (_serviceState == PathfindingServiceState.Launched)
-            {
-                // Process exited before we ever connected
-                _serviceState = PathfindingServiceState.ProcessExited;
-                Console.WriteLine($"PathfindingService process exited unexpectedly with code {_pathfindingProcess?.ExitCode}.");
-            }
-            else if (_serviceState == PathfindingServiceState.Loading)
-            {
-                // Process exited while loading navigation data
-                _serviceState = PathfindingServiceState.ProcessExited;
-                Console.WriteLine($"PathfindingService process exited during initialization (code {_pathfindingProcess?.ExitCode}).");
-            }
-            else if (_serviceState == PathfindingServiceState.Connected || _serviceState == PathfindingServiceState.Ready)
-            {
-                // We had a connection but the process died
-                _serviceState = PathfindingServiceState.ConnectionLost;
-                Console.WriteLine($"PathfindingService process exited (code {_pathfindingProcess?.ExitCode}). Connection lost.");
-            }
+            CreateHostBuilder(args)
+                .Build()
+                .Run();
         }
 
         private static void WaitForPathfindingService()
         {
-            var ipAddress = _configuration["PathfindingService:IpAddress"];
-            var port = int.Parse(_configuration["PathfindingService:Port"]);
+            var ipAddress = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+            var portValue = _configuration["PathfindingService:Port"];
+            var port = int.TryParse(portValue, out var parsedPort) ? parsedPort : 5001;
 
-            // Only show waiting message if we launched the process (silent polling)
-            bool weStartedProcess = _serviceState == PathfindingServiceState.Launched;
-            if (weStartedProcess)
-            {
-                Console.WriteLine($"Waiting for PathfindingService at {ipAddress}:{port}...");
-            }
+            Console.WriteLine($"Waiting for PathfindingService at {ipAddress}:{port} (external dependency)...");
 
-            int delayMs = weStartedProcess ? QuickCheckDelayMs : RetryDelayMs;
-            int maxAttempts = weStartedProcess ? MaxRetries * (RetryDelayMs / QuickCheckDelayMs) : MaxRetries;
+            const int delayMs = RetryDelayMs;
+            int maxAttempts = ExternalServiceMaxRetries;
             var startTime = DateTime.Now;
             bool tcpConnected = false;
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                // Check if process died while we're waiting
-                if (weStartedProcess && _serviceState == PathfindingServiceState.ProcessExited)
-                {
-                    Console.WriteLine(
-                        $"WARNING: PathfindingService process exited with code {_pathfindingProcess?.ExitCode} before becoming available. " +
-                        "Proceeding without pathfinding. Navigation will fall back to direct movement.");
-                    return;
-                }
-
                 // Phase 1: Wait for TCP connectivity
                 if (!tcpConnected && IsPathfindingServiceRunning())
                 {
@@ -305,7 +181,7 @@ namespace WoWStateManager
                     var status = PathfindingServiceStatus.ReadFromFile();
                     if (status != null)
                     {
-                        bool statusMatchesLiveService = IsStatusFromLivePathfindingProcess(status, weStartedProcess);
+                        bool statusMatchesLiveService = IsStatusFromLivePathfindingProcess(status);
                         if (status.IsReady && statusMatchesLiveService)
                         {
                             _serviceState = PathfindingServiceState.Ready;
@@ -317,13 +193,12 @@ namespace WoWStateManager
                             return;
                         }
 
-                        // Status exists but not usable yet (still loading or stale/mismatched PID)
-                        if (attempt % (5000 / delayMs) == 0)
+                        if (attempt % 5 == 0)
                         {
                             if (!statusMatchesLiveService)
                             {
                                 Console.WriteLine(
-                                    $"  PathfindingService status ignored (stale/mismatched PID {status.ProcessId}). Waiting for live ready status...");
+                                    $"  PathfindingService status ignored (stale/mismatched PID {status.ProcessId}). Waiting for current ready status...");
                             }
                             else
                             {
@@ -331,17 +206,10 @@ namespace WoWStateManager
                             }
                         }
                     }
-                    else if (attempt % (5000 / delayMs) == 0)
+                    else if (attempt % 5 == 0)
                     {
                         Console.WriteLine("  PathfindingService status file not found yet. Waiting for ready status...");
                     }
-                }
-
-                // Silent polling - only log every 10 seconds if we launched the process
-                if (weStartedProcess && !tcpConnected && attempt % (10000 / delayMs) == 0)
-                {
-                    var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                    Console.WriteLine($"Still waiting for PathfindingService socket... ({elapsed:F0}s elapsed)");
                 }
 
                 Thread.Sleep(delayMs);
@@ -353,7 +221,37 @@ namespace WoWStateManager
                 "Proceeding without pathfinding. Navigation will fall back to direct movement.");
         }
 
-        private static bool IsStatusFromLivePathfindingProcess(PathfindingServiceStatus status, bool weStartedProcess)
+        private static void WaitForSceneDataService()
+        {
+            var ipAddress = GetSceneDataServiceIpAddress();
+            var port = GetSceneDataServicePort();
+            Console.WriteLine($"Waiting for SceneDataService at {ipAddress}:{port} (external dependency)...");
+
+            var startTime = DateTime.Now;
+            for (int attempt = 1; attempt <= SceneDataMaxRetries; attempt++)
+            {
+                if (IsSceneDataServiceRunning())
+                {
+                    var elapsed = (DateTime.Now - startTime).TotalSeconds;
+                    Console.WriteLine($"SceneDataService READY after {elapsed:F1}s.");
+                    return;
+                }
+
+                if (attempt % 5 == 0)
+                {
+                    var elapsed = (DateTime.Now - startTime).TotalSeconds;
+                    Console.WriteLine($"Still waiting for SceneDataService socket... ({elapsed:F0}s elapsed)");
+                }
+
+                Thread.Sleep(SceneDataRetryDelayMs);
+            }
+
+            Console.WriteLine(
+                $"WARNING: SceneDataService did not become available at {ipAddress}:{port} after {(SceneDataMaxRetries * SceneDataRetryDelayMs) / 1000.0:F1} seconds. " +
+                "Background bots will still launch and retry scene-slice acquisition on demand once the service becomes available.");
+        }
+
+        private static bool IsStatusFromLivePathfindingProcess(PathfindingServiceStatus status)
         {
             try
             {
@@ -361,11 +259,6 @@ namespace WoWStateManager
                 if (process.HasExited)
                     return false;
 
-                // If we launched the service, require exact PID match to avoid stale-status false positives.
-                if (weStartedProcess && _pathfindingProcess != null)
-                    return process.Id == _pathfindingProcess.Id;
-
-                // For pre-existing service, we can't know PID upfront; require plausible process identity.
                 var processName = process.ProcessName;
                 return processName.Contains("dotnet", StringComparison.OrdinalIgnoreCase)
                     || processName.Contains("PathfindingService", StringComparison.OrdinalIgnoreCase);
@@ -390,6 +283,26 @@ namespace WoWStateManager
 
                 using var client = new System.Net.Sockets.TcpClient();
                 var result = client.BeginConnect(ipAddress, port, null, null);
+                var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(500));
+                if (success)
+                {
+                    client.EndConnect(result);
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsSceneDataServiceRunning()
+        {
+            try
+            {
+                using var client = new System.Net.Sockets.TcpClient();
+                var result = client.BeginConnect(GetSceneDataServiceIpAddress(), GetSceneDataServicePort(), null, null);
                 var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(500));
                 if (success)
                 {
@@ -473,6 +386,21 @@ namespace WoWStateManager
                 return;
 
             Environment.SetEnvironmentVariable(name, value);
+        }
+
+        private static string GetSceneDataServiceIpAddress()
+            => _configuration["SceneDataService:IpAddress"]
+               ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
+               ?? "127.0.0.1";
+
+        private static int GetSceneDataServicePort()
+        {
+            var portValue =
+                _configuration["SceneDataService:Port"]
+                ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
+                ?? "5003";
+
+            return int.TryParse(portValue, out var port) ? port : 5003;
         }
     }
 }

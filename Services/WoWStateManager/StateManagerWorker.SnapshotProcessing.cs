@@ -34,7 +34,7 @@ namespace WoWStateManager
             switch (dataMessage.ParameterCase)
             {
                 case AsyncRequest.ParameterOneofCase.StateChange:
-                    HandleStateChange(dataMessage.StateChange);
+                    HandleStateChange(dataMessage.StateChange, response);
                     break;
 
                 case AsyncRequest.ParameterOneofCase.SnapshotQuery:
@@ -55,7 +55,7 @@ namespace WoWStateManager
         }
 
 
-        private void HandleStateChange(StateChangeRequest stateChange)
+        private void HandleStateChange(StateChangeRequest stateChange, StateChangeResponse response)
         {
             string? parameterDetails = null;
             if (stateChange.RequestParameter != null)
@@ -73,6 +73,57 @@ namespace WoWStateManager
 
             _logger.LogInformation(
                 $"State change request received: ChangeType={stateChange.ChangeType}, Parameter={parameterDetails ?? "<none>"}");
+
+            switch (stateChange.ChangeType)
+            {
+                case StateChangeType.CoordinatorEnabled:
+                    if (!TryParseBooleanStateParameter(stateChange.RequestParameter, out var enabled))
+                    {
+                        _logger.LogWarning("State change request failed: COORDINATOR_ENABLED requires a boolean-compatible parameter.");
+                        response.Response = ResponseResult.Failure;
+                        return;
+                    }
+
+                    response.Response = _activityMemberSocketListener.SetCoordinatorEnabled(enabled)
+                        ? ResponseResult.Success
+                        : ResponseResult.Failure;
+                    return;
+            }
+
+            response.Response = ResponseResult.Success;
+        }
+
+        private static bool TryParseBooleanStateParameter(RequestParameter? parameter, out bool value)
+        {
+            value = false;
+            if (parameter == null)
+                return false;
+
+            switch (parameter.ParameterCase)
+            {
+                case RequestParameter.ParameterOneofCase.IntParam:
+                    value = parameter.IntParam != 0;
+                    return true;
+
+                case RequestParameter.ParameterOneofCase.LongParam:
+                    value = parameter.LongParam != 0;
+                    return true;
+
+                case RequestParameter.ParameterOneofCase.StringParam:
+                    if (bool.TryParse(parameter.StringParam, out value))
+                        return true;
+
+                    if (int.TryParse(parameter.StringParam, out var intValue))
+                    {
+                        value = intValue != 0;
+                        return true;
+                    }
+
+                    return false;
+
+                default:
+                    return false;
+            }
         }
 
 

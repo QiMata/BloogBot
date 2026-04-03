@@ -2,6 +2,8 @@
 using System.IO;
 using System.Threading;
 
+using BotRunner;
+
 namespace ForegroundBotRunner
 {
     /// <summary>
@@ -20,11 +22,16 @@ namespace ForegroundBotRunner
         private static int _firstChanceLogged = 0;
         private const int FirstChanceLogLimit = 50;
         private static readonly string LogDirectory = InitLogDirectory();
-        private static string InjectionLog => Path.Combine(LogDirectory, "injection.log");
-        private static string FirstChanceLog => Path.Combine(LogDirectory, "injection_firstchance.log");
+        private static string InjectionLog => string.IsNullOrWhiteSpace(LogDirectory) ? string.Empty : Path.Combine(LogDirectory, "injection.log");
+        private static string FirstChanceLog => string.IsNullOrWhiteSpace(LogDirectory) ? string.Empty : Path.Combine(LogDirectory, "injection_firstchance.log");
 
         private static string InitLogDirectory()
         {
+            if (!RecordingArtifactsFeature.IsEnabled())
+            {
+                return string.Empty;
+            }
+
             try
             {
                 var env = Environment.GetEnvironmentVariable("WWOW_INJECT_LOG_DIR");
@@ -53,6 +60,11 @@ namespace ForegroundBotRunner
 
         static Loader()
         {
+            if (string.IsNullOrWhiteSpace(FirstChanceLog))
+            {
+                return;
+            }
+
             try
             {
                 AppDomain.CurrentDomain.FirstChanceException += (s, e) =>
@@ -85,7 +97,10 @@ namespace ForegroundBotRunner
         {
             try
             {
-                File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
+                if (!string.IsNullOrWhiteSpace(InjectionLog))
+                {
+                    File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
+                }
                 Console.WriteLine("[Loader] Managed entry point called");
 
                 // Write breadcrumb file to confirm managed code entry (same as MinimalLoader for test compatibility)
@@ -93,7 +108,10 @@ namespace ForegroundBotRunner
 
                 if (_isInitialized)
                 {
-                    File.AppendAllText(InjectionLog, "Loader already initialized, skipping.\n");
+                    if (!string.IsNullOrWhiteSpace(InjectionLog))
+                    {
+                        File.AppendAllText(InjectionLog, "Loader already initialized, skipping.\n");
+                    }
                     return 0;
                 }
                 _isInitialized = true;
@@ -110,7 +128,7 @@ namespace ForegroundBotRunner
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[Loader] Exception in main thread: {ex}");
-                        try { File.AppendAllText(InjectionLog, $"[Loader] Exception in main thread: {ex}\n"); } catch { }
+                        try { if (!string.IsNullOrWhiteSpace(InjectionLog)) File.AppendAllText(InjectionLog, $"[Loader] Exception in main thread: {ex}\n"); } catch { }
                     }
                 });
                 
@@ -120,13 +138,16 @@ namespace ForegroundBotRunner
                 _mainThread.Start();
                 
                 Console.WriteLine("[Loader] Main thread started successfully");
-                File.AppendAllText(InjectionLog, "Loader.Load completed successfully.\n");
+                if (!string.IsNullOrWhiteSpace(InjectionLog))
+                {
+                    File.AppendAllText(InjectionLog, "Loader.Load completed successfully.\n");
+                }
                 return 0; // Success
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Loader] Failed to start: {ex}");
-                try { File.AppendAllText(InjectionLog, $"Error in Loader.Load(): {ex}\n"); } catch { }
+                try { if (!string.IsNullOrWhiteSpace(InjectionLog)) File.AppendAllText(InjectionLog, $"Error in Loader.Load(): {ex}\n"); } catch { }
                 return 1; // Failure
             }
         }

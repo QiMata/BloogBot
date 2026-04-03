@@ -16,7 +16,7 @@ public interface IDynamicObjectOverlayRegistry
 
 public sealed class NativeDynamicObjectOverlayRegistry : IDynamicObjectOverlayRegistry
 {
-    private const string DllName = "Navigation.dll";
+    private const string DllName = "Navigation";
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "RegisterDynamicObject")]
     [return: MarshalAs(UnmanagedType.I1)]

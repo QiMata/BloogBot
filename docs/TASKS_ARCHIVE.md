@@ -2,6 +2,20 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-03) - P30 Coordinator Refactor Complete
+
+- [x] `30.1` Extract Dungeoneering prep into `RfcBotFixture`.
+- [x] `30.2` Simplify `DungeoneeringCoordinator` to the coordination-only flow used by the coordinator tests.
+- [x] `30.3` Reuse the shared `CoordinatorFixtureBase` / `BattlegroundCoordinatorFixtureBase` pattern across RFC and battleground fixtures.
+- [x] `30.4` All coordinator tests now follow the same lifecycle: fixture prep first, coordinator actions second, assertions last.
+- Completion notes:
+  - `RfcBotFixture` now disables the coordinator during prep, clears stale group state up front, performs revive/level/spell/gear/Orgrimmar staging, then re-enables the coordinator only after prep finishes.
+  - `DungeoneeringCoordinator` now starts from `WaitingForBots` and transitions directly into group formation once every bot is in-world, so it no longer needs to enter the old prep path to drive RFC tests.
+  - Deterministic coverage now proves both the strict bot-count gate and the coordination-only action flow: `CoordinatorStrictCountTests` confirms RFC waits for all bots before group formation and never emits prep chat commands before RFC teleporting.
+  - Validation:
+    - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CoordinatorStrictCountTests|FullyQualifiedName~CoordinatorFixtureBaseTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+
 
 ## Archived Snapshot (2026-02-23 09:27:22) - docs/TASKS.md
 

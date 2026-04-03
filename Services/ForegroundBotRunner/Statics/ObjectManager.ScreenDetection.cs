@@ -187,7 +187,20 @@ namespace ForegroundBotRunner.Statics
         /// <summary>
         /// Returns true if the world is currently loading (ContinentID = 0xFF)
         /// </summary>
-        public bool IsLoadingWorld => MemoryManager.ReadUint(Offsets.Map.ContinentId) == 0xFF;
+        public bool IsLoadingWorld
+        {
+            get
+            {
+                var continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                if (continentId == 0xFF)
+                    return true;
+
+                // Freshly created characters currently need to watch their intro cinematic.
+                // Once the character list exists, treat "movie" as a world-entry transition
+                // rather than falling back to login handling.
+                return LoginState == LoginStates.movie && MaxCharacterCount > 0;
+            }
+        }
 
         /// <summary>
         /// Gets the current ContinentId from memory.
@@ -267,92 +280,91 @@ namespace ForegroundBotRunner.Statics
         ///   - ContinentId == 0xFF (255) → LoadingWorld (loading bar visible)
         ///   - ContinentId < 0xFF → InWorld (valid map ID: 0=Eastern Kingdoms, 1=Kalimdor, etc.)
         /// </summary>
+        internal static WoWScreenState ResolveScreenState(
+            string? loginState,
+            uint continentId,
+            bool hasEnteredWorld,
+            int maxCharacterCount)
+        {
+            var loginStateStr = loginState?.Trim().ToLowerInvariant() ?? string.Empty;
+
+            // Check for "connecting" state first
+            if (loginStateStr == "connecting")
+                return WoWScreenState.Connecting;
+
+            // Check for character create
+            if (loginStateStr == "charcreate")
+                return WoWScreenState.CharacterCreate;
+
+            // Check for login screen
+            if (loginStateStr == "login")
+                return WoWScreenState.LoginScreen;
+
+            // A movie can mean either the pre-auth intro cinematic or the post-create
+            // character intro cinematic. New characters currently need to watch the
+            // latter, so keep it out of login handling once the character list exists.
+            if (loginStateStr == "movie")
+                return maxCharacterCount > 0 ? WoWScreenState.LoadingWorld : WoWScreenState.LoginScreen;
+
+            // Settings/patch/credits remain pre-auth screens.
+            if (loginStateStr == "options" || loginStateStr == "patchdownload" || loginStateStr == "credits")
+                return WoWScreenState.LoginScreen;
+
+            // "realmwizard" is the first-time realm setup screen (choose realm type, language).
+            // It appears after authentication but before the character list loads.
+            // Treat as CharacterSelect so BotRunnerService triggers realm selection logic.
+            if (loginStateStr == "realmwizard")
+                return WoWScreenState.CharacterSelect;
+
+            // Empty loginState means WoW.exe just launched and memory isn't initialized yet.
+            // This is the login screen — NOT charselect. Without this guard, the bot thinks
+            // it's past login and never sends credentials.
+            if (string.IsNullOrEmpty(loginStateStr))
+                return WoWScreenState.LoginScreen;
+
+            if (loginStateStr == "charselect")
+            {
+                // ContinentId == 0xFFFFFFFF means we're NOT in any map.
+                // This can mean charselect OR continent transition (e.g. zeppelin crossing).
+                // Distinguish: if we've already entered the world, it's a continent transition.
+                if (continentId == 0xFFFFFFFF)
+                {
+                    if (hasEnteredWorld)
+                        return WoWScreenState.LoadingWorld;
+
+                    return WoWScreenState.CharacterSelect;
+                }
+
+                // ContinentId == 0xFF (255) means loading bar is visible
+                if (continentId == 0xFF)
+                    return WoWScreenState.LoadingWorld;
+
+                // If we haven't entered the world yet, continentId may be stale
+                // (leftover from a previous WoW session or WoW.exe startup defaults).
+                // Treat as CharacterSelect until HasEnteredWorld confirms we're actually in-world.
+                if (!hasEnteredWorld)
+                    return WoWScreenState.CharacterSelect;
+
+                // Any other ContinentId value is a valid map ID - we're in world
+                // Map IDs: 0=Eastern Kingdoms, 1=Kalimdor, 36=Deadmines, 329=Stratholme, 533=Naxxramas, etc.
+                // Dungeons/raids can have IDs > 255, so we can't just check < 0xFF
+                return WoWScreenState.InWorld;
+            }
+
+            return WoWScreenState.Unknown;
+        }
+
         public WoWScreenState GetCurrentScreenState()
         {
             try
             {
                 var loginStateStr = MemoryManager.ReadString(Offsets.CharacterScreen.LoginState)?.Trim().ToLowerInvariant() ?? "";
                 var continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                var screenState = ResolveScreenState(loginStateStr, continentId, HasEnteredWorld, MaxCharacterCount);
+                if (screenState == WoWScreenState.Unknown)
+                    DiagLog($"GetCurrentScreenState UNRECOGNIZED loginState='{loginStateStr}' continentId=0x{continentId:X8}");
 
-                // Check for "connecting" state first
-                if (loginStateStr == "connecting")
-                {
-                    return TrackScreenTransition(WoWScreenState.Connecting);
-                }
-
-                // Check for character create
-                if (loginStateStr == "charcreate")
-                {
-                    return TrackScreenTransition(WoWScreenState.CharacterCreate);
-                }
-
-                // Check for login screen
-                if (loginStateStr == "login")
-                {
-                    return TrackScreenTransition(WoWScreenState.LoginScreen);
-                }
-
-                // At this point, loginState should be "charselect"
-                // Use ContinentId as the PRIMARY discriminator
-                // WoW 1.12.1 also uses: "movie" (cinematic), "options" (settings), "patchdownload", "credits"
-                // Treat these as LoginScreen since they're pre-authentication screens
-                if (loginStateStr == "movie" || loginStateStr == "options" || loginStateStr == "patchdownload" || loginStateStr == "credits")
-                {
-                    return TrackScreenTransition(WoWScreenState.LoginScreen);
-                }
-
-                // "realmwizard" is the first-time realm setup screen (choose realm type, language).
-                // It appears after authentication but before the character list loads.
-                // Treat as CharacterSelect so BotRunnerService triggers realm selection logic.
-                if (loginStateStr == "realmwizard")
-                {
-                    return TrackScreenTransition(WoWScreenState.CharacterSelect);
-                }
-
-                // Empty loginState means WoW.exe just launched and memory isn't initialized yet.
-                // This is the login screen — NOT charselect. Without this guard, the bot thinks
-                // it's past login and never sends credentials.
-                if (string.IsNullOrEmpty(loginStateStr))
-                {
-                    return TrackScreenTransition(WoWScreenState.LoginScreen);
-                }
-
-                if (loginStateStr == "charselect")
-                {
-                    // ContinentId == 0xFFFFFFFF means we're NOT in any map.
-                    // This can mean charselect OR continent transition (e.g. zeppelin crossing).
-                    // Distinguish: if we've already entered the world, it's a continent transition.
-                    if (continentId == 0xFFFFFFFF)
-                    {
-                        if (HasEnteredWorld)
-                        {
-                            return TrackScreenTransition(WoWScreenState.LoadingWorld);
-                        }
-                        return TrackScreenTransition(WoWScreenState.CharacterSelect);
-                    }
-
-                    // ContinentId == 0xFF (255) means loading bar is visible
-                    if (continentId == 0xFF)
-                    {
-                        return TrackScreenTransition(WoWScreenState.LoadingWorld);
-                    }
-
-                    // If we haven't entered the world yet, continentId may be stale
-                    // (leftover from a previous WoW session or WoW.exe startup defaults).
-                    // Treat as CharacterSelect until HasEnteredWorld confirms we're actually in-world.
-                    if (!HasEnteredWorld)
-                    {
-                        return TrackScreenTransition(WoWScreenState.CharacterSelect);
-                    }
-
-                    // Any other ContinentId value is a valid map ID - we're in world
-                    // Map IDs: 0=Eastern Kingdoms, 1=Kalimdor, 36=Deadmines, 329=Stratholme, 533=Naxxramas, etc.
-                    // Dungeons/raids can have IDs > 255, so we can't just check < 0xFF
-                    return TrackScreenTransition(WoWScreenState.InWorld);
-                }
-
-                DiagLog($"GetCurrentScreenState UNRECOGNIZED loginState='{loginStateStr}' continentId=0x{continentId:X8}");
-                return TrackScreenTransition(WoWScreenState.Unknown);
+                return TrackScreenTransition(screenState);
             }
             catch (Exception ex)
             {

@@ -42,8 +42,10 @@ public static class DungeonEntryTestRunner
             evaluate: snapshots =>
             {
                 var count = snapshots.Count;
-                return (count >= expectedBotCount, count, $"bots={count}");
+                return (count == expectedBotCount, count, $"bots={count}");
             });
+
+        Assert.Equal(expectedBotCount, bot.AllBots.Count);
 
         // Phase 2: Coordinator pipeline — group, travel, enter dungeon
         var botsOnInstanceMap = await WaitForProgressAsync(bot, output,
@@ -90,10 +92,10 @@ public static class DungeonEntryTestRunner
                 $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
         }
 
+        Assert.Equal(expectedBotCount, finalBots.Count);
+        Assert.Equal(expectedBotCount, groupedBots.Count);
         Assert.True(botsOnInstanceMap >= 2,
             $"At least 2 bots must enter {dungeon.Abbreviation} instance map {dungeon.InstanceMapId} (got {botsOnInstanceMap})");
-        Assert.True(groupedBots.Count >= 2,
-            $"At least 2 bots must be grouped (got {groupedBots.Count})");
     }
 
     private static async Task<TResult> WaitForProgressAsync<TResult>(

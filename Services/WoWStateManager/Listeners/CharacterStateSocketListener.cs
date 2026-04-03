@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using WoWStateManager.Clients;
 using WoWStateManager.Coordination;
@@ -51,12 +52,8 @@ namespace WoWStateManager.Listeners
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
         private BattlegroundCoordinator? _battlegroundCoordinator;
 
-        /// <summary>
-        /// Checked at use-time (not construction-time) so tests can toggle it
-        /// between StateManager restarts via Environment.SetEnvironmentVariable.
-        /// </summary>
-        private static bool IsCoordinatorDisabled =>
-            Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
+        private readonly object _coordinatorStateLock = new();
+        private bool _coordinatorEnabled;
 
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ProgressionPlanner progressionPlanner, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
@@ -64,9 +61,26 @@ namespace WoWStateManager.Listeners
             _soapClient = soapClient;
             _progressionPlanner = progressionPlanner;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
-            if (IsCoordinatorDisabled)
+            _coordinatorEnabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") != "1";
+            if (!_coordinatorEnabled)
                 logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1 (at startup)");
             characterSettings.ForEach(settings => CurrentActivityMemberList.TryAdd(settings.AccountName, new()));
+        }
+
+        public bool SetCoordinatorEnabled(bool enabled)
+        {
+            lock (_coordinatorStateLock)
+            {
+                if (_coordinatorEnabled == enabled)
+                {
+                    _logger.LogInformation("COORDINATOR: Runtime state unchanged ({State})", enabled ? "enabled" : "disabled");
+                    return true;
+                }
+
+                _coordinatorEnabled = enabled;
+                _logger.LogWarning("COORDINATOR: Runtime state changed to {State}", enabled ? "enabled" : "disabled");
+                return true;
+            }
         }
 
         private static int GetCoordinatorSuppressionSeconds()
@@ -141,10 +155,6 @@ namespace WoWStateManager.Listeners
 
             // Store the incoming state update from the bot
             CurrentActivityMemberList[accountName] = request;
-            var storedMapId = request.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            if (storedMapId == 489)
-                _logger.LogWarning("STORED MapId=489 for account '{Account}'", accountName);
-
             // Build the response — start with the stored snapshot
             var response = CurrentActivityMemberList[accountName];
 
@@ -277,8 +287,7 @@ namespace WoWStateManager.Listeners
 
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
         {
-            // Checked at use-time so tests can toggle coordinator mid-session
-            if (IsCoordinatorDisabled)
+            if (!_coordinatorEnabled)
                 return;
 
             // Skip if a forwarded action was recently delivered — let it complete without interference.
@@ -342,11 +351,12 @@ namespace WoWStateManager.Listeners
                 var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
 
-                // WWOW_COORDINATOR_SKIP_PREP: when set to "1", the coordinator skips
-                // all prep states (level, spells, gear, teleport) and starts at
-                // FormGroup_Inviting. Used when the test fixture handles prep.
-                var skipPrep = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_SKIP_PREP") == "1";
-                _dungeoneeringCoordinator = new DungeoneeringCoordinator(leaderAccount, allAccounts, _characterSettings, _soapClient, _logger, skipPrep);
+                _dungeoneeringCoordinator = new DungeoneeringCoordinator(
+                    leaderAccount,
+                    allAccounts,
+                    _characterSettings,
+                    _soapClient,
+                    _logger);
             }
 
             var action = _dungeoneeringCoordinator.GetAction(accountName, CurrentActivityMemberList);
@@ -362,6 +372,7 @@ namespace WoWStateManager.Listeners
             {
                 var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
+                var stagingTargets = BuildBattlegroundStagingTargets();
 
                 // Parse BG type from env var (default WSG=2, map=489)
                 var bgTypeStr = Environment.GetEnvironmentVariable("WWOW_BG_TYPE") ?? "2";
@@ -370,7 +381,12 @@ namespace WoWStateManager.Listeners
                 uint.TryParse(bgMapStr, out var bgMap);
 
                 _battlegroundCoordinator = new BattlegroundCoordinator(
-                    leaderAccount, allAccounts, bgType, bgMap, _logger);
+                    leaderAccount,
+                    allAccounts,
+                    bgType,
+                    bgMap,
+                    _logger,
+                    stagingTargets);
             }
 
             var action = _battlegroundCoordinator.GetAction(accountName, CurrentActivityMemberList);
@@ -378,6 +394,63 @@ namespace WoWStateManager.Listeners
             {
                 response.CurrentAction = action;
             }
+        }
+
+        private IReadOnlyDictionary<string, BattlegroundCoordinator.StagingTarget> BuildBattlegroundStagingTargets()
+        {
+            var stagingTargets = new Dictionary<string, BattlegroundCoordinator.StagingTarget>(StringComparer.OrdinalIgnoreCase);
+            var hordeTarget = TryReadBattlegroundStagingTarget("WWOW_BG_HORDE_QUEUE");
+            var allianceTarget = TryReadBattlegroundStagingTarget("WWOW_BG_ALLIANCE_QUEUE");
+
+            foreach (var settings in _characterSettings)
+            {
+                BattlegroundCoordinator.StagingTarget? target = null;
+                if (IsHordeRace(settings.CharacterRace))
+                    target = hordeTarget;
+                else if (IsAllianceRace(settings.CharacterRace))
+                    target = allianceTarget;
+
+                if (target.HasValue)
+                    stagingTargets[settings.AccountName] = target.Value;
+            }
+
+            return stagingTargets;
+        }
+
+        private static bool IsAllianceRace(string? race)
+        {
+            return race != null && (
+                race.Equals("Human", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("Dwarf", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("NightElf", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("Gnome", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsHordeRace(string? race)
+        {
+            return race != null && (
+                race.Equals("Orc", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("Undead", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
+                || race.Equals("Troll", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static BattlegroundCoordinator.StagingTarget? TryReadBattlegroundStagingTarget(string prefix)
+        {
+            var mapText = Environment.GetEnvironmentVariable($"{prefix}_MAP");
+            var xText = Environment.GetEnvironmentVariable($"{prefix}_X");
+            var yText = Environment.GetEnvironmentVariable($"{prefix}_Y");
+            var zText = Environment.GetEnvironmentVariable($"{prefix}_Z");
+
+            if (!uint.TryParse(mapText, out var mapId)
+                || !float.TryParse(xText, NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+                || !float.TryParse(yText, NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+                || !float.TryParse(zText, NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+            {
+                return null;
+            }
+
+            return new BattlegroundCoordinator.StagingTarget(mapId, x, y, z);
         }
 
         private void InjectCombatActions(string accountName, WoWActivitySnapshot response)

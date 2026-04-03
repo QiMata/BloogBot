@@ -153,6 +153,7 @@ enum StateChangeType {
     EXTRAVERSION = 3;
     AGREEABLENESS = 4;
     NEUROTICISM = 5;
+    COORDINATOR_ENABLED = 6;
 }
 
 enum ResponseResult {

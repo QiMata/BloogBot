@@ -1,5 +1,6 @@
 #include "PhysicsDiagnosticsHelpers.h"
 #include <cmath>
+#include <cfloat>
 
 namespace PhysicsDiag
 {

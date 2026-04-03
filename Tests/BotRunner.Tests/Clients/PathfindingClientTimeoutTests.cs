@@ -12,6 +12,8 @@ namespace BotRunner.Tests.Clients;
 
 public sealed class PathfindingClientTimeoutTests
 {
+    private const int PhysicsFailureBackoffBaseMs = 250;
+
     [Fact]
     public async Task GetPath_Succeeds_WhenResponseExceedsPhysicsTimeoutButFitsPathTimeout()
     {
@@ -281,6 +283,97 @@ public sealed class PathfindingClientTimeoutTests
         Assert.False(client.IsAvailable);
     }
 
+    [Fact]
+    public void PhysicsStep_SuppressesRepeatedRequests_DuringFailureBackoff()
+    {
+        var requestCount = 0;
+        var client = new BackoffCapturingPathfindingClient(
+            pathRequestTimeoutMs: 500,
+            queryTimeoutMs: 100,
+            physicsTimeoutMs: 50,
+            responseFactory: _ =>
+            {
+                requestCount++;
+                throw new TimeoutException("physics unavailable");
+            });
+
+        var input = new PhysicsInput
+        {
+            PosX = 10f,
+            PosY = 20f,
+            PosZ = 30f,
+            RunSpeed = 7f,
+            RunBackSpeed = 4.5f,
+            DeltaTime = 0.016f,
+            MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+        };
+
+        var first = client.PhysicsStep(input);
+        var second = client.PhysicsStep(input);
+
+        Assert.Equal(1, requestCount);
+        Assert.Equal(input.PosX, first.NewPosX);
+        Assert.Equal(input.PosX, second.NewPosX);
+
+        client.Advance(TimeSpan.FromMilliseconds(PhysicsFailureBackoffBaseMs - 1));
+        _ = client.PhysicsStep(input);
+        Assert.Equal(1, requestCount);
+
+        client.Advance(TimeSpan.FromMilliseconds(1));
+        _ = client.PhysicsStep(input);
+        Assert.Equal(2, requestCount);
+    }
+
+    [Fact]
+    public void PhysicsStep_Success_ClearsFailureBackoff()
+    {
+        var requestCount = 0;
+        var shouldFail = true;
+        var client = new BackoffCapturingPathfindingClient(
+            pathRequestTimeoutMs: 500,
+            queryTimeoutMs: 100,
+            physicsTimeoutMs: 50,
+            responseFactory: _ =>
+            {
+                requestCount++;
+                if (shouldFail)
+                    throw new TimeoutException("physics unavailable");
+
+                return new PathfindingResponse
+                {
+                    Step = new PhysicsOutput
+                    {
+                        NewPosX = 1f,
+                        NewPosY = 2f,
+                        NewPosZ = 3f,
+                    }
+                };
+            });
+
+        var input = new PhysicsInput
+        {
+            PosX = 0f,
+            PosY = 0f,
+            PosZ = 0f,
+            RunSpeed = 7f,
+            RunBackSpeed = 4.5f,
+            DeltaTime = 0.016f,
+            MovementFlags = (uint)MovementFlags.MOVEFLAG_NONE,
+        };
+
+        _ = client.PhysicsStep(input);
+        Assert.Equal(1, requestCount);
+
+        shouldFail = false;
+        client.Advance(TimeSpan.FromMilliseconds(PhysicsFailureBackoffBaseMs));
+        var success = client.PhysicsStep(input);
+        var immediateFollowUp = client.PhysicsStep(input);
+
+        Assert.Equal(3, requestCount);
+        Assert.Equal(1f, success.NewPosX);
+        Assert.Equal(1f, immediateFollowUp.NewPosX);
+    }
+
     private static async Task ReadMessageAsync(NetworkStream stream)
     {
         var lengthBytes = await ReadExactAsync(stream, 4);
@@ -329,5 +422,24 @@ public sealed class PathfindingClientTimeoutTests
             LastTimeoutMs = timeoutMs;
             return responseFactory(request);
         }
+    }
+
+    private sealed class BackoffCapturingPathfindingClient(
+        int pathRequestTimeoutMs,
+        int queryTimeoutMs,
+        int physicsTimeoutMs,
+        Func<PathfindingRequest, PathfindingResponse> responseFactory) : PathfindingClient(
+            pathRequestTimeoutMs,
+            queryTimeoutMs,
+            physicsTimeoutMs)
+    {
+        private DateTime _utcNow = new(2026, 4, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        public void Advance(TimeSpan delta) => _utcNow = _utcNow.Add(delta);
+
+        protected override DateTime UtcNow => _utcNow;
+
+        protected override PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)
+            => responseFactory(request);
     }
 }

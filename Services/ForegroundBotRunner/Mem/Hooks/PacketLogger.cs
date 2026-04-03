@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Serilog;
+using ForegroundBotRunner.Diagnostics;
 
 // ReSharper disable InconsistentNaming
 
@@ -75,23 +76,16 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         static PacketLogger()
         {
-            string wowDir;
-            try
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("packet_logger.log");
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
             {
-                wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName)
-                    ?? AppContext.BaseDirectory;
+                try
+                {
+                    File.WriteAllText(DiagnosticLogPath,
+                        $"=== PacketLogger Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+                }
+                catch { }
             }
-            catch { wowDir = AppContext.BaseDirectory; }
-
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "packet_logger.log");
-            try
-            {
-                File.WriteAllText(DiagnosticLogPath,
-                    $"=== PacketLogger Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
-            }
-            catch { }
         }
 
         /// <summary>
@@ -759,12 +753,16 @@ namespace ForegroundBotRunner.Mem.Hooks
                 or 0x003F // SMSG_TRANSFER_PENDING
                 or 0x0040 // SMSG_TRANSFER_ABORT
                 or 0x00A9 // SMSG_UPDATE_OBJECT
+                or 0x00B1 // CMSG_GAMEOBJ_USE
+                or 0x00B3 // SMSG_GAMEOBJECT_CUSTOM_ANIM
                 or 0x00DC // MSG_MOVE_WORLDPORT_ACK
-                or 0x012E // SMSG_SPELL_START
-                or 0x0130 // SMSG_SPELL_GO
-                or 0x0131 // SMSG_SPELL_FAILURE
-                or 0x013E // SMSG_CHANNEL_START
-                or 0x0160 // SMSG_CHANNEL_UPDATE
+                or 0x012E // CMSG_CAST_SPELL
+                or 0x0130 // SMSG_CAST_FAILED
+                or 0x0131 // SMSG_SPELL_START
+                or 0x0132 // SMSG_SPELL_GO
+                or 0x0139 // MSG_CHANNEL_START
+                or 0x013A // MSG_CHANNEL_UPDATE
+                or 0x0160 // SMSG_LOOT_RESPONSE
                 or 0x01EE // SMSG_AUTH_RESPONSE
                 or 0x0236 // SMSG_LOGIN_VERIFY_WORLD
                 // Combat opcodes — always log
@@ -810,23 +808,26 @@ namespace ForegroundBotRunner.Mem.Hooks
             0x00B9 => "MSG_MOVE_START_STRAFE_LEFT",
             0x00BA => "MSG_MOVE_START_STRAFE_RIGHT",
             0x00BB => "MSG_MOVE_STOP_STRAFE",
-            0x00DA => "MSG_MOVE_HEARTBEAT",
+            0x00DA => "MSG_MOVE_SET_FACING",
             0x00DC => "MSG_MOVE_WORLDPORT_ACK",
-            0x00EE => "MSG_MOVE_SET_FACING",
+            0x00EE => "MSG_MOVE_HEARTBEAT",
             0x00C9 => "MSG_MOVE_TELEPORT_ACK",
 
             // Update objects
             0x00A9 => "SMSG_UPDATE_OBJECT",
             0x00AA => "SMSG_DESTROY_OBJECT",
+            0x00B1 => "CMSG_GAMEOBJ_USE",
+            0x00B3 => "SMSG_GAMEOBJECT_CUSTOM_ANIM",
 
             // Combat & spells
-            0x012E => "SMSG_SPELL_START",
-            0x0130 => "SMSG_SPELL_GO",
-            0x0131 => "SMSG_SPELL_FAILURE",
-            0x012F => "CMSG_CAST_SPELL",
+            0x012E => "CMSG_CAST_SPELL",
             0x012B => "CMSG_CANCEL_CAST",
-            0x013E => "SMSG_CHANNEL_START",
-            0x0160 => "SMSG_CHANNEL_UPDATE",
+            0x0130 => "SMSG_CAST_FAILED",
+            0x0131 => "SMSG_SPELL_START",
+            0x0132 => "SMSG_SPELL_GO",
+            0x0133 => "SMSG_SPELL_FAILURE",
+            0x0139 => "MSG_CHANNEL_START",
+            0x013A => "MSG_CHANNEL_UPDATE",
             0x013F => "SMSG_CHANNEL_NOTIFY",
 
             // Target & combat (values from GameData.Core/Enums/Opcode.cs)
@@ -858,6 +859,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             0x015D => "CMSG_LOOT",
             0x015E => "CMSG_LOOT_MONEY",
             0x015F => "CMSG_LOOT_RELEASE",
+            0x0160 => "SMSG_LOOT_RESPONSE",
             0x0161 => "SMSG_LOOT_RELEASE_RESPONSE",
 
             // Chat
@@ -874,6 +876,11 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (DiagnosticLogLock)

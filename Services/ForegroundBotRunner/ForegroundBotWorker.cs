@@ -42,6 +42,7 @@ namespace ForegroundBotRunner
 
         // Automated recording: runs controlled movement scenarios instead of idle
         private readonly bool _automatedRecording;
+        private readonly bool _recordingArtifactsEnabled;
         private Task? _scenarioRunnerTask;
 
         // Login credentials received from StateManager via IPC
@@ -68,25 +69,11 @@ namespace ForegroundBotRunner
 
         static ForegroundBotWorker()
         {
-            // Write diagnostic log to WoW client's WWoWLogs directory
-            // Note: Process.GetCurrentProcess().MainModule can throw "Access denied" inside injected processes
-            string wowDir;
-            try
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("foreground_bot_debug.log");
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
             {
-                wowDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+                try { File.WriteAllText(DiagnosticLogPath, $"=== ForegroundBotWorker Diagnostic Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nLogPath: {DiagnosticLogPath}\n"); } catch { }
             }
-            catch
-            {
-                // Fall back to AppContext.BaseDirectory which works even without process access
-                wowDir = AppContext.BaseDirectory;
-            }
-
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "foreground_bot_debug.log");
-
-            // Clear previous log on startup
-            try { File.WriteAllText(DiagnosticLogPath, $"=== ForegroundBotWorker Diagnostic Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nLogPath: {DiagnosticLogPath}\n"); } catch { }
         }
 
         /// <summary>
@@ -95,6 +82,11 @@ namespace ForegroundBotRunner
         /// </summary>
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (DiagnosticLogLock)
@@ -107,18 +99,6 @@ namespace ForegroundBotRunner
             catch { /* Ignore logging errors */ }
         }
 
-        private static void CrashTrace(string message)
-        {
-            try
-            {
-                var logPath = Path.Combine(Path.GetDirectoryName(DiagnosticLogPath)!, "crash_trace.log");
-                using var sw = new StreamWriter(logPath, true);
-                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Worker] {message}");
-                sw.Flush();
-            }
-            catch { }
-        }
-
         public ForegroundBotWorker(IConfiguration configuration, ILoggerFactory loggerFactory, PathfindingClient? pathfindingClient = null)
         {
             _configuration = configuration;
@@ -126,6 +106,7 @@ namespace ForegroundBotRunner
             _pathfindingClient = pathfindingClient;
             _logger = loggerFactory.CreateLogger<ForegroundBotWorker>();
             _automatedRecording = Environment.GetEnvironmentVariable("BLOOGBOT_AUTOMATED_RECORDING") == "1";
+            _recordingArtifactsEnabled = RecordingArtifactsFeature.IsEnabled();
 
             // Try to register the named-pipe logger so ILogger output reaches StateManager
             var envAccount = Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME");
@@ -149,16 +130,29 @@ namespace ForegroundBotRunner
             {
                 _logger.LogInformation("*** AUTOMATED RECORDING MODE - will run movement scenarios after entering world ***");
             }
+
+            if (_automatedRecording && !_recordingArtifactsEnabled)
+            {
+                _logger.LogWarning("Automated recording requested but recording artifacts are disabled. Set {EnvVar}=1 to enable scenario captures.",
+                    RecordingArtifactsFeature.EnvironmentVariableName);
+            }
         }
 
         /// <summary>
         /// Connects to StateManager and requests an account assignment.
-        /// Sends AccountName="?" to get assigned to the first available character slot.
+        /// When the injector already knows the target account, register with that explicit
+        /// account name so multiple foreground bots do not collide on the same slot.
+        /// Falls back to AccountName="?" only for legacy launches that did not pass one.
         /// </summary>
+        internal static string ResolveStateManagerRegistrationAccount(string? configuredAccountName)
+            => string.IsNullOrWhiteSpace(configuredAccountName) ? "?" : configuredAccountName.Trim();
+
         private async Task<bool> RequestAccountAssignmentAsync(CancellationToken stoppingToken)
         {
             var stateManagerIp = _configuration["CharacterStateListener:IpAddress"] ?? "127.0.0.1";
             var stateManagerPort = int.Parse(_configuration["CharacterStateListener:Port"] ?? "5002");
+            var requestedAccountName = ResolveStateManagerRegistrationAccount(
+                Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME"));
 
             _logger.LogInformation($"Connecting to StateManager at {stateManagerIp}:{stateManagerPort} for account assignment...");
 
@@ -169,15 +163,16 @@ namespace ForegroundBotRunner
                     stateManagerPort,
                     _loggerFactory.CreateLogger<CharacterStateUpdateClient>());
 
-                // Request account assignment by sending "?" as account name
-                // StateManager will assign us to the first unassigned character slot
+                // Prefer the explicit configured account when available so multiple foreground
+                // runners can register independently. Fall back to "?" for legacy launches.
                 var request = new WoWActivitySnapshot
                 {
-                    AccountName = "?",
+                    AccountName = requestedAccountName,
                     Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                 };
 
-                _logger.LogInformation("Requesting account assignment from StateManager (AccountName='?')...");
+                _logger.LogInformation("Requesting account assignment from StateManager (AccountName='{AccountName}')...",
+                    requestedAccountName);
 
                 var response = _stateUpdateClient.SendMemberStateUpdate(request);
 
@@ -255,7 +250,8 @@ namespace ForegroundBotRunner
                         _objectManager?.AntiAfk();
 
                         // At character select with characters present + not already entering world:
-                        // click "Enter World" button directly via Lua. Skip cinematics too.
+                        // click "Enter World" button directly via Lua.
+                        // Do not skip the intro cinematic for freshly created characters.
                         if (!ObjectManager.PauseNativeCallsDuringWorldEntry
                             && _objectManager?.HasEnteredWorld != true
                             && _objectManager?.GetCurrentScreenState() == WoWScreenState.CharacterSelect
@@ -265,7 +261,6 @@ namespace ForegroundBotRunner
                             try
                             {
                                 DiagLog($"[FG-ENTER] CharSelect with {ObjectManager.MaxCharacterCount} char(s). Clicking Enter World button...");
-                                ObjectManager.MainThreadLuaCall("if GameMovieFinished then GameMovieFinished() end");
                                 ObjectManager.MainThreadLuaCall(
                                     "if CharSelectEnterWorldButton and CharSelectEnterWorldButton:IsVisible() then " +
                                     "CharSelectEnterWorldButton:Click() end");
@@ -393,7 +388,6 @@ namespace ForegroundBotRunner
                                 continue;
                             }
 
-                            CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
                             _movementRecorder?.Poll();
 
                             // Launch automated movement scenarios (once)
@@ -456,11 +450,21 @@ namespace ForegroundBotRunner
 
             // Create MovementRecorder for physics engine testing
             // Use macro to toggle: /run REC=(REC or 0)+1
-            _movementRecorder = new MovementRecorder(() => _objectManager, _loggerFactory);
-            _packetTraceRecorder = new ForegroundPacketTraceRecorder(_loggerFactory);
+            if (_recordingArtifactsEnabled)
+            {
+                _movementRecorder = new MovementRecorder(() => _objectManager, _loggerFactory);
+                _packetTraceRecorder = new ForegroundPacketTraceRecorder(_loggerFactory);
+                _logger.LogInformation("MovementRecorder ready - say 'rec' in chat to toggle recording");
+            }
+            else
+            {
+                _movementRecorder = null;
+                _packetTraceRecorder = null;
+                _logger.LogInformation("Recording artifacts disabled; FG movement and packet recorders are inactive. Set {EnvVar}=1 to enable.",
+                    RecordingArtifactsFeature.EnvironmentVariableName);
+            }
 
             _logger.LogInformation("ObjectManager initialized - direct memory access enabled");
-            _logger.LogInformation("MovementRecorder ready - say 'rec' in chat to toggle recording");
             return Task.CompletedTask;
         }
 

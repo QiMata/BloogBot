@@ -13,6 +13,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -26,18 +27,21 @@ namespace ForegroundBotRunner.Statics
 
         static ObjectManager()
         {
-            string wowDir;
-            try { wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory; }
-            catch { wowDir = AppContext.BaseDirectory; }
-            var logsDir = Path.Combine(wowDir, "WWoWLogs");
-            try { Directory.CreateDirectory(logsDir); } catch { }
-            DiagnosticLogPath = Path.Combine(logsDir, "object_manager_debug.log");
-            try { File.WriteAllText(DiagnosticLogPath, $"=== ObjectManager Debug Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
+            DiagnosticLogPath = RecordingFileArtifactGate.ResolveWoWLogsPath("object_manager_debug.log");
+            if (!string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                try { File.WriteAllText(DiagnosticLogPath, $"=== ObjectManager Debug Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
+            }
         }
 
 
         private static void DiagLog(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (DiagnosticLogLock) { File.AppendAllText(DiagnosticLogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n"); }
@@ -49,6 +53,11 @@ namespace ForegroundBotRunner.Statics
         /// Uses cached DiagnosticLogPath directory to avoid Process.GetCurrentProcess() calls.</summary>
         private static void CrashTrace(string message)
         {
+            if (string.IsNullOrWhiteSpace(DiagnosticLogPath))
+            {
+                return;
+            }
+
             try
             {
                 var logPath = Path.Combine(Path.GetDirectoryName(DiagnosticLogPath)!, "crash_trace.log");

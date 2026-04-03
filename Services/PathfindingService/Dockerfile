@@ -1,8 +1,9 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2022 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-ADD https://aka.ms/vs/17/release/vc_redist.x64.exe C:/vc_redist.x64.exe
-RUN C:\vc_redist.x64.exe /install /quiet /norestart || exit 1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY ["WestworldOfWarcraft.sln", "./"]
 COPY ["Directory.Build.props", "./"]
@@ -14,13 +15,21 @@ COPY ["Exports/WinImports/WinProcessImports.csproj", "Exports/WinImports/"]
 RUN dotnet restore "Services/PathfindingService/PathfindingService.csproj"
 
 COPY . .
-RUN dotnet publish "Services/PathfindingService/PathfindingService.csproj" -c Release -r win-x64 --self-contained true -o C:/out/pathfinding
 
-FROM mcr.microsoft.com/windows/servercore:ltsc2022
+RUN cmake -S Exports/Navigation -B /tmp/navigation-build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /tmp/navigation-build --config Release --parallel
+
+RUN dotnet publish "Services/PathfindingService/PathfindingService.csproj" \
+    -c Release \
+    -r linux-x64 \
+    --self-contained false \
+    -o /app/publish
+
+RUN cp /tmp/navigation-build/libNavigation.so /app/publish/libNavigation.so
+
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
 WORKDIR /app
 
-ADD https://aka.ms/vs/17/release/vc_redist.x64.exe C:/vc_redist.x64.exe
-RUN C:\vc_redist.x64.exe /install /quiet /norestart || exit 1
+COPY --from=build /app/publish/ ./
 
-COPY --from=build C:/out/pathfinding/ ./
-ENTRYPOINT ["C:\\app\\PathfindingService.exe"]
+ENTRYPOINT ["dotnet", "PathfindingService.dll"]

@@ -78,6 +78,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
                 capsuleRadius: radius,
                 capsuleHeight: height,
                 nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
+                stuckRecoveryGenerationProvider: () => ObjectManager.MovementStuckRecoveryGeneration,
                 race: player?.Race ?? 0,
                 gender: player?.Gender ?? 0);
         }

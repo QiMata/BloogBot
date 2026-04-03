@@ -86,16 +86,28 @@ public partial class LiveBotFixture
     /// Used by BG tests where bots in map transition have IsObjectManagerValid=false
     /// but still have valid MapId data that needs to be asserted.
     /// </summary>
-    public async Task<List<WoWActivitySnapshot>> QueryAllSnapshotsAsync()
+    public async Task<List<WoWActivitySnapshot>> QueryAllSnapshotsAsync(bool logDiagnostics = false)
     {
         if (_stateManagerClient == null) return [];
         var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
-        // DIAG: log all non-zero CurrentMapId values
-        foreach (var s in snapshots)
+
+        if (!logDiagnostics)
+            return snapshots;
+
+        var currentMapCount = snapshots.Count(snapshot => snapshot.CurrentMapId != 0);
+        var nestedMapCount = snapshots.Count(snapshot => (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != 0);
+        _testOutput?.WriteLine($"  [QUERY] total={snapshots.Count}, currentMapNonZero={currentMapCount}, nestedMapNonZero={nestedMapCount}");
+
+        foreach (var snapshot in snapshots
+            .Where(snapshot => snapshot.CurrentMapId != 0 || (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != 0)
+            .OrderBy(snapshot => snapshot.AccountName, StringComparer.OrdinalIgnoreCase))
         {
-            if (s.CurrentMapId != 0)
-                _testOutput?.WriteLine($"  [QUERY] {s.AccountName}: CurrentMapId={s.CurrentMapId}");
+            var accountName = string.IsNullOrWhiteSpace(snapshot.AccountName) ? "(blank)" : snapshot.AccountName;
+            var nestedMapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
+            _testOutput?.WriteLine(
+                $"  [QUERY] {accountName}: Screen={snapshot.ScreenState}, CurrentMapId={snapshot.CurrentMapId}, NestedMapId={nestedMapId}, ObjMgr={snapshot.IsObjectManagerValid}, Char={snapshot.CharacterName}");
         }
+
         return snapshots;
     }
 

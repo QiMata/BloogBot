@@ -8,6 +8,8 @@ namespace ForegroundBotRunner.Objects
 {
     public class WoWPlayer : WoWUnit, IWoWPlayer
     {
+        private const uint MaxPlausibleMapId = 10000;
+
         internal WoWPlayer(
             nint pointer,
             HighGuid guid,
@@ -19,15 +21,27 @@ namespace ForegroundBotRunner.Objects
 
         public uint MapId
         {
-            // this is weird and throws an exception right after entering world,
-            // so we catch and ignore the exception to avoid console noise
             get
             {
+                try
+                {
+                    // The runtime MapId global tracks the actual world map, including instances
+                    // like WSG/AB/AV. The old manager-base read only surfaced continent-level
+                    // IDs (0/1) for FG snapshots, which broke battleground transfer reporting.
+                    var runtimeMapId = MemoryManager.ReadUint(Offsets.Misc.MapId);
+                    if (runtimeMapId <= MaxPlausibleMapId)
+                        return runtimeMapId;
+                }
+                catch (Exception)
+                {
+                }
+
                 try
                 {
                     var objectManagerPtr = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase);
                     if (!IsValidPtr(objectManagerPtr))
                         return 0;
+
                     return MemoryManager.ReadUint(nint.Add(objectManagerPtr, 0xCC));
                 }
                 catch (Exception)

@@ -59,11 +59,23 @@
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-28
+- Last updated: 2026-04-03 (session 297)
 - Active task: All TINF-MISS tasks complete.
-- Last delta: Implemented TINF-MISS-001 through TINF-MISS-006: repo-scoped process filtering, teardown evidence, pathfinding cleanup guards, WWOW_SHOW_WINDOWS env var, 7 infrastructure config tests.
+- Last delta:
+  - Session 297 aligned fixture ownership with the current StateManager contract: `BotServiceFixture` no longer treats `PathfindingService`/`SceneDataService` as StateManager-managed child processes.
+  - Setup/teardown cleanup now only targets repo-scoped `WoWStateManager`, `WoW.exe`, and `BackgroundBotRunner` processes launched by tests.
+  - Updated fixture comments/log wording so dependency checks for pathfinding/scene are explicitly external-service checks.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateManagerTestClientTimeoutTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+  - Session 294 updated `BotServiceFixture` so isolated live test output trees can auto-start `WoWStateManager` from either `WoWStateManager.exe` or `WoWStateManager.dll`. The fixture launcher now mirrors the repo’s existing exe-or-dll fallback instead of assuming an `.exe` is always present.
+  - Practical implication: `dotnet test -o E:\tmp\...` live runs can now get past the old "Could not find WoWStateManager.exe" startup skip and surface the real runtime blockers in the isolated tree.
 - Pass result: `delta shipped`
 - Files changed:
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` (removed Pathfinding/SceneData cleanup ownership from fixture lifecycle)
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` (managed-process crash wording aligned to StateManager + WoW ownership)
+  - `Tests/Tests.Infrastructure/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` (WoWStateManager exe-or-dll fallback for isolated live output trees)
   - `Tests/Tests.Infrastructure/BotServiceFixture.cs` (RepoMarker constant, repo-scoped StateManager + PathfindingService kills, WWOW_SHOW_WINDOWS)
   - `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs` (repo-scoped KillLingeringProcesses, teardown evidence in Stop(), WWOW_SHOW_WINDOWS)
   - `Services/WoWStateManager/StateManagerWorker.cs` (WWOW_SHOW_WINDOWS for BGBotRunner launch)
@@ -71,4 +83,4 @@
   - `Tests/BotRunner.Tests/Helpers/InfrastructureConfigTests.cs` (NEW — 7 tests)
   - `Tests/Tests.Infrastructure/TASKS.md` (all tasks marked complete)
 - Blockers: None.
-- Next task: None — all TINF-MISS tasks are complete.
+- Next task: `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`

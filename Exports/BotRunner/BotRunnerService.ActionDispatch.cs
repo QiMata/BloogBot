@@ -1,5 +1,6 @@
 using Communication;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
 using System;
@@ -12,6 +13,31 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
+        internal static IReadOnlyList<string> SendChatThroughBestAvailablePath(IObjectManager objectManager, string chatMsg)
+        {
+            ArgumentNullException.ThrowIfNull(objectManager);
+
+            if (!string.IsNullOrWhiteSpace(chatMsg)
+                && chatMsg.StartsWith(".", StringComparison.Ordinal)
+                && objectManager.SupportsDirectGmCommandCapture)
+            {
+                return objectManager.SendGmCommandAsync(chatMsg, GetDirectGmCommandCaptureTimeoutMs(chatMsg)).GetAwaiter().GetResult();
+            }
+
+            objectManager.SendChatMessage(chatMsg);
+            return Array.Empty<string>();
+        }
+
+        internal static int GetDirectGmCommandCaptureTimeoutMs(string chatMsg)
+        {
+            if (string.IsNullOrWhiteSpace(chatMsg))
+                return 2000;
+
+            return chatMsg.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase)
+                ? 3000
+                : 2000;
+        }
+
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
             var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
@@ -595,7 +621,12 @@ namespace BotRunner
                             }
 
                             Log.Information($"[BOT RUNNER] Sending chat message: {chatMsg}");
-                            _objectManager.SendChatMessage(chatMsg);
+                            var gmResponses = SendChatThroughBestAvailablePath(_objectManager, chatMsg);
+                            foreach (var response in gmResponses)
+                            {
+                                if (!string.IsNullOrWhiteSpace(response))
+                                    EnqueueDiagnosticMessage($"[SYSTEM] {response}");
+                            }
                             DiagLog($"SENDCHAT-SENT: '{chatMsg}'");
                             return BehaviourTreeStatus.Success;
                         });
@@ -852,6 +883,11 @@ namespace BotRunner
                                 bgClient.AcceptInviteAsync().GetAwaiter().GetResult();
                                 Log.Information("[BOT RUNNER] BG invite accepted");
                             }
+                            else
+                            {
+                                _objectManager.AcceptBattlegroundInvite();
+                                Log.Information("[BOT RUNNER] BG invite accepted via ObjectManager");
+                            }
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -867,6 +903,11 @@ namespace BotRunner
                             {
                                 bgClient.LeaveAsync().GetAwaiter().GetResult();
                                 Log.Information("[BOT RUNNER] Left battleground");
+                            }
+                            else
+                            {
+                                _objectManager.LeaveBattleground();
+                                Log.Information("[BOT RUNNER] Cleared battleground queue via ObjectManager");
                             }
                             return BehaviourTreeStatus.Success;
                         });

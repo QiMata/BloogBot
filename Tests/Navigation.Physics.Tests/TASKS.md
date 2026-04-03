@@ -34,9 +34,16 @@ Known remaining work in this owner: `6` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-03-28 (session 282)`
+- Last updated: `2026-04-02 (session 293)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 293 added `SceneSliceModeTests.cs` and extended `NavigationInterop.cs` with the native `SetSceneSliceMode(...)` export.
+  - The new deterministic coverage pins the BG thin-scene-slice memory fix through the production DLL: `GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache` first proves the baseline autoload still resolves terrain, then unloads the scene cache, enables slice mode, and proves the same query no longer repopulates the full-map cache.
+  - Validation:
+    - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1` -> `succeeded`
+    - `$env:WWOW_DATA_DIR='E:\repos\Westworld of Warcraft\Data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release -o E:\tmp\isolated-nav-physics-tests\bin --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneSliceModeTests.GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+  - Practical implication: this owner now has a deterministic guard against the local BG path silently regressing back to per-runner full-map native scene loads.
+  - Exact next command: `$env:WWOW_DATA_DIR='E:\repos\Westworld of Warcraft\Data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --logger "console;verbosity=normal"`
   - Session 282 added `WowGroundedDriverSelectedPlaneTailEntrySetupTests.cs` and `WowGroundedDriverSelectedPlaneTailRerouteLoopControllerTests.cs`, and extended the split grounded-driver interop in `NavigationInterop.GroundedDriver.cs`.
   - The new deterministic grounded coverage closes the final two visible seams from the old `PhysicsEngine` grounded caller shell through the production DLL: the `0x635600..0x6356D2` entry/setup shell and the bounded `0x6357DA..0x6359A9` reroute-loop controller above the already-split reroute-candidate / vertical-fallback leaves. `WowGroundedDriverSelectedPlaneTailChooserContractTests.cs` also now pins the positive chooser-mutation path instead of only the unchanged-buffer cases.
   - Validation:

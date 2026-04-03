@@ -10,13 +10,15 @@ The WWoW Services layer forms the backbone of a sophisticated multi-bot automati
 
 ```mermaid
 graph TB
-    A[StateManager] --> B[BackgroundBotRunner]
+    A[WoWStateManager (Host)] --> B[BackgroundBotRunner]
     A --> C[ForegroundBotRunner]
-    A --> D[PathfindingService]
+    A -. external dependency probe .-> D[PathfindingService]
+    A -. external dependency probe .-> L[SceneDataService]
     
     B --> E[DecisionEngineService]
     B --> F[PromptHandlingService]
     B --> D
+    B --> L
     
     C --> G[Memory & Process Injection]
     
@@ -31,7 +33,7 @@ graph TB
 
 ## Core Services
 
-### [StateManager](StateManager/README.md) - Central Orchestrator
+### [WoWStateManager](WoWStateManager/README.md) - Central Orchestrator
 **Purpose**: Multi-bot coordination and state management hub
 
 **Key Features**:
@@ -39,12 +41,13 @@ graph TB
 - **Background Bot Orchestration**: Automatically starts and manages bot instances for each configured character
 - **Socket Communication**: Real-time TCP socket listeners for inter-service communication
 - **Account Management**: Integrates with MaNGOS SOAP API for automatic account creation
-- **Service Coordination**: Automatically launches dependent services like PathfindingService
+- **External Dependency Coordination**: Probes external `PathfindingService`/`SceneDataService` endpoints and continues bot orchestration without owning their process lifecycle
 
 **Communication Ports**:
 - Character State Listener: `5002`
 - State Manager Listener: `8088`
-- PathfindingService: `5000`
+- PathfindingService: `5001`
+- SceneDataService: `5003`
 
 ### [BackgroundBotRunner](BackgroundBotRunner/README.md) - Autonomous Execution Engine
 **Purpose**: AI-driven background automation for individual characters
@@ -134,38 +137,41 @@ graph TB
 
 ```mermaid
 graph LR
-    A[StateManager] --> B[PathfindingService]
-    A --> C[BackgroundBotRunner]
-    A --> D[ForegroundBotRunner]
+    A[WoWStateManager] -. probes .-> B[PathfindingService]
+    A -. probes .-> C[SceneDataService]
+    A --> D[BackgroundBotRunner]
+    A --> E[ForegroundBotRunner]
     
-    C --> E[DecisionEngineService]
-    C --> F[PromptHandlingService]
-    C --> B
+    D --> F[DecisionEngineService]
+    D --> G[PromptHandlingService]
+    D --> B
+    D --> C
     
-    E --> G[MaNGOS Database]
-    F --> H[Ollama API]
-    B --> I[Navigation Data]
+    F --> H[MaNGOS Database]
+    G --> I[Ollama API]
+    B --> J[Navigation Data]
+    C --> J
 ```
 
 ### Deployment Options
 
 #### Development Environment
 ```bash
-# Start core services
-dotnet run --project Services/StateManager
-dotnet run --project Services/PathfindingService
+# Start host-side orchestrator
+dotnet run --project Services/WoWStateManager
 
-# Services will auto-start additional components
+# Start split navigation/collision services (Linux containers)
+docker compose -f ./docker-compose.vmangos-linux.yml up -d pathfinding-service scene-data-service
 ```
 
 #### Production Deployment
 ```bash
 # Windows Service Installation
-sc create StateManager binPath="StateManager.exe"
+sc create WoWStateManager binPath="WoWStateManager.exe"
 sc create PathfindingService binPath="PathfindingService.exe"
 
 # Linux systemd
-sudo systemctl enable statemanager.service
+sudo systemctl enable wowstatemanager.service
 sudo systemctl enable pathfinding.service
 ```
 
@@ -188,7 +194,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 |---------|------|---------|
 | StateManager | 8088 | State management API |
 | Character State | 5002 | Character activity monitoring |
-| PathfindingService | 5000 | Navigation queries |
+| PathfindingService | 5001 | Navigation queries |
+| SceneDataService | 5003 | Scene-slice/collision data |
 | MaNGOS SOAP | 7878 | Game server integration |
 
 ## Monitoring & Observability
@@ -267,7 +274,7 @@ dotnet test Tests/ --filter Category=Integration
 
 ### Startup Sequence
 1. **StateManager** starts and loads configuration
-2. **PathfindingService** launches (auto-started by StateManager)
+2. **PathfindingService/SceneDataService** are validated as external dependencies
 3. **Character-specific services** spawn based on configuration
 4. **AI services** initialize models and connections
 5. **Communication channels** establish between all services

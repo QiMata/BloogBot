@@ -21,11 +21,14 @@ namespace WoWSharpClient.Client
     /// </summary>
     public sealed class WorldClient : IWorldClient
     {
+        internal static TimeSpan IntroCinematicWatchDelay { get; set; } = TimeSpan.FromSeconds(5);
+
         private readonly PacketPipeline<Opcode> _pipeline;
         private readonly IConnection _connection;
         private IEncryptor _encryptor;
         private bool _disposed;
         private uint _lastPingTime;
+        private long _pendingIntroCinematicAttemptId;
         
         // Authentication state
         private string _username = string.Empty;
@@ -191,6 +194,7 @@ namespace WoWSharpClient.Client
             _pipeline.RegisterHandler(Opcode.SMSG_AUTH_RESPONSE, HandleAuthResponse);
             _pipeline.RegisterHandler(Opcode.SMSG_PONG, HandlePong);
             _pipeline.RegisterHandler(Opcode.SMSG_CHARACTER_LOGIN_FAILED, HandleCharacterLoginFailed);
+            _pipeline.RegisterHandler(Opcode.SMSG_TRIGGER_CINEMATIC, HandleTriggerCinematic);
 
             // Logout handler
             _pipeline.RegisterHandler(Opcode.SMSG_LOGOUT_COMPLETE, HandleLogoutComplete);
@@ -469,8 +473,9 @@ namespace WoWSharpClient.Client
                     Console.WriteLine("[NewWorldClient] World authentication successful!");
                     _authenticationSucceeded.OnNext(Unit.Default);
 
-                    // Automatically request character list after successful auth
-                    _ = SendCharEnumAsync();
+                    // Route post-auth bootstrap through the object-manager/session event
+                    // so character-list requests are tracked and can be retried if needed.
+                    WoWSharpEventEmitter.Instance.FireOnWorldSessionStart();
                 }
                 else
                 {
@@ -491,6 +496,43 @@ namespace WoWSharpClient.Client
 
         private Task HandlePong(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleCharacterLoginFailed(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+
+        private Task HandleTriggerCinematic(ReadOnlyMemory<byte> payload)
+        {
+            var cinematicId = payload.Length >= sizeof(uint)
+                ? BitConverter.ToUInt32(payload.Span[..sizeof(uint)])
+                : 0u;
+            var attemptId = Interlocked.Increment(ref _pendingIntroCinematicAttemptId);
+            var delay = IntroCinematicWatchDelay;
+
+            Log.Information("[WorldClient] SMSG_TRIGGER_CINEMATIC id={CinematicId}; completing after {DelayMs}ms",
+                cinematicId,
+                (int)delay.TotalMilliseconds);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (delay > TimeSpan.Zero)
+                        await Task.Delay(delay).ConfigureAwait(false);
+
+                    if (_disposed || !_pipeline.IsConnected)
+                        return;
+
+                    if (Interlocked.Read(ref _pendingIntroCinematicAttemptId) != attemptId)
+                        return;
+
+                    await _pipeline.SendAsync(Opcode.CMSG_COMPLETE_CINEMATIC, ReadOnlyMemory<byte>.Empty)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "[WorldClient] Failed to complete intro cinematic id={CinematicId}", cinematicId);
+                }
+            });
+
+            return Task.CompletedTask;
+        }
 
         private Task HandleAttackStart(ReadOnlyMemory<byte> payload)
         {
@@ -603,6 +645,7 @@ namespace WoWSharpClient.Client
         {
             if (!_disposed)
             {
+                Interlocked.Increment(ref _pendingIntroCinematicAttemptId);
                 _pipeline?.Dispose();
                 _authenticationSucceeded.OnCompleted();
                 _authenticationFailed.OnCompleted();

@@ -273,12 +273,20 @@ namespace BotRunner.Tests.Helpers
             {
                 case BotTaskMode.AutomatedRecording:
                     psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = "1";
+                    psi.Environment["WWOW_ENABLE_RECORDING_ARTIFACTS"] = "1";
+                    break;
+                case BotTaskMode.ManualRecording:
+                    psi.Environment["WWOW_ENABLE_RECORDING_ARTIFACTS"] = "1";
                     break;
                 case BotTaskMode.Idle:
                     psi.Environment["BLOOGBOT_IDLE_MODE"] = "1";
                     break;
                 // ManualRecording and Default don't need special env vars
             }
+
+            var inheritedRecordingArtifacts = Environment.GetEnvironmentVariable("WWOW_ENABLE_RECORDING_ARTIFACTS");
+            if (!string.IsNullOrWhiteSpace(inheritedRecordingArtifacts))
+                psi.Environment["WWOW_ENABLE_RECORDING_ARTIFACTS"] = inheritedRecordingArtifacts;
 
             // Additional env vars from config
             foreach (var kvp in config.ExtraEnvironmentVariables)

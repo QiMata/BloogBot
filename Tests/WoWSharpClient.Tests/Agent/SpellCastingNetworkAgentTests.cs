@@ -1,7 +1,10 @@
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System;
+using System.Collections.Generic;
+using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Client;
@@ -13,12 +16,24 @@ namespace WoWSharpClient.Tests.Agent
     {
         private readonly Mock<IWorldClient> _mockWorld;
         private readonly SpellCastingNetworkClientComponent _agent;
+        private readonly Dictionary<Opcode, Subject<ReadOnlyMemory<byte>>> _opcodeStreams = new();
 
         public SpellCastingNetworkClientComponentTests()
         {
             _mockWorld = new Mock<IWorldClient>();
             _mockWorld.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                       .Returns(Task.CompletedTask);
+            _mockWorld.Setup(x => x.RegisterOpcodeHandler(It.IsAny<Opcode>()))
+                .Returns((Opcode opcode) =>
+                {
+                    if (!_opcodeStreams.TryGetValue(opcode, out var stream))
+                    {
+                        stream = new Subject<ReadOnlyMemory<byte>>();
+                        _opcodeStreams[opcode] = stream;
+                    }
+
+                    return stream;
+                });
             _agent = new SpellCastingNetworkClientComponent(_mockWorld.Object, Mock.Of<ILogger<SpellCastingNetworkClientComponent>>());
         }
 
@@ -197,6 +212,30 @@ namespace WoWSharpClient.Tests.Agent
         public void CanCastSpell_NotCasting_ReturnsTrue()
         {
             Assert.True(_agent.CanCastSpell(200));
+        }
+
+        [Fact]
+        public void CastFailedOpcode_EmitsErrorMessageWithReason()
+        {
+            using var ms = new System.IO.MemoryStream();
+            using var writer = new System.IO.BinaryWriter(ms);
+            writer.Write((uint)18248);
+            writer.Write((byte)0);
+            writer.Write((byte)0x2E);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                _opcodeStreams[Opcode.SMSG_CAST_FAILED].OnNext(ms.ToArray());
+                Assert.Equal("Cast failed for spell 18248: MOVING", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
         }
 
         #endregion

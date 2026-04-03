@@ -219,11 +219,10 @@ namespace BotRunner
                     }
                     if (nonZeroCount > 0)
                     {
-                        Log.Information("[BOT RUNNER] Equipment: {Count} slots occupied (Inventory[].Length={Len})", nonZeroCount, wp.Inventory.Length);
-                        // DIAG: log exact slots and verify protobuf map contains them
+                        Log.Debug("[BOT RUNNER] Equipment: {Count} slots occupied (Inventory[].Length={Len})", nonZeroCount, wp.Inventory.Length);
                         foreach (var kvp in _activitySnapshot.Player.Inventory)
-                            Log.Information("[BOT RUNNER] Equipment slot {Slot}: GUID=0x{Guid:X}", kvp.Key, kvp.Value);
-                        Log.Information("[BOT RUNNER] Protobuf Inventory map count={Count}", _activitySnapshot.Player.Inventory.Count);
+                            Log.Debug("[BOT RUNNER] Equipment slot {Slot}: GUID=0x{Guid:X}", kvp.Key, kvp.Value);
+                        Log.Debug("[BOT RUNNER] Protobuf Inventory map count={Count}", _activitySnapshot.Player.Inventory.Count);
                     }
                 }
                 else
@@ -372,17 +371,17 @@ namespace BotRunner
                             player.SkillInfo[skillId] = skill.SkillInt2 & 0xFFFF;
                             nonZeroSkills++;
                             if (skillId == 356) // Fishing
-                                Log.Information("[SkillSnapshot] Fishing slot {Slot}: Int1=0x{Int1:X8} Int2=0x{Int2:X8} Int3=0x{Int3:X8} → id={Id} val={Val} max={Max}",
+                                Log.Debug("[SkillSnapshot] Fishing slot {Slot}: Int1=0x{Int1:X8} Int2=0x{Int2:X8} Int3=0x{Int3:X8} -> id={Id} val={Val} max={Max}",
                                     i, skill.SkillInt1, skill.SkillInt2, skill.SkillInt3,
                                     skillId, skill.SkillInt2 & 0xFFFF, (skill.SkillInt2 >> 16) & 0xFFFF);
                             if (skillId == 186) // Mining
-                                Log.Information("[SkillSnapshot] Mining slot {Slot}: Int1=0x{Int1:X8} Int2=0x{Int2:X8} Int3=0x{Int3:X8} → id={Id} val={Val} max={Max}",
+                                Log.Debug("[SkillSnapshot] Mining slot {Slot}: Int1=0x{Int1:X8} Int2=0x{Int2:X8} Int3=0x{Int3:X8} -> id={Id} val={Val} max={Max}",
                                     i, skill.SkillInt1, skill.SkillInt2, skill.SkillInt3,
                                     skillId, skill.SkillInt2 & 0xFFFF, (skill.SkillInt2 >> 16) & 0xFFFF);
                         }
                     }
                     if (nonZeroSkills > 0)
-                        Log.Information("[SkillSnapshot] {Count} skills populated", nonZeroSkills);
+                        Log.Debug("[SkillSnapshot] {Count} skills populated", nonZeroSkills);
                 }
                 catch (Exception ex) { Log.Debug("[Snapshot] SkillInfo unavailable: {Type}", ex.GetType().Name); }
             }

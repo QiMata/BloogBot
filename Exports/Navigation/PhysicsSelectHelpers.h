@@ -2,6 +2,7 @@
 #pragma once
 
 #include <vector>
+#include <cfloat>
 #include "SceneQuery.h" // for SceneHit
 
 namespace PhysSelect

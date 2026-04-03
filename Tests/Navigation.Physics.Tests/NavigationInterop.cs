@@ -2066,6 +2066,13 @@ public static partial class NavigationInterop
     public static extern void UnloadSceneCache(uint mapId);
 
     /// <summary>
+    /// Enables the thin scene-slice runtime so collision queries stay on explicitly
+    /// injected nearby geometry instead of auto-loading full-map data on misses.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "SetSceneSliceMode", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SetSceneSliceMode([MarshalAs(UnmanagedType.I1)] bool enabled);
+
+    /// <summary>
     /// Sets the scenes directory for auto-discovery during EnsureMapLoaded.
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]

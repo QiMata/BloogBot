@@ -1,101 +1,71 @@
 # Docker Stack
 
-This repo now has a Windows-container stack for the local VMaNGOS server plus the service binaries that can run outside the game client.
+The default stack is Linux-container based and now includes:
 
-## Linux Engine VMaNGOS Stack
+- `realmd`
+- `mangosd`
+- `pathfinding-service`
+- `scene-data-service`
 
-The local Docker engine on this machine is currently running Linux containers, so the separate `realmd` / `mangosd` deployment for the server itself now lives in `docker-compose.vmangos-linux.yml`.
+`WoWStateManager` remains host-side because it launches local `WoW.exe` processes.
 
-### Scope
+## Prerequisites
 
-- `realmd`: auth server container using the local `D:\vmangos-server\realmd.conf` as the source config.
-- `mangosd`: world server container using the local `D:\vmangos-server\mangosd.conf` and `D:\MaNGOS\data` extracted client data.
-- Database: centralized `maria-db` MariaDB 10.11 container (shared across all game servers). Defined in `E:\repos\Final Fantasy XI\Docker\database\docker-compose.yml` and connected via the `gameserver-net` Docker network.
-
-### Prerequisites
-
-The `maria-db` container and `gameserver-net` network must be running before starting the WWoW stack:
+`gameserver-net` and `maria-db` must already be available.
 
 ```powershell
 cd "E:\repos\Final Fantasy XI\Docker\database"
 docker compose up -d
 ```
 
-### Commands
+## Linux Service Stack
 
-Start the Linux vmangos stack:
+Start all game + split navigation services:
 
 ```powershell
-docker compose -f .\docker-compose.vmangos-linux.yml up -d realmd mangosd
+docker compose -f .\docker-compose.vmangos-linux.yml up -d --build realmd mangosd pathfinding-service scene-data-service
 ```
 
-Follow world-server logs:
+Follow logs:
 
 ```powershell
 docker compose -f .\docker-compose.vmangos-linux.yml logs -f mangosd
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f pathfinding-service
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f scene-data-service
 ```
 
-Stop the Linux vmangos stack:
+Stop the stack:
 
 ```powershell
 docker compose -f .\docker-compose.vmangos-linux.yml down
 ```
 
-### Database Migrations
+## Runtime Configuration
 
-Sync VMaNGOS migrations against the `maria-db` container:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMarkers.ps1 -FetchOrigin
-```
-
-### Notes
-
-- The compose file rewrites only the container-specific config values at startup:
-  - DB host/credentials
-  - `DataDir`
-  - `LogsDir`
-  - `HonorDir`
-  - `SOAP.IP`
-- The WWoW stack connects to `maria-db` via the `gameserver-net` Docker network (container-to-container, no host port needed).
+- `pathfinding-service` loads nav data from `WWOW_DATA_DIR=/wwow-data`.
+- `scene-data-service` loads collision/scene data from `WWOW_DATA_DIR=/wwow-data` and listens on `0.0.0.0:5003`.
+- Both services mount `${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}` read-only.
 - Published ports:
-  - `realmd` on `127.0.0.1:3724`
-  - `mangosd` on `127.0.0.1:8085`
-  - SOAP on `127.0.0.1:7878`
-- Default host paths are:
-  - `D:/vmangos-server`
-  - `D:/MaNGOS/data`
-- Override them with:
-  - `WWOW_VMANGOS_SERVER_CONFIG_DIR`
-  - `WWOW_VMANGOS_DATA_DIR`
-  - `WWOW_VMANGOS_DB_HOST`
-  - `WWOW_VMANGOS_DB_PORT`
-  - `WWOW_VMANGOS_DB_ROOT_PASSWORD`
+  - `realmd`: `3724`
+  - `mangosd`: `8085`
+  - `SOAP`: `7878`
+  - `pathfinding-service`: `5001`
+  - `scene-data-service`: `5003`
 
-## Host-Side Service Execution
+## Current Validation (2026-04-03)
 
-`WoWStateManager` must be able to launch local `WoW.exe` clients, so it should run on the host rather than in Docker.
+- `docker ps` confirms both split services are live:
+  - `pathfinding-service` -> `0.0.0.0:5001->5001/tcp`
+  - `scene-data-service` -> `0.0.0.0:5003->5003/tcp`
+- `docker logs --tail 80 pathfinding-service` shows active map preload from mounted `/wwow-data`.
+- `docker logs --tail 80 scene-data-service` shows ready state (`Ready and listening on 0.0.0.0:5003`) and initialized map coverage.
 
-The current Docker engine on this machine is also running Linux containers, so `PathfindingService` is host-side right now too because it still depends on the native Windows `Navigation.dll`.
+## Host-Side WoWStateManager
 
-- `PathfindingService` depends on the native Windows `Navigation.dll`.
-- `WoWStateManager` must launch local game clients and should keep direct host access to `WoW.exe`.
-
-Run the published host-side outputs against the live vmangos stack:
-
-```powershell
-$env:WWOW_DATA_DIR='D:\MaNGOS\data'
-Start-Process -FilePath .\Bot\Release\net8.0\PathfindingService.exe `
-  -WorkingDirectory .\Bot\Release\net8.0 `
-  -RedirectStandardOutput .\logs\service-host\pathfindingservice.stdout.log `
-  -RedirectStandardError .\logs\service-host\pathfindingservice.stderr.log
-```
-
-For an idle `WoWStateManager` that does not auto-launch MaNGOS or any bots:
+Run StateManager on host while services stay in Docker:
 
 ```powershell
 $env:MangosServer__AutoLaunch='false'
-$env:WWOW_SETTINGS_OVERRIDE='E:\repos\Westworld of Warcraft\Services\WoWStateManager\Settings\StateManagerSettings.Idle.json'
 Start-Process -FilePath .\Bot\Release\net8.0\WoWStateManager.exe `
   -WorkingDirectory .\Bot\Release\net8.0 `
   -RedirectStandardOutput .\logs\service-host\wowstatemanager.stdout.log `
@@ -104,62 +74,17 @@ Start-Process -FilePath .\Bot\Release\net8.0\WoWStateManager.exe `
 
 Validation signals:
 
-- `Bot\Release\net8.0\pathfinding_status.json` reports `IsReady=true`.
-- `PathfindingService` listens on `127.0.0.1:5001`.
-- `WoWStateManager` listens on `127.0.0.1:5002` and `127.0.0.1:8088`.
-- `wowstatemanager.stdout.log` shows `CharacterSettings count: 0` and `MaNGOS auto-launch disabled.`.
+- `pathfinding-service` listening on `127.0.0.1:5001`
+- `scene-data-service` listening on `127.0.0.1:5003`
+- `WoWStateManager` listening on `127.0.0.1:5002` and `127.0.0.1:8088`
 
-## Scope
-
-- `vmangos-server`: wraps the existing local `C:\Mangos\server`, `C:\Mangos\mysql`, and `C:\Mangos\data` installation inside a Windows container.
-- `pathfinding-service`: runs `Services/PathfindingService` in Docker and mounts nav data from `C:\Mangos\data`.
-- `wow-state-manager`: host-side only; it launches local `WoW.exe` clients and should not run in Docker.
-- `background-bot-runner`: optional standalone container/profile for one BG bot instance.
-
-## Requirements
-
-- Docker Desktop must be in Windows container mode.
-- Local VMaNGOS assets must exist at the paths already documented in `docs/TECHNICAL_NOTES.md`.
-- If your paths differ, set these environment variables before launch:
-  - `WWOW_MANGOS_SERVER_DIR`
-  - `WWOW_MANGOS_MYSQL_DIR`
-  - `WWOW_MANGOS_DATA_DIR`
-  - `WWOW_BG_ACCOUNT_NAME`
-  - `WWOW_BG_ACCOUNT_PASSWORD`
-
-## Commands
-
-Start vmangos + PathfindingService containers:
+## Migration Marker Sync
 
 ```powershell
-docker compose -f .\docker-compose.windows.yml up --build vmangos-server pathfinding-service
-```
-
-Start `WoWStateManager` on the host:
-
-```powershell
-$env:MangosServer__AutoLaunch='false'
-Start-Process -FilePath .\Bot\Release\net8.0\WoWStateManager.exe `
-  -WorkingDirectory .\Bot\Release\net8.0 `
-  -RedirectStandardOutput .\logs\service-host\wowstatemanager.stdout.log `
-  -RedirectStandardError .\logs\service-host\wowstatemanager.stderr.log
-```
-
-Start the optional standalone background bot container too:
-
-```powershell
-docker compose -f .\docker-compose.windows.yml --profile bgbot up --build
-```
-
-Stop the stack:
-
-```powershell
-docker compose -f .\docker-compose.windows.yml down
+powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMarkers.ps1 -FetchOrigin
 ```
 
 ## Notes
 
-- `WoWStateManager` should stay host-side so it can launch local `WoW.exe` clients.
-- The optional `background-bot-runner` container now targets the host-side `WoWStateManager` listener through `WWOW_STATE_MANAGER_HOST` / `WWOW_STATE_MANAGER_PORT` (defaults: `host.docker.internal:5002`).
-- `ReamldRepository` and `DecisionEngineService.Repository.MangosRepository` now honor Docker-safe connection strings through environment variables/config-backed environment export.
-- `PathfindingService` expects `WWOW_DATA_DIR` to contain `maps`, `mmaps`, and `vmaps`; the compose file mounts that from the local VMaNGOS data folder.
+- `WoWStateManager` only manages WoW client instances; it does not launch/stop `PathfindingService` or `SceneDataService`.
+- Split service endpoints are still `pathfinding-service:5001` and `scene-data-service:5003`.

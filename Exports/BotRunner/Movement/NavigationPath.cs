@@ -117,6 +117,7 @@ public static class NavigationTraceReason
 {
     public const string InitialPath = "initial_path";
     public const string DestinationChanged = "destination_changed";
+    public const string MovementStuckRecovery = "movement_stuck_recovery";
     public const string PathUnavailable = "path_unavailable";
     public const string PathExhaustedStillFar = "path_exhausted_still_far";
     public const string StalledNearWaypoint = "stalled_near_waypoint";
@@ -362,6 +363,7 @@ public class NavigationPath(
     float capsuleRadius = 0.6f,
     float capsuleHeight = 2.5f,
     Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null,
+    Func<int>? stuckRecoveryGenerationProvider = null,
     Race race = 0,
     Gender gender = 0)
 {
@@ -373,6 +375,7 @@ public class NavigationPath(
     private readonly float _capsuleRadius = capsuleRadius;
     private readonly float _capsuleHeight = capsuleHeight;
     private readonly Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? _nearbyObjectProvider = nearbyObjectProvider;
+    private readonly Func<int>? _stuckRecoveryGenerationProvider = stuckRecoveryGenerationProvider;
     private readonly Race _race = race;
     private readonly Gender _gender = gender;
     private Position[] _waypoints = [];
@@ -394,6 +397,7 @@ public class NavigationPath(
     private Position? _destination;
     private long _lastCalculationTick;
     private bool _hasCalculatedPath;
+    private int _lastObservedStuckRecoveryGeneration;
     private Position? _lastWaypointSamplePosition;
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
@@ -535,6 +539,8 @@ public class NavigationPath(
                 usedDirectFallback: fallback != null,
                 fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
         }
+
+        ObserveMovementStuckRecovery(currentPosition, destination, mapId);
 
         // Recalculate if destination changed significantly
         if (_destination == null || _destination.DistanceTo(destination) > RECALCULATE_DISTANCE)
@@ -1169,6 +1175,23 @@ public class NavigationPath(
             isInLineOfSight = false;
             return false;
         }
+    }
+
+    private void ObserveMovementStuckRecovery(Position currentPosition, Position destination, uint mapId)
+    {
+        if (_stuckRecoveryGenerationProvider == null)
+            return;
+
+        var generation = _stuckRecoveryGenerationProvider();
+        if (generation <= _lastObservedStuckRecoveryGeneration)
+            return;
+
+        _lastObservedStuckRecoveryGeneration = generation;
+
+        if (!_hasCalculatedPath)
+            return;
+
+        CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.MovementStuckRecovery);
     }
 
     private bool PreservesWalkableCorridor(Position from, Position to, uint mapId)

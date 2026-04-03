@@ -95,6 +95,59 @@ public partial class LiveBotFixture
     }
 
 
+    private static bool MatchesExecutedSendChatCommand(WoWActivitySnapshot? snapshot, string command)
+    {
+        var previousAction = snapshot?.PreviousAction;
+        if (previousAction?.ActionType != ActionType.SendChat || previousAction.Parameters.Count == 0)
+            return false;
+
+        var sentCommand = previousAction.Parameters[0].StringParam;
+        return string.Equals(sentCommand, command, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static int GetTrackedChatCommandDelayMs(string command, int requestedDelayMs)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+            return requestedDelayMs;
+
+        if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
+            return Math.Max(requestedDelayMs, 3500);
+
+        if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))
+            return Math.Max(requestedDelayMs, 2500);
+
+        return requestedDelayMs;
+    }
+
+    internal static int GetTrackedChatCommandPostActionTailMs(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+            return 1000;
+
+        if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
+            return 2500;
+
+        if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))
+            return 1500;
+
+        return 1000;
+    }
+
+    internal static int GetTrackedChatCommandResponseSettleMs(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+            return 300;
+
+        if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
+            return 800;
+
+        if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))
+            return 400;
+
+        return 300;
+    }
+
+
     /// <summary>
     /// Clear a bot's backpack by sending DestroyItem actions for all 16 slots.
     /// Alternative to `.reset items` (SOAP) — useful when you want to preserve equipped gear.
@@ -167,25 +220,45 @@ public partial class LiveBotFixture
     /// commands like .learn, .additem that need to target the current character (self).
     /// </summary>
     public Task SendGmChatCommandAsync(string accountName, string command)
-        => SendGmChatCommandAsync(accountName, command, captureResponse: false);
+        => SendGmChatCommandAsync(accountName, command, captureResponse: false, emitOutput: true);
 
-    /// <summary>
-    /// Send a GM command through bot chat and optionally capture the bot's immediate chat/error response
-    /// from the next snapshot poll.
-    /// </summary>
-
-
-    /// <summary>
-    /// Send a GM command through bot chat and optionally capture the bot's immediate chat/error response
-    /// from the next snapshot poll.
-    /// </summary>
-    public async Task SendGmChatCommandAsync(string accountName, string command, bool captureResponse)
+    protected async Task SendSilentGmChatCommandAsync(string accountName, string command)
     {
-        var trace = await SendGmChatCommandTrackedAsync(accountName, command, captureResponse);
+        TrackChatCommand(accountName, command);
+
+        if (_stateManagerClient == null)
+            return;
+
+        var action = new ActionMessage
+        {
+            ActionType = ActionType.SendChat,
+            Parameters = { new RequestParameter { StringParam = command } }
+        };
+
+        _ = await _stateManagerClient.ForwardActionAsync(accountName, action);
+    }
+
+    /// <summary>
+    /// Send a GM command through bot chat and optionally capture the bot's immediate chat/error response
+    /// from the next snapshot poll.
+    /// </summary>
+
+
+    /// <summary>
+    /// Send a GM command through bot chat and optionally capture the bot's immediate chat/error response
+    /// from the next snapshot poll.
+    /// </summary>
+    public Task SendGmChatCommandAsync(string accountName, string command, bool captureResponse)
+        => SendGmChatCommandAsync(accountName, command, captureResponse, emitOutput: true);
+
+    private async Task SendGmChatCommandAsync(string accountName, string command, bool captureResponse, bool emitOutput)
+    {
+        var trace = await SendGmChatCommandTrackedAsync(accountName, command, captureResponse, emitOutput: emitOutput);
         // BT-VERIFY-001: Surface dead-state guard blocks clearly in test output.
         // Previously callers silently continued with half-configured state.
         if (trace.DispatchResult != ResponseResult.Success &&
-            trace.ErrorMessages.Any(e => e.Contains("dead-state guard", StringComparison.OrdinalIgnoreCase)))
+            trace.ErrorMessages.Any(e => e.Contains("dead-state guard", StringComparison.OrdinalIgnoreCase)) &&
+            emitOutput)
         {
             _testOutput?.WriteLine($"[DEAD-GUARD] [{accountName}] Command '{command}' blocked — bot is dead/ghost. " +
                 "This usually means EnsureCleanSlateAsync failed or a prior test leaked dead state.");
@@ -198,10 +271,12 @@ public partial class LiveBotFixture
         string command,
         bool captureResponse = true,
         int delayMs = 2000,
-        bool allowWhenDead = false)
+        bool allowWhenDead = false,
+        bool emitOutput = true)
     {
         var attemptCount = TrackChatCommand(accountName, command);
-        LogDuplicateCommand("CHAT", command, attemptCount, accountName);
+        if (emitOutput)
+            LogDuplicateCommand("CHAT", command, attemptCount, accountName);
 
         if (_stateManagerClient != null)
         {
@@ -209,8 +284,11 @@ public partial class LiveBotFixture
             if (!allowWhenDead && IsDeadOrGhostState(stateSnapshot, out var deadReason))
             {
                 var guardMessage = $"[CMD-GUARD] [{accountName}] Skipping '{command}' because sender is dead/ghost ({deadReason}).";
-                _logger.LogInformation("{Message}", guardMessage);
-                _testOutput?.WriteLine(guardMessage);
+                if (emitOutput)
+                {
+                    _logger.LogInformation("{Message}", guardMessage);
+                    _testOutput?.WriteLine(guardMessage);
+                }
 
                 return new GmChatCommandTrace(
                     attemptCount,
@@ -221,8 +299,11 @@ public partial class LiveBotFixture
         }
 
         var commandMessage = $"[CMD-SEND] [{accountName}] '{command}'";
-        _logger.LogInformation("{Message}", commandMessage);
-        _testOutput?.WriteLine(commandMessage);
+        if (emitOutput)
+        {
+            _logger.LogInformation("{Message}", commandMessage);
+            _testOutput?.WriteLine(commandMessage);
+        }
 
         var baselineChats = Array.Empty<string>();
         var baselineErrors = Array.Empty<string>();
@@ -243,22 +324,40 @@ public partial class LiveBotFixture
             Parameters = { new RequestParameter { StringParam = command } }
         };
 
-        var dispatchResult = await SendActionAsync(accountName, action);
+        var dispatchResult = await SendActionAsync(accountName, action, emitOutput);
         _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result}", action.ActionType, accountName, dispatchResult);
-        await Task.Delay(delayMs);
-
         var chats = new List<string>();
         var errors = new List<string>();
         if (captureResponse && _stateManagerClient != null)
         {
-            var responseSnapshot = await GetSnapshotAsync(accountName);
-            if (responseSnapshot != null)
-            {
-                var chatDelta = GetDeltaMessages(baselineChats, responseSnapshot.RecentChatMessages);
-                var errorDelta = GetDeltaMessages(baselineErrors, responseSnapshot.RecentErrors);
+            var pollDeadlineUtc = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandDelayMs(command, delayMs));
+            var actionSeen = false;
+            var responseSeen = false;
 
-                chats.AddRange(chatDelta);
-                errors.AddRange(errorDelta);
+            while (DateTime.UtcNow < pollDeadlineUtc)
+            {
+                await Task.Delay(200);
+
+                var responseSnapshot = await GetSnapshotAsync(accountName);
+                if (responseSnapshot == null)
+                    continue;
+
+                if (!actionSeen && MatchesExecutedSendChatCommand(responseSnapshot, command))
+                {
+                    actionSeen = true;
+                    var postActionDeadlineUtc = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandPostActionTailMs(command));
+                    if (postActionDeadlineUtc > pollDeadlineUtc)
+                        pollDeadlineUtc = postActionDeadlineUtc;
+                }
+
+                chats = GetDeltaMessages(baselineChats, responseSnapshot.RecentChatMessages);
+                errors = GetDeltaMessages(baselineErrors, responseSnapshot.RecentErrors);
+
+                if (actionSeen && !responseSeen && (chats.Count > 0 || errors.Count > 0))
+                {
+                    responseSeen = true;
+                    pollDeadlineUtc = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandResponseSettleMs(command));
+                }
             }
 
             LogChatCommandResponses(accountName, command, chats, errors);

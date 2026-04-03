@@ -13,12 +13,13 @@ using WoWSharpClient.Parsers;
 
 namespace WoWSharpClient.Movement
 {
-    public class MovementController(WoWClient client, IPhysicsClient physics, WoWLocalPlayer player)
+    public class MovementController(WoWClient client, IPhysicsClient? physics, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null)
     {
         private readonly WoWClient _client = client;
-        private readonly IPhysicsClient _physics = physics;
+        private readonly IPhysicsClient? _physics = physics;
         private readonly WoWLocalPlayer _player = player;
-
+        private readonly SceneDataClient? _sceneDataClient = sceneDataClient;
+        private readonly bool _nativeSceneModeConfigured = ConfigureNativeSceneMode(physics, sceneDataClient);
         // Physics state
         private Vector3 _velocity = Vector3.Zero;
         // Keep fall time in milliseconds to match WoW movement packet expectations.
@@ -165,6 +166,16 @@ namespace WoWSharpClient.Movement
         public List<PhysicsFrameRecord> GetRecordedFrames() => new(_recordedFrames);
         public void ClearRecordedFrames() => _recordedFrames.Clear();
 
+        private static bool ConfigureNativeSceneMode(IPhysicsClient? physics, SceneDataClient? sceneDataClient)
+        {
+            if (sceneDataClient != null)
+                NativeLocalPhysics.SetSceneSliceMode(true);
+            else if (physics == null)
+                NativeLocalPhysics.SetSceneSliceMode(false);
+
+            return true;
+        }
+
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaSec, uint gameTimeMs)
         {
@@ -188,7 +199,7 @@ namespace WoWSharpClient.Movement
             }
 
             // Consume pending knockback impulse from SMSG_MOVE_KNOCK_BACK.
-            // Must happen before the idle early-return so knockback is never dropped.
+            // Must happen before any early exit so knockback is never dropped.
             if (WoWSharpObjectManager.Instance?.TryConsumePendingKnockback(out float kbVx, out float kbVy, out float kbVz) == true)
             {
                 _velocity = new Vector3(kbVx, kbVy, kbVz);
@@ -199,15 +210,6 @@ namespace WoWSharpClient.Movement
                     | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
                 Log.Information("[MovementController] Applied knockback impulse vel=({VelX:F2},{VelY:F2},{VelZ:F2})",
                     kbVx, kbVy, kbVz);
-            }
-
-            if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
-                && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
-                && !_needsGroundSnap
-                && !_player.IsAutoAttacking)
-            {
-                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
-                return;
             }
 
             // Suppress all movement during channeling or casting. MaNGOS interprets
@@ -277,27 +279,62 @@ namespace WoWSharpClient.Movement
                 // Only clamp when there's no ground at all (missing navmesh/collision), which prevents
                 // fallthrough at docks/bridges/beaches where the navmesh sees the ocean floor.
                 bool physicsFoundGround = _prevGroundZ > -50000f;
+                _noGroundFrameCount = physicsFoundGround ? 0 : _noGroundFrameCount + 1;
+
                 if (!float.IsNaN(_teleportZ) && _player.Position.Z < _teleportZ && !physicsFoundGround)
                 {
-                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
-                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    _velocity = Vector3.Zero;
-                    _fallTimeMs = 0;
+                    _teleportZGraceFrames++;
+                    if (_teleportZGraceFrames > TELEPORT_Z_GRACE_DURATION)
+                    {
+                        Log.Warning("[MovementController] Ground snap found no support below teleport target after {Frames} frames: " +
+                            "posZ={PosZ:F1} teleportZ={TeleZ:F1}. Clamping to teleport Z.",
+                            _teleportZGraceFrames, _player.Position.Z, _teleportZ);
+                        _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                        _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                        _velocity = Vector3.Zero;
+                        _fallTimeMs = 0;
+                    }
+                }
+                else
+                {
+                    _teleportZGraceFrames = 0;
                 }
 
                 // Guard against physics finding geometry ABOVE the teleport target (roofs, WMO
                 // surfaces, bridges). The server is authoritative on post-teleport position —
                 // if the player is significantly above teleport Z, physics found a ceiling/roof,
-                // not the intended ground surface. Clamp back to teleport Z.
+                // not the intended ground surface. Reject that contact for a short grace window
+                // so the bot can keep falling while local scene data catches up.
                 if (!float.IsNaN(_teleportZ) && _player.Position.Z > _teleportZ + GROUND_SNAP_MAX_DROP)
                 {
-                    Log.Warning("[MovementController] Ground snap found geometry above teleport target: " +
-                        "posZ={PosZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1}. Clamping to teleport Z.",
-                        _player.Position.Z, _teleportZ, _prevGroundZ);
-                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
-                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    _velocity = Vector3.Zero;
-                    _fallTimeMs = 0;
+                    _teleportClampFrames++;
+                    if (_teleportClampFrames <= TELEPORT_CLAMP_MAX_FRAMES)
+                    {
+                        if (_teleportClampFrames == 1 || (_teleportClampFrames % 30) == 0)
+                        {
+                            Log.Warning("[MovementController] Ground snap rejected geometry above teleport target: " +
+                                "posZ={PosZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1} rejectFrames={Frames}.",
+                                _player.Position.Z, _teleportZ, _prevGroundZ, _teleportClampFrames);
+                        }
+
+                        _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                        _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
+                        _player.MovementFlags &= ~MovementFlags.MOVEFLAG_JUMPING;
+                        _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, -0.1f));
+                        _fallTimeMs = Math.Max(_fallTimeMs, (uint)MathF.Max(1f, deltaSec * 1000f));
+                        _prevGroundZ = -50001f;
+                        _prevGroundNormal = new Vector3(0, 0, 1);
+                        _pendingDepen = Vector3.Zero;
+                        _standingOnInstanceId = 0;
+                        _standingOnLocal = Vector3.Zero;
+                        _hasPhysicsGroundContact = false;
+                        _wasGroundedLastFrame = false;
+                        physicsFoundGround = false;
+                    }
+                }
+                else
+                {
+                    _teleportClampFrames = 0;
                 }
 
                 bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
@@ -331,6 +368,10 @@ namespace WoWSharpClient.Movement
         // ======== PHYSICS ========
         private PhysicsOutput RunPhysics(float deltaSec)
         {
+            // Always run physics, even when MOVEFLAG_NONE. BG bots can be moved
+            // externally or lose support while idle, and a synthetic grounded
+            // result prevents the fall/settle sweep from ever happening.
+
             if (_player.TransportGuid != _lastTransportGuid)
             {
                 ResetTransportContinuity();
@@ -424,9 +465,49 @@ namespace WoWSharpClient.Movement
             _physicsInputZ = input.PosZ;
             _physicsInputFlags = input.MovementFlags;
 
-            return _physics.PhysicsStep(input);
+            if (_physics != null)
+                return _physics.PhysicsStep(input);
+
+            _ = EnsureLocalSceneDataFresh();
+
+            return NativeLocalPhysics.Step(input);
         }
 
+        private bool EnsureLocalSceneDataFresh()
+        {
+            if (_sceneDataClient == null)
+                return true;
+
+            if (_lastSceneRefreshMapId != _player.MapId)
+            {
+                if (_lastSceneRefreshMapId != uint.MaxValue)
+                    NativeLocalPhysics.ClearSceneCache(_lastSceneRefreshMapId);
+
+                _lastSceneRefreshMapId = _player.MapId;
+                _lastSceneRefreshX = float.NaN;
+                _lastSceneRefreshY = float.NaN;
+            }
+
+            float dx = _player.Position.X - _lastSceneRefreshX;
+            float dy = _player.Position.Y - _lastSceneRefreshY;
+            if (!float.IsNaN(_lastSceneRefreshX)
+                && !float.IsNaN(_lastSceneRefreshY)
+                && (dx * dx) + (dy * dy) <= SceneRefreshDistance * SceneRefreshDistance)
+            {
+                return true;
+            }
+
+            if (!_sceneDataClient.EnsureSceneDataAround(_player.MapId, _player.Position.X, _player.Position.Y))
+            {
+                Log.Warning("[MovementController] SceneData refresh failed for map {MapId} at ({X:F1},{Y:F1})",
+                    _player.MapId, _player.Position.X, _player.Position.Y);
+                return false;
+            }
+
+            _lastSceneRefreshX = _player.Position.X;
+            _lastSceneRefreshY = _player.Position.Y;
+            return true;
+        }
         private void ResetTransportContinuity()
         {
             _prevGroundZ = _player.Position.Z;
@@ -593,6 +674,10 @@ namespace WoWSharpClient.Movement
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
         private ulong _lastTransportGuid = player.TransportGuid;
+        private uint _lastSceneRefreshMapId = uint.MaxValue;
+        private float _lastSceneRefreshX = float.NaN;
+        private float _lastSceneRefreshY = float.NaN;
+        private const float SceneRefreshDistance = 100f;
         // Per-frame packet tracking for recording — set by SendMovementPacket,
         // captured by the recording in the NEXT frame's physics tick, then reset.
         private uint _frameSentOpcode = 0;

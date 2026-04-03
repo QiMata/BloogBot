@@ -107,6 +107,28 @@ public class ProtobufSocketPipelineTests : IDisposable
         Assert.Equal(1, server.RequestCount);
     }
 
+    [Fact]
+    public void DeferredConnect_ClientCanBeConstructedBeforeServerStarts()
+    {
+        var port = GetFreePort();
+        using var client = new ProtobufSocketClient<WoWActivitySnapshot, WoWActivitySnapshot>(
+            "127.0.0.1", port, NullLogger.Instance, connectImmediately: false);
+
+        using var server = new TestSocketServer("127.0.0.1", port);
+        Thread.Sleep(100);
+
+        var snapshot = new WoWActivitySnapshot
+        {
+            AccountName = "DEFERRED",
+            IsObjectManagerValid = true,
+        };
+
+        var response = client.SendMessage(snapshot);
+
+        Assert.Equal("DEFERRED", response.AccountName);
+        Assert.Equal(1, server.RequestCount);
+    }
+
     // =========================================================================
     // 2. Multiple sequential messages on same connection
     // =========================================================================

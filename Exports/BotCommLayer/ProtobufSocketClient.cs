@@ -22,16 +22,24 @@ namespace BotCommLayer
         // Store connection parameters for reconnection
         private readonly string? _ipAddress;
         private readonly int _port;
+        private readonly int? _initialConnectBudgetMs;
 
         public ProtobufSocketClient() { }
 
         public ProtobufSocketClient(string ipAddress, int port, ILogger logger)
+            : this(ipAddress, port, logger, connectImmediately: true)
+        {
+        }
+
+        public ProtobufSocketClient(string ipAddress, int port, ILogger logger, bool connectImmediately, int? initialConnectBudgetMs = null)
         {
             _logger = logger;
             _ipAddress = ipAddress;
             _port = port;
+            _initialConnectBudgetMs = initialConnectBudgetMs;
 
-            Connect();
+            if (connectImmediately)
+                Connect(initialConnectBudgetMs);
         }
 
         private void Connect(int? reconnectBudgetMs = null)
@@ -146,15 +154,20 @@ namespace BotCommLayer
 
         public TResponse SendMessage(TRequest request)
         {
-            return SendMessage(request, readTimeoutOverrideMs: null, writeTimeoutOverrideMs: null);
+            return SendMessage(request, readTimeoutOverrideMs: null, writeTimeoutOverrideMs: null, connectBudgetMs: null);
         }
 
         protected TResponse SendMessage(TRequest request, int readTimeoutMs, int writeTimeoutMs)
         {
-            return SendMessage(request, (int?)readTimeoutMs, (int?)writeTimeoutMs);
+            return SendMessage(request, (int?)readTimeoutMs, (int?)writeTimeoutMs, connectBudgetMs: null);
         }
 
-        private TResponse SendMessage(TRequest request, int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
+        protected TResponse SendMessage(TRequest request, int readTimeoutMs, int writeTimeoutMs, int connectBudgetMs)
+        {
+            return SendMessage(request, (int?)readTimeoutMs, (int?)writeTimeoutMs, connectBudgetMs);
+        }
+
+        private TResponse SendMessage(TRequest request, int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs, int? connectBudgetMs)
         {
             if (_stream == null && _ipAddress == null)
             {
@@ -167,6 +180,16 @@ namespace BotCommLayer
                 var previousWriteTimeout = _stream?.WriteTimeout;
                 try
                 {
+                    if (_stream == null && _ipAddress != null)
+                    {
+                        Connect(ResolveConnectBudgetMs(
+                            connectBudgetMs,
+                            readTimeoutOverrideMs,
+                            writeTimeoutOverrideMs,
+                            previousReadTimeout,
+                            previousWriteTimeout));
+                    }
+
                     ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
                     return SendMessageInternal(request);
                 }
@@ -178,7 +201,8 @@ namespace BotCommLayer
                         _logger?.LogWarning($"Connection lost ({ex.GetType().Name}). Attempting reconnect to {_ipAddress}:{_port}...");
                         try
                         {
-                            Connect(ComputeReconnectBudgetMs(
+                            Connect(ResolveConnectBudgetMs(
+                                connectBudgetMs,
                                 readTimeoutOverrideMs,
                                 writeTimeoutOverrideMs,
                                 previousReadTimeout,
@@ -228,6 +252,26 @@ namespace BotCommLayer
             Consider(previousWriteTimeout);
 
             return budget.GetValueOrDefault(5000);
+        }
+
+        private int ResolveConnectBudgetMs(
+            int? explicitBudgetMs,
+            int? readTimeoutOverrideMs,
+            int? writeTimeoutOverrideMs,
+            int? previousReadTimeout,
+            int? previousWriteTimeout)
+        {
+            if (explicitBudgetMs.HasValue && explicitBudgetMs.Value > 0)
+                return explicitBudgetMs.Value;
+
+            if (_initialConnectBudgetMs.HasValue && _initialConnectBudgetMs.Value > 0)
+                return _initialConnectBudgetMs.Value;
+
+            return ComputeReconnectBudgetMs(
+                readTimeoutOverrideMs,
+                writeTimeoutOverrideMs,
+                previousReadTimeout,
+                previousWriteTimeout);
         }
 
         private void ApplyTimeoutOverrides(int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)

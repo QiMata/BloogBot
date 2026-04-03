@@ -255,7 +255,7 @@ dotnet run
 ### Service Flow
 
 1. **Initialization**: Loads configuration and character definitions
-2. **Dependency Check**: Verifies PathfindingService is running, launches if needed
+2. **Dependency Check**: Verifies PathfindingService/SceneDataService external endpoints are available
 3. **Account Management**: Creates MaNGOS accounts for configured characters if they don't exist
 4. **Bot Spawning**: Starts BackgroundBotRunner instances for each character
 5. **State Monitoring**: Continuously monitors and manages character states

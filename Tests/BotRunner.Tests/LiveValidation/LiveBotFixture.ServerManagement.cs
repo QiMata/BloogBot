@@ -16,6 +16,8 @@ using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
+internal readonly record struct AccountCharacterRecord(string Name, byte RaceId, byte ClassId, byte GenderId);
+
 public partial class LiveBotFixture
 {
 
@@ -76,6 +78,57 @@ public partial class LiveBotFixture
         }
 
         return null;
+    }
+
+    private protected async Task<bool> AccountExistsAsync(string accountName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName))
+            throw new ArgumentException("Account name is required.", nameof(accountName));
+
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosRealmDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT 1
+            FROM account
+            WHERE username = @username
+            LIMIT 1";
+        cmd.Parameters.AddWithValue("@username", accountName);
+
+        return await cmd.ExecuteScalarAsync() != null;
+    }
+
+    private protected async Task<IReadOnlyList<AccountCharacterRecord>> QueryCharactersForAccountAsync(string accountName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName))
+            throw new ArgumentException("Account name is required.", nameof(accountName));
+
+        var results = new List<AccountCharacterRecord>();
+
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT c.name, c.race, c.class, c.gender
+            FROM characters c
+            INNER JOIN realmd.account a ON a.id = c.account
+            WHERE a.username = @username
+            ORDER BY c.guid";
+        cmd.Parameters.AddWithValue("@username", accountName);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new AccountCharacterRecord(
+                Name: reader.GetString(0),
+                RaceId: Convert.ToByte(reader.GetValue(1)),
+                ClassId: Convert.ToByte(reader.GetValue(2)),
+                GenderId: Convert.ToByte(reader.GetValue(3))));
+        }
+
+        return results;
     }
 
 
@@ -417,9 +470,10 @@ public partial class LiveBotFixture
 
 
     /// <summary>
-    /// Clears respawn timers for fishing pool gameobjects near a given position.
-    /// MaNGOS tracks depleted pools in characters.gameobject_respawn; deleting those rows
-    /// and reloading the gameobject table forces the server to respawn them immediately.
+    /// Clears persisted respawn timers for fishing pool gameobjects near a given position.
+    /// This only removes rows from characters.gameobject_respawn; callers still need to
+    /// trigger an appropriate in-world refresh (for example, a nearby .respawn) if they
+    /// want loaded objects to become interactable again.
     /// </summary>
     public async Task<int> ClearFishingPoolRespawnTimersAsync(int mapId, float centerX, float centerY, float radius)
     {
@@ -446,11 +500,6 @@ public partial class LiveBotFixture
             var deleted = await cmd.ExecuteNonQueryAsync();
             _logger.LogInformation("[MySQL] Cleared {Count} fishing pool respawn timers near ({X:F0},{Y:F0}) radius={Radius}",
                 deleted, centerX, centerY, radius);
-
-            if (deleted > 0)
-            {
-                await ExecuteGMCommandAsync(".reload gameobject");
-            }
 
             return deleted;
         }

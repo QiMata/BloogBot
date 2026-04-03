@@ -124,7 +124,25 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnCharacterListLoaded(object? sender, EventArgs e)
         {
-            _characterSelectScreen.HasReceivedCharacterList = true;
+            _characterSelectScreen.MarkCharacterListLoaded();
+        }
+
+        private void EventEmitter_OnCharacterCreateResponse(object? sender, CharCreateResponse e)
+        {
+            if (e.Result == CreateCharacterResult.Success)
+            {
+                Log.Information("[CharacterSelect] Character creation succeeded. Refreshing character list.");
+            }
+            else if (e.Result == CreateCharacterResult.InProgress)
+            {
+                Log.Information("[CharacterSelect] Character creation still in progress. Refreshing character list.");
+            }
+            else
+            {
+                Log.Warning("[CharacterSelect] Character creation failed: {Result}", e.Result);
+            }
+
+            _characterSelectScreen.HandleCharacterCreateResponse(e.Result);
         }
 
 
@@ -164,6 +182,8 @@ namespace WoWSharpClient
                 messages.Add(msg);
             return messages;
         }
+
+        public bool SupportsDirectGmCommandCapture => true;
 
 
         private readonly ConcurrentQueue<ObjectStateUpdate> _pendingUpdates = new();

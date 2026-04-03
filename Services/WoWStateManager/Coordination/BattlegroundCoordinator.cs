@@ -4,26 +4,20 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using WoWStateManager.Settings;
+using BotRunner.Travel;
 
 namespace WoWStateManager.Coordination;
 
 /// <summary>
-/// Coordinates N bots for battleground entry. Assumes test fixture has already:
-///   - Leveled all bots to BG minimum (10 for WSG)
-///   - Teleported Horde bots to Orgrimmar BG master area
-///   - Teleported Alliance bots to their faction's BG master area
-///   - Turned .gm off on all bots
-///
-/// Pipeline:
-///   WaitingForBots → QueueForBattleground → WaitForInvite → AcceptInvite → InBattleground
-///
-/// Unlike DungeoneeringCoordinator, this does NOT handle leveling, gear, or teleport.
-/// Those are fixture responsibilities. This coordinator only handles the BG lifecycle
-/// from "bots are at BG masters" to "bots are in the BG".
+/// Coordinates N bots for battleground entry after the fixture has completed
+/// level/teleport prep and staged both factions at their battlemaster areas.
 /// </summary>
 public class BattlegroundCoordinator
 {
+    public readonly record struct StagingTarget(uint MapId, float X, float Y, float Z);
+
+    private const float QueueReadyRadius = 80f;
+
     public enum CoordState
     {
         WaitingForBots,
@@ -36,8 +30,10 @@ public class BattlegroundCoordinator
 
     private readonly string _leaderAccount;
     private readonly List<string> _memberAccounts;
-    private readonly uint _bgTypeId;     // 2=WSG, 3=AB, 1=AV
-    private readonly uint _bgMapId;      // 489=WSG, 529=AB, 30=AV
+    private readonly uint _bgTypeId;
+    private readonly uint _bgMapId;
+    private readonly int _minimumLevel;
+    private readonly IReadOnlyDictionary<string, StagingTarget> _stagingTargets;
     private readonly ILogger _logger;
 
     private CoordState _state = CoordState.WaitingForBots;
@@ -45,7 +41,6 @@ public class BattlegroundCoordinator
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private int _tickCount;
 
-    // Tracking
     private readonly ConcurrentDictionary<string, int> _queueSent = new();
     private readonly ConcurrentDictionary<string, int> _acceptSent = new();
 
@@ -54,21 +49,30 @@ public class BattlegroundCoordinator
         IEnumerable<string> allAccounts,
         uint bgTypeId,
         uint bgMapId,
-        ILogger logger)
+        ILogger logger,
+        IReadOnlyDictionary<string, StagingTarget>? stagingTargets = null)
     {
         _leaderAccount = leaderAccount;
         _memberAccounts = allAccounts
-            .Where(a => !a.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+            .Where(account => !account.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
             .ToList();
         _bgTypeId = bgTypeId;
         _bgMapId = bgMapId;
+        _minimumLevel = BattlemasterData.GetMinimumLevel(bgTypeId);
         _logger = logger;
+        _stagingTargets = stagingTargets
+            ?? new Dictionary<string, StagingTarget>(StringComparer.OrdinalIgnoreCase);
 
-        _logger.LogInformation("BG_COORD: Initialized — Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}",
-            leaderAccount, _memberAccounts.Count, bgTypeId, bgMapId);
+        _logger.LogInformation(
+            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}",
+            leaderAccount,
+            _memberAccounts.Count,
+            bgTypeId,
+            bgMapId);
     }
 
-    public ActionMessage? GetAction(string requestingAccount,
+    public ActionMessage? GetAction(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         _tickCount++;
@@ -80,86 +84,111 @@ public class BattlegroundCoordinator
             CoordState.WaitForInvite => HandleWaitForInvite(requestingAccount, snapshots),
             CoordState.AcceptInvite => HandleAcceptInvite(requestingAccount, snapshots),
             CoordState.WaitForEntry => HandleWaitForEntry(requestingAccount, snapshots),
-            CoordState.InBattleground => null, // Idle — bots do their own thing
+            CoordState.InBattleground => null,
             _ => null,
         };
     }
 
     private void TransitionTo(CoordState newState)
     {
-        _logger.LogWarning("BG_COORD: {Old} → {New}", _state, newState);
+        _logger.LogWarning("BG_COORD: {Old} -> {New}", _state, newState);
         _state = newState;
         _stateEnteredAt = DateTime.UtcNow;
         _tickCount = 0;
     }
 
-    private ActionMessage? HandleWaitingForBots(string requestingAccount,
+    private ActionMessage? HandleWaitingForBots(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Wait for ALL bots to be in-world with valid ObjectManager AND level >= 10.
-        // Fixture handles leveling/teleporting — coordinator must wait for that to complete.
-        // Don't transition early — if we queue before all bots are ready, some will
-        // have their actions dropped by BotRunnerService (HasEnteredWorld=false).
-        var ready = snapshots.Values.Count(s =>
-            s.IsObjectManagerValid
-            && (s.Player?.Unit?.GameObject?.Level ?? 0) >= 10);
         var total = _memberAccounts.Count + 1;
+        var ready = 0;
+        var staged = 0;
+        var pendingAccounts = new List<string>();
 
-        if (ready < total)
+        foreach (var account in _memberAccounts.Append(_leaderAccount))
         {
-            if (_tickCount % 20 == 1)
-                _logger.LogInformation("BG_COORD: Waiting for bots (level>=10): {Ready}/{Total}", ready, total);
+            if (!snapshots.TryGetValue(account, out var snapshot))
+            {
+                pendingAccounts.Add($"{account}(no snapshot)");
+                continue;
+            }
 
-            // Accept N-1 bots (FG bot may crash, leaving 19/20)
-            // Also hard timeout after 60s — proceed with at least 4 bots per faction (min for BG)
-            var closeEnough = ready >= total - 1;
-            var timedOut = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds > 60 && ready >= 4;
+            if (!IsWorldReady(snapshot, _minimumLevel))
+            {
+                pendingAccounts.Add($"{account}(world not ready)");
+                continue;
+            }
 
-            if (!closeEnough && !timedOut)
-                return null;
+            ready++;
+            if (IsQueuedAtStagingTarget(account, snapshot))
+            {
+                staged++;
+                continue;
+            }
 
-            if (timedOut && !closeEnough)
-                _logger.LogWarning("BG_COORD: Timeout waiting for all bots. Proceeding with {Ready}/{Total}", ready, total);
+            pendingAccounts.Add(DescribeUnstagedAccount(account, snapshot));
         }
 
-        _logger.LogInformation("BG_COORD: {Ready}/{Total} bots ready. Starting BG queue.", ready, total);
+        if (ready < total || staged < total)
+        {
+            if (_tickCount % 20 == 1)
+            {
+                _logger.LogInformation(
+                    "BG_COORD: Waiting for bots (ready={Ready}/{Total}, staged={Staged}/{Total}). Pending: {Pending}",
+                    ready,
+                    total,
+                    staged,
+                    total,
+                    string.Join(", ", pendingAccounts));
+            }
+
+            return null;
+        }
+
+        _logger.LogInformation(
+            "BG_COORD: {Ready}/{Total} bots staged at battlemaster areas. Starting BG queue.",
+            ready,
+            total);
         TransitionTo(CoordState.QueueForBattleground);
         return null;
     }
 
-    private ActionMessage? HandleQueueForBattleground(string requestingAccount,
+    private ActionMessage? HandleQueueForBattleground(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Already sent to this bot — skip
-        if (_queueSent.ContainsKey(requestingAccount))
-            return null;
+        ActionMessage? action = null;
 
-        // Only send JoinBattleground to bots that are actually world-ready.
-        // Bots still loading (HasEnteredWorld=false, Guid=0) will have their actions dropped
-        // by BotRunnerService — so we must NOT mark them as queued until they're ready.
-        if (snapshots.TryGetValue(requestingAccount, out var snap)
-            && snap.IsObjectManagerValid
-            && (snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != _bgMapId) // not already in BG
+        if (!_queueSent.ContainsKey(requestingAccount)
+            && snapshots.TryGetValue(requestingAccount, out var snapshot)
+            && snapshot.IsObjectManagerValid
+            && (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != _bgMapId)
         {
-            _queueSent.TryAdd(requestingAccount, 0);
+            if (_queueSent.TryAdd(requestingAccount, 0))
+            {
+                _logger.LogInformation(
+                    "BG_COORD: Sending JOIN_BATTLEGROUND to '{Account}' (bgType={BgType})",
+                    requestingAccount,
+                    _bgTypeId);
 
-            _logger.LogInformation("BG_COORD: Sending JOIN_BATTLEGROUND to '{Account}' (bgType={BgType})",
-                requestingAccount, _bgTypeId);
-
-            var action = new ActionMessage { ActionType = ActionType.JoinBattleground };
-            action.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
-            action.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
-
-            return action;
+                action = new ActionMessage { ActionType = ActionType.JoinBattleground };
+                action.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
+                action.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
+            }
         }
 
-        // Bot not ready yet — log periodically
-        if (_tickCount % 20 == 1)
-            _logger.LogInformation("BG_COORD: Waiting for '{Account}' to be world-ready before queueing", requestingAccount);
+        if (action == null
+            && !_queueSent.ContainsKey(requestingAccount)
+            && _tickCount % 20 == 1)
+        {
+            _logger.LogInformation(
+                "BG_COORD: Waiting for '{Account}' to be world-ready before queueing",
+                requestingAccount);
+        }
 
-        // Check if all bots have been queued
         var allQueued = _queueSent.ContainsKey(_leaderAccount)
-            && _memberAccounts.All(m => _queueSent.ContainsKey(m));
+            && _memberAccounts.All(member => _queueSent.ContainsKey(member));
 
         if (allQueued)
         {
@@ -167,60 +196,102 @@ public class BattlegroundCoordinator
             TransitionTo(CoordState.WaitForInvite);
         }
 
-        return null;
+        return action;
     }
 
-    private ActionMessage? HandleWaitForInvite(string requestingAccount,
+    private ActionMessage? HandleWaitForInvite(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // The BattlegroundQueueTask on each bot handles the actual queue/invite flow.
-        // We just wait here. The task will transition to AcceptInvite state internally.
-        // Check if any bot has entered the BG map — that means invites are flowing.
+        var onBgMap = snapshots.Values.Count(snapshot =>
+            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
 
-        var onBgMap = snapshots.Values.Count(s =>
-            (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
-
-        if (onBgMap > 0)
+        var total = _memberAccounts.Count + 1;
+        if (onBgMap >= total)
         {
-            _logger.LogInformation("BG_COORD: {Count} bot(s) on BG map! BG is active.", onBgMap);
+            _logger.LogInformation("BG_COORD: {Count}/{Total} bots on BG map. BG is active.", onBgMap, total);
             TransitionTo(CoordState.InBattleground);
-            return null;
-        }
-
-        // Timeout after 5 minutes
-        if ((DateTime.UtcNow - _stateEnteredAt).TotalSeconds > 300)
-        {
-            _logger.LogWarning("BG_COORD: Invite timeout after 5 minutes");
-            TransitionTo(CoordState.InBattleground); // Give up waiting
         }
 
         return null;
     }
 
-    private ActionMessage? HandleAcceptInvite(string requestingAccount,
+    private ActionMessage? HandleAcceptInvite(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        // Send AcceptBattleground to each bot
         if (!_acceptSent.TryAdd(requestingAccount, 0))
             return null;
 
         _logger.LogInformation("BG_COORD: Sending ACCEPT_BATTLEGROUND to '{Account}'", requestingAccount);
-
         return new ActionMessage { ActionType = ActionType.AcceptBattleground };
     }
 
-    private ActionMessage? HandleWaitForEntry(string requestingAccount,
+    private ActionMessage? HandleWaitForEntry(
+        string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        var onBgMap = snapshots.Values.Count(s =>
-            (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
+        var onBgMap = snapshots.Values.Count(snapshot =>
+            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
 
-        if (onBgMap >= 2)
+        var total = _memberAccounts.Count + 1;
+        if (onBgMap >= total)
         {
-            _logger.LogInformation("BG_COORD: {Count} bots entered BG map {Map}", onBgMap, _bgMapId);
+            _logger.LogInformation(
+                "BG_COORD: {Count}/{Total} bots entered BG map {Map}",
+                onBgMap,
+                total,
+                _bgMapId);
             TransitionTo(CoordState.InBattleground);
         }
 
         return null;
+    }
+
+    private string DescribeUnstagedAccount(string accountName, WoWActivitySnapshot snapshot)
+    {
+        var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+        var position = snapshot.Player?.Unit?.GameObject?.Base?.Position;
+
+        if (!_stagingTargets.TryGetValue(accountName, out var target))
+            return $"{accountName}(map={mapId}, no staging target)";
+
+        if (position == null)
+            return $"{accountName}(map={mapId}, pos=unknown)";
+
+        var distance = Distance2D(position.X, position.Y, target.X, target.Y);
+        return $"{accountName}(map={mapId}, dist={distance:F0})";
+    }
+
+    private bool IsQueuedAtStagingTarget(string accountName, WoWActivitySnapshot snapshot)
+    {
+        var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+        if (mapId == _bgMapId)
+            return true;
+
+        if (!_stagingTargets.TryGetValue(accountName, out var target))
+            return true;
+
+        if (mapId != target.MapId)
+            return false;
+
+        var position = snapshot.Player?.Unit?.GameObject?.Base?.Position;
+        if (position == null)
+            return false;
+
+        return Distance2D(position.X, position.Y, target.X, target.Y) <= QueueReadyRadius;
+    }
+
+    private static bool IsWorldReady(WoWActivitySnapshot snapshot, int minimumLevel)
+    {
+        return snapshot.IsObjectManagerValid
+            && (snapshot.Player?.Unit?.GameObject?.Level ?? 0) >= minimumLevel;
+    }
+
+    private static float Distance2D(float ax, float ay, float bx, float by)
+    {
+        var dx = ax - bx;
+        var dy = ay - by;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
     }
 }

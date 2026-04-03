@@ -15,7 +15,7 @@ namespace PathfindingService.Repository
 
     public class Navigation
     {
-        private const string DLL_NAME = "Navigation.dll";
+        private const string DLL_NAME = "Navigation";
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeXyz

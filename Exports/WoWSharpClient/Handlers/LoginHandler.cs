@@ -155,7 +155,7 @@ namespace WoWSharpClient.Handlers
 
                 // Read MapId (4 bytes)
                 uint serverTime = reader.ReadUInt32();
-                Log.Error($"[LoginHandler] SMSG_QUERY_TIME_RESPONSE {serverTime}");
+                Log.Debug("[LoginHandler] SMSG_QUERY_TIME_RESPONSE {ServerTime}", serverTime);
                 // Process the login verification as needed
                 //_woWSharpEventEmitter.FireOnSetTimeSpeed(new OnSetTimeSpeedArgs(serverTime, timescale));
             }

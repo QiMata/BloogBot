@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Diagnostics;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -373,6 +374,59 @@ namespace WowSharpClient.NetworkTests
 
             // Assert
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await loginTask);
+        }
+
+        [Fact]
+        public async Task LoginAsync_UsesConfiguredHandshakeTimeout()
+        {
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(
+                connection,
+                framer,
+                encryptor,
+                codec,
+                router,
+                loginHandshakeTimeout: TimeSpan.FromMilliseconds(200));
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            var sw = Stopwatch.StartNew();
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+
+            await Assert.ThrowsAsync<TaskCanceledException>(async () => await loginTask);
+
+            Assert.InRange(sw.ElapsedMilliseconds, 150, 2000);
+        }
+
+        [Fact]
+        public async Task GetRealmListAsync_UsesConfiguredTimeout()
+        {
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(
+                connection,
+                framer,
+                encryptor,
+                codec,
+                router,
+                realmListTimeout: TimeSpan.FromMilliseconds(200));
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            var sw = Stopwatch.StartNew();
+            var realms = await authClient.GetRealmListAsync();
+
+            Assert.Empty(realms);
+            Assert.InRange(sw.ElapsedMilliseconds, 150, 2000);
         }
 
         /// <summary>

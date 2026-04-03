@@ -358,6 +358,7 @@ namespace WoWSharpClient.Handlers
                     // Simple failure with no details
                     Console.WriteLine($"[CAST_FAILED] spell={spellId} status=FAILURE (no details) raw={BitConverter.ToString(data)}");
                     Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} status=FAILURE (no details)", spellId);
+                    WoWSharpEventEmitter.Instance.FireOnErrorMessage($"Cast failed for spell {spellId}");
                     return;
                 }
 
@@ -365,6 +366,7 @@ namespace WoWSharpClient.Handlers
                 var reasonName = GetCastFailureReasonName(reason);
                 Console.WriteLine($"[CAST_FAILED] spell={spellId} reason=0x{reason:X2} ({reasonName}) raw={BitConverter.ToString(data)}");
                 Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} reason=0x{Reason:X2} ({ReasonName})", spellId, reason, reasonName);
+                WoWSharpEventEmitter.Instance.FireOnErrorMessage($"Cast failed for spell {spellId}: {reasonName}");
             }
             catch (EndOfStreamException) { }
         }
@@ -372,7 +374,7 @@ namespace WoWSharpClient.Handlers
         /// <summary>
         /// Maps vanilla 1.12.1 CastFailureReason wire values to human-readable names.
         /// </summary>
-        private static string GetCastFailureReasonName(byte reason) => reason switch
+        internal static string GetCastFailureReasonName(byte reason) => reason switch
         {
             0x00 => "AFFECTING_COMBAT",
             0x01 => "ALREADY_AT_FULL_HEALTH",

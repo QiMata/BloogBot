@@ -3,9 +3,9 @@ using Pathfinding;
 namespace BotRunner.Clients
 {
     /// <summary>
-    /// Abstraction for physics step computation. Allows swapping between:
-    /// - LocalPhysicsClient: direct P/Invoke to Navigation.dll (zero latency, binary parity)
-    /// - PathfindingClient: TCP to PathfindingService (existing, adds 5-20ms latency)
+    /// Abstraction for movement physics. Most BG runners execute physics locally
+    /// from scene-backed Navigation.dll data, while PathfindingService remains as
+    /// the shared fallback when local scene data is unavailable.
     /// </summary>
     public interface IPhysicsClient
     {

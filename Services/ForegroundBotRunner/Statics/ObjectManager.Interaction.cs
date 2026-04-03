@@ -151,12 +151,42 @@ namespace ForegroundBotRunner.Statics
 
         public void JoinBattleGroundQueue()
         {
-            string enabled = MainThreadLuaCallWithResult("{0} = BattlefieldFrameGroupJoinButton:IsEnabled()")[0];
+            var joinMode = MainThreadLuaCallWithResult(
+                "if BattlefieldFrame and BattlefieldFrame:IsVisible() and BattlefieldFrameGroupJoinButton and BattlefieldFrameGroupJoinButton:IsEnabled() then " +
+                "  {0} = 'group' " +
+                "elseif BattlefieldFrame and BattlefieldFrame:IsVisible() and BattlefieldFrameJoinButton and BattlefieldFrameJoinButton:IsVisible() then " +
+                "  {0} = 'solo' " +
+                "else " +
+                "  {0} = '' " +
+                "end")[0];
 
-            if (enabled == "1")
+            if (joinMode == "group")
                 MainThreadLuaCall("BattlefieldFrameGroupJoinButton:Click()");
-            else
+            else if (joinMode == "solo")
                 MainThreadLuaCall("BattlefieldFrameJoinButton:Click()");
+        }
+
+        public void AcceptBattlegroundInvite()
+        {
+            MainThreadLuaCall(
+                "for i = 1, 3 do " +
+                "  local status = GetBattlefieldStatus(i); " +
+                "  if status == 'confirm' then " +
+                "    AcceptBattlefieldPort(i, 1); " +
+                "    break; " +
+                "  end; " +
+                "end");
+        }
+
+        public void LeaveBattleground()
+        {
+            MainThreadLuaCall(
+                "for i = 1, 3 do " +
+                "  local status = GetBattlefieldStatus(i); " +
+                "  if status == 'queued' or status == 'confirm' then " +
+                "    AcceptBattlefieldPort(i, 0); " +
+                "  end; " +
+                "end");
         }
 
 

@@ -14,10 +14,18 @@
 //   Names:   char[nameTableSize]  (null-terminated M2 filenames)
 
 #include <cstdint>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <vector>
 #include <fstream>
+
+#if defined(_WIN32)
+#define WWOW_STRICMP _stricmp
+#else
+#include <strings.h>
+#define WWOW_STRICMP strcasecmp
+#endif
 
 namespace WmoDoodad
 {
@@ -177,7 +185,7 @@ inline std::string NormalizeDoodadName(const char* rawPath)
     if (len > 3)
     {
         char* ext = &buf[len - 4];
-        if (_stricmp(ext, ".mdx") == 0 || _stricmp(ext, ".mdl") == 0)
+        if (WWOW_STRICMP(ext, ".mdx") == 0 || WWOW_STRICMP(ext, ".mdl") == 0)
         {
             ext[1] = 'm';
             ext[2] = '2';

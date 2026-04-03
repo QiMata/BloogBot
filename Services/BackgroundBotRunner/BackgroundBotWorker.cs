@@ -31,7 +31,8 @@ namespace BackgroundBotRunner
         private readonly WoWClient _wowClient;
         private readonly BotCombatState _botCombatState;
         private readonly BotRunnerService _botRunner;
-        private readonly BackgroundPacketTraceRecorder _packetTraceRecorder;
+        private readonly BackgroundPacketTraceRecorder? _packetTraceRecorder;
+        private readonly BackgroundPhysicsMode _physicsMode;
 
         private IAgentFactory? _agentFactory;
         private IWorldClient? _activeWorldClient;
@@ -46,13 +47,26 @@ namespace BackgroundBotRunner
 
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<BackgroundBotWorker>();
+            _physicsMode = BackgroundPhysicsModeResolver.Resolve(configuration);
+            _logger.LogInformation("Background bot physics mode: {PhysicsMode} ({Description}). Set {EnvVar}=shared to force PathfindingService physics.",
+                _physicsMode,
+                BackgroundPhysicsModeResolver.Describe(_physicsMode),
+                BackgroundPhysicsModeResolver.EnvironmentVariableName);
 
             var infrastructure = InitializeInfrastructure(configuration);
 
             _pathfindingClient = infrastructure.PathfindingClient;
             _characterStateUpdateClient = infrastructure.CharacterStateUpdateClient;
             _wowClient = infrastructure.WowClient;
-            _packetTraceRecorder = new BackgroundPacketTraceRecorder(_wowClient, _loggerFactory);
+            if (RecordingArtifactsFeature.IsEnabled())
+            {
+                _packetTraceRecorder = new BackgroundPacketTraceRecorder(_wowClient, _loggerFactory);
+            }
+            else
+            {
+                _logger.LogInformation("Recording artifacts disabled; background packet trace recorder is not active. Set {EnvVar}=1 to enable.",
+                    RecordingArtifactsFeature.EnvironmentVariableName);
+            }
 
             _agentFactory = infrastructure.AgentFactory;
             _activeWorldClient = infrastructure.InitialWorldClient;
@@ -112,7 +126,7 @@ namespace BackgroundBotRunner
             }
 
             ResetAgentFactory();
-            _packetTraceRecorder.Dispose();
+            _packetTraceRecorder?.Dispose();
 
             _logger.LogInformation("BackgroundBotWorker cleanup complete.");
             await base.StopAsync(cancellationToken);
@@ -158,23 +172,68 @@ namespace BackgroundBotRunner
                 wowClient.SetIpAddress(realmIp);
             }
 
-            // Create local physics client — direct P/Invoke to Navigation.dll,
-            // zero IPC latency, matching WoW.exe's synchronous CMovement::Update.
-            WoWSharpClient.Movement.SceneDataClient? sceneDataClient = null;
-            var sceneDataIp = configuration["SceneDataService:IpAddress"];
-            var sceneDataPortStr = configuration["SceneDataService:Port"];
-            if (!string.IsNullOrWhiteSpace(sceneDataIp) && int.TryParse(sceneDataPortStr, out var sceneDataPort))
-            {
-                sceneDataClient = new WoWSharpClient.Movement.SceneDataClient(
-                    sceneDataIp, sceneDataPort, _loggerFactory.CreateLogger("SceneDataClient"));
-            }
-            var localPhysics = new WoWSharpClient.Movement.LocalPhysicsClient(
-                _loggerFactory.CreateLogger("LocalPhysicsClient"), sceneDataClient);
-
             var objectManager = WoWSharpObjectManager.Instance;
-            objectManager.Initialize(wowClient, pathfindingClient,
-                _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
-                physicsClient: localPhysics);
+            if (_physicsMode == BackgroundPhysicsMode.LocalInProcess)
+            {
+                WoWSharpClient.Movement.SceneDataClient? sceneDataClient = null;
+                var sceneDataIp =
+                    configuration["SceneDataService:IpAddress"]
+                    ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
+                    ?? "127.0.0.1";
+                var sceneDataPortStr =
+                    configuration["SceneDataService:Port"]
+                    ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
+                    ?? "5003";
+                var sceneDataEndpointValid = int.TryParse(sceneDataPortStr, out var sceneDataPort);
+                var runtimeMode = BackgroundPhysicsRuntimeModeResolver.Resolve(_physicsMode, sceneDataEndpointValid);
+
+                if (runtimeMode == BackgroundPhysicsRuntimeMode.LocalSceneSlices)
+                {
+                    try
+                    {
+                        sceneDataClient = new WoWSharpClient.Movement.SceneDataClient(
+                            sceneDataIp, sceneDataPort, _loggerFactory.CreateLogger("SceneDataClient"));
+                    }
+                    catch (Exception ex)
+                    {
+                        runtimeMode = BackgroundPhysicsRuntimeMode.LocalPreloadedMaps;
+                        _logger.LogWarning(ex, "SceneDataService client initialization failed at {Ip}:{Port}; BG movement will use local preloaded Navigation.dll physics instead.",
+                            sceneDataIp, sceneDataPort);
+                    }
+                }
+
+                if (!sceneDataEndpointValid)
+                {
+                    runtimeMode = BackgroundPhysicsRuntimeMode.LocalPreloadedMaps;
+                    _logger.LogWarning("SceneDataService port '{Port}' is invalid; BG movement will use local preloaded Navigation.dll physics instead.",
+                        sceneDataPortStr);
+                }
+                else if (runtimeMode == BackgroundPhysicsRuntimeMode.LocalSceneSlices)
+                {
+                    _logger.LogInformation("SceneDataService slices configured at {Ip}:{Port}; BG movement will establish the scene-data connection on demand and retry slice refreshes as the service becomes available.",
+                        sceneDataIp, sceneDataPortStr);
+                }
+                else if (runtimeMode == BackgroundPhysicsRuntimeMode.LocalPreloadedMaps)
+                {
+                    _logger.LogWarning("SceneDataService endpoint is not configured; BG movement will use local Navigation.dll physics with on-demand per-map preload and without scene slices.");
+                }
+
+                _logger.LogInformation("Resolved BG physics runtime mode: {RuntimeMode} ({Description})",
+                    runtimeMode,
+                    BackgroundPhysicsRuntimeModeResolver.Describe(runtimeMode));
+
+                objectManager.Initialize(wowClient, pathfindingClient,
+                    _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
+                    physicsClient: runtimeMode == BackgroundPhysicsRuntimeMode.SharedPathfinding ? pathfindingClient : null,
+                    sceneDataClient: runtimeMode == BackgroundPhysicsRuntimeMode.LocalSceneSlices ? sceneDataClient : null,
+                    useLocalPhysics: runtimeMode != BackgroundPhysicsRuntimeMode.SharedPathfinding);
+            }
+            else
+            {
+                objectManager.Initialize(wowClient, pathfindingClient,
+                    _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
+                    physicsClient: pathfindingClient);
+            }
 
             var initialWorldClient = WoWClientFactory.CreateWorldClient();
             var agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(initialWorldClient, _loggerFactory);

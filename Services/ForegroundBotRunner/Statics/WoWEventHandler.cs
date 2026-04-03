@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -351,15 +352,18 @@ namespace ForegroundBotRunner.Statics
         public event EventHandler<GameObjectCreatedArgs> OnGameObjectCreated;
 
         // Event logging for debugging disconnects
-        private static readonly string EventLogPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "Documents", "BloogBot", "event_log.txt");
+        private static readonly string EventLogPath = RecordingFileArtifactGate.ResolveDocumentsPath("BloogBot", "event_log.txt");
         private static readonly object _logLock = new();
         private static DateTime _startTime = DateTime.Now;
         private static bool _loggingInitialized = false;
 
         private void LogEvent(string parEvent, object[] parArgs)
         {
+            if (string.IsNullOrWhiteSpace(EventLogPath))
+            {
+                return;
+            }
+
             try
             {
                 lock (_logLock)

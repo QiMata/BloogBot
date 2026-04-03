@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
+using WoWSharpClient.Handlers;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using SpellSchool = WoWSharpClient.Networking.ClientComponents.I.SpellSchool;
@@ -88,11 +89,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .RefCount();
 
             _spellCastErrors = Observable.Merge(
-                    SafeOpcodeStream(Opcode.SMSG_CAST_FAILED),
-                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILURE),
-                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILED_OTHER)
+                    SafeOpcodeStream(Opcode.SMSG_CAST_FAILED).Select(ParseCastFailedError),
+                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILURE).Select(ParseGenericSpellError),
+                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILED_OTHER).Select(ParseGenericSpellError)
                 )
-                .Select(payload => ParseSpellError(payload))
                 .Do(err =>
                 {
                     _isCasting = false;
@@ -102,6 +102,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                         _currentSpellId = null;
                         _currentSpellTarget = null;
                     }
+
+                    PublishSpellError(err.SpellId, err.ErrorMessage);
+                    WoWSharpEventEmitter.Instance.FireOnErrorMessage(err.ErrorMessage);
                 })
                 .Publish()
                 .RefCount();
@@ -611,11 +614,30 @@ namespace WoWSharpClient.Networking.ClientComponents
             );
         }
 
-        private SpellCastErrorData ParseSpellError(ReadOnlyMemory<byte> payload)
+        private SpellCastErrorData ParseCastFailedError(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
             uint spellId = ReadUInt32(span, 0);
-            string message = "Spell cast failed";
+            string message = $"Cast failed for spell {spellId}";
+            if (span.Length >= 6)
+            {
+                var reason = span[5];
+                message = $"Cast failed for spell {spellId}: {SpellHandler.GetCastFailureReasonName(reason)}";
+            }
+
+            return new SpellCastErrorData(
+                ErrorMessage: message,
+                SpellId: spellId,
+                TargetGuid: _currentSpellTarget,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private SpellCastErrorData ParseGenericSpellError(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            string message = $"Spell cast failed for spell {spellId}";
             return new SpellCastErrorData(
                 ErrorMessage: message,
                 SpellId: spellId,

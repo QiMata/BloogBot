@@ -76,7 +76,7 @@ public:
     static SceneCache* Extract(uint32_t mapId,
                                VMAP::VMapManager2* vmapMgr,
                                MapLoader* mapLoader,
-                               const ExtractBounds& bounds = ExtractBounds());
+                               const ExtractBounds& bounds);
 
     // --- Query interface (matches what SweepCapsule/GetGroundZ need) ---
 

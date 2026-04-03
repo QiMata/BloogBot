@@ -1,7 +1,10 @@
+using System;
 using System.Runtime.InteropServices;
 using BotCommLayer;
 using Microsoft.Extensions.Logging;
 using SceneData;
+using System.Globalization;
+using System.Collections.Concurrent;
 
 namespace SceneDataService;
 
@@ -14,6 +17,9 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
 {
     private readonly ILogger _logger;
     private bool _initialized;
+    private List<uint> _preloadedMapIds = [];
+    private readonly ConcurrentDictionary<string, SceneGridResponse> _regionCache = new();
+    private readonly ConcurrentDictionary<string, object> _regionLocks = new();
 
     public SceneDataSocketServer(string ipAddress, int port, ILogger logger)
         : base(ipAddress, port, logger)
@@ -33,10 +39,16 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
             NativeScene.SetDataDirectory(dataDir);
         }
 
-        NativeScene.PreloadMap(0); // Eastern Kingdoms
-        NativeScene.PreloadMap(1); // Kalimdor
+        _preloadedMapIds = DiscoverMapIds(dataDir);
+        foreach (var mapId in _preloadedMapIds)
+        {
+            NativeScene.PreloadMap(mapId);
+        }
+
         _initialized = true;
-        _logger.LogInformation("[SceneDataService] Navigation initialized for maps 0, 1");
+        _logger.LogInformation("[SceneDataService] Navigation initialized for {Count} maps: {Maps}",
+            _preloadedMapIds.Count,
+            string.Join(", ", _preloadedMapIds));
     }
 
     protected override SceneGridResponse HandleRequest(SceneGridRequest request)
@@ -44,19 +56,36 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         if (!_initialized)
             InitializeNavigation();
 
-        try
+        var cacheKey = BuildRegionCacheKey(request);
+        if (_regionCache.TryGetValue(cacheKey, out var cachedResponse))
+            return CloneResponse(cachedResponse);
+
+        var regionLock = _regionLocks.GetOrAdd(cacheKey, static _ => new object());
+        lock (regionLock)
         {
-            return ExtractSceneGrid(request);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[SceneDataService] Error extracting scene grid for map {MapId}", request.MapId);
-            return new SceneGridResponse
+            try
             {
-                MapId = request.MapId,
-                Success = false,
-                ErrorMessage = ex.Message
-            };
+                if (_regionCache.TryGetValue(cacheKey, out cachedResponse))
+                    return CloneResponse(cachedResponse);
+
+                var response = ExtractSceneGrid(request);
+                _regionCache[cacheKey] = CloneResponse(response);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[SceneDataService] Error extracting scene grid for map {MapId}", request.MapId);
+                return new SceneGridResponse
+                {
+                    MapId = request.MapId,
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+            finally
+            {
+                _regionLocks.TryRemove(cacheKey, out _);
+            }
         }
     }
 
@@ -64,9 +93,6 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
     {
         _logger.LogDebug("[SceneDataService] Extracting grid: map={Map} bounds=({MinX},{MinY})-({MaxX},{MaxY})",
             request.MapId, request.MinX, request.MinY, request.MaxX, request.MaxY);
-
-        // Ensure the map is loaded
-        NativeScene.PreloadMap(request.MapId);
 
         // Use Navigation.dll's SceneQuery to extract triangles in the bounded region.
         // We query GetGroundZ at a grid of points to determine terrain triangles,
@@ -118,6 +144,73 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         }
 
         return response;
+    }
+
+    private static string BuildRegionCacheKey(SceneGridRequest request)
+        => FormattableString.Invariant($"{request.MapId}_{request.MinX:F0}_{request.MinY:F0}_{request.MaxX:F0}_{request.MaxY:F0}");
+
+    private static SceneGridResponse CloneResponse(SceneGridResponse response)
+    {
+        var clone = new SceneGridResponse
+        {
+            MapId = response.MapId,
+            MinX = response.MinX,
+            MinY = response.MinY,
+            MaxX = response.MaxX,
+            MaxY = response.MaxY,
+            Success = response.Success,
+            ErrorMessage = response.ErrorMessage,
+            TriangleCount = response.TriangleCount,
+        };
+
+        clone.TriangleData.Add(response.TriangleData);
+        clone.NormalData.Add(response.NormalData);
+        clone.Walkable.Add(response.Walkable);
+        return clone;
+    }
+
+    private static List<uint> DiscoverMapIds(string? dataDir)
+    {
+        var ids = new HashSet<uint>();
+
+        if (!string.IsNullOrWhiteSpace(dataDir) && Directory.Exists(dataDir))
+        {
+            AddIdsFromDirectory(Path.Combine(dataDir, "scenes"), "*.scene", ParseWholeStem, ids);
+            AddIdsFromDirectory(Path.Combine(dataDir, "mmaps"), "*.mmap", ParseWholeStem, ids);
+            AddIdsFromDirectory(Path.Combine(dataDir, "maps"), "*.map", ParseFirstThreeDigits, ids);
+        }
+
+        if (ids.Count == 0)
+        {
+            ids.Add(0);
+            ids.Add(1);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private static void AddIdsFromDirectory(string directory, string pattern, Func<string, uint?> parser, HashSet<uint> ids)
+    {
+        if (!Directory.Exists(directory))
+            return;
+
+        foreach (var file in Directory.GetFiles(directory, pattern))
+        {
+            var id = parser(Path.GetFileNameWithoutExtension(file));
+            if (id.HasValue)
+                ids.Add(id.Value);
+        }
+    }
+
+    private static uint? ParseWholeStem(string stem)
+        => uint.TryParse(stem, NumberStyles.None, CultureInfo.InvariantCulture, out var mapId) ? mapId : null;
+
+    private static uint? ParseFirstThreeDigits(string stem)
+    {
+        if (stem.Length < 3)
+            return null;
+
+        return uint.TryParse(stem[..3], NumberStyles.None, CultureInfo.InvariantCulture, out var mapId) ? mapId : null;
     }
 }
 

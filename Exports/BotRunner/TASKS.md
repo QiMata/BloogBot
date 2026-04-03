@@ -49,6 +49,14 @@ Known remaining work in this owner: `0` items.
 - [x] Session 188 redirect parity test proved FG/BG matched pause/resume packet timing with `Parity_Durotar_RoadPath_Redirect`. BG `SET_FACING` fix shipped so both clients emit `MSG_MOVE_SET_FACING` on mid-route direction changes.
 - [x] Final live proof bundle (session 188): forced-turn Durotar, redirect, combat auto-attack, and corpse-run reclaim all pass on the same DLL baseline.
 
+### BR-FISH-001 Keep Ratchet fishing search-walk failures bounded and attributable
+- [x] `FishingTask` now caps each probe waypoint at `20s`, so one unreachable search leg no longer burns the full `180s` `search_walk` budget before the task can try the next probe.
+- [x] `FishingTask` search-walk travel targeting now falls back through shorter local steps (`8y -> 4y -> 2y`) and only keeps a step when the pathfinder can actually route to it from the current pier position.
+- [x] `FishingTask` now consumes `MovementStuckRecoveryGeneration` during `search_walk` probe windows and abandons a blocked local pier leg after about `1.5s` with `reason=movement_stuck` instead of regrinding the same corner for the full `20s` stall timeout.
+- [x] `FishingTask` now rejects non-progressing shoreline approach targets after `12s` and reacquires the same pool with a different candidate instead of looping on one dock-lip approach until the overall fishing timeout.
+- [ ] Keep staged Ratchet visibility explicit so fishing runtime failures only count once a local pool is actually active/visible from the staged dock position.
+- [ ] If the dual slice falls back into runtime search again, keep tightening any remaining short local pier legs beyond the new stuck-recovery skip until parity stays green on staged-search reruns too.
+
 ## Simple Command Set
 1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`
 2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"`
@@ -56,51 +64,27 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-25 (session 187)
-- Active task: `BR-NAV-006`
+- Last updated: 2026-04-02 (search-walk now obeys movement-controller stuck recovery; focused dual path green)
+- Active task: `BR-FISH-001`
 - Last delta:
-  - Session 187 closed the forced-turn Durotar stop tail that BotRunner and BG had been using as the active managed blocker. `BuildGoToSequence(...)` now treats arrival as horizontal distance only, and `NavigationPath` no longer re-opens an exhausted route because of Z-only destination drift.
-  - `MovementParityTests` now proves the same forced-turn route on both edges instead of only the start edge: no late outbound `SET_FACING` is allowed after the opening pair, both clients must emit outbound `MSG_MOVE_STOP`, the final outbound movement packet must be `MSG_MOVE_STOP`, and the FG/BG stop-edge delta must stay within `300ms` (latest run: `50ms`).
-  - The remaining BotRunner ownership/controller gap is now the pause/resume and corridor-handoff slice on the same route family, plus the candidate `3/15` mining proof loop. The old stop-tail mismatch is no longer an open reason to touch movement arrival/stop logic.
-  - Session 186 tightened the live movement proof instead of letting route passes count as parity by accident. `MovementParityTests` now requires meaningful travel from both FG and BG, and it has a forced-turn Durotar route that uses the stable FG/BG `packets_<account>.csv` sidecars on the same interval.
-  - That forced-turn route closes the old “do we have matched facing-correction evidence?” question for BotRunner-owned live proof: both clients now show `MSG_MOVE_SET_FACING -> MSG_MOVE_START_FORWARD` on the start edge.
-  - That session narrowed the remaining BotRunner ownership/controller gap to the route tail plus pause/resume ownership work. Session 187 subsequently closed the route tail, leaving pause/resume and corridor handoff as the current live gap.
-  - Session 184 finished wiring the live corridor-ownership trace path. `BotRunnerService.Diagnostics` now records `navtrace_<account>.json` alongside the stable transform/physics artifacts, and `DeathCorpseRunTests` now starts/stops recording around `RetrieveCorpseTask` and asserts that the emitted sidecar captured `RecordedTask=RetrieveCorpseTask`, `TaskStack=[RetrieveCorpseTask, IdleTask]`, and a non-null `TraceSnapshot`.
-  - Added deterministic coverage for the stable-vs-legacy recording lookup/cleanup helper, and updated `MovementParityTests` to consume the stable `physics_<account>.csv` / `transform_<account>.csv` filenames so live diagnostics no longer depend on timestamped file copies.
-  - Revalidated the compact packet-backed Undercity replay slice and the BG corpse-run live slice after the recorder changes. The remaining BotRunner ownership/controller backlog is now the missing paired FG/BG heartbeat/facing evidence on the same route segments, not whether BG can emit corridor ownership state at all.
-- Pass result: `stop-edge parity shipped; 4 BotRunner-owned items remain`
+  - `FishingTask.SearchForPool(...)` now snapshots the active `MovementStuckRecoveryGeneration` when each probe window opens and treats a newer generation after a short `1.5s` grace as authoritative blocked-probe evidence. The task now emits `search_walk_stalled ... reason=movement_stuck` and advances instead of burning the full `20s` stall timer on the same pier corner.
+  - Added deterministic coverage in `AtomicBotTaskTests` for the new behavior.
+  - The focused dual live Ratchet path test is green on the current BotRunner binaries: FG completed `fishing_loot_success` with loot item `6303`, and BG completed `fishing_loot_success` with loot item `6358`.
+  - Important scope note: the latest green dual rerun did not re-enter `search_walk`, so the blocked-corner fix is currently backed by deterministic coverage plus the earlier live stuck-recovery diagnostics rather than by a fresh staged-search live rerun.
+- Pass result: `delta shipped; focused dual Ratchet fishing path green`
 - Validation/tests run:
   - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (61/61)`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.RequestGroundedStop_ClearsForwardIntent_OnFirstGroundedFrame|FullyQualifiedName~MovementControllerTests.SendStopPacket_PreservesFallingFlags_WhenClearingForwardIntent|FullyQualifiedName~MovementControllerTests.SendStopPacket_SendsMsgMoveStop_AfterForwardMovementWasSent" --logger "console;verbosity=minimal"` -> `passed (3/3)`
-  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)`; stop-edge delta `50ms`, no late outbound `SET_FACING`, final outbound packet `MSG_MOVE_STOP` for both clients
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath" --logger "console;verbosity=normal"` -> `passed (1/1)`
-  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Parity_Durotar_RoadPath_TurnStart" --logger "console;verbosity=minimal"` -> `passed (1/1)` twice; start edge proven, stop tail still divergent
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RecordingArtifactHelperTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock" --logger "console;verbosity=minimal"` -> `passed (3/3)`
-  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests.Combat_BG_AutoAttacksMob_WithFgObserver" --logger "console;verbosity=normal"` -> `passed (1/1)`
-  - `$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer" --logger "console;verbosity=normal"` -> `passed (1/1)`
-  - `dotnet run --project tools/RecordingMaintenance/RecordingMaintenance.csproj --configuration Release -- compact` -> `26 logical recordings, 411.67 MiB canonical corpus, 0 sidecars refreshed, duplicate Bot/*/Recordings copies missing/clean`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~AtomicBotTaskTests" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath" --logger "console;verbosity=normal"` -> `passed`
 - Files changed:
-  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
-  - `Exports/BotRunner/Movement/NavigationPath.cs`
-  - `Tests/BotRunner.Tests/Movement/GoToArrivalTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
-  - `Exports/WoWSharpClient/Movement/MovementController.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
   - `Exports/BotRunner/TASKS.md`
-  - `Exports/BotRunner/BotRunnerService.Diagnostics.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/RecordingArtifactHelper.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/RecordingArtifactHelperTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Services/BackgroundBotRunner/TASKS.md`
-  - `Tests/Navigation.Physics.Tests/TASKS.md`
-  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs | Select-Object -Skip 320 -First 220`
-- Blockers:
-  - The old mining and corpse-run harness blockers are closed, and the forced-turn stop edge is now closed too. The remaining live parity issue is paired FG/BG controller trace evidence for pause/resume behavior and corridor ownership on the same route segment.
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CaptureForegroundPackets_RatchetStagingCast" --logger "console;verbosity=normal"`
+- Current blockers:
+  - Focused dual path is green on the current binaries, but staged dock visibility/streaming attribution is still nondeterministic across reruns and the actual FG/BG packet-sequence comparison work is still open.
+- Blockers (historical note below):
+  - The current red fishing slice is no longer blocked on “how to respawn Ratchet pools.” It is now blocked by staged dock visibility/streaming plus the remaining last-two-leg local pier stalls after a local child pool has already been activated.

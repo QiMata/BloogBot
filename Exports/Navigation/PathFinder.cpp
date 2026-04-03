@@ -30,6 +30,7 @@
 
 #include <cmath>
 #include <chrono>
+#include <cstring>
 
 extern "C" uint32_t ValidateWalkableSegment(
     uint32_t mapId,
@@ -650,7 +651,7 @@ void PathFinder::BuildPolyPath(const Vector3& startPos, const Vector3& endPos)
 
 		// take ~80% of the original length
 		// TODO : play with the values here
-		unsigned int prefixPolyLength = unsigned int(m_polyLength * 0.8f + 0.5f);
+		unsigned int prefixPolyLength = static_cast<unsigned int>(m_polyLength * 0.8f + 0.5f);
 		memmove(m_pathPolyRefs, m_pathPolyRefs + pathStartIndex, prefixPolyLength * sizeof(dtPolyRef));
 
 		dtPolyRef suffixStartPoly = m_pathPolyRefs[prefixPolyLength - 1];
@@ -1003,7 +1004,9 @@ unsigned int PathFinder::fixupCorridor(dtPolyRef* path, unsigned int npath, unsi
 
 	// Adjust beginning of the buffer to include the visited.
 	unsigned int req = nvisited - furthestVisited;
-	unsigned int orig = unsigned int(furthestPath + 1) < npath ? furthestPath + 1 : npath;
+	unsigned int orig = static_cast<unsigned int>(furthestPath + 1) < npath
+		? static_cast<unsigned int>(furthestPath + 1)
+		: npath;
 	unsigned int size = npath > orig ? npath - orig : 0;
 	if (req + size > maxPath)
 	{

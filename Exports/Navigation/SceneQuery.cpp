@@ -13,15 +13,15 @@
 #include <filesystem>
 #include "PhysicsEngine.h"
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <vector>
 #include <cstdlib>
 #include <mutex>
+#include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <set>
-#define NOMINMAX
-#include <windows.h>
 #include "PhysicsDiagnosticsHelpers.h"
 #include "VMapDefinitions.h"
 #include "PhysicsLiquidHelpers.h"
@@ -373,20 +373,13 @@ void SceneQuery::Initialize()
 
     try
     {
-        // Build data root from WWOW_DATA_DIR environment variable
-        // Use Win32 GetEnvironmentVariableA instead of _dupenv_s because .NET's
-        // Environment.SetEnvironmentVariable updates the process environment block
-        // but NOT the CRT cache that _dupenv_s reads from.
+        // Build data root from WWOW_DATA_DIR environment variable.
         std::string dataRoot;
+        if (const char* env = std::getenv("WWOW_DATA_DIR"))
         {
-            char buf[512] = {0};
-            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
-            if (len > 0 && len < sizeof(buf))
-            {
-                dataRoot = buf;
-                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                    dataRoot += '/';
-            }
+            dataRoot = env;
+            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                dataRoot += '/';
         }
 
         // Acquire or create the VMapManager instance and configure it
@@ -449,6 +442,9 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 {
     // 1. Already have a scene cache? Done.
     if (GetSceneCache(mapId))
+        return;
+
+    if (m_sceneSliceMode)
         return;
 
     // 2. Check for .scene file on disk (fast path)
@@ -625,7 +621,13 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
             if (dynOk) return dynZ;
             return sceneZ;
         }
+
+        if (m_sceneSliceMode)
+            return PhysicsConstants::INVALID_HEIGHT;
     }
+
+    if (m_sceneSliceMode)
+        return GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
@@ -1680,6 +1682,67 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
     outContacts.clear();
 
     auto* scCache = GetSceneCache(mapId);
+    std::unique_ptr<SceneCache> extractedCache;
+    if (scCache)
+    {
+        const SceneCache::ExtractBounds bounds = scCache->GetExtractBounds();
+        constexpr float coverageEpsilon = 1.0f;
+        const bool cacheCoversQuery =
+            boxMin.x >= (bounds.minX - coverageEpsilon) &&
+            boxMin.y >= (bounds.minY - coverageEpsilon) &&
+            boxMax.x <= (bounds.maxX + coverageEpsilon) &&
+            boxMax.y <= (bounds.maxY + coverageEpsilon);
+
+        if (!cacheCoversQuery)
+        {
+            if (m_sceneSliceMode)
+                return 0;
+
+            SceneCache::ExtractBounds extractBounds;
+            extractBounds.minX = boxMin.x;
+            extractBounds.minY = boxMin.y;
+            extractBounds.maxX = boxMax.x;
+            extractBounds.maxY = boxMax.y;
+
+            extractedCache.reset(SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds));
+            if (extractedCache)
+            {
+                fprintf(stderr,
+                        "[SceneQuery] Query bounds (%.1f,%.1f)-(%.1f,%.1f) fall outside cached scene map %u bounds (%.1f,%.1f)-(%.1f,%.1f); using live bounded extract.\n",
+                        boxMin.x,
+                        boxMin.y,
+                        boxMax.x,
+                        boxMax.y,
+                        mapId,
+                        bounds.minX,
+                        bounds.minY,
+                        bounds.maxX,
+                        bounds.maxY);
+                scCache = extractedCache.get();
+            }
+        }
+    }
+    else if (!m_sceneSliceMode)
+    {
+        SceneCache::ExtractBounds extractBounds;
+        extractBounds.minX = boxMin.x;
+        extractBounds.minY = boxMin.y;
+        extractBounds.maxX = boxMax.x;
+        extractBounds.maxY = boxMax.y;
+        extractedCache.reset(SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds));
+        if (extractedCache)
+        {
+            fprintf(stderr,
+                    "[SceneQuery] No cached scene for map %u; using live bounded extract for query bounds (%.1f,%.1f)-(%.1f,%.1f).\n",
+                    mapId,
+                    boxMin.x,
+                    boxMin.y,
+                    boxMax.x,
+                    boxMax.y);
+            scCache = extractedCache.get();
+        }
+    }
+
     if (!scCache) return 0;
 
     // Query all triangles in the XY footprint
@@ -2045,6 +2108,12 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
         return static_cast<int>(outHits.size());
     }
     // ---- End Scene Cache fast path ----
+
+    if (m_sceneSliceMode)
+    {
+        outHits.clear();
+        return 0;
+    }
 
     // Acquire map tree from injected manager
     const VMAP::StaticMapTree* map = nullptr;

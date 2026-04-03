@@ -18,9 +18,35 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-05` `MSG_MOVE_SET_FACING` packet timing now matches WoW.exe send semantics: removed the synthetic pre-facing heartbeat from `MovementController.SendFacingUpdate(...)` and replaced the idle/mid-move dampening split with the binary-backed `0.1 rad` gate from `0x60E1EA` / `0x80C408` (session 188).
 
 ## Session Handoff
-- Last updated: `2026-03-25 (session 188)`
-- Pass result: `binary-backed SET_FACING packet parity shipped; managed facing send path no longer diverges from WoW.exe`
+- Last updated: `2026-04-03 (session 296)`
+- Pass result: `scene-backed BG physics can now connect lazily and back off cleanly instead of depending on a startup socket race`
 - Last delta:
+  - Session 296 hardened the scene-slice client contract rather than the controller math itself. `SceneDataClient` now defers its initial socket connect, uses a bounded connect budget on the first region request, and applies a short retry backoff after request failures so late `SceneDataService` bring-up does not permanently force BG runners off the intended thin-slice path.
+  - `MovementController` still pins the scene-backed local path to thin-scene-slice mode whenever a `SceneDataClient` is present, but the client can now exist before the service is listening instead of paying the old blocking startup connect.
+  - Added deterministic coverage in `SceneDataClientTests` for the new failure/backoff behavior, and kept the earlier scene-slice controller assertions green (`Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode`, `Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure`).
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataClientTests|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - Session 295 closed the pure-local fallback hole behind the remaining AV hover reports. `WoWSharpObjectManager.Initialize(...)` now remembers `useLocalPhysics`, and `InitializeMovementController()` now creates `MovementController` whenever local physics is requested, even if both `_physicsClient` and `_sceneDataClient` are null.
+  - Practical implication: when `SceneDataService` is unavailable and BG runners fall back to preloaded local `Navigation.dll` physics, they no longer skip controller construction and hover forever without per-frame gravity/collision updates.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.Initialize_UseLocalPhysicsWithoutSceneData_DoesNotFallbackToPathfindingClient|FullyQualifiedName~ObjectManagerWorldSessionTests.EnterWorld_UseLocalPhysicsWithoutSceneData_InitializesMovementController" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+    - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - Session 294 fixed the remaining managed AV hover path in `MovementController`. Post-teleport settle now gives real airborne grace when physics reports no ground below the teleport target, instead of immediately snapping back to `teleportZ` and clearing `FALLINGFAR`.
+  - The same settle path now rejects support surfaces that project the player above the teleport target during the grace window. Rather than accepting that contact and finalizing the snap, the controller clears grounded continuity and keeps the bot in falling motion so the next frame can continue descending once scene data/physics stabilizes.
+  - Deterministic coverage was expanded with `MovementControllerTests.Update_PostTeleport_NoGroundBelow_AllowsGraceFall` and `Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling`, both run from an isolated output tree because the shared `Bot\Release\net8.0` path remains busy during the AV swarm.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin4 --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_PostTeleport_NoGroundBelow_AllowsGraceFall|FullyQualifiedName~MovementControllerTests.Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - Session 293 added native thin-scene-slice control for the scene-backed local physics path. `MovementController` now enables `NativeLocalPhysics.SetSceneSliceMode(true)` whenever a `SceneDataClient` is present, disables it for native local controllers that do not have scene data, and leaves remote/shared-physics controllers alone so they do not require `Navigation.dll` at construction time.
+  - Added `SetSceneSliceMode(...)` interop in `NativePhysicsInterop` / `NativeLocalPhysics`, plus deterministic constructor-time assertions in `MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode` and `Update_LocalNativePhysics_WithoutSceneDataClient_DisablesSceneSliceMode`.
+  - Validation stayed on isolated output directories because the shared `Bot\Release\net8.0` tree was still contended by the active AV/background swarm:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin3 --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_WithoutSceneDataClient_DisablesSceneSliceMode" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - Session 291 removed the last local hover regression in the scene-backed path. `MovementController.RunPhysics(...)` no longer synthesizes a hold-position output when `EnsureLocalSceneDataFresh()` fails; it now continues into `NativeLocalPhysics.Step(...)` so BG bots still fall and settle on the currently loaded local scene cache.
+  - Added an internal `SceneDataClient` test constructor plus `TestEnsureSceneDataAroundOverride`, which lets deterministic coverage force scene refresh failures without opening a real socket.
+  - Added `MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure`, which proves the local native path still produces falling motion and a movement packet when the scene refresh misses.
+  - Standard `Bot\Release\net8.0` builds were blocked by active AV-process file locks, so validation for this delta used isolated `-o E:\tmp\...` output directories instead of the shared repo output tree.
+  - Session 290 removed the runtime `LocalPhysicsClient` layer. `MovementController` now executes local `Navigation.dll` physics directly through `NativeLocalPhysics` whenever a `SceneDataClient` is provided, while `WoWSharpObjectManager.Initialize(...)` still falls back to `PathfindingClient` for legacy/shared callers that do not opt into scene slices.
+  - The new local native path now marshals `NearbyObjects` into the native `PhysicsInput`, so transports and nearby collidable game objects are available to local collision exactly where BG movement needs them. Deterministic coverage was added in `MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput`.
+  - Idle physics remains active every frame, so air teleports and support loss still settle correctly even when `MOVEFLAG_NONE`.
   - Session 188 re-audited the managed movement send path against `WoW.exe` instead of keeping the earlier heuristic heartbeat/facing logic. `0x60E1EA` gates explicit facing packets on the float at `0x80C408`, which reads as `0.1f`; the surrounding send path falls straight into the movement send helper without a synthetic `MSG_MOVE_HEARTBEAT` before `MSG_MOVE_SET_FACING`.
   - `MovementController.SendFacingUpdate(...)` now sends only `MSG_MOVE_SET_FACING`, records the opcode into the per-frame diagnostics, and still updates `_lastPacketTime` / `_lastPacketPosition` from the sent frame. This removes BG behavior that was not present in the binary.
   - `WoWSharpObjectManager.MoveToward(position, facing)` no longer uses the old split thresholds (`0.02f` idle, `0.20f` mid-move). Local facing updates happen on any real delta, while the explicit `MSG_MOVE_SET_FACING` send is now gated only by the binary-backed `0.1f` threshold.
@@ -48,6 +74,10 @@ Known remaining work in this owner: `0` items.
   - Added fast replay-backed proof in `Navigation.Physics.Tests` for the new compact packet-backed recordings: flat Durotar travel, Undercity lower-route underground seating, and the west elevator up-ride from lower Undercity to the upper deck.
   - The remaining WoWSharpClient parity work is now live paired FG/BG tracing on corpse-run and combat-travel segments so pause/resume timing and corridor ownership can be compared against the client on identical routes.
 - Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -o E:\tmp\isolated-wowsharp-tests\bin --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_RunsRemotePhysicsEveryIdleFrame|FullyQualifiedName~MovementControllerTests.Update_KeepsLocalPhysicsActiveWhileIdle|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_IdleFreefallStillAppliesPhysics" --logger "console;verbosity=minimal"` -> `passed (6/6)`
+  - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release -o E:\tmp\isolated-background-botrunner\bin --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests.Update_RunsRemotePhysicsEveryIdleFrame|FullyQualifiedName~MovementControllerTests.Update_KeepsLocalPhysicsActiveWhileIdle|FullyQualifiedName~MovementControllerTests.Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput|FullyQualifiedName~MovementControllerTests.Update_IdleAirTeleportDoesNotSkipRemotePhysics|FullyQualifiedName~MovementControllerTests.Update_IdleFreefallStillAppliesPhysics" --logger "console;verbosity=minimal"` -> `passed (5/5)`
   - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.SendMovementStartFacingUpdate_SendsSetFacingOnly|FullyQualifiedName~MovementControllerTests.SendFacingUpdate_StandingStill_SendsSetFacingOnly|FullyQualifiedName~MovementControllerTests.SendFacingUpdate_AfterMovement_SendsSetFacingOnly|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_AlreadyMovingForward_SendsSetFacingOnRedirect|FullyQualifiedName~ObjectManagerWorldSessionTests.MoveTowardWithFacing_AlreadyMovingForward_SubThresholdFacingChange_NoSetFacingPacket|FullyQualifiedName~MovementControllerRecordedFrameTests.RecordedFrames_WithPackets_OpcodeSequenceParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
@@ -73,6 +103,23 @@ Known remaining work in this owner: `0` items.
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerPhysicsTests.Forward_FlatTerrain_PacketTimingAndPositionDeltas|FullyQualifiedName~MovementControllerPhysicsTests.HeartbeatInterval_500ms" --logger "console;verbosity=minimal"` -> `2 passed`
   - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedFlatRun_FrameByFrame_PositionMatchesRecording|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityLowerRoute_ReplayRemainsUnderground|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck" --logger "console;verbosity=detailed"` -> `3 passed`
 - Files changed:
+  - `Exports/BotCommLayer/ProtobufSocketClient.cs`
+  - `Exports/WoWSharpClient/Movement/SceneDataClient.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/SceneDataClientTests.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/Movement/NativeLocalPhysics.cs`
+  - `Exports/WoWSharpClient/Movement/NativePhysicsInterop.cs`
+  - `Exports/WoWSharpClient/Movement/SceneDataClient.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
   - `Exports/WoWSharpClient/Movement/MovementController.cs`
   - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
   - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
@@ -105,4 +152,4 @@ Known remaining work in this owner: `0` items.
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
 - Next command:
-  - `py -c "from capstone import *; import struct; f=open(r'D:/World of Warcraft/WoW.exe','rb'); f.seek(0x633840-0x400000); code=f.read(2048); md=Cs(CS_ARCH_X86, CS_MODE_32); [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') or (i.mnemonic in ('ret','retn') and (_ for _ in ()).throw(SystemExit)) for i in md.disasm(code, 0x633840)]"`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --logger "console;verbosity=normal"`

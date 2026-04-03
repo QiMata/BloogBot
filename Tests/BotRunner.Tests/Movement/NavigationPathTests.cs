@@ -1381,6 +1381,54 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_TraceRecordsMovementStuckRecoveryReplanReason()
+    {
+        var pathfindingCalls = 0;
+        var stuckGeneration = 0;
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                return pathfindingCalls == 1
+                    ? [new Position(start.X + 10f, start.Y, start.Z)]
+                    : [new Position(start.X, start.Y + 10f, start.Z)];
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            stuckRecoveryGenerationProvider: () => stuckGeneration);
+
+        var destination = new Position(20f, 20f, 0f);
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        stuckGeneration = 1;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(firstWaypoint);
+        Assert.NotNull(replannedWaypoint);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(10f, firstWaypoint!.X);
+        Assert.Equal(0f, firstWaypoint.Y);
+        Assert.Equal(0f, replannedWaypoint!.X);
+        Assert.Equal(10f, replannedWaypoint.Y);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.MovementStuckRecovery, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+    }
+
+    [Fact]
     public void GetNextWaypoint_TraceRecordsDirectFallbackWhenNoRouteExists()
     {
         var pathfinding = new DelegatePathfindingClient(

@@ -352,5 +352,52 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
             Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
         }
+
+        [Fact]
+        public void HandleCastFailed_WithReason_FiresErrorMessage()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((uint)18248);
+            writer.Write((byte)0);
+            writer.Write((byte)0x2E);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray());
+                Assert.Equal("Cast failed for spell 18248: MOVING", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
+        }
+
+        [Fact]
+        public void HandleCastFailed_WithoutReason_FiresGenericErrorMessage()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((uint)18248);
+            writer.Write((byte)2);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray());
+                Assert.Equal("Cast failed for spell 18248", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
+        }
     }
 }

@@ -32,6 +32,47 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void Initialize_UseLocalPhysicsWithoutSceneData_DoesNotFallbackToPathfindingClient()
+    {
+        var objectManager = WoWSharpObjectManager.Instance;
+
+        objectManager.Initialize(
+            _fixture._woWClient.Object,
+            _fixture._pathfindingClient.Object,
+            NullLogger<WoWSharpObjectManager>.Instance,
+            physicsClient: null,
+            sceneDataClient: null,
+            useLocalPhysics: true);
+
+        var physicsClientField = typeof(WoWSharpObjectManager).GetField("_physicsClient", BindingFlags.Instance | BindingFlags.NonPublic);
+        var sceneDataClientField = typeof(WoWSharpObjectManager).GetField("_sceneDataClient", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(physicsClientField);
+        Assert.NotNull(sceneDataClientField);
+        Assert.Null(physicsClientField!.GetValue(objectManager));
+        Assert.Null(sceneDataClientField!.GetValue(objectManager));
+    }
+
+    [Fact]
+    public void EnterWorld_UseLocalPhysicsWithoutSceneData_InitializesMovementController()
+    {
+        var objectManager = WoWSharpObjectManager.Instance;
+
+        objectManager.Initialize(
+            _fixture._woWClient.Object,
+            _fixture._pathfindingClient.Object,
+            NullLogger<WoWSharpObjectManager>.Instance,
+            physicsClient: null,
+            sceneDataClient: null,
+            useLocalPhysics: true);
+
+        objectManager.EnterWorld(0xAABBCCDDuL);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        Assert.NotNull(controller);
+    }
+
+    [Fact]
     public void ResetWorldSessionState_ClearsObjectsAndPreservesGuid()
     {
         var objectManager = WoWSharpObjectManager.Instance;
@@ -58,6 +99,49 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(playerGuid, objectManager.PlayerGuid.FullGuid);
         Assert.Equal(playerGuid, objectManager.Player.Guid);
         Assert.NotSame(originalPlayer, objectManager.Player);
+    }
+
+    [Fact]
+    public async Task EnterWorld_RetriesPendingPlayerLoginUntilWorldVerified()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x9988776655443322ul;
+        var objectManager = WoWSharpObjectManager.Instance;
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreatePlayerLoginRecorder(out var loginRequests).Object);
+
+        var originalDelay = WoWSharpObjectManager.WorldEntryRetryDelay;
+        WoWSharpObjectManager.WorldEntryRetryDelay = TimeSpan.FromMilliseconds(50);
+        try
+        {
+            objectManager.EnterWorld(playerGuid);
+
+            WaitForCondition(() => loginRequests.Count >= 2, timeoutMs: 1000);
+
+            Assert.True(objectManager.HasPendingWorldEntry);
+            Assert.Equal(playerGuid, objectManager.PendingWorldEntryGuid);
+            Assert.All(loginRequests, guid => Assert.Equal(playerGuid, guid));
+
+            var requestCountBeforeVerify = loginRequests.Count;
+            WoWSharpEventEmitter.Instance.FireOnLoginVerifyWorld(new WorldInfo
+            {
+                MapId = 1,
+                PositionX = 10f,
+                PositionY = 20f,
+                PositionZ = 30f,
+                Facing = 1.25f
+            });
+
+            await Task.Delay(TimeSpan.FromMilliseconds(150));
+
+            Assert.False(objectManager.HasPendingWorldEntry);
+            Assert.Equal(requestCountBeforeVerify, loginRequests.Count);
+        }
+        finally
+        {
+            WoWSharpObjectManager.WorldEntryRetryDelay = originalDelay;
+            objectManager.ResetWorldSessionState("EnterWorld_RetriesPendingPlayerLoginUntilWorldVerified");
+        }
     }
 
     [Fact]
@@ -1091,6 +1175,21 @@ public class ObjectManagerWorldSessionTests
             .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => packets.Add((opcode, payload)))
             .Returns(Task.CompletedTask);
         sentPackets = packets;
+        return mockWorldClient;
+    }
+
+    private static Mock<IWorldClient> CreatePlayerLoginRecorder(out List<ulong> loginRequests)
+    {
+        var requests = new List<ulong>();
+        var mockWorldClient = new Mock<IWorldClient>();
+        mockWorldClient
+            .Setup(x => x.SendPlayerLoginAsync(It.IsAny<ulong>(), It.IsAny<CancellationToken>()))
+            .Callback<ulong, CancellationToken>((guid, _) => requests.Add(guid))
+            .Returns(Task.CompletedTask);
+        mockWorldClient
+            .Setup(x => x.SendMoveWorldPortAckAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        loginRequests = requests;
         return mockWorldClient;
     }
 

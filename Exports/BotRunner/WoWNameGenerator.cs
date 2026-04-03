@@ -20,6 +20,27 @@ namespace BotRunner
             return constructedName;
         }
 
+        public static string GenerateName(Race race, Gender gender, string? uniquenessSeed)
+        {
+            if (string.IsNullOrWhiteSpace(uniquenessSeed))
+                return GenerateName(race, gender);
+
+            var (prefixes, middles, suffixes) = GetSyllables(race, gender);
+            var hash = ComputeStableHash(unquenessSeed: uniquenessSeed);
+
+            var prefix = prefixes[(int)(hash % (uint)prefixes.Count)];
+            var middle = middles[(int)((hash / (uint)prefixes.Count) % (uint)middles.Count)];
+            var suffix = suffixes[(int)((hash / (uint)(prefixes.Count * middles.Count)) % (uint)suffixes.Count)];
+
+            var accountSuffix = EncodeHashSuffix(hash);
+            var stem = prefix + middle + suffix;
+            var maxStemLength = Math.Max(3, 12 - accountSuffix.Length);
+            if (stem.Length > maxStemLength)
+                stem = stem[..maxStemLength];
+
+            return stem + accountSuffix;
+        }
+
         public static Race ParseRaceCode(string code)
         {
             foreach (var kvp in RaceCodeMap)
@@ -174,6 +195,36 @@ namespace BotRunner
                 ["TrollMale"] = (["Zal", "Rok", "Vol", "Daz", "Mak", "Zul", "Jin", "Gor", "Tal", "Nak"], ["jin", "han", "kur", "tal", "jam", "rak", "zul", "mar", "dak", "lor"], ["bo", "ok", "o", "ul", "ur", "jin", "rok", "thul", "zan", "mok"]),
                 ["TrollFemale"] = (["Zen", "Rok", "Ta", "Zu", "Kal", "Sha", "Vol", "Nal", "Zil", "Ora"], ["za", "ka", "ji", "la", "ji", "sha", "mira", "nora", "thea", "lia"], ["li", "ra", "i", "ya", "ra", "wyn", "mira", "lia", "thea", "nara"])
             };
+        }
+
+        private static uint ComputeStableHash(string unquenessSeed)
+        {
+            unchecked
+            {
+                const uint offsetBasis = 2166136261;
+                const uint prime = 16777619;
+                uint hash = offsetBasis;
+
+                foreach (var ch in unquenessSeed)
+                {
+                    hash ^= char.ToUpperInvariant(ch);
+                    hash *= prime;
+                }
+
+                return hash;
+            }
+        }
+
+        private static string EncodeHashSuffix(uint hash)
+        {
+            Span<char> letters = stackalloc char[3];
+            for (var i = letters.Length - 1; i >= 0; i--)
+            {
+                letters[i] = (char)('a' + (hash % 26));
+                hash /= 26;
+            }
+
+            return new string(letters);
         }
     }
 }

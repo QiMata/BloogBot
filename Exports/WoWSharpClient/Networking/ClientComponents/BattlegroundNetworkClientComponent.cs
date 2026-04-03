@@ -1,12 +1,14 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.IO;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
+using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -16,17 +18,28 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// </summary>
     public class BattlegroundNetworkClientComponent : NetworkClientComponent, IDisposable
     {
+        private static readonly uint[] KnownBattlegroundMapIds = [30u, 489u, 529u];
+
         private readonly IWorldClient _worldClient;
         private readonly ILogger<BattlegroundNetworkClientComponent> _logger;
         private bool _disposed;
 
         // Reactive streams
         private readonly IObservable<BattlegroundStatus> _statusChanged;
+        private readonly IObservable<uint?> _groupJoined;
+        private readonly IObservable<ulong> _playerJoined;
+        private readonly IObservable<ulong> _playerLeft;
+        private readonly IObservable<ReadOnlyMemory<byte>> _instanceOwnershipUpdated;
         private readonly IObservable<BattlegroundList> _listReceived;
         private readonly IObservable<PvPLogData> _scoreboardReceived;
 
         // Self-subscriptions to keep .Do() side effects active
         private readonly IDisposable _statusChangedSub;
+        private readonly IDisposable _groupJoinedSub;
+        private readonly IDisposable _playerJoinedSub;
+        private readonly IDisposable _playerLeftSub;
+        private readonly IDisposable _instanceOwnershipUpdatedSub;
+        private uint? _lastRequestedBgMapId;
 
         public BattlegroundNetworkClientComponent(IWorldClient worldClient, ILogger<BattlegroundNetworkClientComponent> logger)
         {
@@ -54,6 +67,49 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish().RefCount();
 
+            _groupJoined = SafeOpcodeStream(Opcode.SMSG_GROUP_JOINED_BATTLEGROUND)
+                .Select(ParseGroupJoinedBattleground)
+                .Do(groupJoinedMapId =>
+                {
+                    var mapId = groupJoinedMapId ?? _lastRequestedBgMapId;
+                    if (mapId.HasValue)
+                        CurrentBgTypeId = mapId.Value;
+
+                    if (CurrentState == BattlegroundState.None)
+                        CurrentState = BattlegroundState.Queued;
+
+                    _logger.LogInformation(
+                        "Group battleground queue acknowledged: MapId={MapId} State={State}",
+                        mapId,
+                        CurrentState);
+                })
+                .Publish().RefCount();
+
+            _playerJoined = SafeOpcodeStream(Opcode.SMSG_BATTLEGROUND_PLAYER_JOINED)
+                .Select(ParseBattlegroundPlayerGuid)
+                .Where(playerGuid => playerGuid != 0)
+                .Do(playerGuid =>
+                {
+                    _logger.LogDebug("Battleground player joined: PlayerGuid=0x{PlayerGuid:X}", playerGuid);
+                })
+                .Publish().RefCount();
+
+            _playerLeft = SafeOpcodeStream(Opcode.SMSG_BATTLEGROUND_PLAYER_LEFT)
+                .Select(ParseBattlegroundPlayerGuid)
+                .Where(playerGuid => playerGuid != 0)
+                .Do(playerGuid =>
+                {
+                    _logger.LogDebug("Battleground player left: PlayerGuid=0x{PlayerGuid:X}", playerGuid);
+                })
+                .Publish().RefCount();
+
+            _instanceOwnershipUpdated = SafeOpcodeStream(Opcode.SMSG_UPDATE_INSTANCE_OWNERSHIP)
+                .Do(_ =>
+                {
+                    _logger.LogDebug("Instance ownership updated");
+                })
+                .Publish().RefCount();
+
             _listReceived = SafeOpcodeStream(Opcode.SMSG_BATTLEFIELD_LIST)
                 .Select(ParseBattlefieldList)
                 .Do(list =>
@@ -76,6 +132,10 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             // Self-subscribe to keep state tracking active
             _statusChangedSub = _statusChanged.Subscribe(_ => { });
+            _groupJoinedSub = _groupJoined.Subscribe(_ => { });
+            _playerJoinedSub = _playerJoined.Subscribe(_ => { });
+            _playerLeftSub = _playerLeft.Subscribe(_ => { });
+            _instanceOwnershipUpdatedSub = _instanceOwnershipUpdated.Subscribe(_ => { });
         }
 
         #region State
@@ -98,6 +158,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>Emits whenever SMSG_BATTLEFIELD_LIST arrives (list of active BG instances).</summary>
         public IObservable<BattlegroundList> ListReceived => _listReceived;
+
+        /// <summary>Emits the GUID from SMSG_BATTLEGROUND_PLAYER_JOINED.</summary>
+        public IObservable<ulong> BattlegroundPlayerJoined => _playerJoined;
+
+        /// <summary>Emits the GUID from SMSG_BATTLEGROUND_PLAYER_LEFT.</summary>
+        public IObservable<ulong> BattlegroundPlayerLeft => _playerLeft;
 
         /// <summary>Emits whenever MSG_PVP_LOG_DATA arrives as SMSG (scoreboard data).</summary>
         public IObservable<PvPLogData> ScoreboardReceived => _scoreboardReceived;
@@ -123,6 +189,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Joining BG queue: MapId={MapId} Instance={Instance} AsGroup={AsGroup} GUID={Guid:X}",
                     bgMapId, instanceId, asGroup, battleMasterGuid);
+                _lastRequestedBgMapId = bgMapId;
 
                 // CMSG_BATTLEMASTER_JOIN: uint64 guid + uint32 mapId + uint32 instanceId + uint8 joinAsGroup
                 // IMPORTANT: The second field is the BG MAP ID (489, 529, 30), NOT the BG type enum (2, 3, 1).
@@ -164,9 +231,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Accepting BG invite: mapId={MapId}", mapId);
 
                 // CMSG_BATTLEFIELD_PORT: uint32 mapId + uint8 action (1=accept, 0=leave)
-                var payload = new byte[5];
-                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), mapId);
-                payload[4] = 1; // accept
+                var payload = BuildBattlefieldPortPayload(mapId, action: 1);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_PORT, payload, cancellationToken);
 
@@ -191,15 +256,15 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Declining BG invite");
+                var mapId = CurrentBgTypeId ?? 489u; // fallback to WSG
+                _logger.LogDebug("Declining BG invite: mapId={MapId}", mapId);
 
-                // CMSG_BATTLEFIELD_PORT: uint8 action (0=decline)
-                var payload = new byte[1];
-                payload[0] = 0;
+                // CMSG_BATTLEFIELD_PORT: uint32 mapId + uint8 action (1=accept, 0=leave)
+                var payload = BuildBattlefieldPortPayload(mapId, action: 0);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_PORT, payload, cancellationToken);
 
-                _logger.LogInformation("BG invite declined");
+                _logger.LogInformation("BG invite declined (mapId={MapId})", mapId);
             }
             catch (Exception ex)
             {
@@ -220,14 +285,48 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Leaving battlefield");
+                if (CurrentState is BattlegroundState.Queued or BattlegroundState.Invited)
+                {
+                    await ClearQueueAsync(CurrentBgTypeId ?? 489u, CurrentState, cancellationToken);
+                    return;
+                }
 
-                // CMSG_LEAVE_BATTLEFIELD: uint8 unk=0, uint8 unk=0
-                var payload = new byte[2];
+                if (CurrentState == BattlegroundState.InBattleground)
+                {
+                    await SendLeaveBattlefieldAsync(cancellationToken);
+                    return;
+                }
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LEAVE_BATTLEFIELD, payload, cancellationToken);
+                // After relog / port-out, stale battleground queues can exist before we have received
+                // an SMSG_BATTLEFIELD_STATUS update. Ask the server first, then do a conservative
+                // queue-clear sweep across the known vanilla battleground maps as a fallback.
+                await RequestStatusAsync(cancellationToken);
+                await Task.Delay(150, cancellationToken);
 
-                _logger.LogInformation("Leave battlefield sent");
+                if (CurrentState is BattlegroundState.Queued or BattlegroundState.Invited)
+                {
+                    await ClearQueueAsync(CurrentBgTypeId ?? 489u, CurrentState, cancellationToken);
+                    return;
+                }
+
+                if (CurrentState == BattlegroundState.InBattleground)
+                {
+                    await SendLeaveBattlefieldAsync(cancellationToken);
+                    return;
+                }
+
+                _logger.LogDebug("Battleground state unknown; sending queue-clear sweep before leave fallback");
+                foreach (var mapId in KnownBattlegroundMapIds)
+                {
+                    var queuePayload = BuildBattlefieldPortPayload(mapId, action: 0);
+                    await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_PORT, queuePayload, cancellationToken);
+                }
+
+                _logger.LogInformation(
+                    "Battleground queue clear sweep sent for maps: {MapIds}",
+                    string.Join(", ", KnownBattlegroundMapIds));
+
+                await SendLeaveBattlefieldAsync(cancellationToken);
             }
             catch (Exception ex)
             {
@@ -238,6 +337,42 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(false);
             }
+        }
+
+        private static byte[] BuildBattlefieldPortPayload(uint mapId, byte action)
+        {
+            var payload = new byte[5];
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), mapId);
+            payload[4] = action;
+            return payload;
+        }
+
+        private async Task RequestStatusAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogDebug("Requesting battleground status refresh");
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_STATUS, [], cancellationToken);
+        }
+
+        private async Task ClearQueueAsync(uint mapId, BattlegroundState state, CancellationToken cancellationToken)
+        {
+            _logger.LogDebug("Clearing battleground queue: mapId={MapId} state={State}", mapId, state);
+
+            var queuePayload = BuildBattlefieldPortPayload(mapId, action: 0);
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_BATTLEFIELD_PORT, queuePayload, cancellationToken);
+
+            _logger.LogInformation("Battleground queue cleared (mapId={MapId}, state={State})", mapId, state);
+        }
+
+        private async Task SendLeaveBattlefieldAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogDebug("Leaving battlefield");
+
+            // CMSG_LEAVE_BATTLEFIELD: uint8 unk=0, uint8 unk=0
+            var payload = new byte[2];
+
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_LEAVE_BATTLEFIELD, payload, cancellationToken);
+
+            _logger.LogInformation("Leave battlefield sent");
         }
 
         /// <summary>
@@ -375,6 +510,42 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         /// <summary>
+        /// Parses SMSG_GROUP_JOINED_BATTLEGROUND (0x2E8).
+        /// The packet is used as an acknowledgment that a grouped battleground join succeeded.
+        /// Current VMaNGOS runs may omit map data here, so we fall back to the last join request.
+        /// </summary>
+        private static uint? ParseGroupJoinedBattleground(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length < 4)
+                return null;
+
+            var candidate = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(0, 4));
+            return IsKnownBattlegroundMapId(candidate) ? candidate : null;
+        }
+
+        /// <summary>
+        /// Parses SMSG_BATTLEGROUND_PLAYER_JOINED / SMSG_BATTLEGROUND_PLAYER_LEFT.
+        /// Vanilla uses a packed GUID payload for the player whose roster state changed.
+        /// </summary>
+        private static ulong ParseBattlegroundPlayerGuid(ReadOnlyMemory<byte> payload)
+        {
+            if (payload.IsEmpty)
+                return 0;
+
+            try
+            {
+                using var stream = new MemoryStream(payload.ToArray(), writable: false);
+                using var reader = new BinaryReader(stream);
+                return ReaderUtils.ReadPackedGuid(reader);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
         /// Parses MSG_PVP_LOG_DATA (0x2E0) as SMSG.
         /// Format: uint8 isArena + uint8 isFinished + per-player records.
         /// Per-player (non-arena): uint64 playerGuid + uint32 killingBlows + uint32 honorableKills +
@@ -432,6 +603,17 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
+        private static bool IsKnownBattlegroundMapId(uint mapId)
+        {
+            foreach (var knownMapId in KnownBattlegroundMapIds)
+            {
+                if (knownMapId == mapId)
+                    return true;
+            }
+
+            return false;
+        }
+
         #endregion
 
         #region IDisposable
@@ -442,6 +624,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             _disposed = true;
 
             _statusChangedSub?.Dispose();
+            _groupJoinedSub?.Dispose();
+            _playerJoinedSub?.Dispose();
+            _playerLeftSub?.Dispose();
+            _instanceOwnershipUpdatedSub?.Dispose();
 
             _logger.LogDebug("Disposing BattlegroundNetworkClientComponent");
             base.Dispose();

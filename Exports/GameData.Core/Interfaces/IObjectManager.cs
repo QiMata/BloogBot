@@ -141,8 +141,17 @@ namespace GameData.Core.Interfaces
         void EquipCursorItem();
         void ConfirmItemEquip();
         void SendChatMessage(string chatMessage);
+        bool SupportsDirectGmCommandCapture => false;
+        Task<List<string>> SendGmCommandAsync(string command, int timeoutMs = 2000)
+            => Task.FromResult(new List<string>());
         void SetRaidTarget(IWoWUnit target, TargetMarker v);
         void JoinBattleGroundQueue();
+#if NET8_0_OR_GREATER
+        public void AcceptBattlegroundInvite() { }
+#else
+        void AcceptBattlegroundInvite();
+#endif
+        void LeaveBattleground();
         void ResetInstances();
         void PickupMacro(uint v);
         void PlaceAction(uint v);
@@ -184,6 +193,7 @@ namespace GameData.Core.Interfaces
         bool PhysicsHitWall => false;
         (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
         float PhysicsBlockedFraction => 1.0f;
+        int MovementStuckRecoveryGeneration => 0;
         bool HadRecentMeleeRangeRejection(ulong targetGuid) => false;
         bool HadRecentMeleeFacingRejection(ulong targetGuid) => false;
         bool IsSpellReady(string spellName);

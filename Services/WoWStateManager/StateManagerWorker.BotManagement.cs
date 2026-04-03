@@ -87,6 +87,14 @@ namespace WoWStateManager
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
             psi.Environment["PathfindingService__IpAddress"] = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
             psi.Environment["PathfindingService__Port"] = _configuration["PathfindingService:Port"] ?? "5001";
+            psi.Environment["SceneDataService__IpAddress"] =
+                _configuration["SceneDataService:IpAddress"]
+                ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
+                ?? "127.0.0.1";
+            psi.Environment["SceneDataService__Port"] =
+                _configuration["SceneDataService:Port"]
+                ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
+                ?? "5003";
             psi.Environment["CharacterStateListener__IpAddress"] = _configuration["CharacterStateClient:IpAddress"] ?? "127.0.0.1";
             psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "5002";
             psi.Environment["RealmEndpoint__IpAddress"] = _configuration["RealmEndpoint:IpAddress"] ?? "127.0.0.1";
@@ -622,11 +630,23 @@ namespace WoWStateManager
             }
             _logger.LogWarning($"Added {accountName} to managed services with PID {processId} - preventing duplicate launches");
 
-            // 62a: Poll for WoW window before injection (up to 15s)
+            // 62a: Poll for WoW window before injection.
+            // A second foreground client in live tests can take longer than 15s to create
+            // a visible top-level window, so keep this configurable and use a less fragile default.
             // Uses WaitForSingleObject + EnumWindows instead of Process.GetProcessById
             // to avoid "Access denied" when the test host isn't running elevated.
             {
-                var windowPollTimeout = TimeSpan.FromSeconds(15);
+                var windowPollTimeoutSeconds = 45;
+                var configuredWindowTimeout =
+                    Environment.GetEnvironmentVariable("WWOW_FOREGROUND_WINDOW_TIMEOUT_SECONDS")
+                    ?? _configuration["Injection:WindowTimeoutSeconds"];
+                if (int.TryParse(configuredWindowTimeout, out var parsedWindowTimeoutSeconds)
+                    && parsedWindowTimeoutSeconds > 0)
+                {
+                    windowPollTimeoutSeconds = parsedWindowTimeoutSeconds;
+                }
+
+                var windowPollTimeout = TimeSpan.FromSeconds(windowPollTimeoutSeconds);
                 var windowPollSw = Stopwatch.StartNew();
                 bool windowReady = false;
 

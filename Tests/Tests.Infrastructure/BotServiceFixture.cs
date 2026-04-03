@@ -20,7 +20,7 @@ namespace Tests.Infrastructure;
 ///
 /// Safety:
 ///   - Named mutex prevents concurrent test processes from racing
-///   - Stale processes (StateManager, WoW.exe, PathfindingService) are killed before launch
+///   - Stale processes (StateManager, WoW.exe, BackgroundBotRunner) are killed before launch
 ///   - Port 8088 is verified free before starting a new StateManager
 ///   - MaNGOS session cleanup delay after killing WoW.exe
 ///
@@ -245,9 +245,8 @@ public class BotServiceFixture : IAsyncLifetime
             _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
             Log($"All services are ready! (settings={Path.GetFileName(CustomSettingsPath ?? "default")}, coordinator={_activeCoordinatorFlag})");
 
-            // Check if PathfindingService is also available (StateManager launches it as a child process).
-            // PathfindingService listens on port 5001 by default. If it's not running, tests that require
-            // pathfinding (corpse run, movement, gathering) will fail.
+            // Check if PathfindingService is available on its external endpoint.
+            // Tests that require pathfinding (corpse run, movement, gathering) should skip when unavailable.
             PathfindingServiceReady = await WaitForPathfindingServiceAsync();
             Log($"  PathfindingService (5001): {PathfindingServiceReady}");
             if (!PathfindingServiceReady)
@@ -258,15 +257,14 @@ public class BotServiceFixture : IAsyncLifetime
                 Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
             }
 
-            // Check if SceneDataService is also available (StateManager launches it as a child process).
-            // SceneDataService listens on port 5003 by default.
+            // Check if SceneDataService is available on its external endpoint.
             SceneDataServiceReady = await WaitForSceneDataServiceAsync();
             Log($"  SceneDataService (5003): {SceneDataServiceReady}");
             if (!SceneDataServiceReady)
             {
                 Log("  [SceneDataService] WARNING: SceneDataService is not available on port 5003.");
                 Log("  [SceneDataService] Likely cause: WWOW_DATA_DIR is not set or SceneDataService.dll is not built.");
-                Log("  [SceneDataService] Tests requiring scene data will fall back to pre-loaded data from disk.");
+                Log("  [SceneDataService] BG workers will still launch and retry scene-slice refresh on demand once the service becomes available.");
             }
 
             // Start background crash monitoring
@@ -547,7 +545,7 @@ public class BotServiceFixture : IAsyncLifetime
         // Stop crash monitor first
         try { _crashMonitorCts?.Cancel(); } catch { }
 
-        int wowKilled = 0, pfKilled = 0;
+        int wowKilled = 0;
 
         // Snapshot PIDs we launched so we can check for orphans after cleanup.
         // Copy under lock to avoid racing with the stdout capture callback.
@@ -596,37 +594,7 @@ public class BotServiceFixture : IAsyncLifetime
             finally { proc.Dispose(); }
         }
 
-        // 4. Kill orphaned PathfindingService
-        pfKilled += await KillPathfindingServiceProcessesAsync("PF");
-
-        // 4b. Kill orphaned SceneDataService
-        foreach (var proc in Process.GetProcessesByName("SceneDataService"))
-        {
-            try
-            {
-                Log($"Cleanup: killing SceneDataService PID {proc.Id}");
-                if (await ForceKillProcessAsync(proc, "SDS"))
-                    pfKilled++;
-            }
-            finally { proc.Dispose(); }
-        }
-        foreach (var sdsPid in FindDotnetProcessesByDll("SceneDataService"))
-        {
-            try
-            {
-                var proc = Process.GetProcessById(sdsPid);
-                try
-                {
-                    Log($"Cleanup: killing SceneDataService (dotnet-hosted) PID {sdsPid}");
-                    if (await ForceKillProcessAsync(proc, "SDS"))
-                        pfKilled++;
-                }
-                finally { proc.Dispose(); }
-            }
-            catch (ArgumentException) { /* already dead */ }
-        }
-
-        // 5. Kill orphaned BackgroundBotRunner processes
+        // 4. Kill orphaned BackgroundBotRunner processes
         int bgKilled = 0;
         foreach (var bgPid in FindDotnetProcessesByDll("BackgroundBotRunner"))
         {
@@ -647,8 +615,8 @@ public class BotServiceFixture : IAsyncLifetime
         lock (_managedWoWPids)
             _managedWoWPids.Clear();
 
-        if (wowKilled + pfKilled + bgKilled > 0)
-            Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService, {bgKilled} BackgroundBotRunner killed.");
+        if (wowKilled + bgKilled > 0)
+            Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {bgKilled} BackgroundBotRunner killed.");
 
         // 6. Orphan detection
         await ForceKillOrphanedProcessesAsync(stateManagerPid, launchedPids);
@@ -703,14 +671,14 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Kill any WoWStateManager.exe, WoW.exe, and PathfindingService processes
+    /// Kill any WoWStateManager.exe and WoW.exe processes
     /// left over from previous test runs. This prevents stale StateManagers from
     /// intercepting new bot connections. WoW.exe kills include a MaNGOS session
     /// cooldown so the auth server doesn't reject the next login attempt.
     /// </summary>
     private async Task KillStaleProcessesAsync()
     {
-        int smKilled = 0, wowKilled = 0, pfKilled = 0;
+        int smKilled = 0, wowKilled = 0;
 
         // 1. Kill stale StateManagers (repo-scoped — only kills processes from this repo)
         foreach (var proc in Process.GetProcessesByName("WoWStateManager"))
@@ -748,40 +716,10 @@ public class BotServiceFixture : IAsyncLifetime
             finally { proc.Dispose(); }
         }
 
-        // 3. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
-        pfKilled += await KillPathfindingServiceProcessesAsync("Cleanup-PF");
-
-        // 3b. Kill orphaned SceneDataService
-        foreach (var proc in Process.GetProcessesByName("SceneDataService"))
-        {
-            try
-            {
-                Log($"  [Cleanup] Killing orphaned SceneDataService PID {proc.Id}");
-                if (await ForceKillProcessAsync(proc, "Cleanup-SDS"))
-                    pfKilled++;
-            }
-            finally { proc.Dispose(); }
-        }
-        foreach (var sdsPid in FindDotnetProcessesByDll("SceneDataService"))
-        {
-            try
-            {
-                var proc = Process.GetProcessById(sdsPid);
-                try
-                {
-                    Log($"  [Cleanup] Killing orphaned SceneDataService (dotnet-hosted) PID {sdsPid}");
-                    if (await ForceKillProcessAsync(proc, "Cleanup-SDS"))
-                        pfKilled++;
-                }
-                finally { proc.Dispose(); }
-            }
-            catch (ArgumentException) { /* already dead */ }
-        }
-
-        int totalKilled = smKilled + wowKilled + pfKilled;
+        int totalKilled = smKilled + wowKilled;
         if (totalKilled > 0)
         {
-            Log($"  [Cleanup] Killed: {smKilled} StateManager, {wowKilled} WoW.exe, {pfKilled} PathfindingService");
+            Log($"  [Cleanup] Killed: {smKilled} StateManager, {wowKilled} WoW.exe");
 
             // Wait for MaNGOS auth server to clear stale sessions (rejects duplicates otherwise)
             // Also wait for port release after StateManager kill
@@ -797,8 +735,7 @@ public class BotServiceFixture : IAsyncLifetime
 
     /// <summary>
     /// Waits for PathfindingService to become available on port 5001.
-    /// StateManager launches PathfindingService as a child process. If WWOW_DATA_DIR
-    /// is missing or invalid, PathfindingService exits immediately with code 1.
+    /// The service is treated as an external dependency and must be launched separately.
     /// </summary>
     private async Task<bool> WaitForPathfindingServiceAsync()
     {
@@ -812,7 +749,6 @@ public class BotServiceFixture : IAsyncLifetime
             return true;
         }
 
-        // Give StateManager time to launch PathfindingService (it does this during Main())
         Log($"  [PathfindingService] Waiting up to {maxWaitSeconds}s for port {pathfindingPort}...");
         for (int i = 0; i < maxWaitSeconds; i++)
         {
@@ -835,7 +771,7 @@ public class BotServiceFixture : IAsyncLifetime
 
     /// <summary>
     /// Waits for SceneDataService to become available on port 5003.
-    /// StateManager launches SceneDataService as a child process.
+    /// The service is treated as an external dependency and must be launched separately.
     /// </summary>
     private async Task<bool> WaitForSceneDataServiceAsync()
     {
@@ -849,7 +785,6 @@ public class BotServiceFixture : IAsyncLifetime
             return true;
         }
 
-        // Give StateManager time to launch SceneDataService
         Log($"  [SceneDataService] Waiting up to {maxWaitSeconds}s for port {sceneDataPort}...");
         for (int i = 0; i < maxWaitSeconds; i++)
         {
@@ -874,22 +809,25 @@ public class BotServiceFixture : IAsyncLifetime
     {
         try
         {
-            var smExe = FindStateManagerExecutable();
-            if (smExe == null)
+            var smBinary = FindStateManagerExecutable();
+            if (smBinary == null)
             {
-                Log("  [StateManager] Could not find WoWStateManager.exe — cannot auto-start.");
+                Log("  [StateManager] Could not find WoWStateManager.exe or WoWStateManager.dll - cannot auto-start.");
                 Log("  [StateManager] Build the solution first, then re-run the test.");
                 return false;
             }
 
-            var smDir = Path.GetDirectoryName(smExe)!;
-            Log($"  [StateManager] Starting exe: {smExe}");
+            var smDir = Path.GetDirectoryName(smBinary)!;
+            var useDotnetHost = smBinary.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+            Log($"  [StateManager] Starting {(useDotnetHost ? "dll" : "exe")}: {smBinary}");
 
             var envRecording = Environment.GetEnvironmentVariable("BLOOGBOT_AUTOMATED_RECORDING");
+            var envRecordingArtifacts = Environment.GetEnvironmentVariable("WWOW_ENABLE_RECORDING_ARTIFACTS");
 
             var psi = new ProcessStartInfo
             {
-                FileName = smExe,
+                FileName = useDotnetHost ? "dotnet" : smBinary,
+                Arguments = useDotnetHost ? $"\"{smBinary}\"" : string.Empty,
                 WorkingDirectory = smDir,
                 UseShellExecute = false,
                 CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
@@ -906,12 +844,14 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] Set DOTNET_ROOT(x86) = {x86DotnetRoot}");
             }
 
-            // Always show console windows for child processes (BG bots, PathfindingService)
+            // Always show console windows for child processes (BG/FG bot runners)
             // so test runners can observe bot output in real time.
             psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
 
             if (!string.IsNullOrEmpty(envRecording))
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
+            if (!string.IsNullOrEmpty(envRecordingArtifacts))
+                psi.Environment["WWOW_ENABLE_RECORDING_ARTIFACTS"] = envRecordingArtifacts;
 
             // Pass custom settings override to StateManager if configured
             Log($"  [StateManager] CustomSettingsPath={CustomSettingsPath ?? "(null)"}");
@@ -928,6 +868,9 @@ public class BotServiceFixture : IAsyncLifetime
             // Reduce log level to Warning to prevent stdout pipe saturation with 10+ bots.
             // .NET Host reads Logging__LogLevel__Default from environment (double underscore = : separator).
             psi.Environment["Logging__LogLevel__Default"] = "Warning";
+            psi.Environment["WWOW_LOG_LEVEL"] = "Warning";
+            psi.Environment["WWOW_CONSOLE_LOG_LEVEL"] = "Warning";
+            psi.Environment["WWOW_FILE_LOG_LEVEL"] = "Warning";
 
             // Explicitly forward coordinator toggle so restarts inherit the test's intent
             var coordDisable = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR");
@@ -1033,6 +976,9 @@ public class BotServiceFixture : IAsyncLifetime
         var exeInBot = Path.Combine(botDir, "WoWStateManager.exe");
         if (File.Exists(exeInBot))
             return exeInBot;
+        var dllInBot = Path.Combine(botDir, "WoWStateManager.dll");
+        if (File.Exists(dllInBot))
+            return dllInBot;
 
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
@@ -1040,14 +986,24 @@ public class BotServiceFixture : IAsyncLifetime
             var candidate = Path.Combine(dir.FullName, "Bot", "Debug", "net8.0", "WoWStateManager.exe");
             if (File.Exists(candidate))
                 return candidate;
+            candidate = Path.Combine(dir.FullName, "Bot", "Debug", "net8.0", "WoWStateManager.dll");
+            if (File.Exists(candidate))
+                return candidate;
             candidate = Path.Combine(dir.FullName, "Bot", "net8.0", "WoWStateManager.exe");
+            if (File.Exists(candidate))
+                return candidate;
+            candidate = Path.Combine(dir.FullName, "Bot", "net8.0", "WoWStateManager.dll");
             if (File.Exists(candidate))
                 return candidate;
             dir = dir.Parent;
         }
 
         const string fallback = @"E:\repos\BloogBot\Bot\Debug\net8.0\WoWStateManager.exe";
-        return File.Exists(fallback) ? fallback : null;
+        if (File.Exists(fallback))
+            return fallback;
+
+        const string fallbackDll = @"E:\repos\BloogBot\Bot\Debug\net8.0\WoWStateManager.dll";
+        return File.Exists(fallbackDll) ? fallbackDll : null;
     }
 
     /// <summary>
@@ -1140,118 +1096,6 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Kill PathfindingService regardless of hosting model:
-    /// 1) direct PathfindingService.exe process name
-    /// 2) dotnet-hosted PathfindingService.dll discovered via listening port
-    /// </summary>
-    private async Task<int> KillPathfindingServiceProcessesAsync(string label)
-    {
-        if (ShouldPreserveExistingPathfindingService())
-        {
-            Log("  [Cleanup] Preserving existing PathfindingService per WWOW_TEST_PRESERVE_EXISTING_PATHFINDING=1.");
-            return 0;
-        }
-
-        var killed = 0;
-        var seenPids = new HashSet<int>();
-
-        foreach (var proc in Process.GetProcessesByName("PathfindingService"))
-        {
-            try
-            {
-                var modulePath = proc.MainModule?.FileName ?? "";
-                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
-                {
-                    Log($"  [Cleanup] Skipping PathfindingService PID {proc.Id} (not repo-scoped: {modulePath})");
-                    continue;
-                }
-
-                seenPids.Add(proc.Id);
-                Log($"  [Cleanup] Killing PathfindingService PID {proc.Id}");
-                if (await ForceKillProcessAsync(proc, label))
-                    killed++;
-            }
-            finally { proc.Dispose(); }
-        }
-
-        foreach (var pid in GetListeningPidsForPort(5001))
-        {
-            if (seenPids.Contains(pid))
-                continue;
-
-            Process? proc = null;
-            try
-            {
-                proc = Process.GetProcessById(pid);
-                seenPids.Add(pid);
-                Log($"  [Cleanup] Killing process on PathfindingService port 5001 (PID {pid}, Name '{proc.ProcessName}')");
-                if (await ForceKillProcessAsync(proc, $"{label}-Port5001"))
-                    killed++;
-            }
-            catch (ArgumentException)
-            {
-                // Process already exited.
-            }
-            finally { proc?.Dispose(); }
-        }
-
-        return killed;
-    }
-
-    private static bool ShouldPreserveExistingPathfindingService()
-        => string.Equals(
-            Environment.GetEnvironmentVariable("WWOW_TEST_PRESERVE_EXISTING_PATHFINDING"),
-            "1",
-            StringComparison.Ordinal);
-
-    /// <summary>
-    /// Parses `netstat -ano -p tcp` and returns PIDs listening on the specified local TCP port.
-    /// </summary>
-    private static IEnumerable<int> GetListeningPidsForPort(int port)
-    {
-        var pids = new HashSet<int>();
-        try
-        {
-            using var netstat = Process.Start(new ProcessStartInfo
-            {
-                FileName = "netstat",
-                Arguments = "-ano -p tcp",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
-
-            if (netstat == null)
-                return pids;
-
-            var output = netstat.StandardOutput.ReadToEnd();
-            netstat.WaitForExit(5000);
-
-            var matches = System.Text.RegularExpressions.Regex.Matches(
-                output,
-                @"^\s*TCP\s+\S+:(?<port>\d+)\s+\S+\s+LISTENING\s+(?<pid>\d+)\s*$",
-                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            foreach (System.Text.RegularExpressions.Match match in matches)
-            {
-                if (!int.TryParse(match.Groups["port"].Value, out var parsedPort) || parsedPort != port)
-                    continue;
-                if (!int.TryParse(match.Groups["pid"].Value, out var parsedPid) || parsedPid <= 0)
-                    continue;
-
-                pids.Add(parsedPid);
-            }
-        }
-        catch
-        {
-            // Best-effort cleanup helper; ignore parse failures.
-        }
-
-        return pids;
-    }
-
-    /// <summary>
     /// Find dotnet.exe processes hosting a specific DLL by querying wmic for command lines.
     /// Returns PIDs of matching processes.
     /// </summary>
@@ -1340,6 +1184,9 @@ public class BotServiceFixture : IAsyncLifetime
             || line.Contains("[DIAG] [TICK#")
             || line.Contains("SMSG_COMPRESSED_UPDATE_OBJECT")
             || line.Contains("StateChangeResponse dispatched")
+            || line.Contains("No handler registered for opcode SMSG_PARTY_MEMBER_STATS")
+            || line.Contains("[SplineController] Added spline")
+            || line.Contains("[SplineController] Spline finished")
             // Action delivery logs temporarily unfiltered for GOTO debugging
             // || line.Contains("QUEUED ACTION for")
             // || line.Contains("Action forward: queued")

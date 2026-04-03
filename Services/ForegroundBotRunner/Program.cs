@@ -6,26 +6,41 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BotRunner;
+using ForegroundBotRunner.Diagnostics;
 
 namespace ForegroundBotRunner;
 
 public static class Program
 {
+    private static LogLevel ResolveMinimumLogLevel()
+    {
+        var rawValue = Environment.GetEnvironmentVariable("WWOW_LOG_LEVEL");
+        return Enum.TryParse<LogLevel>(rawValue, ignoreCase: true, out var parsed)
+            ? parsed
+            : LogLevel.Information;
+    }
+
     public static void Main(string[] args)
     {
         try
         {
             Console.WriteLine("=== ForegroundBotRunner.exe Main() called directly ===");
 
-            var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
-            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
-            File.AppendAllText(logPath, $"\n=== DIRECT EXECUTION - Program.Main() called at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            var logPath = RecordingFileArtifactGate.ResolveBaseDirectoryPath("BloogBotLogs", "injection.log");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, $"\n=== DIRECT EXECUTION - Program.Main() called at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            }
 
             var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             if (currentProcess.ProcessName.Contains("wow", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("ERROR: Program.Main() is running in WoW process! Use StartInjected() instead.");
-                File.AppendAllText(logPath, "ERROR: Program.Main() running in WoW process - use StartInjected() entry point!\n");
+                if (!string.IsNullOrWhiteSpace(logPath))
+                {
+                    File.AppendAllText(logPath, "ERROR: Program.Main() running in WoW process - use StartInjected() entry point!\n");
+                }
                 return;
             }
 
@@ -37,8 +52,11 @@ public static class Program
         catch (Exception ex)
         {
             Console.WriteLine($"Fatal error in ForegroundBotRunner Program.Main(): {ex}");
-            var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
-            File.AppendAllText(logPath, $"FATAL ERROR in Program.Main(): {ex}\n");
+            var logPath = RecordingFileArtifactGate.ResolveBaseDirectoryPath("BloogBotLogs", "injection.log");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, $"FATAL ERROR in Program.Main(): {ex}\n");
+            }
         }
     }
 
@@ -51,30 +69,55 @@ public static class Program
         string logPath = "";
         try
         {
-            // Get log path early - use WoW directory via AppDomain
             var baseDir = AppDomain.CurrentDomain.BaseDirectory ?? Environment.CurrentDirectory;
-            var logDir = Path.Combine(baseDir, "WWoWLogs");
-            Directory.CreateDirectory(logDir);
-            logPath = Path.Combine(logDir, "startinjected.log");
+            var diagnosticsEnabled = RecordingArtifactsFeature.IsEnabled();
+            logPath = diagnosticsEnabled
+                ? RecordingFileArtifactGate.ResolveWoWLogsPath("startinjected.log")
+                : string.Empty;
 
-            File.AppendAllText(logPath, $"\n=== StartInjected() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
-            File.AppendAllText(logPath, $"BaseDir: {baseDir}\n");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, $"\n=== StartInjected() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+                File.AppendAllText(logPath, $"BaseDir: {baseDir}\n");
+            }
 
             Console.WriteLine("=== ForegroundBotRunner StartInjected() - Running inside WoW ===");
 
             // Skip DisplayProcessInfo - it can crash with Access Denied
-            File.AppendAllText(logPath, "STEP 1: Skipping DisplayProcessInfo\n");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, "STEP 1: Skipping DisplayProcessInfo\n");
+            }
 
             // Enable FastCall crash diagnostics — logs all SEH exceptions to WWoWLogs/fastcall_crash.log
             // In production mode (letCrash=false), AVs are still caught but now logged with faulting address
-            File.AppendAllText(logPath, "STEP 1.5: Enabling FastCall crash diagnostics\n");
-            try { Mem.Functions.EnableCrashDiagnostics(letCrash: false); }
-            catch (EntryPointNotFoundException ex) { File.AppendAllText(logPath, $"STEP 1.5: FastCall.dll missing diagnostic exports (old DLL?): {ex.Message}\n"); }
+            if (diagnosticsEnabled)
+            {
+                if (!string.IsNullOrWhiteSpace(logPath))
+                {
+                    File.AppendAllText(logPath, "STEP 1.5: Enabling FastCall crash diagnostics\n");
+                }
+
+                try { Mem.Functions.EnableCrashDiagnostics(letCrash: false); }
+                catch (EntryPointNotFoundException ex)
+                {
+                    if (!string.IsNullOrWhiteSpace(logPath))
+                    {
+                        File.AppendAllText(logPath, $"STEP 1.5: FastCall.dll missing diagnostic exports (old DLL?): {ex.Message}\n");
+                    }
+                }
+            }
 
             // Build and run the host - this will block until shutdown
-            File.AppendAllText(logPath, "STEP 2: About to call CreateHostBuilder().Build().Run()\n");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, "STEP 2: About to call CreateHostBuilder().Build().Run()\n");
+            }
             CreateHostBuilder([]).Build().Run();
-            File.AppendAllText(logPath, "STEP 3: Host exited normally\n");
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                File.AppendAllText(logPath, "STEP 3: Host exited normally\n");
+            }
         }
         catch (Exception ex)
         {
@@ -113,7 +156,7 @@ public static class Program
             .ConfigureLogging((context, builder) =>
             {
                 builder.AddConsole();
-                builder.SetMinimumLevel(LogLevel.Information);
+                builder.SetMinimumLevel(ResolveMinimumLogLevel());
             });
 
     private static void DisplayProcessInfo()

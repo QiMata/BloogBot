@@ -56,8 +56,10 @@ public class WailingCavernsTests
             evaluate: snapshots =>
             {
                 var count = snapshots.Count;
-                return (count >= ExpectedBotCount, count, $"bots={count}");
+                return (count == ExpectedBotCount, count, $"bots={count}");
             });
+
+        Assert.Equal(ExpectedBotCount, _bot.AllBots.Count);
 
         // Phase 2: Coordinator pipeline — group, travel, enter dungeon
         var botsOnWcMap = await WaitForProgressAsync(
@@ -103,7 +105,8 @@ public class WailingCavernsTests
             _output.WriteLine($"  {snap.AccountName}: map={mapId}, HP={hp * 100 / maxHp}%, pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
         }
 
-        Assert.True(groupedBots.Count >= 2, $"At least 2 bots must be grouped (got {groupedBots.Count})");
+        Assert.Equal(ExpectedBotCount, finalBots.Count);
+        Assert.Equal(ExpectedBotCount, groupedBots.Count);
     }
 
     /// <summary>

@@ -437,10 +437,26 @@ namespace BotRunner
 
             if (charSelects?.Count == 0)
             {
+                if (_objectManager.CharacterSelectScreen?.IsCharacterCreationPending == true)
+                {
+                    return;
+                }
+
                 _pendingCharacterDeletion = false;
+                var createAttempts = _objectManager.CharacterSelectScreen?.CharacterCreateAttempts ?? 0;
+                if (createAttempts > 0)
+                {
+                    Log.Warning("[BOT RUNNER] Retrying character creation for {Account} (attempt {Attempt})",
+                        _activitySnapshot.AccountName,
+                        createAttempts + 1);
+                }
+
                 _behaviorTree = BuildCreateCharacterSequence(
                     [
-                        WoWNameGenerator.GenerateName(race, gender),
+                        WoWNameGenerator.GenerateName(
+                            race,
+                            gender,
+                            BuildCharacterUniquenessSeed(_activitySnapshot.AccountName, createAttempts)),
                         race,
                         gender,
                         @class,
@@ -460,6 +476,16 @@ namespace BotRunner
 
             // Not yet in world — build EnterWorld sequence
             _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
+        }
+
+        internal static string? BuildCharacterUniquenessSeed(string? accountName, int createAttempts)
+        {
+            if (string.IsNullOrWhiteSpace(accountName))
+                return accountName;
+
+            return createAttempts <= 0
+                ? accountName
+                : $"{accountName}:{createAttempts}";
         }
 
         internal static Position? ResolveNextWaypoint(Position[]? positions, Action<string>? logAction = null)

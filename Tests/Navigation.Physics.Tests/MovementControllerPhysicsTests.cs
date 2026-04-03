@@ -1361,8 +1361,8 @@ public class MovementControllerPhysicsTests
         float startZ = player.Position.Z;
 
         // Run 20 frames (1 second) of freefall — force FALLINGFAR each frame
-        // because ApplyPhysicsResult merges physics flags, and without FORWARD
-        // intent the idle guard skips physics if all flags get cleared.
+        // because ApplyPhysicsResult merges physics flags and this test wants
+        // to stay explicitly airborne for the full trace.
         var frames = RunFramesWithTrace(ctrl, player, 20, 0.05f,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FALLINGFAR);
 

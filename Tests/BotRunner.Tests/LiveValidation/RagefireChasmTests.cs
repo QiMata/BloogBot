@@ -17,8 +17,10 @@ namespace BotRunner.Tests.LiveValidation;
 /// Ragefire Chasm 10-man dungeoneering integration test.
 ///
 /// Launches 10 bots (1 FG raid leader/main tank + 9 BG role-specific bots)
-/// via custom StateManager config. The group forms outside RFC, enters the
-/// dungeon (map 389), and uses DungeoneeringTask to clear encounters.
+/// via custom StateManager config. Fixture prep handles group cleanup, level, spells, gear,
+/// and Orgrimmar staging while the coordinator is disabled; the coordinator then forms the
+/// group, enters the dungeon (map 389), and uses
+/// DungeoneeringTask to clear encounters.
 ///
 /// Raid composition:
 ///   Slot 1: TESTBOT1  — Warrior (F) — Main Tank / Raid Leader (FG)
@@ -185,12 +187,12 @@ public class RagefireChasmTests
 
     // RFC_AllBotsEnterWorld, RFC_FormRaidGroup, RFC_TeleportToEntrance REMOVED.
     // These tests manually performed group/teleport operations that conflicted with the
-    // DungeoneeringCoordinator, which handles the full pipeline autonomously.
+    // fixture-prep + coordinator-only RFC flow.
     // Use RFC_PrepareAndOrganizeRaid as the single coordinator-driven test.
 
     /// <summary>
-    /// Coordinator-driven full preparation and dungeon entry.
-    /// Validates that after the coordinator's TeleportToOrg + DisbandAndReset + PrepareCharacters + FormGroup phases:
+    /// Fixture-prepared, coordinator-driven raid organization and dungeon entry.
+    /// Validates that after fixture prep and the coordinator's FormGroup + TeleportToRFC phases:
     ///   - Each bot has key class spells learned
     ///   - Each bot has class-appropriate gear items
     ///   - The raid is formed with all bots grouped
@@ -219,12 +221,12 @@ public class RagefireChasmTests
             evaluate: snapshots =>
             {
                 var count = snapshots.Count;
-                return (count >= ExpectedBotCount, count, $"bots={count}");
+                return (count == ExpectedBotCount, count, $"bots={count}");
             });
         Assert.Equal(ExpectedBotCount, _bot.AllBots.Count);
 
-        // ===== Phase: Coordinator prep pipeline =====
-        // TeleportToOrgrimmar → DisbandAndReset → PrepareCharacters → EquipGear → FormGroup → TeleportToRFC
+        // ===== Phase: RFC coordination pipeline =====
+        // FormGroup → TeleportToRFC
         // Fingerprint: grouped count + total spells + total items + map IDs + positions (rounded).
         // This captures all coordinator state transitions. Stale if nothing changes for 45s.
         var botsOnRfcMap = await WaitForProgressAsync<int>(
@@ -256,7 +258,7 @@ public class RagefireChasmTests
 
                 var fingerprint = $"grp={grouped},rfc={onRfc},spells={totalSpells},items={totalItems}," +
                     $"hp={totalHp},lvl={totalLevel},act={actionTypes.GetHashCode():X8},pos={posHash.GetHashCode():X8}";
-                return (onRfc >= 2, onRfc, fingerprint);
+                return (onRfc == ExpectedBotCount && grouped == ExpectedBotCount, onRfc, fingerprint);
             });
 
         await _bot.RefreshSnapshotsAsync();
@@ -354,7 +356,7 @@ public class RagefireChasmTests
                 $"class={GetCharacterClass(snap.AccountName) ?? "?"}");
         }
         _output.WriteLine($"Grouped: {groupedBots.Count}/{finalBots.Count}");
-        Assert.True(groupedBots.Count >= 2, $"At least 2 bots must be grouped (got {groupedBots.Count})");
+        Assert.Equal(ExpectedBotCount, groupedBots.Count);
 
         // ===== Assert: Subgroup diversity (warriors in different groups) =====
         _output.WriteLine("\n=== SUBGROUP ORGANIZATION ===");
@@ -371,7 +373,7 @@ public class RagefireChasmTests
         _output.WriteLine("\n=== DUNGEON COMBAT PHASE ===");
 
         // If bots aren't on RFC map yet, wait with progress tracking
-        if (botsOnRfcMap < 2)
+        if (botsOnRfcMap < ExpectedBotCount)
         {
             botsOnRfcMap = await WaitForProgressAsync<int>(
                 phaseName: "RFCEntry",
@@ -381,10 +383,10 @@ public class RagefireChasmTests
                 evaluate: snapshots =>
                 {
                     var onRfc = snapshots.Count(s => (s.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == RfcMap);
-                    return (onRfc >= 2, onRfc, $"onRFC={onRfc}");
+                    return (onRfc == ExpectedBotCount, onRfc, $"onRFC={onRfc}");
                 });
         }
-        Assert.True(botsOnRfcMap >= 2, $"At least 2 bots must be on RFC map for dungeon combat (got {botsOnRfcMap})");
+        Assert.Equal(ExpectedBotCount, botsOnRfcMap);
 
         // ===== Combat observation with progress tracking =====
         // Fingerprint: positions (movement), target GUIDs (pulling), health values (taking/dealing damage).
@@ -531,9 +533,9 @@ public class RagefireChasmTests
     }
 
     /// <summary>
-    /// Full coordinator-driven dungeon run — loaded from scenario JSON.
-    /// The DungeoneeringCoordinator drives: TeleportToOrgrimmar → DisbandAndReset →
-    /// PrepareCharacters → FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress.
+    /// Full fixture-prepared, coordinator-driven dungeon run — loaded from scenario JSON.
+    /// The fixture owns prep; the DungeoneeringCoordinator drives:
+    /// FormGroup → TeleportToRFC → DispatchDungeoneering → DungeonInProgress.
     /// </summary>
     [SkippableFact]
     public async Task RFC_FullDungeonRun()

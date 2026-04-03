@@ -1,3 +1,4 @@
+using BotRunner;
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,7 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
     private List<PacketTraceRow>? _rows;
     private string? _accountName;
     private bool _isRecording;
+    private bool _writeArtifactOnStop;
     private int _nextIndex;
 
     private sealed record PacketTraceRow(
@@ -60,11 +62,19 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
         {
             StopRecordingInternal(writeFile: true);
 
+            if (!RecordingArtifactsFeature.IsEnabled())
+            {
+                _logger.LogInformation("[DIAG] Background packet trace skipped; set {EnvVar}=1 to enable artifact recording",
+                    RecordingArtifactsFeature.EnvironmentVariableName);
+                return;
+            }
+
             _accountName = accountName;
             _rows = [];
             _nextIndex = 0;
             _stopwatch = Stopwatch.StartNew();
             _isRecording = true;
+            _writeArtifactOnStop = true;
         }
 
         _logger.LogInformation("[DIAG] Background packet trace recording STARTED for {Account}", accountName);
@@ -134,8 +144,10 @@ public sealed class BackgroundPacketTraceRecorder : IDiagnosticPacketTraceRecord
         _rows = null;
         _accountName = null;
         _nextIndex = 0;
+        var shouldWriteArtifact = writeFile && _writeArtifactOnStop;
+        _writeArtifactOnStop = false;
 
-        if (!writeFile)
+        if (!shouldWriteArtifact)
             return;
 
         Directory.CreateDirectory(RecordingDir);

@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 #include "AABox.h"
 #include "Ray.h"

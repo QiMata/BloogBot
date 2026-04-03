@@ -23,9 +23,16 @@ namespace WoWSharpClient.Client
     /// </summary>
     public sealed class AuthClient : IDisposable
     {
+        private const string LoginTimeoutEnvironmentVariable = "WWOW_AUTH_LOGIN_TIMEOUT_SECONDS";
+        private const string RealmListTimeoutEnvironmentVariable = "WWOW_AUTH_REALM_LIST_TIMEOUT_SECONDS";
+        private static readonly TimeSpan DefaultLoginHandshakeTimeout = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan DefaultRealmListTimeout = TimeSpan.FromSeconds(30);
+
         private readonly PacketPipeline<Opcode> _pipeline;
         private readonly IConnection _connection;
         private readonly IEncryptor _encryptor;
+        private readonly TimeSpan _loginHandshakeTimeout;
+        private readonly TimeSpan _realmListTimeout;
         
         private string _username = string.Empty;
         private string _password = string.Empty;
@@ -58,9 +65,39 @@ namespace WoWSharpClient.Client
             IEncryptor encryptor,
             IPacketCodec<Opcode> codec,
             IMessageRouter<Opcode> router)
+            : this(connection, framer, encryptor, codec, router, null, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the AuthClient class with optional timeout overrides.
+        /// </summary>
+        /// <param name="connection">The connection implementation.</param>
+        /// <param name="framer">The message framer for auth protocol.</param>
+        /// <param name="encryptor">The encryptor (typically NoEncryption for auth).</param>
+        /// <param name="codec">The packet codec for auth protocol.</param>
+        /// <param name="router">The message router for auth protocol.</param>
+        /// <param name="loginHandshakeTimeout">Optional override for the auth handshake timeout.</param>
+        /// <param name="realmListTimeout">Optional override for the realm-list timeout.</param>
+        public AuthClient(
+            IConnection connection,
+            IMessageFramer framer,
+            IEncryptor encryptor,
+            IPacketCodec<Opcode> codec,
+            IMessageRouter<Opcode> router,
+            TimeSpan? loginHandshakeTimeout = null,
+            TimeSpan? realmListTimeout = null)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _encryptor = encryptor ?? throw new ArgumentNullException(nameof(encryptor));
+            _loginHandshakeTimeout = ResolveTimeout(
+                loginHandshakeTimeout,
+                LoginTimeoutEnvironmentVariable,
+                DefaultLoginHandshakeTimeout);
+            _realmListTimeout = ResolveTimeout(
+                realmListTimeout,
+                RealmListTimeoutEnvironmentVariable,
+                DefaultRealmListTimeout);
             
             _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
             
@@ -185,7 +222,7 @@ namespace WoWSharpClient.Client
 
             // Wait for the full SRP6 handshake to complete (proof verified)
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            timeoutCts.CancelAfter(_loginHandshakeTimeout);
             try
             {
                 var proofResult = await loginTcs.Task.WaitAsync(timeoutCts.Token);
@@ -196,7 +233,7 @@ namespace WoWSharpClient.Client
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("[AuthClient] Login handshake timed out");
+                Console.WriteLine($"[AuthClient] Login handshake timed out after {_loginHandshakeTimeout.TotalSeconds:F1}s");
                 throw;
             }
             finally
@@ -235,7 +272,7 @@ namespace WoWSharpClient.Client
 
             // Wait for the response with timeout
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10)); // 10 second timeout
+            timeoutCts.CancelAfter(_realmListTimeout);
 
             try
             {
@@ -243,13 +280,32 @@ namespace WoWSharpClient.Client
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("[AuthClient] Realm list request timed out");
+                Console.WriteLine($"[AuthClient] Realm list request timed out after {_realmListTimeout.TotalSeconds:F1}s");
                 return [];
             }
             finally
             {
                 _realmListCompletionSource = null;
             }
+        }
+
+        private static TimeSpan ResolveTimeout(
+            TimeSpan? explicitTimeout,
+            string environmentVariableName,
+            TimeSpan defaultTimeout)
+        {
+            if (explicitTimeout is { } configuredTimeout && configuredTimeout > TimeSpan.Zero)
+            {
+                return configuredTimeout;
+            }
+
+            var rawValue = Environment.GetEnvironmentVariable(environmentVariableName);
+            if (double.TryParse(rawValue, out var seconds) && seconds > 0)
+            {
+                return TimeSpan.FromSeconds(seconds);
+            }
+
+            return defaultTimeout;
         }
 
         /// <summary>

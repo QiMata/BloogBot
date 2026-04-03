@@ -1,5 +1,6 @@
-﻿using GameData.Core.Enums;
+using GameData.Core.Enums;
 using GameData.Core.Models;
+using System;
 using System.Collections.Generic;
 
 namespace GameData.Core.Frames
@@ -9,6 +10,9 @@ namespace GameData.Core.Frames
         bool IsOpen { get; }
         bool HasReceivedCharacterList { get; set; }
         bool HasRequestedCharacterList { get; set; }
+        bool IsCharacterCreationPending { get; }
+        DateTime LastCharacterListRequestUtc { get; }
+        int CharacterCreateAttempts { get; }
         void CreateCharacter(
             string name,
             Race race,
@@ -18,5 +22,8 @@ namespace GameData.Core.Frames
         void DeleteCharacter(ulong characterGuid);
         List<CharacterSelect> CharacterSelects { get; }
         void RefreshCharacterListFromServer();
+        void MarkCharacterListLoaded();
+        void ResetCharacterListRequest();
+        bool ShouldRetryCharacterListRequest(TimeSpan retryAfter, DateTime utcNow);
     }
 }
