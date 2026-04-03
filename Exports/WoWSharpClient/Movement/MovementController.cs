@@ -342,6 +342,39 @@ namespace WoWSharpClient.Movement
                 {
                     _needsGroundSnap = false;
 
+                    // If we timed out while still falling, force-clear airborne flags.
+                    // Without this, FALLINGFAR persists permanently and the bot can never
+                    // move (airborne steering only, zero-delta physics).
+                    // Try to find actual ground Z via native GetGroundZ so we don't leave
+                    // the bot stranded at a wrong altitude (e.g. Z=147 on an Org rooftop).
+                    if (stillFalling && _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
+                    {
+                        float correctedZ = _player.Position.Z;
+                        try
+                        {
+                            float nativeGround = NativePhysics.GetGroundZ(
+                                _player.MapId, _player.Position.X, _player.Position.Y,
+                                _player.Position.Z + 5f, 200f);
+                            if (nativeGround > -50000f)
+                                correctedZ = nativeGround + 0.5f;
+                        }
+                        catch
+                        {
+                            // Navigation.dll not loaded (FG bot) — use teleportZ as fallback
+                            if (!float.IsNaN(_teleportZ))
+                                correctedZ = _teleportZ;
+                        }
+
+                        Log.Warning("[MovementController] Ground snap timed out at {Frames} frames with FALLINGFAR still set. " +
+                            "Force-clearing airborne flags. posZ={PosZ:F1} correctedZ={CorrectedZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1}",
+                            _groundSnapFrames, _player.Position.Z, correctedZ, _teleportZ, _prevGroundZ);
+                        _player.Position = new Position(_player.Position.X, _player.Position.Y, correctedZ);
+                        _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                        _velocity = Vector3.Zero;
+                        _fallTimeMs = 0;
+                        _wasGroundedLastFrame = true;
+                    }
+
                     Log.Information("[MovementController] Post-teleport ground snap complete: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X} frames={Frames}",
                         _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags, _groundSnapFrames);
 

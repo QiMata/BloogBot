@@ -490,6 +490,16 @@ extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ 
     return SceneQuery::LineOfSight(mapId, G3D::Vector3(from.X, from.Y, from.Z), G3D::Vector3(to.X, to.Y, to.Z));
 }
 
+extern "C" __declspec(dllexport) float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+    return SceneQuery::GetGroundZ(mapId, x, y, z, maxSearchDist);
+}
+
 // Möller–Trumbore segment-triangle intersection.
 // Returns true if segment (p0→p1) intersects triangle (a, b, c).
 static bool SegmentIntersectsTriangle(
