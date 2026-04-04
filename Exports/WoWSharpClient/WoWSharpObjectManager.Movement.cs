@@ -34,6 +34,19 @@ namespace WoWSharpClient
 
         public bool IsPlayerMoving => !Player.MovementFlags.Equals(MovementFlags.MOVEFLAG_NONE);
 
+        /// <summary>
+        /// True when the character is on a taxi flight path.
+        /// In 1.12.1, taxi rides set MOVEFLAG_ONTRANSPORT with a non-zero transport GUID.
+        /// The flight master component can also set this directly.
+        /// </summary>
+        public bool IsInFlight
+        {
+            get => _isInFlight || (Player != null
+                && Player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT)
+                && Player.TransportGuid != 0);
+            set => _isInFlight = value;
+        }
+        private bool _isInFlight;
 
         private bool _isInControl = false;
         private const float FacingPacketThresholdRadians = 0.1f; // WoW.exe 0x80C408

@@ -234,6 +234,9 @@ namespace GameData.Core.Interfaces
         void UseContainerItem(int bag, int slot);
 #endif
 
+        // Flight (taxi) state
+        bool IsInFlight { get; }
+
         // Wand helpers
         void StartWandAttack();
         void StopWandAttack();
