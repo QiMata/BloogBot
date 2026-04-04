@@ -532,35 +532,6 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 ---
 
-## P8 — FG/BG Feature Parity Gaps
-
-**Goal:** Close all gaps where BG bot cannot perform actions FG bot can.
-
-### 8A — Critical (BG Crashes)
-
-| # | Task | Status |
-|---|------|--------|
-| 8.1 | Add null guards to all 6 trade sequences. Already done — all have `TradeFrame Available` condition checks. | **Done** (pre-existing) |
-| 8.2 | Wire `TradeNetworkClientComponent` packet path as BG fallback for all 6 trade actions. Pattern: check params for targetGuid, use `InitiateTradeAsync(guid)` / `SetTradeItemAsync()` / `AcceptTradeAsync()` instead of frame methods. Model after BuyItem dual-path in ActionDispatch.cs:311-326. | Open |
-
-### 8B — FG-Only Features Needing BG Packet Paths
-
-| # | Task | Status |
-|---|------|--------|
-| 8.3 | BG BuybackItem — already done. ActionDispatch dual-path: `VendorAgent.BuybackItemAsync` packet vs legacy MerchantFrame. | **Done** (pre-existing) |
-| 8.4 | BG Craft — already done. ActionDispatch dual-path: 2-param packet (`CMSG_CAST_SPELL`) vs legacy CraftFrame. | **Done** (pre-existing) |
-| 8.5 | Wire FlightMaster BG path — already done. ActionDispatch has dual-path: 3-param packet vs 1-param TaxiFrame. `FlightMasterAgent.ActivateFlightAsync` wired. | **Done** (pre-existing) |
-| 8.6 | Wire Trainer BG path — already done. ActionDispatch: 2-param packet via `TrainerAgent.BuySpellAsync` vs legacy TrainerFrame. | **Done** (pre-existing) |
-| 8.7 | Wire Talent BG path — already done. ActionDispatch: 2-param packet via `TalentAgent` vs legacy TalentFrame. | **Done** (pre-existing) |
-| 8.8 | Wire Gossip BG path — already done. ActionDispatch: 2-param packet via `GossipAgent.SelectOptionAsync` vs legacy GossipFrame. | **Done** (pre-existing) |
-
-### 8C — Proto/Enum Alignment
-
-| # | Task | Status |
-|---|------|--------|
-| 8.9 | Add `StartWandAttack` to `CharacterAction` enum + ActionDispatch + BuildStartWandAttackSequence. | **Done** (5c7b1e98) |
-| 8.10 | Remove `START_PHYSICS_RECORDING` / `STOP_PHYSICS_RECORDING` — already removed from proto. | **Done** (pre-existing) |
-
 ---
 
 ## P9 — Scalability: 3000 Concurrent Bot Architecture

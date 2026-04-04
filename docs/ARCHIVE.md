@@ -1996,3 +1996,13 @@ Stripped PathfindingService to path-only. Physics, GroundZ, LOS, navmesh queries
 | 28.5 | BG fixtures: strict bot count | Done (2026-04-01) |
 | 28.6 | DeathCorpseRunTests CRASH-001 | Done (pre-existing) |
 | 28.7 | Move OrgrimmarGroundZAnalysisTests | Done |
+
+## P8 — FG/BG Feature Parity Gaps — Archived session 301
+
+| # | Task | Status |
+|---|------|--------|
+| 8.1 | Null guards on trade sequences | Done (pre-existing) |
+| 8.2 | Wire TradeNetworkClientComponent BG path | Done (1d6ff20e) — dual-path in ActionDispatch |
+| 8.3-8.8 | BG packet paths for BuybackItem, Craft, FlightMaster, Trainer, Talent, Gossip | Done (pre-existing) |
+| 8.9 | StartWandAttack enum + dispatch | Done (5c7b1e98) |
+| 8.10 | Remove physics recording actions | Done (pre-existing) |
