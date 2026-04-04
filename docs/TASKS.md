@@ -99,7 +99,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 23.4 | **Create `FgAuctionFrame.cs`** — Lua-based FG auction house frame. Methods: `IsOpen`, `SearchByName(name)`, `PostItem(bagId, slotId, startBid, buyout, duration)`, `PlaceBid(auctionId, amount)`, `CancelAuction(auctionId)`, `GetSearchResults()`. File: `Services/ForegroundBotRunner/Frames/FgAuctionFrame.cs`. | Open |
+| 23.4 | **Create `FgAuctionFrame.cs`** — Lua-based AH frame + IAuctionFrame interface. | **Done** (d5f915b5) |
 | 23.5 | **AH search test** — BG+FG: teleport to Orgrimmar AH, interact with auctioneer, search for "Linen Cloth". Assert: both get SMSG_AUCTION_LIST_RESULT, result counts match. Record FG packets, verify BG sends matching CMSG_AUCTION_LIST_ITEMS. | Open |
 | 23.6 | **AH post+buy test** — Bot A posts item via CMSG_AUCTION_SELL_ITEM. Bot B searches and buys via CMSG_AUCTION_PLACE_BID. Assert: SMSG_AUCTION_COMMAND_RESULT success, item delivered via mail. | Open |
 | 23.7 | **AH cancel test** — Post item, cancel via CMSG_AUCTION_REMOVE_ITEM. Assert: item returned to inventory. | Open |
@@ -108,7 +108,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 23.8 | **Create `FgBankFrame.cs`** — Lua-based FG bank frame. Methods: `IsOpen`, `DepositItem(bagId, slotId)`, `WithdrawItem(bankSlot)`, `GetBankSlots()`, `PurchaseBankSlot()`. File: `Services/ForegroundBotRunner/Frames/FgBankFrame.cs`. | Open |
+| 23.8 | **Create `FgBankFrame.cs`** — Lua-based bank frame + IBankFrame interface. | **Done** (d5f915b5) |
 | 23.9 | **Bank deposit/withdraw test** — BG+FG: teleport to Orgrimmar bank, interact with banker, deposit an item, verify it appears in bank slot. Withdraw it back, verify inventory. Record packets. | Open |
 | 23.10 | **Bank slot purchase test** — Purchase a new bank bag slot via CMSG_BUY_BANK_SLOT. Assert: SMSG_BUY_BANK_SLOT_RESULT = OK. | Open |
 
@@ -436,7 +436,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.29 | **Gear evaluation test** — `Tests/BotRunner.Tests/Progression/GearEvaluationTests.cs`. Given a Fury Warrior at level 60 with greens, evaluate against pre-raid BiS list. Assert: all 16 slots show gaps. Equip one BiS item, re-evaluate: that slot shows no gap. | Open |
+| 22.29 | **Gear evaluation test** — 3 tests: empty slots, matched slot, priority ordering. | **Done** (d5f915b5) |
 | 22.30 | **ProgressionPlanner priority test** — `Tests/BotRunner.Tests/Progression/ProgressionPlannerTests.cs`. Given: bot is level 40, has no mount, has 50g, BiS head is available from a dungeon. Assert: planner picks mount gold farming over BiS farming (mount is higher priority at 40). At level 60 with mount: planner picks BiS farming. | Open |
 | 22.31 | **Configurable spec test** — 6 tests for BotProfileResolver.Resolve with spec overrides. | **Done** (3e20b43d) |
 | 22.32 | **Talent auto-allocation test** — `Tests/BotRunner.Tests/Progression/TalentAllocationTests.cs`. Given custom talent build order in config, assert TalentService follows the custom order instead of hardcoded default. | Open |
