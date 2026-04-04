@@ -208,6 +208,30 @@ public sealed class StateManagerViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>P22.28: Available character build templates from Config/CharacterTemplates/.</summary>
+    public string[] AvailableTemplates { get; } =
+    [
+        "",
+        "FuryWarriorPreRaid",
+        "HolyPriestMCReady",
+        "FrostMageAoEFarmer",
+        "ProtectionWarriorTank",
+    ];
+
+    /// <summary>P22.28: Selected build template for the current character.</summary>
+    public string SelectedBuildTemplate
+    {
+        get => GetSelectedCharacter()?.BuildTemplate ?? "";
+        set
+        {
+            if (TryGetSelectedCharacter(out var character))
+            {
+                character.BuildTemplate = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     private CharacterDefinition? GetSelectedCharacter() => TryGetSelectedCharacter(out var character) ? character : null;
 
     private bool TryGetSelectedCharacter(out CharacterDefinition character)

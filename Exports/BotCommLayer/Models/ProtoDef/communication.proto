@@ -145,6 +145,7 @@ message CharacterDefinition {
     float neuroticism = 6;
     bool should_run = 7;
     BotRunnerType runner_type = 8;  // Which bot runner to use
+    string build_template = 9;     // P22.28: Template name (e.g. "FuryWarriorPreRaid", "HolyPriestMCReady")
 }
 
 enum StateChangeType {
