@@ -16,7 +16,8 @@ namespace WoWSharpClient.Movement
     public class MovementController(WoWClient client, IPhysicsClient? physics, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null)
     {
         private readonly WoWClient _client = client;
-        private readonly IPhysicsClient? _physics = physics;
+        // _physics is intentionally unused — physics is always local via NativeLocalPhysics.
+        // The parameter remains for API compatibility with callers that pass PathfindingClient.
         private readonly WoWLocalPlayer _player = player;
         private readonly SceneDataClient? _sceneDataClient = sceneDataClient;
         private readonly bool _nativeSceneModeConfigured = ConfigureNativeSceneMode(physics, sceneDataClient);
@@ -443,11 +444,9 @@ namespace WoWSharpClient.Movement
             _physicsInputZ = input.PosZ;
             _physicsInputFlags = input.MovementFlags;
 
-            if (_physics != null)
-                return _physics.PhysicsStep(input);
-
+            // Physics is always local — NativeLocalPhysics.Step calls Navigation.dll directly.
+            // No remote fallback. WoW.exe runs physics locally; so do we.
             _ = EnsureLocalSceneDataFresh();
-
             return NativeLocalPhysics.Step(input);
         }
 

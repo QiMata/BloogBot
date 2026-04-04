@@ -17,7 +17,7 @@ namespace BotRunner.Clients
     /// All other operations (GroundZ, LOS, physics, navmesh queries) use the local
     /// in-process Navigation.dll directly.
     /// </summary>
-    public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>, IPhysicsClient
+    public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
     {
         internal const int DefaultPathRequestTimeoutMs = 30_000;
 
@@ -166,22 +166,6 @@ namespace BotRunner.Clients
                 _logger?.LogWarning("Local LineOfSight failed: {Error}", ex.Message);
                 return false;
             }
-        }
-
-        public virtual PhysicsOutput PhysicsStep(PhysicsInput physicsInput)
-        {
-            // Physics is always local now — handled by MovementController's
-            // NativeLocalPhysics. This method exists for IPhysicsClient compatibility
-            // but should not be called in the normal BG bot flow.
-            return new PhysicsOutput
-            {
-                NewPosX = physicsInput.PosX,
-                NewPosY = physicsInput.PosY,
-                NewPosZ = physicsInput.PosZ,
-                MovementFlags = physicsInput.MovementFlags,
-                Orientation = physicsInput.Facing,
-                GroundZ = -999999f,
-            };
         }
 
         public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)

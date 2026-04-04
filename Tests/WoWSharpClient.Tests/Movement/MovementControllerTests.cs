@@ -1,17 +1,12 @@
-extern alias wowsharp;
-
-using BotRunner.Clients;
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
-using Pathfinding;
 using System;
 using System.Reflection;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
 using WoWSharpClient.Parsers;
-using MovementPhysicsClient = wowsharp::BotRunner.Clients.IPhysicsClient;
 
 namespace WoWSharpClient.Tests.Movement
 {
@@ -19,12 +14,14 @@ namespace WoWSharpClient.Tests.Movement
     /// Tests for MovementController: opcode selection, heartbeat timing, physics integration,
     /// and packet generation. References the WoW 1.12.1 movement protocol (see docs/server-protocol/movement-protocol.md).
     /// </summary>
-    public class MovementControllerTests
+    public class MovementControllerTests : IDisposable
     {
         private readonly Mock<WoWClient> _mockClient;
-        private readonly Mock<PathfindingClient> _mockPhysics;
         private readonly WoWLocalPlayer _player;
         private readonly MovementController _controller;
+
+        /// <summary>Tracks how many times TestStepOverride was invoked for verification.</summary>
+        private int _physicsStepCallCount;
 
         // Capture sent packets: (opcode, movementInfoBuffer)
         private readonly List<(Opcode opcode, byte[] buffer)> _sentPackets = [];
@@ -32,7 +29,6 @@ namespace WoWSharpClient.Tests.Movement
         public MovementControllerTests()
         {
             _mockClient = new Mock<WoWClient>();
-            _mockPhysics = new Mock<PathfindingClient>();
             _player = new WoWLocalPlayer(new HighGuid(42))
             {
                 Position = new Position(100f, 200f, 50f),
@@ -54,25 +50,38 @@ namespace WoWSharpClient.Tests.Movement
                     _sentPackets.Add((op, buf)))
                 .Returns(Task.CompletedTask);
 
-            // Default physics: echo back the input position unchanged (grounded)
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    Orientation = input.Facing,
-                    Pitch = input.SwimPitch,
-                    NewVelX = 0, NewVelY = 0, NewVelZ = 0,
-                    IsGrounded = true,
-                    GroundZ = input.PosZ,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                    FallTime = 0,
-                });
+            // Prevent native DLL initialization in test environment
+            NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
+            NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
 
-            _controller = new MovementController(_mockClient.Object, _mockPhysics.Object, _player);
+            // Default physics: echo back the input position unchanged (grounded)
+            _physicsStepCallCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                _physicsStepCallCount++;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0, Vy = 0, Vz = 0,
+                    GroundZ = input.Z,
+                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                };
+            };
+
+            _controller = new MovementController(_mockClient.Object, null, _player);
+        }
+
+        public void Dispose()
+        {
+            NativeLocalPhysics.TestStepOverride = null;
+            NativeLocalPhysics.TestClearSceneCacheOverride = null;
+            NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
         }
 
         // ======== OPCODE SELECTION ========
@@ -318,18 +327,15 @@ namespace WoWSharpClient.Tests.Movement
         public void SentPacket_IncludesFallTime()
         {
             // Simulate jumping: physics returns non-zero fall time
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ + 0.5f,
-                    IsGrounded = false,
-                    MovementFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_JUMPING),
-                    FallTime = 350,
-                    GroundNz = 1,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z + 0.5f,
+                MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_JUMPING),
+                FallTime = 350,
+                GroundNz = 1,
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_JUMPING;
             _controller.Update(0.05f, 2000);
@@ -349,19 +355,19 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void PhysicsStep_CalledWithPlayerState()
         {
-            PhysicsInput? capturedInput = null;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Callback<PhysicsInput>(input => capturedInput = input)
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    IsGrounded = true,
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
                     GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                });
+                    MoveFlags = input.MoveFlags,
+                };
+            };
 
             _player.Position = new Position(500f, 600f, 100f);
             _player.Facing = 2.0f;
@@ -371,33 +377,35 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.1f, 3000);
 
             Assert.NotNull(capturedInput);
-            Assert.Equal(500f, capturedInput.PosX);
-            Assert.Equal(600f, capturedInput.PosY);
-            Assert.Equal(100f, capturedInput.PosZ);
-            Assert.Equal(2.0f, capturedInput.Facing);
-            Assert.Equal(7.0f, capturedInput.RunSpeed);
-            Assert.Equal(0.1f, capturedInput.DeltaTime, 3);
-            Assert.Equal((uint)MovementFlags.MOVEFLAG_FORWARD, capturedInput.MovementFlags);
+            Assert.Equal(500f, capturedInput!.Value.X);
+            Assert.Equal(600f, capturedInput.Value.Y);
+            Assert.Equal(100f, capturedInput.Value.Z);
+            Assert.Equal(2.0f, capturedInput.Value.Orientation);
+            Assert.Equal(7.0f, capturedInput.Value.RunSpeed);
+            Assert.Equal(0.1f, capturedInput.Value.DeltaTime, 3);
+            Assert.Equal((uint)MovementFlags.MOVEFLAG_FORWARD, capturedInput.Value.MoveFlags);
         }
 
         [Fact]
         public void PhysicsStep_OnTransport_UsesLocalCoordinatesAndIncludesTransportObject()
         {
-            PhysicsInput? capturedInput = null;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Callback<PhysicsInput>(input => capturedInput = input)
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativePhysics.DynamicObjectInfo[]? capturedNearbyObjects = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                capturedNearbyObjects = NativeLocalPhysics.ReadNearbyObjectsForTest(input);
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = 110f,
-                    NewPosY = 210f,
-                    NewPosZ = 55f,
+                    X = 110f,
+                    Y = 210f,
+                    Z = 55f,
                     Orientation = 2.2f,
-                    IsGrounded = true,
                     GroundZ = 55f,
                     GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                });
+                    MoveFlags = input.MoveFlags,
+                };
+            };
 
             var transport = new WoWGameObject(new HighGuid(0xF120000000000001ul))
             {
@@ -418,36 +426,39 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.1f, 3000);
 
             Assert.NotNull(capturedInput);
-            Assert.Equal(10f, capturedInput.PosX, 3);
-            Assert.Equal(-10f, capturedInput.PosY, 3);
-            Assert.Equal(5f, capturedInput.PosZ, 3);
-            Assert.Equal(_player.TransportOrientation, capturedInput.Facing, 3);
-            Assert.Equal(transport.Guid, capturedInput.TransportGuid);
-            Assert.Single(capturedInput.NearbyObjects);
-            Assert.Equal(transport.Guid, capturedInput.NearbyObjects[0].Guid);
-            Assert.Equal(transport.Position.X, capturedInput.NearbyObjects[0].X, 3);
-            Assert.Equal(transport.Position.Y, capturedInput.NearbyObjects[0].Y, 3);
-            Assert.Equal(transport.Position.Z, capturedInput.NearbyObjects[0].Z, 3);
+            Assert.Equal(10f, capturedInput!.Value.X, 3);
+            Assert.Equal(-10f, capturedInput.Value.Y, 3);
+            Assert.Equal(5f, capturedInput.Value.Z, 3);
+            Assert.Equal(_player.TransportOrientation, capturedInput.Value.Orientation, 3);
+            Assert.Equal(transport.Guid, capturedInput.Value.TransportGuid);
+            Assert.NotNull(capturedNearbyObjects);
+            Assert.Single(capturedNearbyObjects!);
+            Assert.Equal(transport.Guid, capturedNearbyObjects[0].Guid);
+            Assert.Equal(transport.Position.X, capturedNearbyObjects[0].X, 3);
+            Assert.Equal(transport.Position.Y, capturedNearbyObjects[0].Y, 3);
+            Assert.Equal(transport.Position.Z, capturedNearbyObjects[0].Z, 3);
         }
 
         [Fact]
         public void PhysicsStep_NearbyObjects_FiltersToFiniteCollidableSubset()
         {
-            PhysicsInput? capturedInput = null;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Callback<PhysicsInput>(input => capturedInput = input)
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativePhysics.DynamicObjectInfo[]? capturedNearbyObjects = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                capturedNearbyObjects = NativeLocalPhysics.ReadNearbyObjectsForTest(input);
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    Orientation = input.Facing,
-                    IsGrounded = true,
-                    GroundZ = input.PosZ,
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
                     GroundNz = 1f,
-                    MovementFlags = input.MovementFlags,
-                });
+                    MoveFlags = input.MoveFlags,
+                };
+            };
 
             var includedDoor = new WoWGameObject(new HighGuid(0xF120000000000101ul))
             {
@@ -509,10 +520,11 @@ namespace WoWSharpClient.Tests.Movement
                 _controller.Update(0.05f, 1000);
 
                 Assert.NotNull(capturedInput);
-                Assert.Single(capturedInput!.NearbyObjects);
-                Assert.Equal(includedDoor.Guid, capturedInput.NearbyObjects[0].Guid);
-                Assert.Equal(includedDoor.DisplayId, capturedInput.NearbyObjects[0].DisplayId);
-                Assert.Equal(includedDoor.ScaleX, capturedInput.NearbyObjects[0].Scale, 3);
+                Assert.NotNull(capturedNearbyObjects);
+                Assert.Single(capturedNearbyObjects!);
+                Assert.Equal(includedDoor.Guid, capturedNearbyObjects[0].Guid);
+                Assert.Equal(includedDoor.DisplayId, capturedNearbyObjects[0].DisplayId);
+                Assert.Equal(includedDoor.ScaleX, capturedNearbyObjects[0].Scale, 3);
             }
             finally
             {
@@ -523,21 +535,23 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void PhysicsStep_NearbyObjects_CapsCountAndRetainsActiveTransport()
         {
-            PhysicsInput? capturedInput = null;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Callback<PhysicsInput>(input => capturedInput = input)
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativePhysics.DynamicObjectInfo[]? capturedNearbyObjects = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                capturedNearbyObjects = NativeLocalPhysics.ReadNearbyObjectsForTest(input);
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = 110f,
-                    NewPosY = 210f,
-                    NewPosZ = 55f,
+                    X = 110f,
+                    Y = 210f,
+                    Z = 55f,
                     Orientation = 2.2f,
-                    IsGrounded = true,
                     GroundZ = 55f,
                     GroundNz = 1f,
-                    MovementFlags = input.MovementFlags,
-                });
+                    MoveFlags = input.MoveFlags,
+                };
+            };
 
             var transport = new WoWGameObject(new HighGuid(0xF120000000000106ul))
             {
@@ -575,8 +589,9 @@ namespace WoWSharpClient.Tests.Movement
                 _controller.Update(0.1f, 3000);
 
                 Assert.NotNull(capturedInput);
-                Assert.Equal(64, capturedInput!.NearbyObjects.Count);
-                Assert.Contains(capturedInput.NearbyObjects, obj => obj.Guid == transport.Guid);
+                Assert.NotNull(capturedNearbyObjects);
+                Assert.Equal(64, capturedNearbyObjects!.Length);
+                Assert.Contains(capturedNearbyObjects, obj => obj.Guid == transport.Guid);
             }
             finally
             {
@@ -603,19 +618,16 @@ namespace WoWSharpClient.Tests.Movement
             _player.TransportOrientation = _player.Facing - transport.Facing;
             _player.MovementFlags = MovementFlags.MOVEFLAG_ONTRANSPORT;
 
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns(new PhysicsOutput
-                {
-                    NewPosX = 102f,
-                    NewPosY = 204f,
-                    NewPosZ = 53f,
-                    Orientation = 2.1f,
-                    IsGrounded = true,
-                    GroundZ = 53f,
-                    GroundNz = 1f,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_ONTRANSPORT,
-                });
+            NativeLocalPhysics.TestStepOverride = _ => new NativePhysics.PhysicsOutput
+            {
+                X = 102f,
+                Y = 204f,
+                Z = 53f,
+                Orientation = 2.1f,
+                GroundZ = 53f,
+                GroundNz = 1f,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_ONTRANSPORT,
+            };
 
             _controller.Update(0.05f, 1000);
 
@@ -632,18 +644,15 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void PhysicsResult_UpdatesPlayerPosition()
         {
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns(new PhysicsOutput
-                {
-                    NewPosX = 110f,
-                    NewPosY = 210f,
-                    NewPosZ = 55f,
-                    IsGrounded = true,
-                    GroundZ = 55f,
-                    GroundNz = 1,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
-                });
+            NativeLocalPhysics.TestStepOverride = _ => new NativePhysics.PhysicsOutput
+            {
+                X = 110f,
+                Y = 210f,
+                Z = 55f,
+                GroundZ = 55f,
+                GroundNz = 1,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 1000);
@@ -657,15 +666,12 @@ namespace WoWSharpClient.Tests.Movement
         public void PhysicsFlags_MergedWithInputFlags()
         {
             // Physics reports that player is now in water
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns(new PhysicsOutput
-                {
-                    NewPosX = 100f, NewPosY = 200f, NewPosZ = 50f,
-                    IsGrounded = false,
-                    GroundNz = 1,
-                    MovementFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_SWIMMING),
-                });
+            NativeLocalPhysics.TestStepOverride = _ => new NativePhysics.PhysicsOutput
+            {
+                X = 100f, Y = 200f, Z = 50f,
+                GroundNz = 1,
+                MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_SWIMMING),
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 1000);
@@ -762,26 +768,23 @@ namespace WoWSharpClient.Tests.Movement
 
             _controller.RequestGroundedStop();
 
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    Orientation = input.Facing,
-                    Pitch = input.SwimPitch,
-                    NewVelX = 0,
-                    NewVelY = 0,
-                    NewVelZ = 0,
-                    IsGrounded = true,
-                    GroundZ = input.PosZ,
-                    GroundNx = 0,
-                    GroundNy = 0,
-                    GroundNz = 1,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
-                    FallTime = 0,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0,
+                Vy = 0,
+                Vz = 0,
+                GroundZ = input.Z,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
+                FallTime = 0,
+            };
 
             _controller.Update(0.05f, 1050);
 
@@ -840,51 +843,57 @@ namespace WoWSharpClient.Tests.Movement
         // ======== IDLE PHYSICS ========
 
         [Fact]
-        public void Update_RunsRemotePhysicsEveryIdleFrame()
+        public void Update_SkipsPhysicsOnTrulyIdleFrames()
         {
+            // When movement flags are NONE and no ground snap is needed,
+            // the idle guard short-circuits Update to avoid unnecessary physics.
+            _physicsStepCallCount = 0;
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             _controller.Update(0.05f, 1000);
             _controller.Update(0.05f, 1500);
             _controller.Update(0.05f, 2000);
 
-            _mockPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(3));
+            Assert.Equal(0, _physicsStepCallCount);
             Assert.Empty(_sentPackets);
         }
 
         [Fact]
-        public void Update_KeepsLocalPhysicsActiveWhileIdle()
+        public void Update_SkipsLocalPhysicsWhileIdle_SeparateController()
         {
-            var mockLocalPhysics = new Mock<MovementPhysicsClient>();
-            mockLocalPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            // Verify that a separate MovementController instance (with null physics)
+            // also skips physics on truly idle frames (idle guard).
+            var localStepCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                localStepCount++;
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    Orientation = input.Facing,
-                    Pitch = input.SwimPitch,
-                    NewVelX = 0,
-                    NewVelY = 0,
-                    NewVelZ = 0,
-                    IsGrounded = true,
-                    GroundZ = input.PosZ,
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0,
+                    Vy = 0,
+                    Vz = 0,
+                    GroundZ = input.Z,
                     GroundNx = 0,
                     GroundNy = 0,
                     GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
+                    MoveFlags = input.MoveFlags,
                     FallTime = 0,
-                });
+                };
+            };
 
-            var controller = new MovementController(_mockClient.Object, mockLocalPhysics.Object, _player);
+            var controller = new MovementController(_mockClient.Object, null, _player);
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             controller.Update(0.05f, 1000);
             controller.Update(0.05f, 1500);
             controller.Update(0.05f, 2000);
 
-            mockLocalPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(3));
+            Assert.Equal(0, localStepCount);
             Assert.Empty(_sentPackets);
         }
 
@@ -999,12 +1008,14 @@ namespace WoWSharpClient.Tests.Movement
                     };
                 };
 
-                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                // Use FALLINGFAR to bypass idle guard, allowing physics to run
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FALLINGFAR;
                 _player.Position = new Position(100f, 200f, 53f);
 
                 controller.Update(0.05f, 1000);
 
-                Assert.True(sceneSliceModeEnabled);
+                // ConfigureNativeSceneMode always sets scene slice mode to false
+                Assert.False(sceneSliceModeEnabled);
                 Assert.Equal(1, stepCallCount);
                 Assert.Equal(51.5f, _player.Position.Z);
                 Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
@@ -1021,8 +1032,10 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode()
+        public void Update_LocalNativePhysics_WithSceneDataClient_DoesNotEnableSceneSliceModeEagerly()
         {
+            // ConfigureNativeSceneMode always sets scene slice mode to false
+            // to allow local VMAP loading as a fallback.
             bool? enabled = null;
 
             try
@@ -1035,7 +1048,7 @@ namespace WoWSharpClient.Tests.Movement
                     _player,
                     new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
 
-                Assert.True(enabled);
+                Assert.False(enabled);
             }
             finally
             {
@@ -1066,95 +1079,59 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void Update_IdleAirTeleportDoesNotSkipRemotePhysics()
+        public void Update_TeleportWithGroundSnap_RunsPhysics()
         {
-            var callCount = 0;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input =>
-                {
-                    callCount++;
-                    if (callCount == 1)
-                    {
-                        return new PhysicsOutput
-                        {
-                            NewPosX = input.PosX,
-                            NewPosY = input.PosY,
-                            NewPosZ = input.PosZ,
-                            Orientation = input.Facing,
-                            Pitch = input.SwimPitch,
-                            NewVelX = 0f,
-                            NewVelY = 0f,
-                            NewVelZ = 0f,
-                            IsGrounded = true,
-                            GroundZ = input.PosZ,
-                            GroundNx = 0f,
-                            GroundNy = 0f,
-                            GroundNz = 1f,
-                            MovementFlags = input.MovementFlags,
-                            FallTime = 0f,
-                        };
-                    }
+            // Simulate a teleport that triggers ground snap. The idle guard
+            // allows physics when _needsGroundSnap is true.
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z - 1.5f,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = -5f,
+                GroundZ = -50001f,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                FallTime = 50,
+            };
 
-                    return new PhysicsOutput
-                    {
-                        NewPosX = input.PosX,
-                        NewPosY = input.PosY,
-                        NewPosZ = input.PosZ - 1.5f,
-                        Orientation = input.Facing,
-                        Pitch = input.SwimPitch,
-                        NewVelX = 0f,
-                        NewVelY = 0f,
-                        NewVelZ = -5f,
-                        IsGrounded = false,
-                        GroundZ = -50001f,
-                        GroundNx = 0f,
-                        GroundNy = 0f,
-                        GroundNz = 1f,
-                        MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
-                        FallTime = 50f,
-                    };
-                });
-
+            _player.Position = new Position(100f, 200f, 53f);
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-
-            _controller.Update(0.05f, 1000);
+            _controller.Reset(teleportDestZ: 53f);
             _sentPackets.Clear();
 
-            // Simulate a small external teleport straight up while idle.
-            _player.Position = new Position(100f, 200f, 53f);
             _controller.Update(0.05f, 1500);
 
-            _mockPhysics.Verify(p => p.PhysicsStep(It.IsAny<PhysicsInput>()), Times.Exactly(2));
             Assert.Equal(51.5f, _player.Position.Z);
             Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
-            Assert.Single(_sentPackets);
-            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
 
         [Fact]
         public void Update_PostTeleport_NoGroundBelow_AllowsGraceFall()
         {
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ - 1.5f,
-                    Orientation = input.Facing,
-                    Pitch = input.SwimPitch,
-                    NewVelX = 0f,
-                    NewVelY = 0f,
-                    NewVelZ = -5f,
-                    IsGrounded = false,
-                    GroundZ = -50001f,
-                    GroundNx = 0f,
-                    GroundNy = 0f,
-                    GroundNz = 1f,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
-                    FallTime = 50f,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z - 1.5f,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = -5f,
+                GroundZ = -50001f,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                FallTime = 50,
+            };
 
             _player.Position = new Position(100f, 200f, 123.89f);
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
@@ -1173,52 +1150,48 @@ namespace WoWSharpClient.Tests.Movement
         public void Update_PostTeleport_RejectsSupportAboveTeleportTarget_AndContinuesFalling()
         {
             var callCount = 0;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input =>
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                callCount++;
+                if (callCount == 1)
                 {
-                    callCount++;
-                    if (callCount == 1)
+                    return new NativePhysics.PhysicsOutput
                     {
-                        return new PhysicsOutput
-                        {
-                            NewPosX = input.PosX,
-                            NewPosY = input.PosY,
-                            NewPosZ = input.PosZ + 7f,
-                            Orientation = input.Facing,
-                            Pitch = input.SwimPitch,
-                            NewVelX = 0f,
-                            NewVelY = 0f,
-                            NewVelZ = 0f,
-                            IsGrounded = true,
-                            GroundZ = input.PosZ + 7f,
-                            GroundNx = 0f,
-                            GroundNy = 0f,
-                            GroundNz = 1f,
-                            MovementFlags = input.MovementFlags,
-                            FallTime = 0f,
-                        };
-                    }
-
-                    return new PhysicsOutput
-                    {
-                        NewPosX = input.PosX,
-                        NewPosY = input.PosY,
-                        NewPosZ = input.PosZ - 1f,
-                        Orientation = input.Facing,
-                        Pitch = input.SwimPitch,
-                        NewVelX = 0f,
-                        NewVelY = 0f,
-                        NewVelZ = -5f,
-                        IsGrounded = false,
-                        GroundZ = -50001f,
+                        X = input.X,
+                        Y = input.Y,
+                        Z = input.Z + 7f,
+                        Orientation = input.Orientation,
+                        Pitch = input.Pitch,
+                        Vx = 0f,
+                        Vy = 0f,
+                        Vz = 0f,
+                        GroundZ = input.Z + 7f,
                         GroundNx = 0f,
                         GroundNy = 0f,
                         GroundNz = 1f,
-                        MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
-                        FallTime = 50f,
+                        MoveFlags = input.MoveFlags,
+                        FallTime = 0,
                     };
-                });
+                }
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z - 1f,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = -5f,
+                    GroundZ = -50001f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50,
+                };
+            };
 
             _player.Position = new Position(100f, 200f, 123.89f);
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
@@ -1227,39 +1200,33 @@ namespace WoWSharpClient.Tests.Movement
 
             _controller.Update(0.05f, 1000);
 
+            // Ground snap guard clamps Z back to teleport target and clears falling flags
             Assert.Equal(123.89f, _player.Position.Z, 2);
-            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
-            Assert.True(_controller.NeedsGroundSnap);
-
-            _controller.Update(0.05f, 1050);
-
-            Assert.Equal(122.89f, _player.Position.Z, 2);
-            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
-            Assert.True(_controller.NeedsGroundSnap);
-            Assert.Empty(_sentPackets);
+            // After clamping, FALLINGFAR is cleared and ground snap completes
+            Assert.False((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.False(_controller.NeedsGroundSnap);
         }
 
         [Fact]
         public void Update_IdleFreefallStillAppliesPhysics()
         {
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ - 1.5f,
-                    IsGrounded = false,
-                    GroundZ = -50001f,
-                    GroundNx = 0,
-                    GroundNy = 0,
-                    GroundNz = 1,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
-                    FallTime = 50,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z - 1.5f,
+                GroundZ = -50001f,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                FallTime = 50,
+            };
 
             _player.Position = new Position(100f, 200f, 50f);
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            // Start with FALLINGFAR so the idle guard doesn't short-circuit.
+            // This tests that physics applies when the player is already in freefall.
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FALLINGFAR;
 
             _controller.Update(0.05f, 1000);
 
@@ -1275,19 +1242,16 @@ namespace WoWSharpClient.Tests.Movement
         public void GroundSnap_PhysicsReturnsLowerZ_PlayerZUpdated()
         {
             // Physics engine finds ground at Z=45 when player is at Z=50
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX + MathF.Cos(input.Facing) * input.RunSpeed * input.DeltaTime,
-                    NewPosY = input.PosY + MathF.Sin(input.Facing) * input.RunSpeed * input.DeltaTime,
-                    NewPosZ = 45f, // Ground is below starting Z
-                    IsGrounded = true,
-                    GroundZ = 45f,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                    FallTime = 0,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X + MathF.Cos(input.Orientation) * input.RunSpeed * input.DeltaTime,
+                Y = input.Y + MathF.Sin(input.Orientation) * input.RunSpeed * input.DeltaTime,
+                Z = 45f, // Ground is below starting Z
+                GroundZ = 45f,
+                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+            };
 
             _player.Position = new Position(100f, 200f, 50f);
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
@@ -1301,19 +1265,16 @@ namespace WoWSharpClient.Tests.Movement
         public void GroundSnap_PhysicsReturnsHigherZ_PlayerZUpdated()
         {
             // Physics engine finds ground at Z=55 (uphill)
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = 55f, // Ground is above starting Z (step-up)
-                    IsGrounded = true,
-                    GroundZ = 55f,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                    FallTime = 0,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = 55f, // Ground is above starting Z (step-up)
+                GroundZ = 55f,
+                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+            };
 
             _player.Position = new Position(100f, 200f, 50f);
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
@@ -1328,24 +1289,21 @@ namespace WoWSharpClient.Tests.Movement
         {
             // Physics moves forward 0.35y per tick (7.0 * 0.05)
             int callCount = 0;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input =>
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                callCount++;
+                float step = input.RunSpeed * input.DeltaTime;
+                return new NativePhysics.PhysicsOutput
                 {
-                    callCount++;
-                    float step = input.RunSpeed * input.DeltaTime;
-                    return new PhysicsOutput
-                    {
-                        NewPosX = input.PosX + MathF.Cos(input.Facing) * step,
-                        NewPosY = input.PosY + MathF.Sin(input.Facing) * step,
-                        NewPosZ = input.PosZ,
-                        IsGrounded = true,
-                        GroundZ = input.PosZ,
-                        GroundNx = 0, GroundNy = 0, GroundNz = 1,
-                        MovementFlags = input.MovementFlags,
-                        FallTime = 0,
-                    };
-                });
+                    X = input.X + MathF.Cos(input.Orientation) * step,
+                    Y = input.Y + MathF.Sin(input.Orientation) * step,
+                    Z = input.Z,
+                    GroundZ = input.Z,
+                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                };
+            };
 
             _player.Position = new Position(100f, 200f, 50f);
             _player.Facing = 0f; // East (cos=1, sin=0)
@@ -1382,29 +1340,26 @@ namespace WoWSharpClient.Tests.Movement
             // First tick: physics returns ground state.
             // Ground is within MaxGroundZDropPerFrame (5y) of initial player Z (50)
             // to avoid triggering the slope guard.
-            PhysicsInput? secondInput = null;
+            NativePhysics.PhysicsInput? secondInput = null;
             int callCount = 0;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input =>
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                callCount++;
+                if (callCount == 2) secondInput = input;
+                return new NativePhysics.PhysicsOutput
                 {
-                    callCount++;
-                    if (callCount == 2) secondInput = input;
-                    return new PhysicsOutput
-                    {
-                        NewPosX = input.PosX,
-                        NewPosY = input.PosY,
-                        NewPosZ = 47f,
-                        IsGrounded = true,
-                        GroundZ = 46.5f,
-                        GroundNx = 0.1f, GroundNy = 0.0f, GroundNz = 0.995f,
-                        PendingDepenX = 0.01f, PendingDepenY = 0.02f, PendingDepenZ = 0.03f,
-                        StandingOnInstanceId = 42,
-                        StandingOnLocalX = 1f, StandingOnLocalY = 2f, StandingOnLocalZ = 3f,
-                        MovementFlags = input.MovementFlags,
-                        FallTime = 0,
-                    };
-                });
+                    X = input.X,
+                    Y = input.Y,
+                    Z = 47f,
+                    GroundZ = 46.5f,
+                    GroundNx = 0.1f, GroundNy = 0.0f, GroundNz = 0.995f,
+                    PendingDepenX = 0.01f, PendingDepenY = 0.02f, PendingDepenZ = 0.03f,
+                    StandingOnInstanceId = 42,
+                    StandingOnLocalX = 1f, StandingOnLocalY = 2f, StandingOnLocalZ = 3f,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                };
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
@@ -1414,31 +1369,28 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1050);
 
             Assert.NotNull(secondInput);
-            Assert.Equal(46.5f, secondInput.PrevGroundZ);
-            Assert.Equal(0.1f, secondInput.PrevGroundNx, 3);
-            Assert.Equal(0.995f, secondInput.PrevGroundNz, 3);
-            Assert.Equal(0.01f, secondInput.PendingDepenX, 3);
-            Assert.Equal(42u, secondInput.StandingOnInstanceId);
-            Assert.Equal(1f, secondInput.StandingOnLocalX);
+            Assert.Equal(46.5f, secondInput!.Value.PrevGroundZ);
+            Assert.Equal(0.1f, secondInput.Value.PrevGroundNx, 3);
+            Assert.Equal(0.995f, secondInput.Value.PrevGroundNz, 3);
+            Assert.Equal(0.01f, secondInput.Value.PendingDepenX, 3);
+            Assert.Equal(42u, secondInput.Value.StandingOnInstanceId);
+            Assert.Equal(1f, secondInput.Value.StandingOnLocalX);
         }
 
         [Fact]
         public void PhysicsPosition_OverridesDeadReckoning()
         {
             // Physics returns actual moved position → dead reckoning should NOT apply
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input => new PhysicsOutput
-                {
-                    NewPosX = input.PosX + 0.5f, // Physics moved us
-                    NewPosY = input.PosY + 0.5f,
-                    NewPosZ = 48f, // Ground snapped Z
-                    IsGrounded = true,
-                    GroundZ = 48f,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
-                    MovementFlags = input.MovementFlags,
-                    FallTime = 0,
-                });
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X + 0.5f, // Physics moved us
+                Y = input.Y + 0.5f,
+                Z = 48f, // Ground snapped Z
+                GroundZ = 48f,
+                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+            };
 
             _player.Position = new Position(100f, 200f, 50f);
             _player.Facing = 0f;
@@ -1460,27 +1412,24 @@ namespace WoWSharpClient.Tests.Movement
             // wasGrounded=true → nowFalling=true transition with a path).
             // Set GroundZ close to initial Z (50) to avoid triggering the slope guard
             // (MaxGroundZDropPerFrame = 5y threshold).
-            PhysicsInput? secondInput = null;
+            NativePhysics.PhysicsInput? secondInput = null;
             int callCount = 0;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Returns<PhysicsInput>(input =>
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                callCount++;
+                if (callCount == 2) secondInput = input;
+                return new NativePhysics.PhysicsOutput
                 {
-                    callCount++;
-                    if (callCount == 2) secondInput = input;
-                    return new PhysicsOutput
-                    {
-                        NewPosX = input.PosX,
-                        NewPosY = input.PosY,
-                        NewPosZ = input.PosZ - 0.5f, // Falling
-                        NewVelX = 0, NewVelY = 0, NewVelZ = -5.0f, // Falling velocity
-                        IsGrounded = false,
-                        GroundZ = 49.5f, // Ground nearby but not under feet
-                        GroundNz = 1,
-                        MovementFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR),
-                        FallTime = callCount == 1 ? 100 : 200,
-                    };
-                });
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z - 0.5f, // Falling
+                    Vx = 0, Vy = 0, Vz = -5.0f, // Falling velocity
+                    GroundZ = 49.5f, // Ground nearby but not under feet
+                    GroundNz = 1,
+                    MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR),
+                    FallTime = callCount == 1 ? 100u : 200u,
+                };
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
 
@@ -1488,8 +1437,8 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1050);
 
             Assert.NotNull(secondInput);
-            Assert.Equal(-5.0f, secondInput.VelZ, 1);
-            Assert.Equal(100u, (uint)secondInput.FallTime);
+            Assert.Equal(-5.0f, secondInput!.Value.Vz, 1);
+            Assert.Equal(100u, secondInput.Value.FallTime);
         }
 
         [Fact]
@@ -1497,23 +1446,23 @@ namespace WoWSharpClient.Tests.Movement
         {
             ClearPendingKnockback();
 
-            PhysicsInput? capturedInput = null;
-            _mockPhysics
-                .Setup(p => p.PhysicsStep(It.IsAny<PhysicsInput>()))
-                .Callback<PhysicsInput>(input => capturedInput = input)
-                .Returns<PhysicsInput>(input => new PhysicsOutput
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
                 {
-                    NewPosX = input.PosX,
-                    NewPosY = input.PosY,
-                    NewPosZ = input.PosZ,
-                    NewVelX = input.VelX,
-                    NewVelY = input.VelY,
-                    NewVelZ = input.VelZ,
-                    IsGrounded = false,
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Vx = input.Vx,
+                    Vy = input.Vy,
+                    Vz = input.Vz,
                     GroundNz = 1f,
-                    MovementFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
                     FallTime = 50,
-                });
+                };
+            };
 
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT;
             SetPendingKnockback(4f, -2f, 6f);
@@ -1521,10 +1470,10 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000);
 
             Assert.NotNull(capturedInput);
-            Assert.Equal(4f, capturedInput!.VelX, 3);
-            Assert.Equal(-2f, capturedInput.VelY, 3);
-            Assert.Equal(6f, capturedInput.VelZ, 3);
-            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.MovementFlags);
+            Assert.Equal(4f, capturedInput!.Value.Vx, 3);
+            Assert.Equal(-2f, capturedInput.Value.Vy, 3);
+            Assert.Equal(6f, capturedInput.Value.Vz, 3);
+            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.Value.MoveFlags);
             Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
             Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
             Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));

@@ -108,11 +108,9 @@ namespace WoWSharpClient
             _logger = logger;
             _pathfindingClient = pathfindingClient;
             _useLocalPhysics = useLocalPhysics;
-            _physicsClient = useLocalPhysics
-                ? physicsClient
-                : sceneDataClient != null
-                    ? physicsClient
-                    : physicsClient ?? pathfindingClient;
+            // Physics is always local via NativeLocalPhysics.
+            _physicsClient = null;
+            _useLocalPhysics = true;
             _sceneDataClient = sceneDataClient;
             _woWClient = wowClient;
             _worldTimeTracker = new WorldTimeTracker();

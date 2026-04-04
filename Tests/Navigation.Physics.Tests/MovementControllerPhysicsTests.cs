@@ -61,7 +61,7 @@ public class MovementControllerPhysicsTests
                 It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var physics = new NativePathfindingClient();
+        // Physics is always local via NativeLocalPhysics — pass null for IPhysicsClient.
         var player = new WoWLocalPlayer(new HighGuid(42))
         {
             Position = new Position(x, y, z),
@@ -76,7 +76,7 @@ public class MovementControllerPhysicsTests
             SwimBackSpeed = 2.5f,
         };
 
-        var controller = new MovementController(mockClient.Object, physics, player);
+        var controller = new MovementController(mockClient.Object, null, player);
         return (controller, player, mockClient);
     }
 

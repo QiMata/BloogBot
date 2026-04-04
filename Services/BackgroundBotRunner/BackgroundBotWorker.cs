@@ -222,17 +222,19 @@ namespace BackgroundBotRunner
                     runtimeMode,
                     BackgroundPhysicsRuntimeModeResolver.Describe(runtimeMode));
 
+                // Physics is always local via NativeLocalPhysics — no remote physics fallback.
                 objectManager.Initialize(wowClient, pathfindingClient,
                     _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
-                    physicsClient: runtimeMode == BackgroundPhysicsRuntimeMode.SharedPathfinding ? pathfindingClient : null,
+                    physicsClient: null,
                     sceneDataClient: runtimeMode == BackgroundPhysicsRuntimeMode.LocalSceneSlices ? sceneDataClient : null,
-                    useLocalPhysics: runtimeMode != BackgroundPhysicsRuntimeMode.SharedPathfinding);
+                    useLocalPhysics: true);
             }
             else
             {
                 objectManager.Initialize(wowClient, pathfindingClient,
                     _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
-                    physicsClient: pathfindingClient);
+                    physicsClient: null,
+                    useLocalPhysics: true);
             }
 
             var initialWorldClient = WoWClientFactory.CreateWorldClient();
