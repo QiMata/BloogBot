@@ -423,7 +423,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.24 | **Create `ProgressionPlanner.cs`** — Already exists with priority-ordered goal evaluation. | **Done** (pre-existing) |
 | 22.25 | **Wire ProgressionPlanner into StateManager** — Already wired in CharacterStateSocketListener. | **Done** (pre-existing) |
-| 22.26 | **Progress dashboard in snapshot** — Add `ProgressionStatus` proto message: `message ProgressionStatus { float gearCompletionPct = 1; int32 goldProgress = 2; repeated ReputationProgress repProgress = 3; repeated ItemProgress itemProgress = 4; string currentObjective = 5; }`. Add to WoWActivitySnapshot. StateManager populates. UI and monitoring can display per-bot progress toward goals. | Open |
+| 22.26 | **Progress dashboard in snapshot** — `ProgressionStatus` proto added to WoWActivitySnapshot field 23. | **Done** (7b504352) |
 
 ### 22I — Pre-Built Character Templates
 
@@ -476,7 +476,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 21.6 | **Create `TakeFlightPathTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/TakeFlightPathTask.cs`. Steps: (1) Navigate to nearest discovered flight master NPC (use FlightPathData to find position, GoTo sub-task). (2) Interact with flight master (right-click/CMSG_GOSSIP_HELLO). (3) Wait for SMSG_SHOWTAXINODES. (4) Call `FlightMasterNetworkClientComponent.ActivateFlightAsync(masterGuid, sourceNodeId, destNodeId)`. (5) Detect flight completion: position stops changing for 3s after being in-flight (or SMSG_MONSTER_MOVE_TRANSPORT with spline completed). (6) Pop task. Timeout: 5 minutes (longest vanilla flight). | Open |
 | 21.7 | **Integrate flight legs into CrossMapRouter** — Currently `CrossMapRouter.PlanRoute()` plans Walk, Elevator, Boat, Zeppelin, DungeonPortal legs. Add `FlightPath` leg type. When planning a Walk leg >200y on same map, check if a flight path shortcut exists: find nearest discovered flight node to start, find nearest discovered flight node to destination, if flight saves >50% of walk time, insert FlightPath leg. Requires `TravelOptions.DiscoveredFlightNodes`. | Open |
-| 21.8 | **Flight path discovery tracking** — Add `discoveredFlightNodes` repeated uint32 field to `WoWPlayer` proto message. BotRunner populates from `FlightMasterNetworkClientComponent.AvailableTaxiNodes`. StateManager reads from snapshot to pass into route planning. Persist discovered nodes per character (survive logout). | Open |
+| 21.8 | **Flight path discovery tracking** — `discoveredFlightNodes` repeated uint32 added to WoWPlayer proto field 44. | **Done** (7b504352) |
 
 ### 21C — Hearthstone Integration
 
