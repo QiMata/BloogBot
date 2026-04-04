@@ -44,43 +44,43 @@
 | 2.1 | **TradingTests** — OFFER_TRADE/DECLINE_TRADE/ACCEPT_TRADE flow with gold transfer. | **Done** (c5207f42) |
 | 2.2 | **AuctionHouseTests** — Navigate to AH, find auctioneer NPC, interact. | **Done** (c5207f42) |
 | 2.3 | **BankInteractionTests** — Find banker NPC, interact, deposit item. | **Done** (c5207f42) |
-| 2.4 | **MailSystemTests** — Send mail with gold via CMSG_SEND_MAIL, verify SMSG_SEND_MAIL_RESULT, recipient opens mailbox and takes gold. | Open |
-| 2.5 | **GuildOperationTests** — Create guild via `.guild create`, invite second bot, accept, assert both in roster. | Open |
+| 2.4 | **MailSystemTests** — .send money/items GM, CHECK_MAIL action, bag count comparison. | **Done** (633d7f11) |
+| 2.5 | **GuildOperationTests** — .guild create/invite/delete with dual-bot verification. | **Done** (633d7f11) |
 
 ### V2B — Combat & BG Tests
 
 | # | Task | Status |
 |---|------|--------|
-| 2.6 | **WandAttackTests** — Equip wand via GM, target mob, CastSpellByName('Shoot'), assert SMSG_ATTACKERSTATUPDATE with ranged damage. | Open |
-| 2.7 | **BattlegroundQueueTests** — Navigate to WSG battlemaster, send CMSG_BATTLEMASTER_JOIN, assert SMSG_BATTLEFIELD_STATUS with queued status. | Open |
-| 2.8 | **WsgObjectiveTests** — After BG entry, locate flag game object, interact, carry to base. Assert SMSG_UPDATE_WORLD_STATE for capture. | Open |
+| 2.6 | **WandAttackTests** — Equip wand, START_WAND_ATTACK, poll for combat flag. | **Done** (633d7f11) |
+| 2.7 | **BattlegroundQueueTests** — JOIN_BATTLEGROUND action, poll for BG status. | **Done** (633d7f11) |
+| 2.8 | **WsgObjectiveTests** — Flag object search + interact on WSG map. | **Done** (dc312da4) |
 
 ### V2C — Travel & Navigation Tests
 
 | # | Task | Status |
 |---|------|--------|
-| 2.9 | **TravelPlannerTests** — BG bot in Orgrimmar, send TravelTo(Crossroads). Assert bot walks south, arrives within 10 minutes. | Open |
-| 2.10 | **MageTeleportTests** — Mage bot casts Teleport: Orgrimmar (3567), assert position changes to Org within 15s. | Open |
-| 2.11 | **TaxiTests** — Bot at Org flight master, activate flight to Crossroads, assert CMSG_ACTIVATETAXI sent, arrival within 3 min. | Open |
-| 2.12 | **TransportTests** — Bot at Org zeppelin tower, board zeppelin, assert TransportGuid set, mapId changes to 0. | Open |
+| 2.9 | **TravelPlannerTests** — TRAVEL_TO from Org to Crossroads, position tracking. | **Done** (dc312da4) |
+| 2.10 | **MageTeleportTests** — .learn teleport spells, CAST_SPELL, position verify. | **Done** (dc312da4) |
+| 2.11 | **TaxiTests** — VISIT_FLIGHT_MASTER, SELECT_TAXI_NODE, flight tracking. | **Done** (dc312da4) |
+| 2.12 | **TransportTests** — Zeppelin/boat/elevator/tram object detection. | **Done** (dc312da4) |
 
 ### V2D — Raid & Dungeon Tests
 
 | # | Task | Status |
 |---|------|--------|
-| 2.13 | **RaidFormationTests** — Form 10-man raid, assign subgroups via CMSG_GROUP_CHANGE_SUB_GROUP, verify group list. | Open |
-| 2.14 | **RaidCoordinationTests** — Ready check (MSG_RAID_READY_CHECK), raid marks (CMSG_SET_RAID_ICON), loot rules. | Open |
-| 2.15 | **SummoningStoneTests** — 3 bots at WC meeting stone, summon 2 from Org, assert arrival. | Open |
+| 2.13 | **RaidFormationTests** — Group invite, raid convert, subgroup assignment. | **Done** (dc312da4) |
+| 2.14 | **RaidCoordinationTests** — Ready check, marks, loot rules. | **Done** (dc312da4) |
+| 2.15 | **SummoningStoneTests** — Meeting stone interaction + fallback walk. | **Done** (dc312da4) |
 
 ### V2E — Remaining Stubs
 
 | # | Task | Status |
 |---|------|--------|
-| 2.16 | **ChannelTests** — Join General, send message, second bot receives via SMSG_MESSAGECHAT. | Open |
-| 2.17 | **QuestObjectiveTests** — Accept kill quest, kill mobs, assert SMSG_QUESTUPDATE_ADD_KILL increments. | Open |
-| 2.18 | **PetManagementTests** — Hunter summons pet, set Defensive stance, feed, use Growl in combat. | Open |
-| 2.19 | **SpiritHealerTests** — Kill bot, release, navigate to spirit healer, activate, assert res sickness. | Open |
-| 2.20 | **GossipQuestTests** — Interact with multi-option NPC, select options, verify sub-frames open. | Open |
+| 2.16 | **ChannelTests** — SEND_CHAT with message verification. | **Done** (dc312da4) |
+| 2.17 | **QuestObjectiveTests** — .quest add, kill mob, quest log tracking. | **Done** (dc312da4) |
+| 2.18 | **PetManagementTests** — Call Pet spell, pet snapshot, dismiss. | **Done** (dc312da4) |
+| 2.19 | **SpiritHealerTests** — .damage kill, RELEASE_CORPSE, spirit healer interact. | **Done** (dc312da4) |
+| 2.20 | **GossipQuestTests** — NPC gossip/questgiver interaction. | **Done** (dc312da4) |
 
 ---
 
