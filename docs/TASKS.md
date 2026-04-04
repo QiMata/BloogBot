@@ -633,7 +633,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 10.4 | **Warsong Gulch objectives** — Create `WsgObjectiveTask.cs` in `Exports/BotRunner/Tasks/Battlegrounds/`. Implements: flag pickup (interact with game object), flag carry (move to base), flag capture (interact at home base), flag return (interact with dropped flag). Uses existing `CMSG_GAMEOBJ_USE` for flag objects. Detect flag state from `SMSG_UPDATE_WORLD_STATE` packets. | Open |
+| 10.4 | **Warsong Gulch objectives** — `WsgObjectiveTask.cs` with flag pickup/carry/capture/defend. | **Done** (76614674) |
 | 10.5 | **Arathi Basin objectives** — Create `AbObjectiveTask.cs`. Implements: node assault (interact with banner game object), node defense (stay in range, attack enemies), node status from world state updates. 5 nodes: Stables, Farm, Blacksmith, Lumber Mill, Gold Mine. | Open |
 | 10.6 | **Alterac Valley objectives** — Create `AvObjectiveTask.cs`. Implements: tower assault/defense, graveyard capture, general kill coordination (40-man raid boss fight). Uses existing raid target system for marking priorities. | Open |
 | 10.7 | **BG target prioritization** — `BgTargetSelector.cs` with health/mana heuristics. | **Done** (c1bcbbf0) |
@@ -673,9 +673,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 11.5 | **Threat management** — `ThreatTracker.cs` with damage/healing threat + throttle check. | **Done** (5cfc1183) |
-| 11.6 | **Positional awareness** — Create `EncounterPositioning.cs`. Define boss hitbox avoidance zones (front cleave, tail swipe). Melee DPS position behind boss. Ranged/healers stay at max range. Use existing `CombatReach` + `BoundingRadius` from unit data. | Open |
+| 11.6 | **Positional awareness** — `EncounterPositioning.cs` with melee/ranged/tank positions + cleave zones. | **Done** (76614674) |
 | 11.7 | **Boss mechanic responses** — Create `EncounterMechanicsTask.cs`. Data-driven: load encounter definitions from JSON. Mechanics: spread (move away from nearby allies), stack (move to designated point), interrupt (cast counterspell on boss channel), dispel (remove debuff from ally), taunt swap (off-tank taunts at N stacks). | Open |
-| 11.8 | **Raid cooldown coordination** — Create `RaidCooldownCoordinator.cs`. Track raid-wide cooldowns: Innervate, Power Infusion, Tranquility, Divine Shield. Sequence them to avoid overlap. Announce usage via raid chat. | Open |
+| 11.8 | **Raid cooldown coordination** — `RaidCooldownCoordinator.cs` with overlap prevention. | **Done** (76614674) |
 
 ### 11C — Master Loot
 
