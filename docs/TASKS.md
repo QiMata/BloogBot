@@ -17,7 +17,7 @@
 |-------|--------|--------|---------|-------|
 | WoWSharpClient.Tests | 1410 | 0 | 1 | All green after V1.1 reflection fix |
 | Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator Z sync (known) |
-| BotRunner.Tests (unit) | TBD | TBD | ~80 | LiveValidation tests skip without infra |
+| BotRunner.Tests (non-infra) | 624 | 12 | 4 | Pre-V2 run; 12 failures likely LiveValidation infra-dependent |
 
 ---
 
