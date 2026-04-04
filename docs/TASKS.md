@@ -93,7 +93,7 @@
 |---|------|------|
 | 23.1 | **Extend BackgroundPacketTraceRecorder to capture ALL opcodes** — Added `PacketSent`/`PacketReceived` events to WoWClient, WorldClient, PacketPipeline. BackgroundPacketTraceRecorder now captures all CMSG+SMSG opcodes in both directions, matching FG's PacketLogger coverage. | **Done** (1464e7d) |
 | 23.2 | **Add packet payload recording** — Current CSV captures opcode+size only. Add binary payload dump for interaction opcodes (AH, bank, mail, vendor, trainer). Save as sidecar `.bin` file alongside CSV. | Open |
-| 23.3 | **Create `PacketSequenceComparator` test helper** — Compares FG and BG packet traces for a given interaction. Input: two CSV files. Output: opcode sequence diff, missing/extra packets, timing delta. File: `Tests/Tests.Infrastructure/PacketSequenceComparator.cs`. | Open |
+| 23.3 | **Create `PacketSequenceComparator`** — `Tests/Tests.Infrastructure/PacketSequenceComparator.cs`. Parses CSV, compares opcodes, counts, timing. | **Done** (session 302) |
 
 ### 23B — Auction House Tests
 
@@ -398,7 +398,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.15 | **Skill training priority config** — `CharacterBuildConfig.SkillPriorities` is an ordered list like: `["Mining:300", "Engineering:300", "FirstAid:300", "Cooking:225"]`. Each entry: `profession:targetLevel`. StateManager evaluates current skill levels (from snapshot's `skillInfo` map) against targets. When a skill is below target and trainable, push trainer visit + gather/craft activities. | Open |
-| 22.16 | **Profession trainer location data** — File: `Exports/BotRunner/Progression/ProfessionTrainerData.cs`. Static data: trainer NPC positions for all professions at all tier thresholds. E.g., Mining Apprentice trainer in Orgrimmar (mapId=1, pos), Mining Journeyman in Orgrimmar, Mining Expert in Darnassus/Ironforge, Mining Artisan in Gadgetzan. ~100 entries covering all professions × faction × tier. | Open |
+| 22.16 | **Profession trainer location data** — `ProfessionTrainerData.cs` already exists with trainer records. | **Done** (pre-existing) |
 | 22.17 | **Auto-train on skill threshold** — When a profession hits a tier boundary (75 Journeyman, 150 Expert, 225 Artisan), StateManager detects the cap from snapshot skillInfo. Pushes: (1) TravelTo trainer (via P21). (2) TrainSkill action. (3) Resume previous activity. Insert this as a high-priority interrupt. | Open |
 
 ### 22F — Gold & Economy Goals
@@ -485,7 +485,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 21.9 | **Create `UseHearthstoneTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/UseHearthstoneTask.cs`. Steps: (1) Find hearthstone in inventory via `ConsumableData.FindHearthstone()`. (2) Stop all movement. (3) Cast hearthstone: FG uses `ObjectManager.UseItem(bagId, slotId)`, BG uses `CMSG_USE_ITEM` with item GUID. (4) Wait for 10s cast bar (SMSG_SPELL_START with spell 8690 "Hearthstone"). (5) Detect teleport: position delta >100y or mapId change. (6) Pop task. Cancel if interrupted (combat, movement). | Open |
 | 21.10 | **Hearthstone cooldown tracking** — Track hearthstone cooldown from `SMSG_SPELL_COOLDOWN` or item cooldown field in SMSG_UPDATE_OBJECT. Add `HearthstoneCooldownRemainingSec` to snapshot's MovementData or a new travel-state field. `CrossMapRouter` checks this: if hearthstone is off cooldown AND bind point is within 50y of a good intermediate for the route, prefer hearthstone leg. | Open |
 | 21.11 | **Create `SetBindPointTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/SetBindPointTask.cs`. Steps: (1) Navigate to innkeeper NPC (find by `UNIT_NPC_FLAG_INNKEEPER` 0x80). (2) Interact (right-click/gossip). (3) Select "Make this inn your home" gossip option (GossipTypes.Binder = 5). (4) Wait for SMSG_BINDPOINTUPDATE confirming new bind location. (5) Pop task. | Open |
-| 21.12 | **Innkeeper location data** — File: `Exports/BotRunner/Travel/InnkeeperData.cs`. Static data: major city innkeeper positions (Orgrimmar, Undercity, Thunder Bluff, Stormwind, Ironforge, Darnassus) + key quest hub innkeepers (Crossroads, Tarren Mill, Southshore, Lakeshire, etc.). ~30 entries with mapId, position, faction. Used by TravelTask to decide when to set a new bind point (e.g., when assigned to a new grind zone). | Open |
+| 21.12 | **Innkeeper location data** — `InnkeeperData.cs` with 26 innkeepers (Horde/Alliance/Neutral). | **Done** (session 302) |
 
 ### 21D — Missing Transport Data
 
@@ -499,7 +499,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.16 | **Mage teleport spell data** — File: `Exports/BotRunner/Travel/MageTeleportData.cs`. Define all mage teleport/portal spell IDs and their destinations. Teleport (self, 10min CD): Orgrimmar(3567), Undercity(3563), Thunder Bluff(3566), Stormwind(3561), Ironforge(3562), Darnassus(3565). Portal (group, 1min CD, requires reagent Rune of Portals 17032): Portal:Org(11417), Portal:UC(11418), Portal:TB(11420), Portal:SW(10059), Portal:IF(11416), Portal:Darn(11419). Each entry: spellId, destinationMapId, destinationPosition, reagentItemId, cooldownSec, faction. | Open |
+| 21.16 | **Mage teleport spell data** — `MageTeleportData.cs` already exists. | **Done** (pre-existing) |
 | 21.17 | **Create `MageTeleportTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/MageTeleportTask.cs`. If bot IS a mage: (1) Check spell known. (2) Check cooldown. (3) Check reagent (for portal). (4) Stop movement. (5) Cast spell. (6) Detect teleport (mapId change or position delta >100y). If bot is NOT a mage but party has one: request mage to cast portal via party chat or coordinated action. | Open |
 | 21.18 | **Warlock Ritual of Summoning** — File: `Exports/BotRunner/Tasks/Travel/WarlockSummonTask.cs`. Spell ID 698 (Ritual of Summoning). Requires: 3 party members, Soul Shard reagent. Warlock casts, 2 helpers click portal. Target clicks accept. Add `CMSG_MEETINGSTONE_JOIN` / `SMSG_MEETINGSTONE_COMPLETE` handling in a new `SummoningNetworkClientComponent`. CrossMapRouter: if party has warlock + 2 members at destination, prefer summon over transport (0 travel time). | Open |
 | 21.19 | **Meeting stone summoning** — Similar to warlock summon but at dungeon meeting stones. GameObjectType 23. Bot walks to meeting stone, interacts via `CMSG_MEETINGSTONE_JOIN`, waits for `SMSG_MEETINGSTONE_COMPLETE`. Used to summon offline group members to dungeon entrance. | Open |
