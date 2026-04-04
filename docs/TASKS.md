@@ -366,7 +366,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 22.1 | **Add `CharacterBuildConfig` to CharacterSettings** — Added TargetGearSet, ReputationGoals, ItemGoals, MountGoal fields. | **Done** (c15b6773) |
 | 22.2 | **Make spec configurable** — Already wired: BuildConfig.SpecName → WWOW_CHARACTER_SPEC → BotProfileResolver.Resolve. | **Done** (pre-existing) |
 | 22.3 | **Make talent build configurable** — Already wired: BuildConfig.TalentBuildName → WWOW_TALENT_BUILD env var. | **Done** (pre-existing) |
-| 22.4 | **Add build config to proto snapshot** — Add `CharacterBuildConfig buildConfig = 21` field to `WoWActivitySnapshot` (or a new `CharacterGoals` sub-message). StateManager populates from CharacterSettings. BotRunner reads to drive behavior. DecisionEngineService reads to prioritize actions toward goals. | Open |
+| 22.4 | **Add build config to proto snapshot** — `CharacterGoals` proto message added to WoWActivitySnapshot field 22. | **Done** (d9bdf4bd) |
 
 ### 22B — Gear Progression System (BiS Lists & Target Sets)
 
@@ -482,7 +482,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.9 | **Create `UseHearthstoneTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/UseHearthstoneTask.cs`. Steps: (1) Find hearthstone in inventory via `ConsumableData.FindHearthstone()`. (2) Stop all movement. (3) Cast hearthstone: FG uses `ObjectManager.UseItem(bagId, slotId)`, BG uses `CMSG_USE_ITEM` with item GUID. (4) Wait for 10s cast bar (SMSG_SPELL_START with spell 8690 "Hearthstone"). (5) Detect teleport: position delta >100y or mapId change. (6) Pop task. Cancel if interrupted (combat, movement). | Open |
+| 21.9 | **Create `UseHearthstoneTask.cs`** — Finds hearthstone, casts, detects teleport. | **Done** (d9bdf4bd) |
 | 21.10 | **Hearthstone cooldown tracking** — Track hearthstone cooldown from `SMSG_SPELL_COOLDOWN` or item cooldown field in SMSG_UPDATE_OBJECT. Add `HearthstoneCooldownRemainingSec` to snapshot's MovementData or a new travel-state field. `CrossMapRouter` checks this: if hearthstone is off cooldown AND bind point is within 50y of a good intermediate for the route, prefer hearthstone leg. | Open |
 | 21.11 | **Create `SetBindPointTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/SetBindPointTask.cs`. Steps: (1) Navigate to innkeeper NPC (find by `UNIT_NPC_FLAG_INNKEEPER` 0x80). (2) Interact (right-click/gossip). (3) Select "Make this inn your home" gossip option (GossipTypes.Binder = 5). (4) Wait for SMSG_BINDPOINTUPDATE confirming new bind location. (5) Pop task. | Open |
 | 21.12 | **Innkeeper location data** — `InnkeeperData.cs` with 26 innkeepers (Horde/Alliance/Neutral). | **Done** (session 302) |
@@ -491,7 +491,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.13 | **Add Deeprun Tram** — Add to `MapTransitionGraph`: Ironforge (Map 0, position near tram entrance) ↔ Stormwind (Map 0, position near tram exit). TransitionType = `Tram`. Add to `TransportData`: Deeprun Tram entries with boarding positions at both stations. Both Alliance-only. Tram is a short ride (~30s). Create `RideDeeprunTramTask.cs` or extend TransportWaitingLogic. | Open |
+| 21.13 | **Add Deeprun Tram** — Already in MapTransitionGraph with Ironforge↔Stormwind transitions. | **Done** (pre-existing) |
 | 21.14 | **Add missing dungeon portals to MapTransitionGraph** — All vanilla dungeon/raid maps already defined in MapTransitionGraph.cs. | **Done** (pre-existing) |
 | 21.15 | **Add all raid instance portals** — Already in MapTransitionGraph: MC, BWL, Onyxia, AQ20, AQ40, Naxx. | **Done** (pre-existing) |
 
