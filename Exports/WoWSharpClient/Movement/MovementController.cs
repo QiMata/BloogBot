@@ -153,7 +153,6 @@ namespace WoWSharpClient.Movement
         private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
         // _accumulatedDelta removed — was causing π speed multiplier bug in dead-reckoning
         private int _frameCounter = 0;
-        private int _forwardFrameLogCount = 0;
         private int _movementDiagCounter = 0;
         private Vector3 _lastPacketPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
 
@@ -258,16 +257,10 @@ namespace WoWSharpClient.Movement
             ApplyPhysicsResult(physicsResult, deltaSec);
             var newPhysicsPos = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
             var frameDelta = (newPhysicsPos - _lastPhysicsPosition).Length();
-            // Log early frames with FORWARD to diagnose zero-displacement issues.
-            // First 20 FORWARD frames get logged, then every 100th.
-            bool hasForward = (_player.MovementFlags & MovementFlags.MOVEFLAG_FORWARD) != 0;
-            if (hasForward && (_forwardFrameLogCount < 20 || _frameCounter % 100 == 1))
+            if (_frameCounter % 100 == 1 && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
             {
-                _forwardFrameLogCount++;
-                Log.Warning("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y expected={Expected:F3}y runSpeed={RunSpeed:F2} flags=0x{Flags:X} pos=({X:F1},{Y:F1},{Z:F1}) wallHit={WallHit} blocked={Blocked:F2}",
-                    _frameCounter, deltaSec, frameDelta, deltaSec * _player.RunSpeed, _player.RunSpeed, (uint)_player.MovementFlags,
-                    _player.Position.X, _player.Position.Y, _player.Position.Z,
-                    physicsResult.HitWall, physicsResult.BlockedFraction);
+                Log.Information("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y expected={Expected:F3}y flags=0x{Flags:X}",
+                    _frameCounter, deltaSec, frameDelta, deltaSec * _player.RunSpeed, (uint)_player.MovementFlags);
             }
 
             ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
