@@ -724,12 +724,7 @@ extern "C"
         return g_testMapLoader->GetHeight(mapId, x, y);
     }
 
-    /// Gets the combined ground Z (VMAP + ADT) at a position.
-    /// Queries both WMO/M2 model geometry and ADT terrain, returns highest walkable surface <= z + 0.5.
-    __declspec(dllexport) float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
-    {
-        return SceneQuery::GetGroundZ(mapId, x, y, z, maxSearchDist);
-    }
+    // GetGroundZ moved to DllMain.cpp (production export, available on all platforms).
 
     /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.
     /// Forces VMAP initialization if not already loaded. Returns ground Z from raw VMAP data.
