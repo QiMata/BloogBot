@@ -94,4 +94,5 @@ public enum CharacterAction
     JoinBattleground,   // Queue for a battleground via battlemaster NPC interaction. Params: int bgTypeId, int expectedMapId.
     AcceptBattleground, // Accept a pending BG invite.
     LeaveBattleground,  // Leave the current battleground.
+    TravelTo,           // Navigate to a target position on any map via CrossMapRouter. Params: int mapId, float x, float y, float z.
 }

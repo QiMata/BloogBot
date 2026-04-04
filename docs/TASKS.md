@@ -374,7 +374,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.5 | **Define `GearGoal` model** — `GearGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.6 | **Create pre-built BiS gear sets** — File: `Exports/BotRunner/Progression/PreRaidBisSets.cs`. Static data: one `List<GearGoal>` per spec (27 sets). Example for Fury Warrior pre-raid BiS: Lionheart Helm (head, craft), Onyxia Tooth Pendant (neck, Onyxia), Truestrike Shoulders (shoulder, UBRS), Cape of the Black Baron (back, Strat Baron), Savage Gladiator Chain (chest, BRD), etc. Each entry includes item ID, slot, source dungeon/quest/craft, and priority tier. Load from JSON files: `Config/BisSets/WarriorFury.json`. | Open |
-| 22.7 | **Gear evaluation against target set** — Extend `EquipmentService` with `EvaluateAgainstBiS(IObjectManager, List<GearGoal>)`. Returns: `List<GearGap>` — slots where current item != target item, sorted by priority. Each gap includes: slot, current item ID, target item ID, source (where to get it). StateManager uses this to decide: "bot needs Cape of the Black Baron → assign Stratholme Baron farming". | Open |
+| 22.7 | **Gear evaluation against target set** — `GearEvaluationService.EvaluateGaps()` already exists. | **Done** (pre-existing) |
 | 22.8 | **Gear-driven activity selection** — In StateManager's action injection, when bot is idle and has gear gaps: pick highest-priority gap, resolve source to an activity. Source mapping: "Dungeon:X" → push DungeoneeringTask for dungeon X, "Quest:X" → push QuestingTask for quest X, "Craft:X" → push CraftTask (need materials), "AH" → push AH scan + purchase, "Vendor:X" → push TravelTo vendor + BuyItem. | Open |
 
 ### 22C — Reputation Goal System

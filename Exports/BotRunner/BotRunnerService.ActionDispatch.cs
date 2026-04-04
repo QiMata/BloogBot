@@ -979,6 +979,28 @@ namespace BotRunner
                         break;
                     }
 
+                    case CharacterAction.TravelTo:
+                    {
+                        // Params: [0]=mapId (int), [1]=x (float), [2]=y (float), [3]=z (float)
+                        var targetMapId = (uint)(int)actionEntry.Item2[0];
+                        var targetX = (float)actionEntry.Item2[1];
+                        var targetY = (float)actionEntry.Item2[2];
+                        var targetZ = (float)actionEntry.Item2[3];
+                        builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
+                        {
+                            // TODO (P21.2): Push TravelTask that decomposes via CrossMapRouter.
+                            // For now, use simple GOTO for same-map travel.
+                            if (_objectManager.Player.MapId == targetMapId)
+                            {
+                                _objectManager.MoveToward(new Position(targetX, targetY, targetZ));
+                                return BehaviourTreeStatus.Running;
+                            }
+                            Log.Warning("[BOT RUNNER] TravelTo cross-map not yet implemented (target map {Map})", targetMapId);
+                            return BehaviourTreeStatus.Failure;
+                        });
+                        break;
+                    }
+
                     default:
                         break;
                 }
