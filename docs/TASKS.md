@@ -1042,15 +1042,20 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-04-03 (session 300)
+- **Last updated:** 2026-04-04 (session 301)
 - **Branch:** `main`
-- **Session 300 — NavigationTests PASSING; containerized services operational; physics wall-contact bug identified:**
-  - **Service simplification:** PathfindingService 967→260 lines (path-only). Physics/GroundZ/LOS/navmesh local via P/Invoke. Physics.cs deleted.
-  - **Containerization fixes:** GetGroundZ export, ground snap FALLINGFAR, CrashMonitor Docker, scene slice VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID fix.
-  - **Navigation test GREEN:** Bot navigates VoT (-601,-4297)→(-630,-4340) via containerized PathfindingService. 78s arrival. Teleport race avoided by using login position.
-  - **Mining test progress:** 15 copper candidates found, GatheringRouteTask dispatched, bot navigates. BUT: ~1y/s speed (expected 7y/s). Root cause: `CollisionStepWoW` `wallHit=1 nZ=1.0` — `ResolveGroundedWallContacts` blocks horizontal movement on flat terrain.
+- **Session 301 — FALLINGFAR feedback loop fixed (binary parity); Z oscillation blocker identified:**
+  - **Root cause found and fixed:** `PhysicsEngine.StepV2` used input FALLINGFAR flag to bypass ground collision path (`useAirbornePath`). Created permanent feedback loop — once FALLINGFAR was set, air movement never detected ground, never cleared FALLINGFAR. Fix: `useAirbornePath` now based on `was_grounded` (previous frame physics output), not input flags. Matches WoW.exe binary at VA 0x633840.
+  - **Result:** SNAP_POS now shows `flags=0x1` (FORWARD, no FALLINGFAR) on flat VoT terrain. Bot navigates with correct heading. `frameDelta=0.112-0.146y/frame` = correct physics displacement.
+  - **Remaining blocker:** Bot gets stuck at Z=67 when ground should be Z=38. The AABB terrain query (`TestTerrainAABB`) picks up contacts from a wrong terrain layer (multi-level terrain disambiguation). Bot oscillates between Z=31-67, triggering STUCK-L1/L2/L3 recoveries. Need to fix the chooser probe logic at line 4942 to maintain layer continuity.
+  - Docker containers rebuilt with fix. Navigation test still GREEN.
+  - Commits: `fb4cbb07`
+  - **Next steps:** Fix multi-level terrain Z oscillation in `CollisionStepWoW` chooser probe. Once Z is stable, movement speed should reach 7y/s and mining test should pass.
+- **Session 300 — containerized services operational; PathfindingService stripped to path-only:**
+  - Service simplification: PathfindingService 967→260 lines (path-only). Physics/GroundZ/LOS/navmesh local via P/Invoke. Physics.cs deleted.
+  - Containerization fixes: GetGroundZ export, ground snap FALLINGFAR, CrashMonitor Docker, scene slice VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID fix.
+  - Navigation test GREEN: Bot navigates VoT (-601,-4297)→(-630,-4340) via containerized PathfindingService.
   - Commits: `b15365e9` through `8faa5618`
-  - **Next blocker:** Physics `ResolveGroundedWallContacts` treating flat terrain as wall. Pre-existing bug, not containerization. Once fixed, mining/gathering/combat should pass at normal speed.
 - **Session 299 — split Pathfinding/SceneData services are live on Linux with mounted data volumes; live matrix still pending completion:**
   - Validated the current split-service deployment on `docker-compose.vmangos-linux.yml`: `pathfinding-service` and `scene-data-service` are both running, publishing `5001`/`5003`, and serving from mounted `/wwow-data`.
   - Runtime logs show the expected behavior: Pathfinding preload across the discovered map set and SceneData readiness on `0.0.0.0:5003` with initialized scene/nav coverage.
