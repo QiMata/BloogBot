@@ -1944,3 +1944,43 @@ Re-extracted vmaps from 1.12.1 client MPQs using VMaNGOS VMapExtractor. Regenera
 | FISH-UNIT-001 | Fix 7 pre-existing FishingData/FishingTask unit test failures (1315/1315 pass) | facd3e7 |
 | BG-FRAMES-001 | Null guard GossipFrame, TaxiFrame, QuestFrame, TrainerFrame, TalentFrame, CraftFrame sequences | 6f93ea7 |
 | BG-PET-001 | BG pet discovery from SMSG_UPDATE_OBJECT + Attack/Follow/Cast via CMSG_PET_ACTION + SMSG_PET_SPELLS handler | 26552ca, 34fdc2d |
+
+## P4 — Movement Flags After Teleport (CLOSED) — Archived session 300
+
+ConnectionStateMachine handles MSG_MOVE_TELEPORT/ACK. MovementController.Reset() clears flags to MOVEFLAG_NONE. FG packet evidence captured; BG flag reset verified by deterministic test.
+
+| # | Task | Status |
+|---|------|--------|
+| 4.1 | Capture FG teleport packets | Done (session 188) |
+| 4.2 | Compare BG teleport behavior | Done |
+| 4.3 | Fix remaining flag issues | Done — no divergence |
+
+## P5 — Ragefire Chasm 10-Man Dungeoneering Test — Archived session 300
+
+All 8 tasks completed. DungeoneeringCoordinator orchestrates 10 bots through RFC.
+
+| # | Task | Status |
+|---|------|--------|
+| 5.1-5.8 | All RFC dungeoneering tasks | Done |
+
+## PathfindingService Simplification — Session 300
+
+Stripped PathfindingService to path-only. Physics, GroundZ, LOS, navmesh queries moved to local Navigation.dll.
+
+| Change | Detail |
+|--------|--------|
+| pathfinding.proto | Removed 7 request/response types (LOS, Physics, GroundZ, etc.) |
+| PathfindingSocketServer.cs | 967 → 260 lines |
+| Physics.cs | Deleted (406 lines) |
+| PathfindingClient.cs | GetGroundZ/LOS/navmesh now P/Invoke local Navigation.dll |
+| Docker rebuild | Containers verified working with path-only service |
+
+## Containerization Fixes — Session 300
+
+| Fix | Detail |
+|-----|--------|
+| GetGroundZ export | Added to DllMain.cpp for Linux libNavigation.so |
+| Ground snap FALLINGFAR | Force-clear on timeout + NativePhysics.GetGroundZ fallback |
+| CrashMonitor Docker | Switched from bind check to TCP connect for Docker ports |
+| Scene slice mode | Disabled eager mode to allow local VMAP fallback |
+| WWOW_DATA_DIR | Forwarded from StateManager to BG bot processes |

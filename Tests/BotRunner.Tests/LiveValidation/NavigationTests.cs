@@ -217,10 +217,19 @@ public class NavigationTests
         // Step 1: Standardized setup (BT-SETUP-001): revive + safe zone.
         await _bot.EnsureCleanSlateAsync(account, label);
 
-        // Step 2: Teleport to start
+        // Step 2: Teleport to start — use longer timeout for BG bot server-side teleport ACK
         _output.WriteLine($"  [{label}] Teleporting to start ({startX:F0}, {startY:F0}, {startZ:F0})");
         await _bot.BotTeleportAsync(account, MapId, startX, startY, startZ);
-        await _bot.WaitForTeleportSettledAsync(account, startX, startY);
+        var settled = await _bot.WaitForTeleportSettledAsync(account, startX, startY, timeoutMs: 8000, progressLabel: $"{label} nav-start");
+        if (!settled)
+        {
+            // If position didn't settle near target, the server may have placed us elsewhere.
+            // Log and continue — the pathfinding will route from wherever we actually are.
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(account);
+            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            _output.WriteLine($"  [{label}] WARNING: Teleport did not settle near ({startX:F0},{startY:F0}). Actual pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
+        }
 
         // Step 3: Issue GOTO
         _output.WriteLine($"  [{label}] Sending GOTO to ({endX:F0}, {endY:F0}, {endZ:F0})");
