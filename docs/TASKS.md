@@ -999,14 +999,13 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 302)
 - **Branch:** `main`
-- **Session 302 — 37 items shipped, 106/305 done (34.8%). Phases P8/P28 archived:**
+- **Session 302 — 54 items shipped, 123/305 done (40.3%). Phases P8/P28 archived:**
   - **P8 archived** (10/10), **P28 archived** (7/7).
-  - **P22** (12): CharacterBuildConfig goals, GearGoal/ReputationGoal models, QuestChainData, CharacterGoals proto, consumable budget.
-  - **P21** (10): TravelObjective proto, TravelTo dispatch, TravelOptions, UseHearthstoneTask, SetBindPointTask, InnkeeperData, LocationResolver, MageTeleportData, Deeprun Tram, dungeon+raid portals.
-  - **P23** (3): PacketSequenceComparator, IsInFlight, SetBindPointTask.
-  - **P24** (3): BotDistribution, BulkAccountCreator, Mage+Alliance accounts.
-  - **P26** (1): SummoningStoneData. **P29** (2): Mage+Alliance accounts.
-  - Commits: `fcba3c26` through `3fed7c4f`
+  - **P22** (20): CharacterBuildConfig, goal models, QuestChainData, CharacterGoals/ProgressionStatus proto, BiS loader, FarmBossTask, MountAcquisitionTask, ConfigurableSpecTests, GearEvaluationTests, templates.
+  - **P21** (14): TravelObjective, TravelTo, TravelTask, TravelOptions, UseHearthstone, SetBindPoint, TakeFlightPath, MageTeleport, InnkeeperData, discoveredFlightNodes, Deeprun Tram, portals, route re-planning.
+  - **P23** (5): PacketSequenceComparator, IsInFlight, FgAuctionFrame, FgBankFrame, IAuction/IBankFrame interfaces.
+  - **P24** (3): BotDistribution, BulkAccountCreator, accounts. **P26** (1). **P29** (2).
+  - Commits: `fcba3c26` through `7d65ff5f`
 - **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
   - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
