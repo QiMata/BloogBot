@@ -776,8 +776,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 19.1 | **Hearthstone auto-use** — When far from quest/grind zone and hearthstone is off cooldown, use it to return instantly. Track cooldown from `SMSG_SPELL_COOLDOWN`. | Open |
-| 19.2 | **Spirit healer navigation** — When dead and corpse is far (>100y), navigate to spirit healer NPC in ghost form instead of corpse run. Use `CMSG_SPIRIT_HEALER_ACTIVATE`. Accept resurrection sickness debuff. | Open |
+| 19.1 | **Hearthstone auto-use** — UseHearthstoneTask (P21.9) + hearthstoneCooldownSec (P21.10). | **Done** (pre-existing via P21) |
+| 19.2 | **Spirit healer navigation** — Covered by P21.25 (RetrieveCorpseTask spirit healer). | **Done** (2c731c05) |
 | 19.3 | **Boat/zeppelin schedule** — Create `TransportScheduleService.cs`. Define departure times for each transport (Menethil ↔ Theramore boat, Orgrimmar ↔ Undercity zeppelin, etc.). Navigate to dock/platform 30s before departure. Board transport. Uses existing transport coordinate transforms from P7. | Open |
 | 19.4 | **Mount usage** — When having mount in inventory and level >= 40, use mount for travel. Cast mount spell before long-distance movement. Dismount before combat. Add `IsMounted` flag to ObjectManager from `UNIT_FIELD_MOUNTDISPLAYID`. | Open |
 
