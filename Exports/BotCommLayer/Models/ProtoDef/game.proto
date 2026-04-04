@@ -126,6 +126,9 @@ message WoWPlayer {
     uint32 corpseRecoveryDelaySeconds = 43;
     repeated uint32 discoveredFlightNodes = 44; // Taxi node IDs the character has discovered
     map<uint32, int32> reputationStandings = 45; // Faction ID → standing value (from SMSG_INITIALIZE_FACTIONS)
+    uint32 honorPoints = 46;                    // Lifetime honorable kills
+    uint32 honorableKills = 47;                 // Session honorable kills
+    uint32 dishonorableKills = 48;              // Dishonorable kills
 }
 
 // Reusable message for WoWItem, extending WoWGameObject
