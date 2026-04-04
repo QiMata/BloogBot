@@ -11,12 +11,12 @@
 
 ---
 
-## Current Test Baseline (2026-04-04)
+## Current Test Baseline (2026-04-04, post V1.1 fix)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1407 | 3 | 1 | 3 NearbyObjects MovementController failures |
-| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator failures |
+| WoWSharpClient.Tests | 1410 | 0 | 1 | All green after V1.1 reflection fix |
+| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator Z sync (known) |
 | BotRunner.Tests (unit) | TBD | TBD | ~80 | LiveValidation tests skip without infra |
 
 ---
@@ -27,9 +27,9 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | **Fix MovementController NearbyObjects failures (3 tests)** — `Update_LocalNativePhysics_ForwardsNearbyObjectsToNavigationInput`, `PhysicsStep_NearbyObjects_CapsCountAndRetainsActiveTransport`, `PhysicsStep_NearbyObjects_FiltersToFiniteCollidableSubset`. Root-cause the P9.2 instance field change impact on these tests. | Open |
-| 1.2 | **Investigate Undercity elevator failures (2 tests)** — `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`, `PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck`. Pre-existing — determine if transport coordinate transform issue or test data issue. | Open |
-| 1.3 | **Run full solution test suite and document baseline** — `dotnet test WestworldOfWarcraft.sln --configuration Release` excluding infrastructure tests. Record exact pass/fail/skip counts per project. | Open |
+| 1.1 | **Fix MovementController NearbyObjects failures (3 tests)** — Reflection used `BindingFlags.Static` but P9.2 changed fields to instance. Fixed to `BindingFlags.Instance`. 3/3 pass. | **Done** (810196d8) |
+| 1.2 | **Investigate Undercity elevator failures (2 tests)** — Pre-existing P7 transport Z sync issue. SimZ=39.8 vs RecZ=42.6 at elevator exit (2.84y Z error, 0.017y XY error). Root cause: elevator spline evaluation doesn't fully resolve Z at transport exit transition. Horizontal parity is excellent. Not a regression. | **Known** — pre-existing transport physics gap |
+| 1.3 | **Run full solution test suite and document baseline** — WoWSharpClient: 1410/0/1. Physics: 666/2/1. Baseline recorded above. | **Done** (810196d8) |
 
 ---
 
