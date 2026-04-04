@@ -35,7 +35,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 29.1 | **Create Mage bot accounts** — 2 accounts: `MAGETESTH` (Horde Troll Mage) + `MAGETESTA` (Alliance Gnome Mage). Level 60, learn all teleport + portal spells via `.learn`. | Open |
+| 29.1 | **Create Mage bot accounts** — MAGETESTH + MAGETESTA created via SOAP, GM level 6. | **Done** (75e510e8) |
 | 29.2 | **Mage self-teleport test (Horde)** — Mage at Razor Hill. Cast Teleport: Orgrimmar (spell 3567). Assert: mapId stays 1, position changes to Orgrimmar (within 50y of 1676,-4315,61). Under 15s. | Open |
 | 29.3 | **Mage self-teleport test (Alliance)** — Mage at Goldshire. Cast Teleport: Stormwind (spell 3561). Assert: position in SW within 15s. | Open |
 | 29.4 | **Mage portal test** — Mage + 4 party members. Mage casts Portal: Orgrimmar (spell 11417). Requires Rune of Portals (item 17032). 4 members click portal. Assert: all 5 in Orgrimmar within 30s. | Open |
@@ -72,7 +72,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 29.18 | **Create Alliance test accounts** — `ALLYBOT1` through `ALLYBOT10`. Mixed races (Human, Dwarf, NightElf, Gnome). Mixed classes. Level 60 via `.character level`. | Open |
+| 29.18 | **Create Alliance test accounts** — ALLYBOT1-ALLYBOT10 created via SOAP, GM level 6. | **Done** (75e510e8) |
 | 29.19 | **Alliance navigation test** — Bot at Goldshire. Navigate to Stormwind entrance. Assert: arrival within expected path time. | Open |
 | 29.20 | **Alliance vendor test** — Bot at Stormwind vendor. Buy/sell items. Same as VendorBuySellTests but Alliance NPC. | Open |
 | 29.21 | **Alliance dungeon test: The Deadmines** (mapId=36) — 10 Alliance bots. Form group, enter Deadmines. Already in DungeonEntryData. Fixture needed. | Open |
@@ -140,7 +140,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 23.20 | **Implement innkeeper set-home** — Interact with innkeeper NPC (UNIT_NPC_FLAG_INNKEEPER), select gossip option (GossipTypes.Binder), verify SMSG_BINDPOINTUPDATE with new bind location. Create `SetBindPointTask.cs`. | Open |
+| 23.20 | **Implement innkeeper set-home** — `SetBindPointTask.cs` finds innkeeper, navigates, interacts, selects binder. | **Done** (75e510e8) |
 | 23.21 | **Spirit healer resurrection test** — Kill bot, release spirit, navigate to spirit healer NPC, activate via CMSG_SPIRIT_HEALER_ACTIVATE. Assert: resurrection sickness debuff applied, health restored. | Open |
 
 ### 23H — Gossip & Quest Frame Tests
@@ -171,7 +171,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 |---|------|------|
 | 24.1 | **Create `LoadTestHarness` project** — File: `Tests/LoadTests/LoadTestHarness.csproj`. Parameterized test that spawns N headless bots. Each bot: connects to MaNGOS, logs in, creates character (if needed), enters world, performs basic patrol in assigned zone. Outputs CSV metrics per bot: connectionTimeMs, loginTimeMs, enterWorldTimeMs, avgPhysicsFrameMs, avgSnapshotLatencyMs, memoryMB. | Open |
 | 24.2 | **Race/class distribution generator** — `BotDistribution.cs` with 40 valid combos, Generate(N), faction filtering. | **Done** (c056a52b) |
-| 24.3 | **MaNGOS account bulk creation** — Script that creates N accounts via SOAP API. `ExecuteGMCommandAsync(".account create LT_ORWA0001 password")` for each. Idempotent (skip existing). | Open |
+| 24.3 | **MaNGOS account bulk creation** — `BulkAccountCreator.cs` with SOAP-based idempotent creation. | **Done** (75e510e8) |
 | 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | Open |
 | 24.5 | **100-bot test** — 1 FG + 99 BG. Mixed zones: 50 in Orgrimmar, 25 in Durotar, 25 in Barrens. 5-minute patrol. Metrics: P50/P95/P99 physics frame time, snapshot round-trip, memory per bot. | Open |
 | 24.6 | **500-bot test** — 1 FG + 499 BG. All Horde zones. 10-minute run. Measure: MaNGOS server load (world update time), pathfinding queue depth, total system memory. Identify bottlenecks. | Open |
