@@ -407,7 +407,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.18 | **Gold tracking in progression** — `CharacterBuildConfig.GoldTargetCopper` sets a savings goal (e.g., 1000000 = 100g for epic mount). StateManager reads `player.Coinage` from snapshot. When below target: prioritize gold-earning activities (grinding high-value mobs, gathering valuable herbs/ore, AH flipping). When above target + buffer: allow spending on gear/consumables. | Open |
 | 22.19 | **Mount acquisition flow** — Create `MountAcquisitionTask.cs`. StateManager evaluates MountGoal: (1) Check level requirement met. (2) Check riding skill learned (skill ID 762 for Riding). If not → push trainer visit. (3) Check gold sufficient. If not → push gold farming. (4) When all prerequisites met → TravelTo mount vendor + BuyItem. Vendor locations: Orc Wolf Handler (Orgrimmar), Raptor Handler (Sen'jin), Kodo Handler (Bloodhoof), Skeleton Horse (Brill), Ram Handler (Amberstill), Horse Handler (Eastvale), Saber Handler (Darnassus). | Open |
-| 22.20 | **Consumable budget management** — When bot has gold goal, limit consumable spending. `BotBehaviorConfig` gets new field: `MaxConsumableSpendPerSessionCopper`. Bot tracks total spent on food/drink/potions per session. When budget exceeded, rely on natural regen instead of buying. Ensures bots save for mounts/gear. | Open |
+| 22.20 | **Consumable budget management** — `MaxConsumableSpendPerSessionCopper` added to BotBehaviorConfig. | **Done** (e881ed2d) |
 
 ### 22G — Quest Chain Progression
 
