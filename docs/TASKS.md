@@ -997,8 +997,15 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-04-04 (session 301)
+- **Last updated:** 2026-04-04 (session 302)
 - **Branch:** `main`
+- **Session 302 — Phases P8/P28 archived; P22/P21/P26 items shipped:**
+  - **P8 complete and archived** (10/10 items): P8.2 trade BG path wired, P8.9 StartWandAttack added.
+  - **P28 complete and archived** (7/7 items): Strict bot count assertions in LiveBotFixture.
+  - **P22 items shipped:** 22.1 CharacterBuildConfig expanded with TargetGearSet/ReputationGoals/ItemGoals/MountGoal. 22.2/22.3 confirmed pre-existing. 22.5/22.9/22.12/22.13 goal model classes.
+  - **P21.3:** TravelOptions record created. **P21.22:** LocationResolver confirmed pre-existing.
+  - **P26.4:** SummoningStoneData.cs created.
+  - Commits: `fcba3c26` through `3d3da1b3`
 - **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
   - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
