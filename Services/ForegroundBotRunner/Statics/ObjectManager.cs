@@ -19,6 +19,9 @@ namespace ForegroundBotRunner.Statics
 {
     public partial class ObjectManager : IObjectManager
     {
+        // Flight (taxi) state — FG detects via Lua or movement flags
+        public bool IsInFlight { get; set; }
+
         // Diagnostic logging for debugging (writes to WWoWLogs folder)
         private static readonly string DiagnosticLogPath;
 
