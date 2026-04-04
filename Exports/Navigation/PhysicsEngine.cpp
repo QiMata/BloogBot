@@ -5301,17 +5301,17 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// deferred depenetration to avoid displacing the start position — these corrections
 	// are for runtime stability but introduce error in replay calibration.
 	const bool trustAirborneReplayInput = trustInputVel && inputAirborneFlag;
-	// Binary parity (0x633840): grounded state is determined by was_grounded from
-	// the previous frame's physics output, NOT from input movement flags.
-	// Input FALLINGFAR/JUMPING flags are echoed state — the physics engine is the
-	// authority on grounding. Using input flags to determine grounding creates a
-	// feedback loop where FALLINGFAR can never be cleared.
-	st.isGrounded = input.wasGrounded && !inputSwimmingFlag && !inputFlyingFlag;
+	// NOTE (stateless MMO): input flags represent the caller's last-frame state.
+	// We preserve these unless StepV2 simulation detects a real state transition.
+	// We still use queries to *inform* grounding, but we avoid immediately overriding
+	// airborne flags purely from a pre-probe.
+	st.isGrounded = !(inputSwimmingFlag || inputFlyingFlag || inputAirborneFlag);
 	const bool hasPrevGround = (input.prevGroundZ > PhysicsConstants::INVALID_HEIGHT) && (input.prevGroundNz > 0.0f);
-	// Recover grounded from previous ground contact when physics says we were
-	// grounded last frame. This handles the case where was_grounded=false on the
-	// very first frame but we're actually standing on terrain.
-	if (!st.isGrounded && hasPrevGround) {
+	// Only recover grounded from prevGroundZ when NO airborne flags are set.
+	// When JUMPING/FALLINGFAR is active, the character IS airborne regardless of
+	// proximity to ground. The old check was too aggressive (STEP_DOWN_HEIGHT=4.0y
+	// exceeds max jump height ~1.64y), causing mid-jump frames to be treated as grounded.
+	if (!st.isGrounded && hasPrevGround && !inputAirborneFlag) {
 		float groundDelta = std::fabs(st.z - input.prevGroundZ);
 		if (groundDelta <= PhysicsConstants::STEP_DOWN_HEIGHT)
 			st.isGrounded = true;
@@ -5384,14 +5384,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		st.isGrounded = false;
 	}
 	st.isSwimming = isSwimming;
-	// Binary parity (0x633840): WoW.exe always runs the ground collision step
-	// when the character has recent ground contact (wasGrounded from previous frame).
-	// Input FALLINGFAR flags do NOT bypass the ground path — they're just echoed state.
-	// The ground collision step itself determines whether the character stays grounded
-	// (found support) or transitions to airborne (no support found).
-	// Only skip the ground path when genuinely airborne: no ground contact in the
-	// previous frame AND the physics engine confirmed ungrounded.
-	const bool useAirbornePath = !input.wasGrounded && !st.isGrounded && !isSwimming;
+	// WoW.exe 0x633A29 checks the airborne helper before the swim helper.
+	// Preserve that precedence when both states are present on the same frame,
+	// while still allowing non-swimming unsupported states to fall through to air.
+	const bool useAirbornePath = inputAirborneFlag || (!st.isGrounded && !isSwimming);
 	const bool isFlying = inputFlyingFlag;
 	const bool isRooted = (input.moveFlags & MOVEFLAG_ROOT) != 0;
 
