@@ -257,7 +257,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 |---|------|------|
 | 26.1 | **Create `DungeonTestFixture`** — `DungeonInstanceFixture` base class generates settings JSON, launches 10 bots (1 FG + 9 BG), enables coordinator. | **Done** (1464e7d) |
 | 26.2 | **Create `DungeonEntryData.cs`** — 26 dungeons with entrance/meeting stone positions, level ranges, faction access. | **Done** (1464e7d) |
-| 26.3 | **Implement meeting stone summoning** — File: `Exports/BotRunner/Tasks/Travel/MeetingStoneSummonTask.cs`. Steps: (1) Navigate to meeting stone game object (GameObjectType 23). (2) Interact via `CMSG_MEETINGSTONE_JOIN`. (3) Wait for `SMSG_MEETINGSTONE_SETQUEUE` confirmation. (4) When 3 members are at stone, summoning portal appears. (5) Target absent member, confirm summon. (6) Wait for `SMSG_MEETINGSTONE_COMPLETE`. (7) Repeat for all absent members. Also implement Warlock Ritual of Summoning (spell 698) as alternative path when party has a Warlock. | Open |
+| 26.3 | **Implement meeting stone summoning** — `MeetingStoneSummonTask.cs` (same as P21.19). | **Done** (e8476356) |
 | 26.4 | **Create `SummoningStoneData.cs`** — Accessor over DungeonEntryData meeting stones. GetByInstanceMapId, GetNearby, AllStones. | **Done** (ce24a5ce) |
 
 ### 26B — Classic Dungeons (Levels 13-30)
@@ -502,7 +502,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 21.16 | **Mage teleport spell data** — `MageTeleportData.cs` already exists. | **Done** (pre-existing) |
 | 21.17 | **Create `MageTeleportTask.cs`** — Checks class/spell/cooldown, casts, detects teleport. | **Done** (cbf62843) |
 | 21.18 | **Warlock Ritual of Summoning** — `WarlockSummonTask.cs` with prereq checks + ritual cast. | **Done** (9893b352) |
-| 21.19 | **Meeting stone summoning** — Similar to warlock summon but at dungeon meeting stones. GameObjectType 23. Bot walks to meeting stone, interacts via `CMSG_MEETINGSTONE_JOIN`, waits for `SMSG_MEETINGSTONE_COMPLETE`. Used to summon offline group members to dungeon entrance. | Open |
+| 21.19 | **Meeting stone summoning** — `MeetingStoneSummonTask.cs` with stone find/navigate/interact/summon. | **Done** (e8476356) |
 
 ### 21F — Route Optimization & Hearthstone Strategy
 
@@ -517,7 +517,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.24 | **Graveyard position cache** — File: `Exports/BotRunner/Travel/GraveyardData.cs`. Query `game_graveyard` from MaNGOS DB (read-only) at startup: `SELECT id, position_x, position_y, position_z, map FROM game_graveyard`. Cross-reference with `game_graveyard_zone` for zone → graveyard mapping. Cache in static dictionary. ~100 entries. | Open |
+| 21.24 | **Graveyard position cache** — `GraveyardData.cs` with runtime DB loading + FindNearest/GetForZone. | **Done** (e8476356) |
 | 21.25 | **Spirit healer auto-navigation** — Extend `RetrieveCorpseTask`: if corpse is >200y away and spirit healer is within 50y of ghost spawn, offer spirit healer resurrection as alternative (accept 25% durability loss + rez sickness). Use `CMSG_SPIRIT_HEALER_ACTIVATE`. Only when corpse run would take >3 minutes. | Open |
 
 ### 21H — Travel Planner Tests
