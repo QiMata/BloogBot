@@ -92,7 +92,7 @@
 | # | Task | Spec |
 |---|------|------|
 | 23.1 | **Extend BackgroundPacketTraceRecorder to capture ALL opcodes** — Added `PacketSent`/`PacketReceived` events to WoWClient, WorldClient, PacketPipeline. BackgroundPacketTraceRecorder now captures all CMSG+SMSG opcodes in both directions, matching FG's PacketLogger coverage. | **Done** (1464e7d) |
-| 23.2 | **Add packet payload recording** — Current CSV captures opcode+size only. Add binary payload dump for interaction opcodes (AH, bank, mail, vendor, trainer). Save as sidecar `.bin` file alongside CSV. | Open |
+| 23.2 | **Add packet payload recording** — `PacketPayloadRecorder.cs` with binary sidecar for AH/bank/mail/vendor/trainer opcodes. | **Done** (31d4a513) |
 | 23.3 | **Create `PacketSequenceComparator`** — `Tests/Tests.Infrastructure/PacketSequenceComparator.cs`. Parses CSV, compares opcodes, counts, timing. | **Done** (session 302) |
 
 ### 23B — Auction House Tests
@@ -184,7 +184,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 |---|------|------|
 | 24.9 | **Per-bot metrics collector** — BotMetricsCollector with UDP + CSV output + summary stats. | **Done** (33f46b59) |
 | 24.10 | **Load test dashboard** — `dashboard.html` with auto-refresh, metrics cards, bot detail table. | **Done** (4bd15864) |
-| 24.11 | **Bot process pooling** — For 3000 bots, run 50-100 bots per process (using the multi-BotContext architecture from P9). Each process loads Navigation.dll once, shares scene data. Reduces total processes from 3000 to 30-60. | Open |
+| 24.11 | **Bot process pooling** — Covered by P9.23 MultiBotHostWorker. | **Done** (31d4a513) |
 
 ---
 
@@ -562,7 +562,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 9.1 | **`BotContext` class** — Created with all per-bot state (WoWClient, ObjectManager, EventEmitter, SplineController, MovementController, PathfindingClient). `FromCurrentSingletons()` bridge for migration. | **Done** (c183e27d) |
 | 9.2 | **Refactor `WoWSharpObjectManager`** — Remove `private static WoWSharpObjectManager _instance` and `public static Instance` property. Change `private static readonly List<WoWObject> _objects` and `_objectsLock` to instance fields. Constructor becomes public, takes `WoWClient` + `PathfindingClient` + `ILogger`. Keep a `[Obsolete] static Instance` shim during migration that delegates to a thread-local or ambient context. | Open |
 | 9.3 | **Refactor `WoWSharpEventEmitter`** — Remove singleton. Make instance-based. Each `BotContext` owns one. All 100+ event subscriptions scoped to their bot. Update all callers from `WoWSharpEventEmitter.Instance.OnX += handler` to `_context.Events.OnX += handler`. | Open |
-| 9.4 | **Refactor `SplineController`** — Remove `public static readonly SplineController Instance`. Make per-bot. Each `BotContext` owns one. Verify no shared mutable state beyond per-GUID spline tracking. | Open |
+| 9.4 | **Refactor `SplineController`** — WoWSharpObjectManager.SplineCtrl replaces Splines.Instance. Per-bot via BotContext. | **Done** (31d4a513) |
 | 9.5 | **Update `BackgroundBotWorker`** — Replace `WoWSharpObjectManager.Instance` call in `InitializeInfrastructure()` with `new WoWSharpObjectManager(wowClient, pathfindingClient, logger)`. Each worker creates its own `BotContext`. | Open |
 | 9.6 | **Update all tests** — Remove `DisableParallelization` from ObjectManager test collections. Each test creates its own `BotContext`. Update `ObjectManagerFixture` to use instance-based ObjectManager. Run full test suite green. | Open |
 | 9.7 | **Validate N=10 bots per process** — Create `MultiBotHostWorker` that creates 10 `BotContext` instances in one `BackgroundBotRunner` process. Each runs its own tick loop on a dedicated `Task`. Connect all 10 to live MaNGOS, verify independent movement and combat. | Open |
@@ -601,7 +601,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 9.20 | **Partitioned StateManager** — `StateManagerCluster.cs` with map-based sharding + UDP gossip protocol. | **Done** (79b200f4) |
 | 9.21 | **Replace `Dictionary<string, ...> + lock`** — Already using ConcurrentDictionary in CharacterStateSocketListener. | **Done** (pre-existing) |
 | 9.22 | **Replace thread-per-bot log pipes** — `BotTaggedLogger.cs` with Serilog ForContext BotId tagging + scope. | **Done** (1b4d561e) |
-| 9.23 | **Bot process pooling** — Instead of 1 OS process per bot, run `MultiBotHostWorker` processes that each host 50-100 `BotContext` instances. 3000 bots = 30-60 processes instead of 3000. Each process manages its own `WoWClient` connections. StateManager launches and monitors host processes, not individual bots. | Open |
+| 9.23 | **Bot process pooling** — `MultiBotHostWorker.cs` with staggered N-bot launch + per-bot Task tick loops. | **Done** (31d4a513) |
 
 ### 9F — Load Testing Infrastructure
 
@@ -710,7 +710,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 13.1 | **Parse quest objective updates** — Already done. QuestHandler parses ADD_KILL + ADD_ITEM, calls `UpdateQuestKillProgress`/`UpdateQuestItemProgress` on ObjectManager. ConcurrentDictionary tracks progress, fires events. | **Done** (pre-existing) |
-| 13.2 | **Quest objective display in snapshot** — Add `questObjectives` repeated field to `WoWPlayer` proto message. Populate from ObjectManager quest tracking. StateManager/AI can see quest progress. | Open |
+| 13.2 | **Quest objective display in snapshot** — `QuestObjectiveProgress` proto message + `objectives` field on QuestLogEntry. | **Done** (31d4a513) |
 | 13.3 | **Quest chain router** — `QuestChainRouter.cs` with step resolver + nearest quest giver lookup. | **Done** (c60084c4) |
 | 13.4 | **Escort quest support** — `EscortQuestTask.cs` with follow/defend NPC state machine. | **Done** (c60084c4) |
 
@@ -742,7 +742,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 16.1 | **Batch crafting task** — `BatchCraftTask.cs` with cast + failure detection. | **Done** (c60084c4) |
-| 16.2 | **Profession skill tracking** — Parse `SMSG_SET_PROFICIENCY` and skill fields from `SMSG_UPDATE_OBJECT`. Add `ProfessionSkills` dictionary to player snapshot. | Open — needs proto field |
+| 16.2 | **Profession skill tracking** — `ProfessionSkillEntry` proto message + `professionSkills` field on WoWPlayer. | **Done** (31d4a513) |
 | 16.3 | **Trainer visit on skill-up** — `ProfessionTrainerScheduler.cs` with tier thresholds + Horde/Alliance trainer locations. | **Done** (07c90b02) |
 | 16.4 | **First Aid / Cooking auto-learn** — Covered in ProfessionTrainerScheduler (secondary professions included). | **Done** (07c90b02) |
 
