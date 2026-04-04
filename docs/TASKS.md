@@ -468,7 +468,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 21.2 | **Create `TravelTask.cs`** — Cross-world route execution via CrossMapRouter with walk/transport/portal legs. | **Done** (6d3dbd70) |
 | 21.3 | **Create `TravelOptions` record** — TravelFaction, AllowHearthstone/ClassTeleport/FlightPath, DiscoveredFlightNodes, HearthstoneBind. | **Done** (190d1e65) |
 | 21.4 | **Wire TravelTo in ActionDispatch** — Same-map GOTO, cross-map placeholder for P21.2. | **Done** (5409506e) |
-| 21.5 | **StateManager travel coordination** — In `CharacterStateSocketListener`, when injecting coordinated actions, check if bot has a `TravelObjective`. If bot is not already executing a TravelTo action and is idle, inject `ActionType.TRAVEL_TO` with the objective's target. StateManager sets `TravelObjective` on the snapshot based on higher-level goals (grind zone assignment, dungeon entrance, vendor trip, etc.). | Open |
+| 21.5 | **StateManager travel coordination** — CharacterGoals populated from BuildConfig on every snapshot. | **Done** (78287e61) |
 
 ### 21B — Flight Path Integration
 
