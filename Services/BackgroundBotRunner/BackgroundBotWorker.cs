@@ -34,6 +34,8 @@ namespace BackgroundBotRunner
         private readonly BackgroundPacketTraceRecorder? _packetTraceRecorder;
         private readonly BackgroundPhysicsMode _physicsMode;
 
+        /// <summary>P9.5: Per-bot ObjectManager instance (no longer using singleton).</summary>
+        private readonly WoWSharpObjectManager _objectManager = new();
         private IAgentFactory? _agentFactory;
         private IWorldClient? _activeWorldClient;
         private IDisposable? _worldDisconnectSubscription;
@@ -172,7 +174,7 @@ namespace BackgroundBotRunner
                 wowClient.SetIpAddress(realmIp);
             }
 
-            var objectManager = WoWSharpObjectManager.Instance;
+            var objectManager = _objectManager;
             if (_physicsMode == BackgroundPhysicsMode.LocalInProcess)
             {
                 WoWSharpClient.Movement.SceneDataClient? sceneDataClient = null;
@@ -303,7 +305,7 @@ namespace BackgroundBotRunner
             try
             {
                 var spellCasting = _agentFactory.SpellCastingAgent;
-                WoWSharpObjectManager.Instance.SetSpellCooldownChecker(
+                _objectManager.SetSpellCooldownChecker(
                     spellId => spellCasting.CanCastSpell(spellId));
             }
             catch (Exception ex)
@@ -312,7 +314,7 @@ namespace BackgroundBotRunner
             }
 
             // Wire agent factory accessor for LootTargetAsync
-            WoWSharpObjectManager.Instance.SetAgentFactoryAccessor(() => _agentFactory);
+            _objectManager.SetAgentFactoryAccessor(() => _agentFactory);
 
             // Wire auto-accept trading from party members
             try
@@ -326,7 +328,7 @@ namespace BackgroundBotRunner
                         if (tradingWith == null) return;
 
                         // Auto-accept trades from party members
-                        var om = WoWSharpObjectManager.Instance;
+                        var om = _objectManager;
                         var guid = tradingWith.Value;
                         bool isPartyMember = guid == om.Party1Guid || guid == om.Party2Guid
                             || guid == om.Party3Guid || guid == om.Party4Guid;
@@ -355,7 +357,7 @@ namespace BackgroundBotRunner
                 _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
                 {
                     _logger.LogInformation("World client disconnected. Resetting object manager world state and agent factory.");
-                    WoWSharpObjectManager.Instance.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
+                    _objectManager.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
                     ResetAgentFactory();
                 });
             }
@@ -371,7 +373,7 @@ namespace BackgroundBotRunner
             {
                 _logoutCompleteSubscription = worldClient.LogoutComplete?.Subscribe(_ =>
                 {
-                    var om = WoWSharpObjectManager.Instance;
+                    var om = _objectManager;
                     var guid = om.PlayerGuid.FullGuid;
                     if (guid == 0)
                     {
