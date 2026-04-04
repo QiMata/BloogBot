@@ -1622,14 +1622,18 @@ namespace WoWSharpClient.Tests.Movement
 
         private static IReadOnlyList<WoWObject> ReplaceTrackedObjects(params WoWObject[] objects)
         {
-            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Static | BindingFlags.NonPublic);
-            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Static | BindingFlags.NonPublic);
+            // P9.2: _objects and _objectsLock are now instance fields (not static)
+            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Instance | BindingFlags.NonPublic);
+            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Instance | BindingFlags.NonPublic);
 
             Assert.NotNull(objectsField);
             Assert.NotNull(objectsLockField);
 
-            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(null)!;
-            var syncRoot = objectsLockField!.GetValue(null)!;
+#pragma warning disable CS0618 // Instance still used via legacy singleton in tests
+            var instance = WoWSharpObjectManager.Instance;
+#pragma warning restore CS0618
+            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(instance)!;
+            var syncRoot = objectsLockField!.GetValue(instance)!;
 
             lock (syncRoot)
             {
@@ -1642,14 +1646,17 @@ namespace WoWSharpClient.Tests.Movement
 
         private static void RestoreTrackedObjects(IReadOnlyList<WoWObject> snapshot)
         {
-            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Static | BindingFlags.NonPublic);
-            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Static | BindingFlags.NonPublic);
+            var objectsField = typeof(WoWSharpObjectManager).GetField("_objects", BindingFlags.Instance | BindingFlags.NonPublic);
+            var objectsLockField = typeof(WoWSharpObjectManager).GetField("_objectsLock", BindingFlags.Instance | BindingFlags.NonPublic);
 
             Assert.NotNull(objectsField);
             Assert.NotNull(objectsLockField);
 
-            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(null)!;
-            var syncRoot = objectsLockField!.GetValue(null)!;
+#pragma warning disable CS0618
+            var instance = WoWSharpObjectManager.Instance;
+#pragma warning restore CS0618
+            var trackedObjects = (List<WoWObject>)objectsField!.GetValue(instance)!;
+            var syncRoot = objectsLockField!.GetValue(instance)!;
 
             lock (syncRoot)
             {
