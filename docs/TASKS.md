@@ -116,7 +116,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 23.11 | **Wire mail take operations** — `MailNetworkClientComponent` has CMSG_MAIL_TAKE_MONEY, CMSG_MAIL_TAKE_ITEM, CMSG_MAIL_DELETE but observables return Never. Parse SMSG responses and wire observables. | Open |
+| 23.11 | **Wire mail take operations** — Observables wired from SMSG_SEND_MAIL_RESULT action types. | **Done** (2c731c05) |
 | 23.12 | **Mail send test** — Bot A sends mail with 1 copper to Bot B via CMSG_SEND_MAIL. Assert: SMSG_SEND_MAIL_RESULT success. Bot B opens mailbox, gets mail list, takes money. | Open |
 | 23.13 | **Mail with item test** — Bot A sends mail with an item attachment. Bot B takes item. Assert item in inventory. | Open |
 
@@ -518,7 +518,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.24 | **Graveyard position cache** — `GraveyardData.cs` with runtime DB loading + FindNearest/GetForZone. | **Done** (e8476356) |
-| 21.25 | **Spirit healer auto-navigation** — Extend `RetrieveCorpseTask`: if corpse is >200y away and spirit healer is within 50y of ghost spawn, offer spirit healer resurrection as alternative (accept 25% durability loss + rez sickness). Use `CMSG_SPIRIT_HEALER_ACTIVATE`. Only when corpse run would take >3 minutes. | Open |
+| 21.25 | **Spirit healer auto-navigation** — RetrieveCorpseTask checks for spirit healer when corpse >200y. | **Done** (2c731c05) |
 
 ### 21H — Travel Planner Tests
 
