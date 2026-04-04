@@ -170,7 +170,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | # | Task | Spec |
 |---|------|------|
 | 24.1 | **Create `LoadTestHarness` project** — File: `Tests/LoadTests/LoadTestHarness.csproj`. Parameterized test that spawns N headless bots. Each bot: connects to MaNGOS, logs in, creates character (if needed), enters world, performs basic patrol in assigned zone. Outputs CSV metrics per bot: connectionTimeMs, loginTimeMs, enterWorldTimeMs, avgPhysicsFrameMs, avgSnapshotLatencyMs, memoryMB. | Open |
-| 24.2 | **Race/class distribution generator** — File: `Tests/LoadTests/BotDistribution.cs`. Generates account names + character configs for all 44 valid race/class combos. Even distribution. Uses naming convention: `LT_{race2}{class2}{index:D4}` (e.g., `LTORWA0001` = Orc Warrior #1). | Open |
+| 24.2 | **Race/class distribution generator** — `BotDistribution.cs` with 40 valid combos, Generate(N), faction filtering. | **Done** (c056a52b) |
 | 24.3 | **MaNGOS account bulk creation** — Script that creates N accounts via SOAP API. `ExecuteGMCommandAsync(".account create LT_ORWA0001 password")` for each. Idempotent (skip existing). | Open |
 | 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | Open |
 | 24.5 | **100-bot test** — 1 FG + 99 BG. Mixed zones: 50 in Orgrimmar, 25 in Durotar, 25 in Barrens. 5-minute patrol. Metrics: P50/P95/P99 physics frame time, snapshot round-trip, memory per bot. | Open |
