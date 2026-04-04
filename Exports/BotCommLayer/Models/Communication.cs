@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-            "IAEoCUgAQgsKCXBhcmFtZXRlciL2BQoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
+            "IAEoCUgAQgsKCXBhcmFtZXRlciK0BgoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -70,60 +70,65 @@ namespace Communication {
             "U2VxdWVuY2UYEyABKA0SFAoMY3VycmVudE1hcElkGBQgASgNEjgKEHRyYXZl",
             "bF9vYmplY3RpdmUYFSABKAsyHi5jb21tdW5pY2F0aW9uLlRyYXZlbE9iamVj",
             "dGl2ZRI2Cg9jaGFyYWN0ZXJfZ29hbHMYFiABKAsyHS5jb21tdW5pY2F0aW9u",
-            "LkNoYXJhY3RlckdvYWxzIq8BCg5DaGFyYWN0ZXJHb2FscxIRCglzcGVjX25h",
-            "bWUYASABKAkSGQoRdGFsZW50X2J1aWxkX25hbWUYAiABKAkSGgoSZ29sZF90",
-            "YXJnZXRfY29wcGVyGAMgASgFEhgKEHNraWxsX3ByaW9yaXRpZXMYBCADKAkS",
-            "FAoMcXVlc3RfY2hhaW5zGAUgAygJEiMKG21heF9jb25zdW1hYmxlX3NwZW5k",
-            "X2NvcHBlchgGIAEoBSKoAQoPVHJhdmVsT2JqZWN0aXZlEhUKDXRhcmdldF9t",
-            "YXBfaWQYASABKA0SJwoPdGFyZ2V0X3Bvc2l0aW9uGAIgASgLMg4uZ2FtZS5Q",
-            "b3NpdGlvbhIcChR0YXJnZXRfbG9jYXRpb25fbmFtZRgDIAEoCRIZChFhbGxv",
-            "d19oZWFydGhzdG9uZRgEIAEoCBIcChRhbGxvd19jbGFzc190ZWxlcG9ydBgF",
-            "IAEoCCJPCghMb2dFbnRyeRINCgVsZXZlbBgBIAEoCRIQCghjYXRlZ29yeRgC",
-            "IAEoCRIPCgdtZXNzYWdlGAMgASgJEhEKCXRpbWVzdGFtcBgEIAEoCSr7CwoK",
-            "QWN0aW9uVHlwZRIICgRXQUlUEAASCAoER09UTxABEhEKDUlOVEVSQUNUX1dJ",
-            "VEgQAhIRCg1TRUxFQ1RfR09TU0lQEAMSFAoQU0VMRUNUX1RBWElfTk9ERRAE",
-            "EhAKDEFDQ0VQVF9RVUVTVBAFEhEKDURFQ0xJTkVfUVVFU1QQBhIRCg1TRUxF",
-            "Q1RfUkVXQVJEEAcSEgoOQ09NUExFVEVfUVVFU1QQCBIPCgtUUkFJTl9TS0lM",
-            "TBAJEhAKDFRSQUlOX1RBTEVOVBAKEg8KC09GRkVSX1RSQURFEAsSDgoKT0ZG",
-            "RVJfR09MRBAMEg4KCk9GRkVSX0lURU0QDRIQCgxBQ0NFUFRfVFJBREUQDhIR",
-            "Cg1ERUNMSU5FX1RSQURFEA8SEQoNRU5DSEFOVF9UUkFERRAQEhIKDkxPQ0tQ",
-            "SUNLX1RSQURFEBESEgoOUFJPTU9URV9MRUFERVIQEhIVChFQUk9NT1RFX0FT",
-            "U0lTVEFOVBATEhgKFFBST01PVEVfTE9PVF9NQU5BR0VSEBQSEgoOU0VUX0dS",
-            "T1VQX0xPT1QQFRIPCgtBU1NJR05fTE9PVBAWEhIKDkxPT1RfUk9MTF9ORUVE",
-            "EBcSEwoPTE9PVF9ST0xMX0dSRUVEEBgSDQoJTE9PVF9QQVNTEBkSFQoRU0VO",
-            "RF9HUk9VUF9JTlZJVEUQGhIXChNBQ0NFUFRfR1JPVVBfSU5WSVRFEBsSGAoU",
-            "REVDTElORV9HUk9VUF9JTlZJVEUQHBIPCgtLSUNLX1BMQVlFUhAdEg8KC0xF",
-            "QVZFX0dST1VQEB4SEQoNRElTQkFORF9HUk9VUBAfEhYKElNUQVJUX01FTEVF",
-            "X0FUVEFDSxAgEhcKE1NUQVJUX1JBTkdFRF9BVFRBQ0sQIRIVChFTVEFSVF9X",
-            "QU5EX0FUVEFDSxAiEg8KC1NUT1BfQVRUQUNLECMSDgoKQ0FTVF9TUEVMTBAk",
-            "Eg0KCVNUT1BfQ0FTVBAlEgwKCFVTRV9JVEVNECYSDgoKRVFVSVBfSVRFTRAn",
-            "EhAKDFVORVFVSVBfSVRFTRAoEhAKDERFU1RST1lfSVRFTRApEg0KCU1PVkVf",
-            "SVRFTRAqEg8KC1NQTElUX1NUQUNLECsSDAoIQlVZX0lURU0QLBIQCgxCVVlC",
-            "QUNLX0lURU0QLRINCglTRUxMX0lURU0QLhIPCgtSRVBBSVJfSVRFTRAvEhQK",
-            "EFJFUEFJUl9BTExfSVRFTVMQMBIQCgxESVNNSVNTX0JVRkYQMRINCglSRVNV",
-            "UlJFQ1QQMhIJCgVDUkFGVBAzEgkKBUxPR0lOEDQSCgoGTE9HT1VUEDUSFAoQ",
-            "Q1JFQVRFX0NIQVJBQ1RFUhA2EhQKEERFTEVURV9DSEFSQUNURVIQNxIPCgtF",
-            "TlRFUl9XT1JMRBA4Eg8KC0xPT1RfQ09SUFNFEDkSEgoOUkVMRUFTRV9DT1JQ",
-            "U0UQOhITCg9SRVRSSUVWRV9DT1JQU0UQOxIPCgtTS0lOX0NPUlBTRRA8Eg8K",
-            "C0dBVEhFUl9OT0RFED0SDQoJU0VORF9DSEFUED4SDgoKU0VUX0ZBQ0lORxA/",
-            "EhAKDFZJU0lUX1ZFTkRPUhBAEhEKDVZJU0lUX1RSQUlORVIQQRIXChNWSVNJ",
-            "VF9GTElHSFRfTUFTVEVSEEISEQoNU1RBUlRfRklTSElORxBDEhkKFVNUQVJU",
-            "X0dBVEhFUklOR19ST1VURRBEEg4KCkNIRUNLX01BSUwQRRIbChdTVEFSVF9Q",
-            "SFlTSUNTX1JFQ09SRElORxBGEhoKFlNUT1BfUEhZU0lDU19SRUNPUkRJTkcQ",
-            "RxIXChNTVEFSVF9EVU5HRU9ORUVSSU5HEEgSEwoPQ09OVkVSVF9UT19SQUlE",
-            "EEkSGAoUQ0hBTkdFX1JBSURfU1VCR1JPVVAQShIRCg1GT0xMT1dfVEFSR0VU",
-            "EEsSFQoRSk9JTl9CQVRUTEVHUk9VTkQQTBIXChNBQ0NFUFRfQkFUVExFR1JP",
-            "VU5EEE0SFgoSTEVBVkVfQkFUVExFR1JPVU5EEE4SDQoJVFJBVkVMX1RPEE8q",
-            "LwoNQm90UnVubmVyVHlwZRIOCgpGT1JFR1JPVU5EEAASDgoKQkFDS0dST1VO",
-            "RBABKo8BCg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNT",
-            "EAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIR",
-            "Cg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBRIXChNDT09SRElO",
-            "QVRPUl9FTkFCTEVEEAYqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAA",
-            "EgsKB0ZBSUxVUkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0",
-            "aW9uU3RhdGUSFAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5U",
-            "SUNBVElORxABEhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklO",
-            "R19XT1JMRBADEhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJ",
-            "TkcQBRITCg9CT1RfTE9HR0lOR19PVVQQBmIGcHJvdG8z"));
+            "LkNoYXJhY3RlckdvYWxzEjwKEnByb2dyZXNzaW9uX3N0YXR1cxgXIAEoCzIg",
+            "LmNvbW11bmljYXRpb24uUHJvZ3Jlc3Npb25TdGF0dXMimwEKEVByb2dyZXNz",
+            "aW9uU3RhdHVzEhsKE2dlYXJfY29tcGxldGlvbl9wY3QYASABKAISFQoNZ29s",
+            "ZF9wcm9ncmVzcxgCIAEoBRIZChFjdXJyZW50X29iamVjdGl2ZRgDIAEoCRIe",
+            "ChZjb21wbGV0ZWRfcXVlc3RfY2hhaW5zGAQgAygJEhcKD3Byb2Zlc3Npb25f",
+            "Z2FwcxgFIAEoBSKvAQoOQ2hhcmFjdGVyR29hbHMSEQoJc3BlY19uYW1lGAEg",
+            "ASgJEhkKEXRhbGVudF9idWlsZF9uYW1lGAIgASgJEhoKEmdvbGRfdGFyZ2V0",
+            "X2NvcHBlchgDIAEoBRIYChBza2lsbF9wcmlvcml0aWVzGAQgAygJEhQKDHF1",
+            "ZXN0X2NoYWlucxgFIAMoCRIjChttYXhfY29uc3VtYWJsZV9zcGVuZF9jb3Bw",
+            "ZXIYBiABKAUiqAEKD1RyYXZlbE9iamVjdGl2ZRIVCg10YXJnZXRfbWFwX2lk",
+            "GAEgASgNEicKD3RhcmdldF9wb3NpdGlvbhgCIAEoCzIOLmdhbWUuUG9zaXRp",
+            "b24SHAoUdGFyZ2V0X2xvY2F0aW9uX25hbWUYAyABKAkSGQoRYWxsb3dfaGVh",
+            "cnRoc3RvbmUYBCABKAgSHAoUYWxsb3dfY2xhc3NfdGVsZXBvcnQYBSABKAgi",
+            "TwoITG9nRW50cnkSDQoFbGV2ZWwYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkS",
+            "DwoHbWVzc2FnZRgDIAEoCRIRCgl0aW1lc3RhbXAYBCABKAkq+wsKCkFjdGlv",
+            "blR5cGUSCAoEV0FJVBAAEggKBEdPVE8QARIRCg1JTlRFUkFDVF9XSVRIEAIS",
+            "EQoNU0VMRUNUX0dPU1NJUBADEhQKEFNFTEVDVF9UQVhJX05PREUQBBIQCgxB",
+            "Q0NFUFRfUVVFU1QQBRIRCg1ERUNMSU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JF",
+            "V0FSRBAHEhIKDkNPTVBMRVRFX1FVRVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQ",
+            "CgxUUkFJTl9UQUxFTlQQChIPCgtPRkZFUl9UUkFERRALEg4KCk9GRkVSX0dP",
+            "TEQQDBIOCgpPRkZFUl9JVEVNEA0SEAoMQUNDRVBUX1RSQURFEA4SEQoNREVD",
+            "TElORV9UUkFERRAPEhEKDUVOQ0hBTlRfVFJBREUQEBISCg5MT0NLUElDS19U",
+            "UkFERRAREhIKDlBST01PVEVfTEVBREVSEBISFQoRUFJPTU9URV9BU1NJU1RB",
+            "TlQQExIYChRQUk9NT1RFX0xPT1RfTUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9M",
+            "T09UEBUSDwoLQVNTSUdOX0xPT1QQFhISCg5MT09UX1JPTExfTkVFRBAXEhMK",
+            "D0xPT1RfUk9MTF9HUkVFRBAYEg0KCUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JP",
+            "VVBfSU5WSVRFEBoSFwoTQUNDRVBUX0dST1VQX0lOVklURRAbEhgKFERFQ0xJ",
+            "TkVfR1JPVVBfSU5WSVRFEBwSDwoLS0lDS19QTEFZRVIQHRIPCgtMRUFWRV9H",
+            "Uk9VUBAeEhEKDURJU0JBTkRfR1JPVVAQHxIWChJTVEFSVF9NRUxFRV9BVFRB",
+            "Q0sQIBIXChNTVEFSVF9SQU5HRURfQVRUQUNLECESFQoRU1RBUlRfV0FORF9B",
+            "VFRBQ0sQIhIPCgtTVE9QX0FUVEFDSxAjEg4KCkNBU1RfU1BFTEwQJBINCglT",
+            "VE9QX0NBU1QQJRIMCghVU0VfSVRFTRAmEg4KCkVRVUlQX0lURU0QJxIQCgxV",
+            "TkVRVUlQX0lURU0QKBIQCgxERVNUUk9ZX0lURU0QKRINCglNT1ZFX0lURU0Q",
+            "KhIPCgtTUExJVF9TVEFDSxArEgwKCEJVWV9JVEVNECwSEAoMQlVZQkFDS19J",
+            "VEVNEC0SDQoJU0VMTF9JVEVNEC4SDwoLUkVQQUlSX0lURU0QLxIUChBSRVBB",
+            "SVJfQUxMX0lURU1TEDASEAoMRElTTUlTU19CVUZGEDESDQoJUkVTVVJSRUNU",
+            "EDISCQoFQ1JBRlQQMxIJCgVMT0dJThA0EgoKBkxPR09VVBA1EhQKEENSRUFU",
+            "RV9DSEFSQUNURVIQNhIUChBERUxFVEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJf",
+            "V09STEQQOBIPCgtMT09UX0NPUlBTRRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoS",
+            "EwoPUkVUUklFVkVfQ09SUFNFEDsSDwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRI",
+            "RVJfTk9ERRA9Eg0KCVNFTkRfQ0hBVBA+Eg4KClNFVF9GQUNJTkcQPxIQCgxW",
+            "SVNJVF9WRU5ET1IQQBIRCg1WSVNJVF9UUkFJTkVSEEESFwoTVklTSVRfRkxJ",
+            "R0hUX01BU1RFUhBCEhEKDVNUQVJUX0ZJU0hJTkcQQxIZChVTVEFSVF9HQVRI",
+            "RVJJTkdfUk9VVEUQRBIOCgpDSEVDS19NQUlMEEUSGwoXU1RBUlRfUEhZU0lD",
+            "U19SRUNPUkRJTkcQRhIaChZTVE9QX1BIWVNJQ1NfUkVDT1JESU5HEEcSFwoT",
+            "U1RBUlRfRFVOR0VPTkVFUklORxBIEhMKD0NPTlZFUlRfVE9fUkFJRBBJEhgK",
+            "FENIQU5HRV9SQUlEX1NVQkdST1VQEEoSEQoNRk9MTE9XX1RBUkdFVBBLEhUK",
+            "EUpPSU5fQkFUVExFR1JPVU5EEEwSFwoTQUNDRVBUX0JBVFRMRUdST1VORBBN",
+            "EhYKEkxFQVZFX0JBVFRMRUdST1VORBBOEg0KCVRSQVZFTF9UTxBPKi8KDUJv",
+            "dFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASqP",
+            "AQoPU3RhdGVDaGFuZ2VUeXBlEggKBE5BTUUQABIMCghPUEVOTkVTUxABEhUK",
+            "EUNPTlNDSUVOVElPVVNORVNTEAISEAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdS",
+            "RUVBQkxFTkVTUxAEEg8KC05FVVJPVElDSVNNEAUSFwoTQ09PUkRJTkFUT1Jf",
+            "RU5BQkxFRBAGKjsKDlJlc3BvbnNlUmVzdWx0EgsKB1NVQ0NFU1MQABILCgdG",
+            "QUlMVVJFEAESDwoLSU5fUFJPR1JFU1MQAiqsAQoSQm90Q29ubmVjdGlvblN0",
+            "YXRlEhQKEEJPVF9ESVNDT05ORUNURUQQABIWChJCT1RfQVVUSEVOVElDQVRJ",
+            "TkcQARITCg9CT1RfQ0hBUl9TRUxFQ1QQAhIWChJCT1RfRU5URVJJTkdfV09S",
+            "TEQQAxIQCgxCT1RfSU5fV09STEQQBBIUChBCT1RfVFJBTlNGRVJSSU5HEAUS",
+            "EwoPQk9UX0xPR0dJTkdfT1VUEAZiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -136,7 +141,8 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals", "ProgressionStatus" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ProgressionStatus), global::Communication.ProgressionStatus.Parser, new[]{ "GearCompletionPct", "GoldProgress", "CurrentObjective", "CompletedQuestChains", "ProfessionGaps" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterGoals), global::Communication.CharacterGoals.Parser, new[]{ "SpecName", "TalentBuildName", "GoldTargetCopper", "SkillPriorities", "QuestChains", "MaxConsumableSpendCopper" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.TravelObjective), global::Communication.TravelObjective.Parser, new[]{ "TargetMapId", "TargetPosition", "TargetLocationName", "AllowHearthstone", "AllowClassTeleport" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LogEntry), global::Communication.LogEntry.Parser, new[]{ "Level", "Category", "Message", "Timestamp" }, null, null, null, null)
@@ -3004,6 +3010,7 @@ namespace Communication {
       currentMapId_ = other.currentMapId_;
       travelObjective_ = other.travelObjective_ != null ? other.travelObjective_.Clone() : null;
       characterGoals_ = other.characterGoals_ != null ? other.characterGoals_.Clone() : null;
+      progressionStatus_ = other.progressionStatus_ != null ? other.progressionStatus_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3318,6 +3325,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "progression_status" field.</summary>
+    public const int ProgressionStatusFieldNumber = 23;
+    private global::Communication.ProgressionStatus progressionStatus_;
+    /// <summary>
+    /// Current progress toward goals (populated by StateManager)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.ProgressionStatus ProgressionStatus {
+      get { return progressionStatus_; }
+      set {
+        progressionStatus_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3355,6 +3377,7 @@ namespace Communication {
       if (CurrentMapId != other.CurrentMapId) return false;
       if (!object.Equals(TravelObjective, other.TravelObjective)) return false;
       if (!object.Equals(CharacterGoals, other.CharacterGoals)) return false;
+      if (!object.Equals(ProgressionStatus, other.ProgressionStatus)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3384,6 +3407,7 @@ namespace Communication {
       if (CurrentMapId != 0) hash ^= CurrentMapId.GetHashCode();
       if (travelObjective_ != null) hash ^= TravelObjective.GetHashCode();
       if (characterGoals_ != null) hash ^= CharacterGoals.GetHashCode();
+      if (progressionStatus_ != null) hash ^= ProgressionStatus.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3478,6 +3502,10 @@ namespace Communication {
         output.WriteRawTag(178, 1);
         output.WriteMessage(CharacterGoals);
       }
+      if (progressionStatus_ != null) {
+        output.WriteRawTag(186, 1);
+        output.WriteMessage(ProgressionStatus);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3564,6 +3592,10 @@ namespace Communication {
         output.WriteRawTag(178, 1);
         output.WriteMessage(CharacterGoals);
       }
+      if (progressionStatus_ != null) {
+        output.WriteRawTag(186, 1);
+        output.WriteMessage(ProgressionStatus);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3631,6 +3663,9 @@ namespace Communication {
       }
       if (characterGoals_ != null) {
         size += 2 + pb::CodedOutputStream.ComputeMessageSize(CharacterGoals);
+      }
+      if (progressionStatus_ != null) {
+        size += 2 + pb::CodedOutputStream.ComputeMessageSize(ProgressionStatus);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -3719,6 +3754,12 @@ namespace Communication {
           CharacterGoals = new global::Communication.CharacterGoals();
         }
         CharacterGoals.MergeFrom(other.CharacterGoals);
+      }
+      if (other.progressionStatus_ != null) {
+        if (progressionStatus_ == null) {
+          ProgressionStatus = new global::Communication.ProgressionStatus();
+        }
+        ProgressionStatus.MergeFrom(other.ProgressionStatus);
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -3843,6 +3884,13 @@ namespace Communication {
               CharacterGoals = new global::Communication.CharacterGoals();
             }
             input.ReadMessage(CharacterGoals);
+            break;
+          }
+          case 186: {
+            if (progressionStatus_ == null) {
+              ProgressionStatus = new global::Communication.ProgressionStatus();
+            }
+            input.ReadMessage(ProgressionStatus);
             break;
           }
         }
@@ -3970,6 +4018,366 @@ namespace Communication {
             input.ReadMessage(CharacterGoals);
             break;
           }
+          case 186: {
+            if (progressionStatus_ == null) {
+              ProgressionStatus = new global::Communication.ProgressionStatus();
+            }
+            input.ReadMessage(ProgressionStatus);
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
+  /// Progress toward character goals. StateManager populates from snapshot + goal comparison.
+  /// </summary>
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class ProgressionStatus : pb::IMessage<ProgressionStatus>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<ProgressionStatus> _parser = new pb::MessageParser<ProgressionStatus>(() => new ProgressionStatus());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<ProgressionStatus> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProgressionStatus() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProgressionStatus(ProgressionStatus other) : this() {
+      gearCompletionPct_ = other.gearCompletionPct_;
+      goldProgress_ = other.goldProgress_;
+      currentObjective_ = other.currentObjective_;
+      completedQuestChains_ = other.completedQuestChains_.Clone();
+      professionGaps_ = other.professionGaps_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProgressionStatus Clone() {
+      return new ProgressionStatus(this);
+    }
+
+    /// <summary>Field number for the "gear_completion_pct" field.</summary>
+    public const int GearCompletionPctFieldNumber = 1;
+    private float gearCompletionPct_;
+    /// <summary>
+    /// % of BiS slots filled (0.0-1.0)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float GearCompletionPct {
+      get { return gearCompletionPct_; }
+      set {
+        gearCompletionPct_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "gold_progress" field.</summary>
+    public const int GoldProgressFieldNumber = 2;
+    private int goldProgress_;
+    /// <summary>
+    /// Current copper balance
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int GoldProgress {
+      get { return goldProgress_; }
+      set {
+        goldProgress_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "current_objective" field.</summary>
+    public const int CurrentObjectiveFieldNumber = 3;
+    private string currentObjective_ = "";
+    /// <summary>
+    /// Human-readable current goal ("Farming Cape of the Black Baron")
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string CurrentObjective {
+      get { return currentObjective_; }
+      set {
+        currentObjective_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "completed_quest_chains" field.</summary>
+    public const int CompletedQuestChainsFieldNumber = 4;
+    private static readonly pb::FieldCodec<string> _repeated_completedQuestChains_codec
+        = pb::FieldCodec.ForString(34);
+    private readonly pbc::RepeatedField<string> completedQuestChains_ = new pbc::RepeatedField<string>();
+    /// <summary>
+    /// Quest chain IDs already completed
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> CompletedQuestChains {
+      get { return completedQuestChains_; }
+    }
+
+    /// <summary>Field number for the "profession_gaps" field.</summary>
+    public const int ProfessionGapsFieldNumber = 5;
+    private int professionGaps_;
+    /// <summary>
+    /// Number of professions below target level
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int ProfessionGaps {
+      get { return professionGaps_; }
+      set {
+        professionGaps_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as ProgressionStatus);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(ProgressionStatus other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(GearCompletionPct, other.GearCompletionPct)) return false;
+      if (GoldProgress != other.GoldProgress) return false;
+      if (CurrentObjective != other.CurrentObjective) return false;
+      if(!completedQuestChains_.Equals(other.completedQuestChains_)) return false;
+      if (ProfessionGaps != other.ProfessionGaps) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (GearCompletionPct != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(GearCompletionPct);
+      if (GoldProgress != 0) hash ^= GoldProgress.GetHashCode();
+      if (CurrentObjective.Length != 0) hash ^= CurrentObjective.GetHashCode();
+      hash ^= completedQuestChains_.GetHashCode();
+      if (ProfessionGaps != 0) hash ^= ProfessionGaps.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (GearCompletionPct != 0F) {
+        output.WriteRawTag(13);
+        output.WriteFloat(GearCompletionPct);
+      }
+      if (GoldProgress != 0) {
+        output.WriteRawTag(16);
+        output.WriteInt32(GoldProgress);
+      }
+      if (CurrentObjective.Length != 0) {
+        output.WriteRawTag(26);
+        output.WriteString(CurrentObjective);
+      }
+      completedQuestChains_.WriteTo(output, _repeated_completedQuestChains_codec);
+      if (ProfessionGaps != 0) {
+        output.WriteRawTag(40);
+        output.WriteInt32(ProfessionGaps);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (GearCompletionPct != 0F) {
+        output.WriteRawTag(13);
+        output.WriteFloat(GearCompletionPct);
+      }
+      if (GoldProgress != 0) {
+        output.WriteRawTag(16);
+        output.WriteInt32(GoldProgress);
+      }
+      if (CurrentObjective.Length != 0) {
+        output.WriteRawTag(26);
+        output.WriteString(CurrentObjective);
+      }
+      completedQuestChains_.WriteTo(ref output, _repeated_completedQuestChains_codec);
+      if (ProfessionGaps != 0) {
+        output.WriteRawTag(40);
+        output.WriteInt32(ProfessionGaps);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (GearCompletionPct != 0F) {
+        size += 1 + 4;
+      }
+      if (GoldProgress != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeInt32Size(GoldProgress);
+      }
+      if (CurrentObjective.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(CurrentObjective);
+      }
+      size += completedQuestChains_.CalculateSize(_repeated_completedQuestChains_codec);
+      if (ProfessionGaps != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeInt32Size(ProfessionGaps);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(ProgressionStatus other) {
+      if (other == null) {
+        return;
+      }
+      if (other.GearCompletionPct != 0F) {
+        GearCompletionPct = other.GearCompletionPct;
+      }
+      if (other.GoldProgress != 0) {
+        GoldProgress = other.GoldProgress;
+      }
+      if (other.CurrentObjective.Length != 0) {
+        CurrentObjective = other.CurrentObjective;
+      }
+      completedQuestChains_.Add(other.completedQuestChains_);
+      if (other.ProfessionGaps != 0) {
+        ProfessionGaps = other.ProfessionGaps;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 13: {
+            GearCompletionPct = input.ReadFloat();
+            break;
+          }
+          case 16: {
+            GoldProgress = input.ReadInt32();
+            break;
+          }
+          case 26: {
+            CurrentObjective = input.ReadString();
+            break;
+          }
+          case 34: {
+            completedQuestChains_.AddEntriesFrom(input, _repeated_completedQuestChains_codec);
+            break;
+          }
+          case 40: {
+            ProfessionGaps = input.ReadInt32();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 13: {
+            GearCompletionPct = input.ReadFloat();
+            break;
+          }
+          case 16: {
+            GoldProgress = input.ReadInt32();
+            break;
+          }
+          case 26: {
+            CurrentObjective = input.ReadString();
+            break;
+          }
+          case 34: {
+            completedQuestChains_.AddEntriesFrom(ref input, _repeated_completedQuestChains_codec);
+            break;
+          }
+          case 40: {
+            ProfessionGaps = input.ReadInt32();
+            break;
+          }
         }
       }
     }
@@ -3996,7 +4404,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -4380,7 +4788,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[12]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -4742,7 +5150,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[12]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[13]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

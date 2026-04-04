@@ -207,6 +207,16 @@ message WoWActivitySnapshot {
     uint32 currentMapId = 20;                   // Current map ID (top-level for reliable BG transfer detection)
     TravelObjective travel_objective = 21;      // Current travel objective (set by StateManager for goal-driven travel)
     CharacterGoals character_goals = 22;        // Build config / progression goals from CharacterSettings.BuildConfig
+    ProgressionStatus progression_status = 23;  // Current progress toward goals (populated by StateManager)
+}
+
+// Progress toward character goals. StateManager populates from snapshot + goal comparison.
+message ProgressionStatus {
+    float gear_completion_pct = 1;              // % of BiS slots filled (0.0-1.0)
+    int32 gold_progress = 2;                    // Current copper balance
+    string current_objective = 3;               // Human-readable current goal ("Farming Cape of the Black Baron")
+    repeated string completed_quest_chains = 4; // Quest chain IDs already completed
+    int32 profession_gaps = 5;                  // Number of professions below target level
 }
 
 // Character progression goals from CharacterBuildConfig.

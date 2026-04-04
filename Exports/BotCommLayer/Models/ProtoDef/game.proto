@@ -124,6 +124,7 @@ message WoWPlayer {
     uint32 watchedFactionIndex = 41;
     map<uint32, uint32> combatRating = 42;
     uint32 corpseRecoveryDelaySeconds = 43;
+    repeated uint32 discoveredFlightNodes = 44; // Taxi node IDs the character has discovered
 }
 
 // Reusable message for WoWItem, extending WoWGameObject
