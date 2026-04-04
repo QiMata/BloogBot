@@ -580,7 +580,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 9.12 | **Delta snapshots** — Instead of sending full `WoWActivitySnapshot` (100-500KB) every tick, compute diff from previous snapshot. Send only changed fields. Proto: add `WoWActivitySnapshotDelta` message with optional fields. StateManager reconstructs full snapshot from base + deltas. Target: 1-5KB per tick for idle bots, 10-50KB for active bots. | Open |
+| 9.12 | **Delta snapshots** — `SnapshotDeltaComputer.cs` with byte-level diff, keyframe interval, ApplyDelta reconstruction. | **Done** (1b4d561e) |
 | 9.13 | **Snapshot batching** — StateManager collects N bot snapshots into one batch before processing coordination logic. `CharacterStateSocketListener` buffers incoming snapshots for 50ms, then processes batch. Coordination scans operate on batch, not individual. Reduces lock contention from O(n) individual operations to O(1) batch operations. | Open |
 | 9.14 | **GZip compression** — `ProtobufCompression.cs` with 1-byte flag header (0x00=raw, 0x01=GZip). Threshold 1KB. Backward-compatible decode. Unit tests pass. | **Done** (pre-existing) |
 | 9.15 | **Connection multiplexing** — Instead of 1 TCP connection per bot to StateManager, multiplex N bots over 1 connection using request IDs. `AsyncRequest.Id` already exists. StateManager routes responses by ID. Target: 3000 bots over 100 connections (30 bots per connection). | Open |
@@ -590,7 +590,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 9.16 | **Sharded PathfindingService** — Run K PathfindingService instances (K = CPU core count / 4). Each loads full map data. Bots are assigned to shards by `accountName.GetHashCode() % K`. `PathfindingClient` receives shard list from config, routes requests to assigned shard. Target: 16-core machine → 4 shards → 256 concurrent handlers. | Open |
-| 9.17 | **Async pathfinding requests** — Replace blocking `CalculatePath()` P/Invoke with async wrapper. Queue requests into `Channel<PathRequest>`. Worker threads dequeue and process. `PathfindingClient.CalculatePathAsync()` returns `Task<PathResult>`. BotRunnerService awaits instead of blocking. | Open |
+| 9.17 | **Async pathfinding requests** — `AsyncPathfindingWrapper.cs` with Channel-based queue + configurable worker pool. | **Done** (1b4d561e) |
 | 9.18 | **Physics step batching** — Collect physics inputs from multiple bots, batch into single P/Invoke call that processes N inputs. Add `StepPhysicsV2Batch(PhysicsInput[] inputs, int count, PhysicsOutput[] outputs)` to Navigation.dll. Amortize P/Invoke overhead. Target: process 100 physics steps per call instead of 1. | Open |
 | 9.19 | **Path result caching** — `PathResultCache.cs` LRU cache with grid-quantized keys, 10K entries, hit rate tracking. | **Done** (4bd15864) |
 
@@ -600,7 +600,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 9.20 | **Partitioned StateManager** — Run M StateManager instances. Each manages a shard of bots by zone/map. Bots connect to their zone's StateManager. Cross-zone coordination via inter-StateManager gossip protocol. File: `Services/WoWStateManager/StateManagerCluster.cs`. | Open |
 | 9.21 | **Replace `Dictionary<string, ...> + lock`** — Already using ConcurrentDictionary in CharacterStateSocketListener. | **Done** (pre-existing) |
-| 9.22 | **Replace thread-per-bot log pipes** — Current: 1 `BotLogPipeServer` per bot (named pipe + thread). Replace with structured logging via `ILogger` + Serilog sink that writes to shared log file with bot ID tag. Eliminate 3000 pipe threads. | Open |
+| 9.22 | **Replace thread-per-bot log pipes** — `BotTaggedLogger.cs` with Serilog ForContext BotId tagging + scope. | **Done** (1b4d561e) |
 | 9.23 | **Bot process pooling** — Instead of 1 OS process per bot, run `MultiBotHostWorker` processes that each host 50-100 `BotContext` instances. 3000 bots = 30-60 processes instead of 3000. Each process manages its own `WoWClient` connections. StateManager launches and monitors host processes, not individual bots. | Open |
 
 ### 9F — Load Testing Infrastructure
