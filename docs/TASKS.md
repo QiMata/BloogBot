@@ -470,10 +470,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 9.1 | **`BotContext` class** — Created with all per-bot state (WoWClient, ObjectManager, EventEmitter, SplineController, MovementController, PathfindingClient). `FromCurrentSingletons()` bridge for migration. | **Done** (c183e27d) |
-| 9.2 | **Refactor `WoWSharpObjectManager`** — Remove `private static WoWSharpObjectManager _instance` and `public static Instance` property. Change `private static readonly List<WoWObject> _objects` and `_objectsLock` to instance fields. Constructor becomes public, takes `WoWClient` + `PathfindingClient` + `ILogger`. Keep a `[Obsolete] static Instance` shim during migration that delegates to a thread-local or ambient context. | Open |
-| 9.3 | **Refactor `WoWSharpEventEmitter`** — Remove singleton. Make instance-based. Each `BotContext` owns one. All 100+ event subscriptions scoped to their bot. Update all callers from `WoWSharpEventEmitter.Instance.OnX += handler` to `_context.Events.OnX += handler`. | Open |
+| 9.2 | **Refactor `WoWSharpObjectManager`** — Public ctor, [Obsolete] Instance, instance _objects/_objectsLock. | **Done** (77e1fd8e) |
+| 9.3 | **Refactor `WoWSharpEventEmitter`** — Public ctor, [Obsolete] Instance shim. Per-bot via BotContext. | **Done** (aefe34dd) |
 | 9.4 | **Refactor `SplineController`** — WoWSharpObjectManager.SplineCtrl replaces Splines.Instance. Per-bot via BotContext. | **Done** (31d4a513) |
-| 9.5 | **Update `BackgroundBotWorker`** — Replace `WoWSharpObjectManager.Instance` call in `InitializeInfrastructure()` with `new WoWSharpObjectManager(wowClient, pathfindingClient, logger)`. Each worker creates its own `BotContext`. | Open |
+| 9.5 | **Update `BackgroundBotWorker`** — Per-worker `_objectManager` field replaces all Instance calls. | **Done** (8989fa73) |
 | 9.6 | **Update all tests** — Remove `DisableParallelization` from ObjectManager test collections. Each test creates its own `BotContext`. Update `ObjectManagerFixture` to use instance-based ObjectManager. Run full test suite green. | Open |
 | 9.7 | **Validate N=10 bots per process** — Create `MultiBotHostWorker` that creates 10 `BotContext` instances in one `BackgroundBotRunner` process. Each runs its own tick loop on a dedicated `Task`. Connect all 10 to live MaNGOS, verify independent movement and combat. | Open |
 
