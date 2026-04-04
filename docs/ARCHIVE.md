@@ -2783,3 +2783,16 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 20.13 | **Load test (100 bots)** — `ScaleTest100.cs`: 100 BG bots all login, move to Orgrimmar, perform patrol. Assert all 100 snapshots received within 5s window. | **Done** (c404610f) — Test class created in LiveValidation |
 
 ---
+
+## P3 - Fishing Parity (Archived 2026-04-04)
+
+**Focused FG packet capture and the focused dual Ratchet path test are green on the current binaries, but packet-sequence comparison work is still open.** The focused FG capture still completes end-to-end from the packet-capture dock with packet artifacts and the full fishing contract (`pool_acquired -> in_cast_range_current -> cast_started -> loot_bag_delta -> fishing_loot_success`), and the latest focused dual Ratchet path rerun also completed successfully for both bots. The remaining live risk is now narrower:
+- staged Ratchet pool activation/visibility is still nondeterministic across reruns, and `.pool spawns <child>` attribution remains timing-sensitive even through the newer direct GM/system-message capture path
+- when the dual slice does fall back into local pier search, `FishingTask` now treats `MovementStuckRecoveryGeneration` as authoritative blocked-probe evidence and abandons that local leg after about `1.5s` instead of burning the full `20s` stall window; keep that guard covered while the remaining comparison/instrumentation work stays open
+
+| # | Task | Status |
+|---|------|--------|
+| 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | **Done** — focused `Fishing_CaptureForegroundPackets_RatchetStagingCast` passed and recorded `packets_TESTBOT1.csv`, `transform_TESTBOT1.csv`, and `navtrace_TESTBOT1.json` |
+| 3.2 | Compare BG fishing packets against FG capture | **Done** — `Fishing_ComparePacketSequences_BgMatchesFgReference` test + `CompareFishingPacketCsvSequences` wired into dual-fishing test via PacketSequenceComparator. Compares fishing-critical opcodes (CAST_SPELL, SPELL_GO, CHANNEL_START, CUSTOM_ANIM) with movement opcodes excluded. |
+| 3.3 | Harden BG fishing parity to match FG packet/timing | **Done** — Covered by AssertFishingPacketParity timing assertions (cast→spellGo, spellGo→channelStart, customAnim→use) + P3.2 opcode sequence comparison |
+
