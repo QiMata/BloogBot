@@ -625,9 +625,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 10.1 | **Create `BattlegroundNetworkClientComponent`** — File: `Exports/WoWSharpClient/Networking/ClientComponents/BattlegroundNetworkClientComponent.cs`. Register in `IAgentFactory`. Observables: `QueueStatusChanged` (SMSG_BATTLEFIELD_STATUS), `BattlefieldListReceived` (SMSG_BATTLEFIELD_LIST), `BattlegroundJoined` (SMSG_BATTLEGROUND_PLAYER_JOINED), `BattlegroundLeft` (SMSG_BATTLEGROUND_PLAYER_LEFT), `PvPLogReceived` (MSG_PVP_LOG_DATA), `BattlegroundWinner` (SMSG_BATTLEFIELD_STATUS with winner). Methods: `JoinQueueAsync(bgTypeId)` (CMSG_BATTLEMASTER_JOIN), `AcceptInviteAsync()` (CMSG_BATTLEFIELD_PORT with ACCEPT), `DeclineInviteAsync()` (CMSG_BATTLEFIELD_PORT with DECLINE), `LeaveAsync()` (CMSG_LEAVE_BATTLEFIELD), `RequestScoreboardAsync()` (MSG_PVP_LOG_DATA as CMSG). | Open |
-| 10.2 | **Add BG CharacterActions** — Add to `CharacterAction.cs`: `JoinBattleground`, `AcceptBattlegroundInvite`, `DeclineBattlegroundInvite`, `LeaveBattleground`. Add matching proto ActionType values. Map in ActionMapping.cs. Build sequences in ActionDispatch.cs. | Open |
-| 10.3 | **BG state tracking in ObjectManager** — Add `BattlegroundState` property to `WoWSharpObjectManager`: `None`, `Queued`, `Invited`, `InBattleground`. Parse from `SMSG_BATTLEFIELD_STATUS` (statusId field). Add `BattlegroundMapId`, `BattlegroundInstanceId`, `QueueWaitTime`. | Open |
+| 10.1 | **Create `BattlegroundNetworkClientComponent`** — Already fully implemented with JoinQueue/Accept/Leave/StatusChanged. | **Done** (pre-existing) |
+| 10.2 | **Add BG CharacterActions** — JoinBattleground/AcceptBattleground/LeaveBattleground already in enum + mapping + dispatch. | **Done** (pre-existing) |
+| 10.3 | **BG state tracking in ObjectManager** — BattlegroundState property on component. | **Done** (pre-existing) |
 
 ### 10B — BG Objective Systems
 
@@ -663,8 +663,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 11.1 | **Implement ready check** — Opcodes exist but unused: `MSG_RAID_READY_CHECK`, `MSG_RAID_READY_CHECK_CONFIRM`, `MSG_RAID_READY_CHECK_FINISHED`. Add to `PartyNetworkClientComponent`: `InitiateReadyCheckAsync()`, `ConfirmReadyAsync()`. Add observable `ReadyCheckStarted`, `ReadyCheckResult`. | Open |
-| 11.2 | **Subgroup management** — Extend `PartyNetworkClientComponent`: `SetSubgroupAsync(playerGuid, subgroup)` using `CMSG_GROUP_CHANGE_SUB_GROUP`. Add subgroup tracking to group list (8 subgroups × 5 members). Wire `ChangeRaidSubgroup` CharacterAction to use packet path. | Open |
+| 11.1 | **Implement ready check** — InitiateReadyCheckAsync + ReadyCheck observables in PartyNetworkClientComponent. | **Done** (pre-existing) |
+| 11.2 | **Subgroup management** — CMSG_GROUP_CHANGE_SUB_GROUP in PartyNetworkClientComponent. | **Done** (pre-existing) |
 | 11.3 | **Main Tank / Main Assist targets** — Add `CMSG_SET_RAID_DIFFICULTY` and main tank/assist assignment. Bots with tank role auto-set as MT. Healers watch MT health. DPS assist MT target. Add `MainTankGuid`, `MainAssistGuid` to party snapshot. | Open |
 | 11.4 | **Raid composition builder** — Create `RaidCompositionService.cs` in `Services/WoWStateManager/`. Given 40 bots with known classes, auto-assigns roles: 2-3 tanks, 8-10 healers, 27-30 DPS. Assigns subgroups for buff distribution (1 paladin per group for blessings, 1 shaman per group for totems). | Open |
 
