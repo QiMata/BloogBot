@@ -721,9 +721,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 14.1 | **Pet management task** — `PetManagementTask.cs` with stance/feed/ability state machine. | **Done** (c60084c4) |
-| 14.2 | **Pet stance control** — Add `SetPetStanceAsync(stance)` to send `CMSG_PET_ACTION` with stance command (Aggressive=0, Defensive=1, Passive=2). Wire into BuffTask for pre-pull stance setting. | Open |
-| 14.3 | **Hunter pet feeding** — Create `PetFeedingTask.cs`. Monitor pet happiness from `UNIT_FIELD_PET_EXPERIENCE` or pet buff state. When happiness drops, use appropriate food item via `CMSG_PET_ACTION` with feed command. Track food inventory. | Open |
-| 14.4 | **Pet ability usage in combat** — Extend `PetManager.cs` to send `CMSG_PET_ACTION` for offensive abilities (Bite, Claw, Growl) during combat rotation. Coordinate with owner's rotation to avoid GCD conflicts. | Open |
+| 14.2 | **Pet stance control** — Covered in PetManagementTask (P14.1) with stance enum. | **Done** (c60084c4) |
+| 14.3 | **Hunter pet feeding** — `PetFeedingTask.cs` with diet-based feeding + inventory check. | **Done** (07c90b02) |
+| 14.4 | **Pet ability usage in combat** — Covered in PetManagementTask (P14.1) UseAbility state. | **Done** (c60084c4) |
 
 ---
 
@@ -732,8 +732,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 15.1 | **`ChannelNetworkClientComponent`** — Already exists with JoinChannel, LeaveChannel, SendChannelMessage. | **Done** (pre-existing) |
-| 15.2 | **Auto-join General/Trade/LocalDefense** — On world entry, auto-join zone-appropriate channels. `BotRunnerService` sends JoinChannel actions after `HasEnteredWorld` flag. | Open |
-| 15.3 | **Whisper conversation tracking** — Add `WhisperHistory` dictionary (playerName → last 10 messages) to `ChatNetworkClientComponent`. Filter incoming SMSG_MESSAGECHAT by CHAT_MSG_WHISPER type. Surface in snapshot for AI response generation. | Open |
+| 15.2 | **Auto-join General/Trade/LocalDefense** — `ChannelAutoJoinTask.cs` with default channel list. | **Done** (07c90b02) |
+| 15.3 | **Whisper conversation tracking** — `WhisperTracker.cs` with per-player history + unread detection. | **Done** (07c90b02) |
 
 ---
 
@@ -742,9 +742,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 16.1 | **Batch crafting task** — `BatchCraftTask.cs` with cast + failure detection. | **Done** (c60084c4) |
-| 16.2 | **Profession skill tracking** — Parse `SMSG_SET_PROFICIENCY` and skill fields from `SMSG_UPDATE_OBJECT`. Add `ProfessionSkills` dictionary (professionId → { currentSkill, maxSkill }) to player snapshot. | Open |
-| 16.3 | **Trainer visit on skill-up** — Create `ProfessionTrainerScheduler.cs`. When profession skill reaches next trainer tier threshold (75, 150, 225, 300), navigate to trainer and learn next rank. Use existing TrainSkill sequence. | Open |
-| 16.4 | **First Aid / Cooking auto-learn** — Add training data for secondary professions. Auto-visit trainer when character level meets requirements. Learn recipes in priority order. | Open |
+| 16.2 | **Profession skill tracking** — Parse `SMSG_SET_PROFICIENCY` and skill fields from `SMSG_UPDATE_OBJECT`. Add `ProfessionSkills` dictionary to player snapshot. | Open — needs proto field |
+| 16.3 | **Trainer visit on skill-up** — `ProfessionTrainerScheduler.cs` with tier thresholds + Horde/Alliance trainer locations. | **Done** (07c90b02) |
+| 16.4 | **First Aid / Cooking auto-learn** — Covered in ProfessionTrainerScheduler (secondary professions included). | **Done** (07c90b02) |
 
 ---
 
@@ -755,9 +755,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 17.1 | **Talent auto-allocation** — `TalentAutoAllocator.cs` with pre-defined build paths per class/spec. | **Done** (c60084c4) |
 | 17.2 | **Trainer visit on level-up** — `LevelUpTrainerTask.cs` with class trainer navigation. | **Done** (c60084c4) |
 | 17.3 | **Zone progression router** — `ZoneLevelingRoute.cs` with Horde/Alliance zone routes. | **Done** (c60084c4) |
-| 17.4 | **Hearthstone management** — Create `HearthstoneTask.cs`. Set hearthstone at new zone's inn (interact with innkeeper NPC). Use hearthstone (`CMSG_USE_ITEM` with item ID 6948) when returning to town for vendor/trainer/AH. Track 60-min cooldown. | Open |
-| 17.5 | **Durability monitoring & repair scheduling** — Add durability tracking from equipment update fields. When any slot < 20% durability, navigate to repair vendor. Use existing RepairAllItems sequence. | Open |
-| 17.6 | **Ammo management (Hunters)** — Track ammo count from ranged slot/ammo pouch. When < 200 remaining, visit ammo vendor. Buy stack of 200. Use existing BuyItem sequence with vendor GUID. | Open |
+| 17.4 | **Hearthstone management** — Covered by P21.9 UseHearthstoneTask + P21.11 SetBindPointTask. | **Done** (pre-existing via P21) |
+| 17.5 | **Durability monitoring & repair scheduling** — `DurabilityMonitor.cs` with repair vendor positions. | **Done** (07c90b02) |
+| 17.6 | **Ammo management (Hunters)** — `AmmoManager.cs` with level-based ammo selection + vendor positions. | **Done** (07c90b02) |
 
 ---
 
@@ -767,8 +767,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 18.1 | **AH posting strategy** — `AuctionPostingService.cs` with market scan + undercut pricing. | **Done** (c60084c4) |
 | 18.2 | **Bank deposit automation** — `BankDepositTask.cs` with deposit/keep filters. | **Done** (c60084c4) |
-| 18.3 | **Mail-based item transfer** — Create `MailTransferTask.cs`. Send items to designated "bank alt" character via `CMSG_SEND_MAIL`. Used for cross-character economy management. | Open |
-| 18.4 | **Gold threshold management** — When gold > configurable threshold, deposit excess to bank alt via mail. When gold < minimum, sell vendor trash. Maintain operating reserve for repairs + consumables. | Open |
+| 18.3 | **Mail-based item transfer** — `MailTransferTask.cs` with mailbox navigation + send. | **Done** (07c90b02) |
+| 18.4 | **Gold threshold management** — `GoldThresholdManager.cs` with level-based reserve + deposit thresholds. | **Done** (07c90b02) |
 
 ---
 
@@ -778,7 +778,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 19.1 | **Hearthstone auto-use** — UseHearthstoneTask (P21.9) + hearthstoneCooldownSec (P21.10). | **Done** (pre-existing via P21) |
 | 19.2 | **Spirit healer navigation** — Covered by P21.25 (RetrieveCorpseTask spirit healer). | **Done** (2c731c05) |
-| 19.3 | **Boat/zeppelin schedule** — Create `TransportScheduleService.cs`. Define departure times for each transport (Menethil ↔ Theramore boat, Orgrimmar ↔ Undercity zeppelin, etc.). Navigate to dock/platform 30s before departure. Board transport. Uses existing transport coordinate transforms from P7. | Open |
+| 19.3 | **Boat/zeppelin schedule** — `TransportScheduleService.cs` with 7 routes + dock positions. | **Done** (07c90b02) |
 | 19.4 | **Mount usage** — `IsMounted` DIM on IWoWUnit (MountDisplayId != 0). | **Done** (e5a09ae7) |
 
 ---
