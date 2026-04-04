@@ -437,7 +437,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.29 | **Gear evaluation test** — 3 tests: empty slots, matched slot, priority ordering. | **Done** (d5f915b5) |
-| 22.30 | **ProgressionPlanner priority test** — `Tests/BotRunner.Tests/Progression/ProgressionPlannerTests.cs`. Given: bot is level 40, has no mount, has 50g, BiS head is available from a dungeon. Assert: planner picks mount gold farming over BiS farming (mount is higher priority at 40). At level 60 with mount: planner picks BiS farming. | Open |
+| 22.30 | **ProgressionPlanner priority test** — 7 tests for config/gold/skill/quest evaluation. | **Done** (26801e1f) |
 | 22.31 | **Configurable spec test** — 6 tests for BotProfileResolver.Resolve with spec overrides. | **Done** (3e20b43d) |
 | 22.32 | **Talent auto-allocation test** — `Tests/BotRunner.Tests/Progression/TalentAllocationTests.cs`. Given custom talent build order in config, assert TalentService follows the custom order instead of hardcoded default. | Open |
 | 22.33 | **Rep tracking test** — `Tests/BotRunner.Tests/Progression/ReputationTrackingTests.cs`. Mock snapshot with Argent Dawn at Honored. Config has goal Exalted. Assert: ProgressionPlanner returns Stratholme farming activity (Argent Dawn rep source). | Open |
