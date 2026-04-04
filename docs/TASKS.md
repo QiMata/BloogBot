@@ -999,14 +999,14 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 302)
 - **Branch:** `main`
-- **Session 302 — 21 items shipped across P8/P21/P22/P23/P26/P28:**
-  - **P8 archived** (10/10): Trade BG path, StartWandAttack.
-  - **P28 archived** (7/7): Strict bot count.
-  - **P22** (7): 22.1 goal types, 22.2/22.3/22.16 confirmed, 22.5/22.9/22.12/22.13 models.
-  - **P21** (5): 21.3 TravelOptions, 21.12 InnkeeperData, 21.14/21.15/21.16/21.22 confirmed.
-  - **P23** (1): 23.3 PacketSequenceComparator.
-  - **P26** (1): 26.4 SummoningStoneData.
-  - Totals: 90 done / 215 open. Commits: `fcba3c26` through `e02306b0`
+- **Session 302 — 37 items shipped, 106/305 done (34.8%). Phases P8/P28 archived:**
+  - **P8 archived** (10/10), **P28 archived** (7/7).
+  - **P22** (12): CharacterBuildConfig goals, GearGoal/ReputationGoal models, QuestChainData, CharacterGoals proto, consumable budget.
+  - **P21** (10): TravelObjective proto, TravelTo dispatch, TravelOptions, UseHearthstoneTask, SetBindPointTask, InnkeeperData, LocationResolver, MageTeleportData, Deeprun Tram, dungeon+raid portals.
+  - **P23** (3): PacketSequenceComparator, IsInFlight, SetBindPointTask.
+  - **P24** (3): BotDistribution, BulkAccountCreator, Mage+Alliance accounts.
+  - **P26** (1): SummoningStoneData. **P29** (2): Mage+Alliance accounts.
+  - Commits: `fcba3c26` through `3fed7c4f`
 - **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
   - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
