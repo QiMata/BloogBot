@@ -213,6 +213,18 @@ namespace WoWSharpClient.Movement
                     kbVx, kbVy, kbVz);
             }
 
+            // Idle guard: skip physics when no movement intent, no pending ground snap,
+            // and not auto-attacking. Prevents unnecessary airborne detection on idle frames.
+            // This was present in the 100% parity commit (70c72973) and was accidentally removed.
+            if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
+                && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
+                && !_needsGroundSnap
+                && !_player.IsAutoAttacking)
+            {
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                return;
+            }
+
             // Suppress all movement during channeling or casting. MaNGOS interprets
             // any movement packet (including idle heartbeats) as a channel interrupt.
             // This prevents crafting, fishing, and other channeled spells from being
