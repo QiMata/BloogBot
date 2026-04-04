@@ -465,7 +465,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.1 | **Add `TravelObjective` proto message** — TRAVEL_TO=79, TravelObjective proto, CharacterAction.TravelTo, ActionMapping. | **Done** (5409506e) |
-| 21.2 | **Create `TravelTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/TravelTask.cs`. Constructor takes `(IBotContext, uint targetMapId, Position targetPos, TravelOptions)`. On first `Update()`: call `CrossMapRouter.PlanRoute()` to get `List<RouteLeg>`. Push sub-tasks in reverse order (stack is LIFO). Each sub-task pops itself on completion; TravelTask monitors progress. If a leg fails (stuck >30s), re-plan from current position. Arrival: within 5y of target on correct map. | Open |
+| 21.2 | **Create `TravelTask.cs`** — Cross-world route execution via CrossMapRouter with walk/transport/portal legs. | **Done** (6d3dbd70) |
 | 21.3 | **Create `TravelOptions` record** — TravelFaction, AllowHearthstone/ClassTeleport/FlightPath, DiscoveredFlightNodes, HearthstoneBind. | **Done** (190d1e65) |
 | 21.4 | **Wire TravelTo in ActionDispatch** — Same-map GOTO, cross-map placeholder for P21.2. | **Done** (5409506e) |
 | 21.5 | **StateManager travel coordination** — In `CharacterStateSocketListener`, when injecting coordinated actions, check if bot has a `TravelObjective`. If bot is not already executing a TravelTo action and is idle, inject `ActionType.TRAVEL_TO` with the objective's target. StateManager sets `TravelObjective` on the snapshot based on higher-level goals (grind zone assignment, dungeon entrance, vendor trip, etc.). | Open |
