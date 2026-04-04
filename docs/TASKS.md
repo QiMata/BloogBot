@@ -665,7 +665,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 11.1 | **Implement ready check** — InitiateReadyCheckAsync + ReadyCheck observables in PartyNetworkClientComponent. | **Done** (pre-existing) |
 | 11.2 | **Subgroup management** — CMSG_GROUP_CHANGE_SUB_GROUP in PartyNetworkClientComponent. | **Done** (pre-existing) |
-| 11.3 | **Main Tank / Main Assist targets** — Add `CMSG_SET_RAID_DIFFICULTY` and main tank/assist assignment. Bots with tank role auto-set as MT. Healers watch MT health. DPS assist MT target. Add `MainTankGuid`, `MainAssistGuid` to party snapshot. | Open |
+| 11.3 | **Main Tank / Main Assist targets** — `RaidRoleAssignment.cs` with MT/MA tracking + auto-assign. | **Done** (9105b2a3) |
 | 11.4 | **Raid composition builder** — `RaidCompositionService.cs` with tank/healer/DPS assignment. | **Done** (5cfc1183) |
 
 ### 11B — Encounter Mechanics
@@ -682,7 +682,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 11.9 | **Master loot distribution** — `MasterLootDistributionTask.cs` with priority-based loot assignment via LootFrame + AssignLoot. | **Done** (c60084c4) |
-| 11.10 | **Loot council simulation** — For contested items, simulate /roll with `CMSG_LOOT_ROLL`. Track roll results from `SMSG_LOOT_ROLL`. Highest roll wins. | Open |
+| 11.10 | **Loot council simulation** — `LootCouncilSimulator.cs` with MainSpec > OffSpec > Greed priority + /roll. | **Done** (9105b2a3) |
 
 ### 11D — Raid Tests
 
