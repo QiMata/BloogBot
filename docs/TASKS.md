@@ -1,4 +1,4 @@
-# Master Tasks — Validation Phase
+# Master Tasks — Feature Validation & Test Coverage
 
 ## Rules
 1. **Use ONE continuous session.** Auto-compaction handles context limits.
@@ -7,129 +7,135 @@
 4. **The MaNGOS server is ALWAYS live.** Never defer live validation tests.
 5. Every fix must include or update a focused test.
 6. After each shipped delta, commit and push before ending the pass.
-7. **Previous implementation phases (P3-P29) are archived** — see `docs/ARCHIVE.md`.
+7. **Previous implementation phases (P3-P29, V1-V4) are archived** — see `docs/ARCHIVE.md`.
 
 ---
 
-## Current Test Baseline (2026-04-04, post V1.1 fix)
+## Test Baseline (2026-04-04)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1410 | 0 | 1 | All green after V1.1 reflection fix |
-| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator Z sync (known) |
-| BotRunner.Tests (non-infra) | 624 | 12 | 4 | Pre-V2 run; 12 failures likely LiveValidation infra-dependent |
+| WoWSharpClient.Tests | 1410 | 0 | 1 | Green after V1.1 NearbyObjects fix |
+| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator Z sync |
+| BotRunner.Tests (non-infra) | 624 | 12 | 4 | 12 failures from infra-dependent LiveValidation |
 
 ---
 
-## V1 — Fix Existing Test Failures (Priority: Critical)
+## T1 — Unit Tests for New BotRunner Tasks (Priority: Critical)
 
-**Goal:** Green test suite. Fix the 5 known failures before adding new validation.
+**Goal:** Every new BotRunner task class gets at least 2-3 unit tests covering state transitions, edge cases, and key behavior. These are fast tests using mocked IObjectManager/IBotContext — no live server needed.
+
+**62 new files, 0 unit tests.** This is the biggest gap.
+
+### T1A — Combat & Raid Systems
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | **Fix MovementController NearbyObjects failures (3 tests)** — Reflection used `BindingFlags.Static` but P9.2 changed fields to instance. Fixed to `BindingFlags.Instance`. 3/3 pass. | **Done** (810196d8) |
-| 1.2 | **Investigate Undercity elevator failures (2 tests)** — Pre-existing P7 transport Z sync issue. SimZ=39.8 vs RecZ=42.6 at elevator exit (2.84y Z error, 0.017y XY error). Root cause: elevator spline evaluation doesn't fully resolve Z at transport exit transition. Horizontal parity is excellent. Not a regression. | **Known** — pre-existing transport physics gap |
-| 1.3 | **Run full solution test suite and document baseline** — WoWSharpClient: 1410/0/1. Physics: 666/2/1. Baseline recorded above. | **Done** (810196d8) |
+| 1.1 | **ThreatTracker tests** — RecordDamage accumulates, RecordHealing at 0.5x, ShouldThrottle at 90%, GetHighestThreat returns tank, Reset clears. File: `Tests/BotRunner.Tests/Combat/ThreatTrackerTests.cs` | Open |
+| 1.2 | **RaidCooldownCoordinator tests** — RecordUsage logs entry, IsSafeToUse respects gap, GetNextAvailableOwner returns least-recent. File: `Tests/BotRunner.Tests/Combat/RaidCooldownCoordinatorTests.cs` | Open |
+| 1.3 | **EncounterPositioning tests** — GetMeleePosition behind boss, GetTankPosition in front, IsInFrontCleaveZone cone math, IsInTailSwipeZone. File: `Tests/BotRunner.Tests/Combat/EncounterPositioningTests.cs` | Open |
+| 1.4 | **BgTargetSelector tests** — Prioritizes low-HP targets, deprioritizes full-HP, handles empty list. File: `Tests/BotRunner.Tests/Combat/BgTargetSelectorTests.cs` | Open |
+| 1.5 | **HostilePlayerDetector tests** — IsPvPFlagged checks UnitFlags, IsCivilian checks passive flag, AssessThreat levels correct by level diff, GetFactionSide maps correctly. File: `Tests/BotRunner.Tests/Combat/HostilePlayerDetectorTests.cs` | Open |
+| 1.6 | **RaidRoleAssignment tests** — SetMainTank/Assist, GetRole defaults DPS, AutoAssignMainTank picks first tank, GetPlayersWithRole filters. File: `Tests/BotRunner.Tests/Combat/RaidRoleAssignmentTests.cs` | Open |
+| 1.7 | **LootCouncilSimulator tests** — RecordRoll generates 1-100, GetWinner prioritizes MainSpec>OffSpec>Greed then highest roll, AllRollsIn counts, ClearItem removes. File: `Tests/BotRunner.Tests/Combat/LootCouncilSimulatorTests.cs` | Open |
+
+### T1B — Economy & Services
+
+| # | Task | Status |
+|---|------|--------|
+| 1.8 | **AuctionPostingService tests** — RecordPrice stores, GetMarketPrice returns cached, EvaluatePosting undercuts 5%, rejects below vendor price, stale price purge. File: `Tests/BotRunner.Tests/Economy/AuctionPostingServiceTests.cs` | Open |
+| 1.9 | **GoldThresholdManager tests** — Evaluate returns SellVendorTrash below min, DepositExcess above threshold, None in range. CalculateDepositAmount subtracts reserve. GetDefaultReserve scales by level. File: `Tests/BotRunner.Tests/Economy/GoldThresholdManagerTests.cs` | Open |
+| 1.10 | **WhisperTracker tests** — RecordIncoming/Outgoing stores, GetHistory returns ordered, HasUnreadWhispers detects, max messages evicts oldest. File: `Tests/BotRunner.Tests/Social/WhisperTrackerTests.cs` | Open |
+
+### T1C — Progression & Routing
+
+| # | Task | Status |
+|---|------|--------|
+| 1.11 | **TalentAutoAllocator tests** — GetNextAllocation returns correct talent for level/points, returns null when all spent, GetPendingAllocations returns burst list. File: `Tests/BotRunner.Tests/Progression/TalentAutoAllocatorTests.cs` | Open |
+| 1.12 | **ZoneLevelingRoute tests** — GetZoneForLevel returns correct zone, GetNextZone advances, Horde/Alliance routes are different, level 60 returns endgame zones. File: `Tests/BotRunner.Tests/Progression/ZoneLevelingRouteTests.cs` | Open |
+| 1.13 | **QuestChainRouter tests** — GetNextStep skips completed quests, returns null for complete chain, GetNearestQuestGiver finds closest. File: `Tests/BotRunner.Tests/Questing/QuestChainRouterTests.cs` | Open |
+| 1.14 | **ProfessionTrainerScheduler tests** — NeedsTraining detects tier boundaries (75/150/225), GetTrainer returns correct position for faction. File: `Tests/BotRunner.Tests/Crafting/ProfessionTrainerSchedulerTests.cs` | Open |
+| 1.15 | **AmmoManager tests** — NeedsAmmo true when below 200, GetBestAmmoForLevel returns correct tier, GetNearestAmmoVendor returns closest. File: `Tests/BotRunner.Tests/Progression/AmmoManagerTests.cs` | Open |
+
+### T1D — Scalability Infrastructure
+
+| # | Task | Status |
+|---|------|--------|
+| 1.16 | **PathResultCache tests** — Store/TryGet round-trip, grid quantization groups nearby positions, Evict removes oldest, InvalidateMap clears map entries, HitRate calculates correctly. File: `Tests/BotRunner.Tests/Clients/PathResultCacheTests.cs` | Open |
+| 1.17 | **SnapshotBatcher tests** — Enqueue buffers, FlushAsync processes batch, timer triggers flush, max batch size caps. File: `Tests/BotRunner.Tests/Clients/SnapshotBatcherTests.cs` | Open |
+| 1.18 | **ConnectionMultiplexer tests** — GetConnectionAsync routes by hash, same bot always gets same connection, InvalidateConnection forces re-create. File: `Tests/BotRunner.Tests/Clients/ConnectionMultiplexerTests.cs` | Open |
+| 1.19 | **PathfindingShardRouter tests** — GetShard consistent hash, CreateLocal generates N shards on sequential ports. File: `Tests/BotRunner.Tests/Clients/PathfindingShardRouterTests.cs` | Open |
+| 1.20 | **SnapshotDeltaComputer tests** — First call returns full snapshot, subsequent returns delta when changed, unchanged returns small delta, ApplyDelta reconstructs original. File: `Tests/BotRunner.Tests/IPC/SnapshotDeltaComputerTests.cs` | Open |
+
+### T1E — Travel & Transport Data
+
+| # | Task | Status |
+|---|------|--------|
+| 1.21 | **TransportScheduleService tests** — FindRoute matches by mapId, GetBoardingDock returns correct side, GetRoutesFromMap lists departures. 7 routes defined. File: `Tests/BotRunner.Tests/Travel/TransportScheduleServiceTests.cs` | Open |
+| 1.22 | **InnkeeperData tests** — FindNearest returns closest innkeeper, GetByFaction filters, all 26 entries have valid positions. File: `Tests/BotRunner.Tests/Travel/InnkeeperDataTests.cs` | Open |
+| 1.23 | **GraveyardData tests** — FindNearest, GetForZone, data loading. File: `Tests/BotRunner.Tests/Travel/GraveyardDataTests.cs` | Open |
+| 1.24 | **SummoningStoneData tests** — GetByInstanceMapId, GetNearby, AllStones count. File: `Tests/BotRunner.Tests/Travel/SummoningStoneDataTests.cs` | Open |
 
 ---
 
-## V2 — Flesh Out Stub Test Bodies (Priority: High)
-
-**Goal:** Replace snapshot-only stubs with real test logic. ~80 LiveValidation test files currently have placeholder bodies that just assert snapshot != null. Each needs real setup/action/assert logic wired against live MaNGOS.
-
-### V2A — Economy & Interaction Tests (highest value — most protocol coverage)
+## T2 — Fix Existing Test Failures (Priority: High)
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | **TradingTests** — OFFER_TRADE/DECLINE_TRADE/ACCEPT_TRADE flow with gold transfer. | **Done** (c5207f42) |
-| 2.2 | **AuctionHouseTests** — Navigate to AH, find auctioneer NPC, interact. | **Done** (c5207f42) |
-| 2.3 | **BankInteractionTests** — Find banker NPC, interact, deposit item. | **Done** (c5207f42) |
-| 2.4 | **MailSystemTests** — .send money/items GM, CHECK_MAIL action, bag count comparison. | **Done** (633d7f11) |
-| 2.5 | **GuildOperationTests** — .guild create/invite/delete with dual-bot verification. | **Done** (633d7f11) |
-
-### V2B — Combat & BG Tests
-
-| # | Task | Status |
-|---|------|--------|
-| 2.6 | **WandAttackTests** — Equip wand, START_WAND_ATTACK, poll for combat flag. | **Done** (633d7f11) |
-| 2.7 | **BattlegroundQueueTests** — JOIN_BATTLEGROUND action, poll for BG status. | **Done** (633d7f11) |
-| 2.8 | **WsgObjectiveTests** — Flag object search + interact on WSG map. | **Done** (dc312da4) |
-
-### V2C — Travel & Navigation Tests
-
-| # | Task | Status |
-|---|------|--------|
-| 2.9 | **TravelPlannerTests** — TRAVEL_TO from Org to Crossroads, position tracking. | **Done** (dc312da4) |
-| 2.10 | **MageTeleportTests** — .learn teleport spells, CAST_SPELL, position verify. | **Done** (dc312da4) |
-| 2.11 | **TaxiTests** — VISIT_FLIGHT_MASTER, SELECT_TAXI_NODE, flight tracking. | **Done** (dc312da4) |
-| 2.12 | **TransportTests** — Zeppelin/boat/elevator/tram object detection. | **Done** (dc312da4) |
-
-### V2D — Raid & Dungeon Tests
-
-| # | Task | Status |
-|---|------|--------|
-| 2.13 | **RaidFormationTests** — Group invite, raid convert, subgroup assignment. | **Done** (dc312da4) |
-| 2.14 | **RaidCoordinationTests** — Ready check, marks, loot rules. | **Done** (dc312da4) |
-| 2.15 | **SummoningStoneTests** — Meeting stone interaction + fallback walk. | **Done** (dc312da4) |
-
-### V2E — Remaining Stubs
-
-| # | Task | Status |
-|---|------|--------|
-| 2.16 | **ChannelTests** — SEND_CHAT with message verification. | **Done** (dc312da4) |
-| 2.17 | **QuestObjectiveTests** — .quest add, kill mob, quest log tracking. | **Done** (dc312da4) |
-| 2.18 | **PetManagementTests** — Call Pet spell, pet snapshot, dismiss. | **Done** (dc312da4) |
-| 2.19 | **SpiritHealerTests** — .damage kill, RELEASE_CORPSE, spirit healer interact. | **Done** (dc312da4) |
-| 2.20 | **GossipQuestTests** — NPC gossip/questgiver interaction. | **Done** (dc312da4) |
+| 2.1 | **Fix 12 BotRunner.Tests failures** — Run `dotnet test Tests/BotRunner.Tests/ --filter "Category!=RequiresInfrastructure"`, identify and fix each failure. Most are likely infra-dependent tests missing the `RequiresInfrastructure` trait. | Open |
+| 2.2 | **Ensure V4.2-V4.4 unit tests pass** — Run the ScalabilityUnitTests (PathResultCache, SnapshotDeltaComputer, AsyncPathfindingWrapper). These should pass without infrastructure. | Open |
+| 2.3 | **Run full WoWSharpClient.Tests and confirm 1410/0/1** — Regression check after all changes. | Open |
+| 2.4 | **Run full Physics tests and confirm 666/2/1** — Regression check. | Open |
 
 ---
 
-## V3 — Integration Validation (Priority: Medium)
+## T3 — LiveValidation Against Running Server (Priority: High)
 
-**Goal:** End-to-end validation of new BotRunner task implementations against live MaNGOS.
+**Goal:** Run the wired LiveValidation tests against the live MaNGOS server and fix failures.
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | **Validate EncounterMechanicsTask** — RFC dungeoneering dispatch, snapshot tracking. | **Done** (301c9261) |
-| 3.2 | **Validate PvPEngagementTask** — Dual-bot PvP combat state verification. | **Done** (301c9261) |
-| 3.3 | **Validate EscortQuestTask** — .quest add, quest log verification. | **Done** (301c9261) |
-| 3.4 | **Validate TalentAutoAllocator** — .levelup + TRAIN_TALENT, spell list check. | **Done** (301c9261) |
-| 3.5 | **Validate LevelUpTrainerTask** — Find trainer NPC, VISIT_TRAINER, new spells. | **Done** (301c9261) |
-| 3.6 | **Validate AuctionPostingService** — Vendor SELL_ITEM, inventory change. | **Done** (301c9261) |
-| 3.7 | **Validate BgRewardCollectionTask** — .additem marks, bag snapshot check. | **Done** (301c9261) |
-| 3.8 | **Validate MasterLootDistributionTask** — RFC ASSIGN_LOOT dispatch. | **Done** (301c9261) |
+| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. These are the foundation. | Open |
+| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Open |
+| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Open |
+| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Open |
+| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Open |
+| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Open |
+| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Open |
+| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Open |
+| 3.9 | **Run all LiveValidation suite** — Full sweep, document pass/fail counts. | Open |
 
 ---
 
-## V4 — Scalability Validation (Priority: Low)
+## T4 — Proto Snapshot Pipeline Validation (Priority: Medium)
 
-**Goal:** Validate P9 scalability infrastructure with increasing bot counts.
+**Goal:** Verify new proto fields (QuestObjectiveProgress, ProfessionSkillEntry, build_template) flow end-to-end through the snapshot pipeline.
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | **MultiBotHostWorker env validation** — Env var check, snapshot infrastructure. | **Done** (301c9261) |
-| 4.2 | **PathResultCache hit rate** — Unit test: store/retrieve/evict, 33% hit rate. | **Done** (301c9261) |
-| 4.3 | **SnapshotDeltaComputer roundtrip** — Unit test: compute delta, apply, assert match. | **Done** (301c9261) |
-| 4.4 | **AsyncPathfindingWrapper deadlock test** — Unit test: 20 concurrent requests, 2 workers, no deadlock. | **Done** (301c9261) |
-| 4.5 | **100-bot baseline** — Placeholder with single-bot latency measurement. | **Done** (301c9261) |
-| 4.6 | **Singleton migration audit** — Known Instance files listed, snapshot validation. | **Done** (301c9261) |
+| 4.1 | **Quest objective proto round-trip test** — Populate QuestLogEntry.objectives in WoWSharpObjectManager, serialize to proto, deserialize in StateManager, verify fields. | Open |
+| 4.2 | **Profession skill proto round-trip test** — Populate WoWPlayer.professionSkills, serialize, deserialize, verify skillId/currentSkill/maxSkill. | Open |
+| 4.3 | **Build template proto round-trip test** — Set CharacterDefinition.build_template, verify it survives IPC round-trip. | Open |
 
 ---
 
 ## Canonical Commands
 
 ```bash
-# Full LiveValidation suite
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m
+# Unit tests only (fast, no server needed)
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "Category!=RequiresInfrastructure&Category!=RequiresService" --no-build
 
-# WoWSharpClient unit tests (fast, no infra needed)
+# WoWSharpClient tests
 dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "Category!=RequiresInfrastructure" --no-build
 
 # Physics tests
 dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build
 
-# Full solution (excludes C++ vcxproj)
-dotnet test WestworldOfWarcraft.sln --configuration Release --filter "Category!=RequiresInfrastructure"
+# Full LiveValidation suite (needs MaNGOS + StateManager)
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m
+
+# Full solution
+dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ---
