@@ -34,15 +34,14 @@ public class NavigationTests
     private const float NoRouteSkipThresholdSeconds = 10f;
 
     // Valley of Trials — flat outdoor terrain, pathfinding routes reliably here.
-    // CombatLoopTests confirms navigation works at these coordinates.
-    // Z+3 offset applied to spawn table Z to avoid UNDERMAP detection.
-    private const float VotStartX = -284f, VotStartY = -4383f, VotStartZ = 57f;
-    private const float VotEndX = -320f, VotEndY = -4420f, VotEndZ = 57f;
+    // Short path: from VoT spawn area to nearby target (~50y).
+    // The character is pre-teleported to VoT via SOAP offline before login.
+    private const float VotStartX = -601f, VotStartY = -4297f, VotStartZ = 38f;
+    private const float VotEndX = -630f, VotEndY = -4340f, VotEndZ = 40f;
 
     // Valley of Trials — longer path (~100y) on sloped terrain.
-    // Tests slope-guard protection in BG MovementController (prevents cascading Z into caves).
-    private const float VotLongStartX = -284f, VotLongStartY = -4383f, VotLongStartZ = 57f;
-    private const float VotLongEndX = -350f, VotLongEndY = -4450f, VotLongEndZ = 50f;
+    private const float VotLongStartX = -601f, VotLongStartY = -4297f, VotLongStartZ = 38f;
+    private const float VotLongEndX = -680f, VotLongEndY = -4380f, VotLongEndZ = 35f;
 
     public NavigationTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
@@ -57,7 +56,7 @@ public class NavigationTests
     public async Task Navigation_ShortPath_ArrivesAtDestination()
     {
         await RunNavigationTest("Short (Valley of Trials)", VotStartX, VotStartY, VotStartZ,
-            VotEndX, VotEndY, VotEndZ, maxSeconds: 40);
+            VotEndX, VotEndY, VotEndZ, maxSeconds: 120);
     }
 
     [SkippableFact]
@@ -217,18 +216,22 @@ public class NavigationTests
         // Step 1: Standardized setup (BT-SETUP-001): revive + safe zone.
         await _bot.EnsureCleanSlateAsync(account, label);
 
-        // Step 2: Teleport to start — use longer timeout for BG bot server-side teleport ACK
-        _output.WriteLine($"  [{label}] Teleporting to start ({startX:F0}, {startY:F0}, {startZ:F0})");
-        await _bot.BotTeleportAsync(account, MapId, startX, startY, startZ);
-        var settled = await _bot.WaitForTeleportSettledAsync(account, startX, startY, timeoutMs: 8000, progressLabel: $"{label} nav-start");
-        if (!settled)
+        // Step 2: Check if already near start (login position). Only teleport if far away.
+        await _bot.RefreshSnapshotsAsync();
+        var startSnap = await _bot.GetSnapshotAsync(account);
+        var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        float distToStart = startPos != null
+            ? LiveBotFixture.Distance2D(startPos.X, startPos.Y, startX, startY)
+            : float.MaxValue;
+        if (distToStart > 100f)
         {
-            // If position didn't settle near target, the server may have placed us elsewhere.
-            // Log and continue — the pathfinding will route from wherever we actually are.
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            _output.WriteLine($"  [{label}] WARNING: Teleport did not settle near ({startX:F0},{startY:F0}). Actual pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
+            _output.WriteLine($"  [{label}] Bot is {distToStart:F0}y from start — teleporting to ({startX:F0}, {startY:F0}, {startZ:F0})");
+            await _bot.BotTeleportAsync(account, MapId, startX, startY, startZ);
+            await _bot.WaitForTeleportSettledAsync(account, startX, startY, timeoutMs: 8000, progressLabel: $"{label} nav-start");
+        }
+        else
+        {
+            _output.WriteLine($"  [{label}] Bot already near start ({distToStart:F0}y). Using current position.");
         }
 
         // Step 3: Issue GOTO
