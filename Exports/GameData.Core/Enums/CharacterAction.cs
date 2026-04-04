@@ -44,6 +44,7 @@ public enum CharacterAction
 
     StartMeleeAttack,   // Start melee auto-attack on a target.
     StartRangedAttack,  // Start ranged auto-attack (bow/gun/thrown) on a target.
+    StartWandAttack,    // Start wand auto-attack (Shoot). FG: CastSpellByName('Shoot'), BG: CMSG_CAST_SPELL.
     StopAttack,         // Cease any ongoing attack.
     CastSpell,          // Cast or channel a spell on a target or location.
     StopCast,           // Stop casting a spell.

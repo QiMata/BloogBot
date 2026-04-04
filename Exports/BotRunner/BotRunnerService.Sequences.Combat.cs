@@ -211,6 +211,29 @@ namespace BotRunner
             .End()
             .Build();
 
+        /// <summary>
+        /// Sequence to start wand auto-attack (Shoot) on a target.
+        /// FG: CastSpellByName('Shoot'), BG: CMSG_CAST_SPELL with Shoot spell ID.
+        /// </summary>
+        private IBehaviourTreeNode BuildStartWandAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
+            .Sequence("Start Wand Attack Sequence")
+                .Splice(CheckForTarget(targetGuid))
+                .Do("Start Wand Attack", time =>
+                {
+                    if (targetGuid == 0)
+                    {
+                        Log.Warning("[BOT RUNNER] StartWandAttack requested with targetGuid=0; ignoring.");
+                        return BehaviourTreeStatus.Failure;
+                    }
+
+                    _objectManager.SetTarget(targetGuid);
+                    _objectManager.StartWandAttack();
+                    Log.Information("[BOT RUNNER] Started wand attack on target {Guid:X}", targetGuid);
+                    return BehaviourTreeStatus.Success;
+                })
+            .End()
+            .Build();
+
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
                 .Condition("Is Any Auto-Attack Active", time => _objectManager.Player.IsAutoAttacking)

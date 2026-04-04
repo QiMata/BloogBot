@@ -339,6 +339,9 @@ namespace BotRunner
                     case CharacterAction.StartRangedAttack:
                         builder.Splice(BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
+                    case CharacterAction.StartWandAttack:
+                        builder.Splice(BuildStartWandAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        break;
                     case CharacterAction.StopAttack:
                         builder.Splice(StopAttackSequence);
                         break;
