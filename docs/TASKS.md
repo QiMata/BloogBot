@@ -415,7 +415,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.21 | **Quest chain goal config** — `QuestChains` field already in CharacterBuildConfig. | **Done** (pre-existing) |
 | 22.22 | **Quest chain data** — `QuestChainData.cs` with 7 chains (attunements, class quests, zone chains). | **Done** (e5e3c6d6) |
-| 22.23 | **Quest chain progress tracking** — StateManager reads completed quest IDs from snapshot (parse quest log entries and compare against chain requirements). For each active chain goal: determine next incomplete quest, push appropriate activity (TravelTo quest giver, accept, complete objectives, turn in). | Open |
+| 22.23 | **Quest chain progress tracking** — ProgressionPlanner evaluates QuestChains vs quest log. | **Done** (f6f4431b) |
 
 ### 22H — Progression Planner (StateManager Decision Layer)
 
