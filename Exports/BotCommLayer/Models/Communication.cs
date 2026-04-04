@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-            "IAEoCUgAQgsKCXBhcmFtZXRlciK+BQoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
+            "IAEoCUgAQgsKCXBhcmFtZXRlciL2BQoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -69,56 +69,61 @@ namespace Communication {
             "RGVsdGEYESABKAgSGAoQc25hcHNob3RTZXF1ZW5jZRgSIAEoDRIUCgxiYXNl",
             "U2VxdWVuY2UYEyABKA0SFAoMY3VycmVudE1hcElkGBQgASgNEjgKEHRyYXZl",
             "bF9vYmplY3RpdmUYFSABKAsyHi5jb21tdW5pY2F0aW9uLlRyYXZlbE9iamVj",
-            "dGl2ZSKoAQoPVHJhdmVsT2JqZWN0aXZlEhUKDXRhcmdldF9tYXBfaWQYASAB",
-            "KA0SJwoPdGFyZ2V0X3Bvc2l0aW9uGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIc",
-            "ChR0YXJnZXRfbG9jYXRpb25fbmFtZRgDIAEoCRIZChFhbGxvd19oZWFydGhz",
-            "dG9uZRgEIAEoCBIcChRhbGxvd19jbGFzc190ZWxlcG9ydBgFIAEoCCJPCghM",
-            "b2dFbnRyeRINCgVsZXZlbBgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIPCgdt",
-            "ZXNzYWdlGAMgASgJEhEKCXRpbWVzdGFtcBgEIAEoCSr7CwoKQWN0aW9uVHlw",
-            "ZRIICgRXQUlUEAASCAoER09UTxABEhEKDUlOVEVSQUNUX1dJVEgQAhIRCg1T",
-            "RUxFQ1RfR09TU0lQEAMSFAoQU0VMRUNUX1RBWElfTk9ERRAEEhAKDEFDQ0VQ",
-            "VF9RVUVTVBAFEhEKDURFQ0xJTkVfUVVFU1QQBhIRCg1TRUxFQ1RfUkVXQVJE",
-            "EAcSEgoOQ09NUExFVEVfUVVFU1QQCBIPCgtUUkFJTl9TS0lMTBAJEhAKDFRS",
-            "QUlOX1RBTEVOVBAKEg8KC09GRkVSX1RSQURFEAsSDgoKT0ZGRVJfR09MRBAM",
-            "Eg4KCk9GRkVSX0lURU0QDRIQCgxBQ0NFUFRfVFJBREUQDhIRCg1ERUNMSU5F",
-            "X1RSQURFEA8SEQoNRU5DSEFOVF9UUkFERRAQEhIKDkxPQ0tQSUNLX1RSQURF",
-            "EBESEgoOUFJPTU9URV9MRUFERVIQEhIVChFQUk9NT1RFX0FTU0lTVEFOVBAT",
-            "EhgKFFBST01PVEVfTE9PVF9NQU5BR0VSEBQSEgoOU0VUX0dST1VQX0xPT1QQ",
-            "FRIPCgtBU1NJR05fTE9PVBAWEhIKDkxPT1RfUk9MTF9ORUVEEBcSEwoPTE9P",
-            "VF9ST0xMX0dSRUVEEBgSDQoJTE9PVF9QQVNTEBkSFQoRU0VORF9HUk9VUF9J",
-            "TlZJVEUQGhIXChNBQ0NFUFRfR1JPVVBfSU5WSVRFEBsSGAoUREVDTElORV9H",
-            "Uk9VUF9JTlZJVEUQHBIPCgtLSUNLX1BMQVlFUhAdEg8KC0xFQVZFX0dST1VQ",
-            "EB4SEQoNRElTQkFORF9HUk9VUBAfEhYKElNUQVJUX01FTEVFX0FUVEFDSxAg",
-            "EhcKE1NUQVJUX1JBTkdFRF9BVFRBQ0sQIRIVChFTVEFSVF9XQU5EX0FUVEFD",
-            "SxAiEg8KC1NUT1BfQVRUQUNLECMSDgoKQ0FTVF9TUEVMTBAkEg0KCVNUT1Bf",
-            "Q0FTVBAlEgwKCFVTRV9JVEVNECYSDgoKRVFVSVBfSVRFTRAnEhAKDFVORVFV",
-            "SVBfSVRFTRAoEhAKDERFU1RST1lfSVRFTRApEg0KCU1PVkVfSVRFTRAqEg8K",
-            "C1NQTElUX1NUQUNLECsSDAoIQlVZX0lURU0QLBIQCgxCVVlCQUNLX0lURU0Q",
-            "LRINCglTRUxMX0lURU0QLhIPCgtSRVBBSVJfSVRFTRAvEhQKEFJFUEFJUl9B",
-            "TExfSVRFTVMQMBIQCgxESVNNSVNTX0JVRkYQMRINCglSRVNVUlJFQ1QQMhIJ",
-            "CgVDUkFGVBAzEgkKBUxPR0lOEDQSCgoGTE9HT1VUEDUSFAoQQ1JFQVRFX0NI",
-            "QVJBQ1RFUhA2EhQKEERFTEVURV9DSEFSQUNURVIQNxIPCgtFTlRFUl9XT1JM",
-            "RBA4Eg8KC0xPT1RfQ09SUFNFEDkSEgoOUkVMRUFTRV9DT1JQU0UQOhITCg9S",
-            "RVRSSUVWRV9DT1JQU0UQOxIPCgtTS0lOX0NPUlBTRRA8Eg8KC0dBVEhFUl9O",
-            "T0RFED0SDQoJU0VORF9DSEFUED4SDgoKU0VUX0ZBQ0lORxA/EhAKDFZJU0lU",
-            "X1ZFTkRPUhBAEhEKDVZJU0lUX1RSQUlORVIQQRIXChNWSVNJVF9GTElHSFRf",
-            "TUFTVEVSEEISEQoNU1RBUlRfRklTSElORxBDEhkKFVNUQVJUX0dBVEhFUklO",
-            "R19ST1VURRBEEg4KCkNIRUNLX01BSUwQRRIbChdTVEFSVF9QSFlTSUNTX1JF",
-            "Q09SRElORxBGEhoKFlNUT1BfUEhZU0lDU19SRUNPUkRJTkcQRxIXChNTVEFS",
-            "VF9EVU5HRU9ORUVSSU5HEEgSEwoPQ09OVkVSVF9UT19SQUlEEEkSGAoUQ0hB",
-            "TkdFX1JBSURfU1VCR1JPVVAQShIRCg1GT0xMT1dfVEFSR0VUEEsSFQoRSk9J",
-            "Tl9CQVRUTEVHUk9VTkQQTBIXChNBQ0NFUFRfQkFUVExFR1JPVU5EEE0SFgoS",
-            "TEVBVkVfQkFUVExFR1JPVU5EEE4SDQoJVFJBVkVMX1RPEE8qLwoNQm90UnVu",
-            "bmVyVHlwZRIOCgpGT1JFR1JPVU5EEAASDgoKQkFDS0dST1VORBABKo8BCg9T",
-            "dGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoRQ09O",
-            "U0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JFRUFC",
-            "TEVORVNTEAQSDwoLTkVVUk9USUNJU00QBRIXChNDT09SRElOQVRPUl9FTkFC",
-            "TEVEEAYqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZBSUxV",
-            "UkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0aW9uU3RhdGUS",
-            "FAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5USUNBVElORxAB",
-            "EhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklOR19XT1JMRBAD",
-            "EhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJTkcQBRITCg9C",
-            "T1RfTE9HR0lOR19PVVQQBmIGcHJvdG8z"));
+            "dGl2ZRI2Cg9jaGFyYWN0ZXJfZ29hbHMYFiABKAsyHS5jb21tdW5pY2F0aW9u",
+            "LkNoYXJhY3RlckdvYWxzIq8BCg5DaGFyYWN0ZXJHb2FscxIRCglzcGVjX25h",
+            "bWUYASABKAkSGQoRdGFsZW50X2J1aWxkX25hbWUYAiABKAkSGgoSZ29sZF90",
+            "YXJnZXRfY29wcGVyGAMgASgFEhgKEHNraWxsX3ByaW9yaXRpZXMYBCADKAkS",
+            "FAoMcXVlc3RfY2hhaW5zGAUgAygJEiMKG21heF9jb25zdW1hYmxlX3NwZW5k",
+            "X2NvcHBlchgGIAEoBSKoAQoPVHJhdmVsT2JqZWN0aXZlEhUKDXRhcmdldF9t",
+            "YXBfaWQYASABKA0SJwoPdGFyZ2V0X3Bvc2l0aW9uGAIgASgLMg4uZ2FtZS5Q",
+            "b3NpdGlvbhIcChR0YXJnZXRfbG9jYXRpb25fbmFtZRgDIAEoCRIZChFhbGxv",
+            "d19oZWFydGhzdG9uZRgEIAEoCBIcChRhbGxvd19jbGFzc190ZWxlcG9ydBgF",
+            "IAEoCCJPCghMb2dFbnRyeRINCgVsZXZlbBgBIAEoCRIQCghjYXRlZ29yeRgC",
+            "IAEoCRIPCgdtZXNzYWdlGAMgASgJEhEKCXRpbWVzdGFtcBgEIAEoCSr7CwoK",
+            "QWN0aW9uVHlwZRIICgRXQUlUEAASCAoER09UTxABEhEKDUlOVEVSQUNUX1dJ",
+            "VEgQAhIRCg1TRUxFQ1RfR09TU0lQEAMSFAoQU0VMRUNUX1RBWElfTk9ERRAE",
+            "EhAKDEFDQ0VQVF9RVUVTVBAFEhEKDURFQ0xJTkVfUVVFU1QQBhIRCg1TRUxF",
+            "Q1RfUkVXQVJEEAcSEgoOQ09NUExFVEVfUVVFU1QQCBIPCgtUUkFJTl9TS0lM",
+            "TBAJEhAKDFRSQUlOX1RBTEVOVBAKEg8KC09GRkVSX1RSQURFEAsSDgoKT0ZG",
+            "RVJfR09MRBAMEg4KCk9GRkVSX0lURU0QDRIQCgxBQ0NFUFRfVFJBREUQDhIR",
+            "Cg1ERUNMSU5FX1RSQURFEA8SEQoNRU5DSEFOVF9UUkFERRAQEhIKDkxPQ0tQ",
+            "SUNLX1RSQURFEBESEgoOUFJPTU9URV9MRUFERVIQEhIVChFQUk9NT1RFX0FT",
+            "U0lTVEFOVBATEhgKFFBST01PVEVfTE9PVF9NQU5BR0VSEBQSEgoOU0VUX0dS",
+            "T1VQX0xPT1QQFRIPCgtBU1NJR05fTE9PVBAWEhIKDkxPT1RfUk9MTF9ORUVE",
+            "EBcSEwoPTE9PVF9ST0xMX0dSRUVEEBgSDQoJTE9PVF9QQVNTEBkSFQoRU0VO",
+            "RF9HUk9VUF9JTlZJVEUQGhIXChNBQ0NFUFRfR1JPVVBfSU5WSVRFEBsSGAoU",
+            "REVDTElORV9HUk9VUF9JTlZJVEUQHBIPCgtLSUNLX1BMQVlFUhAdEg8KC0xF",
+            "QVZFX0dST1VQEB4SEQoNRElTQkFORF9HUk9VUBAfEhYKElNUQVJUX01FTEVF",
+            "X0FUVEFDSxAgEhcKE1NUQVJUX1JBTkdFRF9BVFRBQ0sQIRIVChFTVEFSVF9X",
+            "QU5EX0FUVEFDSxAiEg8KC1NUT1BfQVRUQUNLECMSDgoKQ0FTVF9TUEVMTBAk",
+            "Eg0KCVNUT1BfQ0FTVBAlEgwKCFVTRV9JVEVNECYSDgoKRVFVSVBfSVRFTRAn",
+            "EhAKDFVORVFVSVBfSVRFTRAoEhAKDERFU1RST1lfSVRFTRApEg0KCU1PVkVf",
+            "SVRFTRAqEg8KC1NQTElUX1NUQUNLECsSDAoIQlVZX0lURU0QLBIQCgxCVVlC",
+            "QUNLX0lURU0QLRINCglTRUxMX0lURU0QLhIPCgtSRVBBSVJfSVRFTRAvEhQK",
+            "EFJFUEFJUl9BTExfSVRFTVMQMBIQCgxESVNNSVNTX0JVRkYQMRINCglSRVNV",
+            "UlJFQ1QQMhIJCgVDUkFGVBAzEgkKBUxPR0lOEDQSCgoGTE9HT1VUEDUSFAoQ",
+            "Q1JFQVRFX0NIQVJBQ1RFUhA2EhQKEERFTEVURV9DSEFSQUNURVIQNxIPCgtF",
+            "TlRFUl9XT1JMRBA4Eg8KC0xPT1RfQ09SUFNFEDkSEgoOUkVMRUFTRV9DT1JQ",
+            "U0UQOhITCg9SRVRSSUVWRV9DT1JQU0UQOxIPCgtTS0lOX0NPUlBTRRA8Eg8K",
+            "C0dBVEhFUl9OT0RFED0SDQoJU0VORF9DSEFUED4SDgoKU0VUX0ZBQ0lORxA/",
+            "EhAKDFZJU0lUX1ZFTkRPUhBAEhEKDVZJU0lUX1RSQUlORVIQQRIXChNWSVNJ",
+            "VF9GTElHSFRfTUFTVEVSEEISEQoNU1RBUlRfRklTSElORxBDEhkKFVNUQVJU",
+            "X0dBVEhFUklOR19ST1VURRBEEg4KCkNIRUNLX01BSUwQRRIbChdTVEFSVF9Q",
+            "SFlTSUNTX1JFQ09SRElORxBGEhoKFlNUT1BfUEhZU0lDU19SRUNPUkRJTkcQ",
+            "RxIXChNTVEFSVF9EVU5HRU9ORUVSSU5HEEgSEwoPQ09OVkVSVF9UT19SQUlE",
+            "EEkSGAoUQ0hBTkdFX1JBSURfU1VCR1JPVVAQShIRCg1GT0xMT1dfVEFSR0VU",
+            "EEsSFQoRSk9JTl9CQVRUTEVHUk9VTkQQTBIXChNBQ0NFUFRfQkFUVExFR1JP",
+            "VU5EEE0SFgoSTEVBVkVfQkFUVExFR1JPVU5EEE4SDQoJVFJBVkVMX1RPEE8q",
+            "LwoNQm90UnVubmVyVHlwZRIOCgpGT1JFR1JPVU5EEAASDgoKQkFDS0dST1VO",
+            "RBABKo8BCg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNT",
+            "EAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIR",
+            "Cg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBRIXChNDT09SRElO",
+            "QVRPUl9FTkFCTEVEEAYqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAA",
+            "EgsKB0ZBSUxVUkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0",
+            "aW9uU3RhdGUSFAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5U",
+            "SUNBVElORxABEhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklO",
+            "R19XT1JMRBADEhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJ",
+            "TkcQBRITCg9CT1RfTE9HR0lOR19PVVQQBmIGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -131,7 +136,8 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterGoals), global::Communication.CharacterGoals.Parser, new[]{ "SpecName", "TalentBuildName", "GoldTargetCopper", "SkillPriorities", "QuestChains", "MaxConsumableSpendCopper" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.TravelObjective), global::Communication.TravelObjective.Parser, new[]{ "TargetMapId", "TargetPosition", "TargetLocationName", "AllowHearthstone", "AllowClassTeleport" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LogEntry), global::Communication.LogEntry.Parser, new[]{ "Level", "Category", "Message", "Timestamp" }, null, null, null, null)
           }));
@@ -2997,6 +3003,7 @@ namespace Communication {
       baseSequence_ = other.baseSequence_;
       currentMapId_ = other.currentMapId_;
       travelObjective_ = other.travelObjective_ != null ? other.travelObjective_.Clone() : null;
+      characterGoals_ = other.characterGoals_ != null ? other.characterGoals_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3296,6 +3303,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "character_goals" field.</summary>
+    public const int CharacterGoalsFieldNumber = 22;
+    private global::Communication.CharacterGoals characterGoals_;
+    /// <summary>
+    /// Build config / progression goals from CharacterSettings.BuildConfig
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.CharacterGoals CharacterGoals {
+      get { return characterGoals_; }
+      set {
+        characterGoals_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3332,6 +3354,7 @@ namespace Communication {
       if (BaseSequence != other.BaseSequence) return false;
       if (CurrentMapId != other.CurrentMapId) return false;
       if (!object.Equals(TravelObjective, other.TravelObjective)) return false;
+      if (!object.Equals(CharacterGoals, other.CharacterGoals)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3360,6 +3383,7 @@ namespace Communication {
       if (BaseSequence != 0) hash ^= BaseSequence.GetHashCode();
       if (CurrentMapId != 0) hash ^= CurrentMapId.GetHashCode();
       if (travelObjective_ != null) hash ^= TravelObjective.GetHashCode();
+      if (characterGoals_ != null) hash ^= CharacterGoals.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3450,6 +3474,10 @@ namespace Communication {
         output.WriteRawTag(170, 1);
         output.WriteMessage(TravelObjective);
       }
+      if (characterGoals_ != null) {
+        output.WriteRawTag(178, 1);
+        output.WriteMessage(CharacterGoals);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3532,6 +3560,10 @@ namespace Communication {
         output.WriteRawTag(170, 1);
         output.WriteMessage(TravelObjective);
       }
+      if (characterGoals_ != null) {
+        output.WriteRawTag(178, 1);
+        output.WriteMessage(CharacterGoals);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3596,6 +3628,9 @@ namespace Communication {
       }
       if (travelObjective_ != null) {
         size += 2 + pb::CodedOutputStream.ComputeMessageSize(TravelObjective);
+      }
+      if (characterGoals_ != null) {
+        size += 2 + pb::CodedOutputStream.ComputeMessageSize(CharacterGoals);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -3678,6 +3713,12 @@ namespace Communication {
           TravelObjective = new global::Communication.TravelObjective();
         }
         TravelObjective.MergeFrom(other.TravelObjective);
+      }
+      if (other.characterGoals_ != null) {
+        if (characterGoals_ == null) {
+          CharacterGoals = new global::Communication.CharacterGoals();
+        }
+        CharacterGoals.MergeFrom(other.CharacterGoals);
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -3795,6 +3836,13 @@ namespace Communication {
               TravelObjective = new global::Communication.TravelObjective();
             }
             input.ReadMessage(TravelObjective);
+            break;
+          }
+          case 178: {
+            if (characterGoals_ == null) {
+              CharacterGoals = new global::Communication.CharacterGoals();
+            }
+            input.ReadMessage(CharacterGoals);
             break;
           }
         }
@@ -3915,6 +3963,396 @@ namespace Communication {
             input.ReadMessage(TravelObjective);
             break;
           }
+          case 178: {
+            if (characterGoals_ == null) {
+              CharacterGoals = new global::Communication.CharacterGoals();
+            }
+            input.ReadMessage(CharacterGoals);
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
+  /// Character progression goals from CharacterBuildConfig.
+  /// StateManager populates from CharacterSettings. BotRunner reads to drive behavior.
+  /// </summary>
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class CharacterGoals : pb::IMessage<CharacterGoals>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<CharacterGoals> _parser = new pb::MessageParser<CharacterGoals>(() => new CharacterGoals());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<CharacterGoals> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CharacterGoals() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CharacterGoals(CharacterGoals other) : this() {
+      specName_ = other.specName_;
+      talentBuildName_ = other.talentBuildName_;
+      goldTargetCopper_ = other.goldTargetCopper_;
+      skillPriorities_ = other.skillPriorities_.Clone();
+      questChains_ = other.questChains_.Clone();
+      maxConsumableSpendCopper_ = other.maxConsumableSpendCopper_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CharacterGoals Clone() {
+      return new CharacterGoals(this);
+    }
+
+    /// <summary>Field number for the "spec_name" field.</summary>
+    public const int SpecNameFieldNumber = 1;
+    private string specName_ = "";
+    /// <summary>
+    /// BotProfile spec name (e.g. "WarriorFury")
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string SpecName {
+      get { return specName_; }
+      set {
+        specName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "talent_build_name" field.</summary>
+    public const int TalentBuildNameFieldNumber = 2;
+    private string talentBuildName_ = "";
+    /// <summary>
+    /// Talent build key
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string TalentBuildName {
+      get { return talentBuildName_; }
+      set {
+        talentBuildName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "gold_target_copper" field.</summary>
+    public const int GoldTargetCopperFieldNumber = 3;
+    private int goldTargetCopper_;
+    /// <summary>
+    /// Savings goal in copper
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int GoldTargetCopper {
+      get { return goldTargetCopper_; }
+      set {
+        goldTargetCopper_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "skill_priorities" field.</summary>
+    public const int SkillPrioritiesFieldNumber = 4;
+    private static readonly pb::FieldCodec<string> _repeated_skillPriorities_codec
+        = pb::FieldCodec.ForString(34);
+    private readonly pbc::RepeatedField<string> skillPriorities_ = new pbc::RepeatedField<string>();
+    /// <summary>
+    /// Profession targets (e.g. "Mining:300")
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> SkillPriorities {
+      get { return skillPriorities_; }
+    }
+
+    /// <summary>Field number for the "quest_chains" field.</summary>
+    public const int QuestChainsFieldNumber = 5;
+    private static readonly pb::FieldCodec<string> _repeated_questChains_codec
+        = pb::FieldCodec.ForString(42);
+    private readonly pbc::RepeatedField<string> questChains_ = new pbc::RepeatedField<string>();
+    /// <summary>
+    /// Quest chain IDs to complete
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> QuestChains {
+      get { return questChains_; }
+    }
+
+    /// <summary>Field number for the "max_consumable_spend_copper" field.</summary>
+    public const int MaxConsumableSpendCopperFieldNumber = 6;
+    private int maxConsumableSpendCopper_;
+    /// <summary>
+    /// Per-session consumable budget (0=unlimited)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int MaxConsumableSpendCopper {
+      get { return maxConsumableSpendCopper_; }
+      set {
+        maxConsumableSpendCopper_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as CharacterGoals);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(CharacterGoals other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (SpecName != other.SpecName) return false;
+      if (TalentBuildName != other.TalentBuildName) return false;
+      if (GoldTargetCopper != other.GoldTargetCopper) return false;
+      if(!skillPriorities_.Equals(other.skillPriorities_)) return false;
+      if(!questChains_.Equals(other.questChains_)) return false;
+      if (MaxConsumableSpendCopper != other.MaxConsumableSpendCopper) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (SpecName.Length != 0) hash ^= SpecName.GetHashCode();
+      if (TalentBuildName.Length != 0) hash ^= TalentBuildName.GetHashCode();
+      if (GoldTargetCopper != 0) hash ^= GoldTargetCopper.GetHashCode();
+      hash ^= skillPriorities_.GetHashCode();
+      hash ^= questChains_.GetHashCode();
+      if (MaxConsumableSpendCopper != 0) hash ^= MaxConsumableSpendCopper.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (SpecName.Length != 0) {
+        output.WriteRawTag(10);
+        output.WriteString(SpecName);
+      }
+      if (TalentBuildName.Length != 0) {
+        output.WriteRawTag(18);
+        output.WriteString(TalentBuildName);
+      }
+      if (GoldTargetCopper != 0) {
+        output.WriteRawTag(24);
+        output.WriteInt32(GoldTargetCopper);
+      }
+      skillPriorities_.WriteTo(output, _repeated_skillPriorities_codec);
+      questChains_.WriteTo(output, _repeated_questChains_codec);
+      if (MaxConsumableSpendCopper != 0) {
+        output.WriteRawTag(48);
+        output.WriteInt32(MaxConsumableSpendCopper);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (SpecName.Length != 0) {
+        output.WriteRawTag(10);
+        output.WriteString(SpecName);
+      }
+      if (TalentBuildName.Length != 0) {
+        output.WriteRawTag(18);
+        output.WriteString(TalentBuildName);
+      }
+      if (GoldTargetCopper != 0) {
+        output.WriteRawTag(24);
+        output.WriteInt32(GoldTargetCopper);
+      }
+      skillPriorities_.WriteTo(ref output, _repeated_skillPriorities_codec);
+      questChains_.WriteTo(ref output, _repeated_questChains_codec);
+      if (MaxConsumableSpendCopper != 0) {
+        output.WriteRawTag(48);
+        output.WriteInt32(MaxConsumableSpendCopper);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (SpecName.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(SpecName);
+      }
+      if (TalentBuildName.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(TalentBuildName);
+      }
+      if (GoldTargetCopper != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeInt32Size(GoldTargetCopper);
+      }
+      size += skillPriorities_.CalculateSize(_repeated_skillPriorities_codec);
+      size += questChains_.CalculateSize(_repeated_questChains_codec);
+      if (MaxConsumableSpendCopper != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeInt32Size(MaxConsumableSpendCopper);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(CharacterGoals other) {
+      if (other == null) {
+        return;
+      }
+      if (other.SpecName.Length != 0) {
+        SpecName = other.SpecName;
+      }
+      if (other.TalentBuildName.Length != 0) {
+        TalentBuildName = other.TalentBuildName;
+      }
+      if (other.GoldTargetCopper != 0) {
+        GoldTargetCopper = other.GoldTargetCopper;
+      }
+      skillPriorities_.Add(other.skillPriorities_);
+      questChains_.Add(other.questChains_);
+      if (other.MaxConsumableSpendCopper != 0) {
+        MaxConsumableSpendCopper = other.MaxConsumableSpendCopper;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 10: {
+            SpecName = input.ReadString();
+            break;
+          }
+          case 18: {
+            TalentBuildName = input.ReadString();
+            break;
+          }
+          case 24: {
+            GoldTargetCopper = input.ReadInt32();
+            break;
+          }
+          case 34: {
+            skillPriorities_.AddEntriesFrom(input, _repeated_skillPriorities_codec);
+            break;
+          }
+          case 42: {
+            questChains_.AddEntriesFrom(input, _repeated_questChains_codec);
+            break;
+          }
+          case 48: {
+            MaxConsumableSpendCopper = input.ReadInt32();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 10: {
+            SpecName = input.ReadString();
+            break;
+          }
+          case 18: {
+            TalentBuildName = input.ReadString();
+            break;
+          }
+          case 24: {
+            GoldTargetCopper = input.ReadInt32();
+            break;
+          }
+          case 34: {
+            skillPriorities_.AddEntriesFrom(ref input, _repeated_skillPriorities_codec);
+            break;
+          }
+          case 42: {
+            questChains_.AddEntriesFrom(ref input, _repeated_questChains_codec);
+            break;
+          }
+          case 48: {
+            MaxConsumableSpendCopper = input.ReadInt32();
+            break;
+          }
         }
       }
     }
@@ -3942,7 +4380,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -4304,7 +4742,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[12]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

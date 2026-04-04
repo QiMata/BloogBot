@@ -206,6 +206,18 @@ message WoWActivitySnapshot {
     uint32 baseSequence = 19;                   // Sequence number of the full snapshot this delta is based on
     uint32 currentMapId = 20;                   // Current map ID (top-level for reliable BG transfer detection)
     TravelObjective travel_objective = 21;      // Current travel objective (set by StateManager for goal-driven travel)
+    CharacterGoals character_goals = 22;        // Build config / progression goals from CharacterSettings.BuildConfig
+}
+
+// Character progression goals from CharacterBuildConfig.
+// StateManager populates from CharacterSettings. BotRunner reads to drive behavior.
+message CharacterGoals {
+    string spec_name = 1;                       // BotProfile spec name (e.g. "WarriorFury")
+    string talent_build_name = 2;               // Talent build key
+    int32 gold_target_copper = 3;               // Savings goal in copper
+    repeated string skill_priorities = 4;       // Profession targets (e.g. "Mining:300")
+    repeated string quest_chains = 5;           // Quest chain IDs to complete
+    int32 max_consumable_spend_copper = 6;      // Per-session consumable budget (0=unlimited)
 }
 
 // Cross-world travel objective. StateManager sets this on a bot's snapshot
