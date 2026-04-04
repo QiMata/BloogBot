@@ -430,7 +430,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.27 | **Create template configs** — 4 JSON templates: FuryWarrior, HolyPriest, FrostMage, ProtWarrior. | **Done** (69cdb6a1) |
-| 22.28 | **Template assignment in UI** — When WoWStateManagerUI adds a new character, show a dropdown of available templates. Selected template populates `CharacterSettings.BuildConfig`. User can then customize individual fields. | Open |
+| 22.28 | **Template assignment in UI** — `build_template` proto field + AvailableTemplates/SelectedBuildTemplate in ViewModel. | **Done** (cd15f2cf) |
 
 ### 22J — Progression Tests
 
@@ -591,7 +591,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 9.16 | **Sharded PathfindingService** — `PathfindingShardRouter.cs` with consistent-hash shard assignment. | **Done** (4a34eafd) |
 | 9.17 | **Async pathfinding requests** — `AsyncPathfindingWrapper.cs` with Channel-based queue + configurable worker pool. | **Done** (1b4d561e) |
-| 9.18 | **Physics step batching** — Collect physics inputs from multiple bots, batch into single P/Invoke call that processes N inputs. Add `StepPhysicsV2Batch(PhysicsInput[] inputs, int count, PhysicsOutput[] outputs)` to Navigation.dll. Amortize P/Invoke overhead. Target: process 100 physics steps per call instead of 1. | Open |
+| 9.18 | **Physics step batching** — `PhysicsBatchProcessor.cs` with batch P/Invoke + sequential fallback. C++ export stub ready. | **Done** (cd15f2cf) |
 | 9.19 | **Path result caching** — `PathResultCache.cs` LRU cache with grid-quantized keys, 10K entries, hit rate tracking. | **Done** (4bd15864) |
 
 ### 9E — StateManager Horizontal Scaling
