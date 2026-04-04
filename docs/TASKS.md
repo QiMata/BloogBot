@@ -183,7 +183,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | # | Task | Spec |
 |---|------|------|
 | 24.9 | **Per-bot metrics collector** — BotMetricsCollector with UDP + CSV output + summary stats. | **Done** (33f46b59) |
-| 24.10 | **Load test dashboard** — Simple HTML page that reads metrics CSV and displays: total connected bots, avg/P95 physics time, total memory, map showing bot positions. Refreshes every 5s. | Open |
+| 24.10 | **Load test dashboard** — `dashboard.html` with auto-refresh, metrics cards, bot detail table. | **Done** (4bd15864) |
 | 24.11 | **Bot process pooling** — For 3000 bots, run 50-100 bots per process (using the multi-BotContext architecture from P9). Each process loads Navigation.dll once, shares scene data. Reduces total processes from 3000 to 30-60. | Open |
 
 ---
@@ -592,7 +592,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 9.16 | **Sharded PathfindingService** — Run K PathfindingService instances (K = CPU core count / 4). Each loads full map data. Bots are assigned to shards by `accountName.GetHashCode() % K`. `PathfindingClient` receives shard list from config, routes requests to assigned shard. Target: 16-core machine → 4 shards → 256 concurrent handlers. | Open |
 | 9.17 | **Async pathfinding requests** — Replace blocking `CalculatePath()` P/Invoke with async wrapper. Queue requests into `Channel<PathRequest>`. Worker threads dequeue and process. `PathfindingClient.CalculatePathAsync()` returns `Task<PathResult>`. BotRunnerService awaits instead of blocking. | Open |
 | 9.18 | **Physics step batching** — Collect physics inputs from multiple bots, batch into single P/Invoke call that processes N inputs. Add `StepPhysicsV2Batch(PhysicsInput[] inputs, int count, PhysicsOutput[] outputs)` to Navigation.dll. Amortize P/Invoke overhead. Target: process 100 physics steps per call instead of 1. | Open |
-| 9.19 | **Path result caching** — Cache recent pathfinding results by (mapId, startCell, endCell) key. Bots in same area requesting similar paths get cached result with start/end adjusted. LRU cache with 10,000 entries. Target: 50-80% cache hit rate for bots in same zone. | Open |
+| 9.19 | **Path result caching** — `PathResultCache.cs` LRU cache with grid-quantized keys, 10K entries, hit rate tracking. | **Done** (4bd15864) |
 
 ### 9E — StateManager Horizontal Scaling
 
@@ -643,7 +643,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 10.8 | **Honor tracking** — honorPoints/honorableKills/dishonorableKills proto fields 46-48. | **Done** (c1bcbbf0) |
-| 10.9 | **BG reward collection** — After BG ends, interact with battlemaster NPCs for mark turn-in quests. Use existing quest accept/complete sequences. | Open — depends on quest frame interaction |
+| 10.9 | **BG reward collection** — `BgRewardCollectionTask.cs` with mark inventory check + battlemaster navigation. | **Done** (4bd15864) |
 
 ### 10D — BG Tests
 
