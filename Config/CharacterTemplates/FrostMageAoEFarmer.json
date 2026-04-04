@@ -1,0 +1,16 @@
+{
+  "SpecName": "MageFrost",
+  "TalentBuildName": "FrostAoE",
+  "GoldTargetCopper": 10000000,
+  "SkillPriorities": ["Herbalism:300", "Alchemy:300", "Cooking:300"],
+  "QuestChains": [],
+  "TargetGearSet": [
+    { "Slot": "MainHand", "ItemId": 18842, "ItemName": "Staff of Dominance", "Source": "Dungeon:DM:West", "Priority": 1 }
+  ],
+  "MountGoal": {
+    "Type": "EpicMount",
+    "GoldCostCopper": 10000000,
+    "RequiredLevel": 60,
+    "RequiredRidingSkill": 150
+  }
+}

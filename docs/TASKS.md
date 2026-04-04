@@ -421,8 +421,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.24 | **Create `ProgressionPlanner.cs`** — File: `Services/WoWStateManager/Progression/ProgressionPlanner.cs`. Central decision engine that evaluates ALL goals for a bot and picks the highest-priority activity. Priority order: (1) Survival — if dead, corpse run. (2) Level-up training — if trainer visit needed after ding. (3) Gear — if high-priority BiS item is farmable. (4) Attunement — if quest chain blocks raid access. (5) Reputation — if rep gate blocks vendor/quest. (6) Mount — if level 40+ without mount. (7) Gold — if below savings target. (8) Profession — if skill below target. (9) Default — grind/quest in level-appropriate zone. Returns an `ActionMessage` for the bot. | Open |
-| 22.25 | **Wire ProgressionPlanner into StateManager** — In `CharacterStateSocketListener.InjectCoordinatedActions()`, when no external action is pending and bot is idle in-world: call `ProgressionPlanner.GetNextAction(snapshot, buildConfig)`. Inject the returned action into the response. This replaces the current "do nothing when idle" behavior with goal-driven activity. | Open |
+| 22.24 | **Create `ProgressionPlanner.cs`** — Already exists with priority-ordered goal evaluation. | **Done** (pre-existing) |
+| 22.25 | **Wire ProgressionPlanner into StateManager** — Already wired in CharacterStateSocketListener. | **Done** (pre-existing) |
 | 22.26 | **Progress dashboard in snapshot** — Add `ProgressionStatus` proto message: `message ProgressionStatus { float gearCompletionPct = 1; int32 goldProgress = 2; repeated ReputationProgress repProgress = 3; repeated ItemProgress itemProgress = 4; string currentObjective = 5; }`. Add to WoWActivitySnapshot. StateManager populates. UI and monitoring can display per-bot progress toward goals. | Open |
 
 ### 22I — Pre-Built Character Templates

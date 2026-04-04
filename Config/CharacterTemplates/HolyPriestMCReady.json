@@ -1,0 +1,21 @@
+{
+  "SpecName": "PriestHoly",
+  "TalentBuildName": "HolyDiscipline",
+  "GoldTargetCopper": 500000,
+  "SkillPriorities": ["Tailoring:300", "Enchanting:300", "FirstAid:300", "Cooking:225"],
+  "QuestChains": ["MoltenCoreAttunement"],
+  "TargetGearSet": [
+    { "Slot": "Head", "ItemId": 13102, "ItemName": "Cassandra's Grace", "Source": "Dungeon:UBRS", "Priority": 1 },
+    { "Slot": "Chest", "ItemId": 14154, "ItemName": "Truefaith Vestments", "Source": "Craft:MoonclothTailor", "Priority": 1 },
+    { "Slot": "MainHand", "ItemId": 18480, "ItemName": "Hammer of Grace", "Source": "Dungeon:Stratholme:Maleki", "Priority": 2 }
+  ],
+  "ReputationGoals": [
+    { "FactionId": 529, "FactionName": "Argent Dawn", "TargetStanding": "Revered", "GrindMethod": "Dungeon:Stratholme" }
+  ],
+  "MountGoal": {
+    "Type": "BasicMount",
+    "GoldCostCopper": 1000000,
+    "RequiredLevel": 40,
+    "RequiredRidingSkill": 75
+  }
+}

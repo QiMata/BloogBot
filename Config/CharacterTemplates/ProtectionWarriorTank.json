@@ -1,0 +1,17 @@
+{
+  "SpecName": "WarriorProtection",
+  "TalentBuildName": "DeepProt",
+  "GoldTargetCopper": 500000,
+  "SkillPriorities": ["Mining:300", "Blacksmithing:300", "FirstAid:300"],
+  "QuestChains": ["OnyxiaAttunementHorde", "MoltenCoreAttunement", "BWLAttunement"],
+  "TargetGearSet": [
+    { "Slot": "MainHand", "ItemId": 11684, "ItemName": "Ironfoe", "Source": "Boss:BRD:EmperorDagranThaurissan", "Priority": 3 },
+    { "Slot": "Shield", "ItemId": 12602, "ItemName": "Draconian Deflector", "Source": "Dungeon:UBRS", "Priority": 1 }
+  ],
+  "MountGoal": {
+    "Type": "BasicMount",
+    "GoldCostCopper": 1000000,
+    "RequiredLevel": 40,
+    "RequiredRidingSkill": 75
+  }
+}

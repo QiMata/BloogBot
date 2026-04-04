@@ -1,0 +1,29 @@
+{
+  "SpecName": "WarriorFury",
+  "TalentBuildName": "FuryDW",
+  "GoldTargetCopper": 1000000,
+  "SkillPriorities": ["Mining:300", "Engineering:300", "FirstAid:300"],
+  "QuestChains": ["OnyxiaAttunementHorde", "MoltenCoreAttunement"],
+  "TargetGearSet": [
+    { "Slot": "Head", "ItemId": 12640, "ItemName": "Lionheart Helm", "Source": "Craft:ArcaniteBar", "Priority": 2 },
+    { "Slot": "Neck", "ItemId": 18404, "ItemName": "Onyxia Tooth Pendant", "Source": "Boss:Onyxia", "Priority": 3 },
+    { "Slot": "Shoulder", "ItemId": 12927, "ItemName": "Truestrike Shoulders", "Source": "Dungeon:UBRS", "Priority": 1 },
+    { "Slot": "Back", "ItemId": 13340, "ItemName": "Cape of the Black Baron", "Source": "Dungeon:Stratholme:Baron", "Priority": 1 },
+    { "Slot": "Chest", "ItemId": 11726, "ItemName": "Savage Gladiator Chain", "Source": "Dungeon:BRD:Arena", "Priority": 1 },
+    { "Slot": "Wrist", "ItemId": 13959, "ItemName": "Omokk's Girth Restrainer", "Source": "Dungeon:LBRS", "Priority": 2 },
+    { "Slot": "Hands", "ItemId": 14551, "ItemName": "Edgemaster's Handguards", "Source": "AH", "Priority": 2 },
+    { "Slot": "Waist", "ItemId": 13252, "ItemName": "Cloudrunner Girdle", "Source": "Dungeon:LBRS", "Priority": 2 },
+    { "Slot": "Legs", "ItemId": 14554, "ItemName": "Cloudkeeper Legplates", "Source": "AH", "Priority": 3 },
+    { "Slot": "Feet", "ItemId": 14616, "ItemName": "Bloodmail Boots", "Source": "Dungeon:Scholomance", "Priority": 2 },
+    { "Slot": "Ring1", "ItemId": 13098, "ItemName": "Painweaver Band", "Source": "Dungeon:UBRS", "Priority": 1 },
+    { "Slot": "Ring2", "ItemId": 11669, "ItemName": "Naglering", "Source": "Dungeon:BRD:GolemLord", "Priority": 2 },
+    { "Slot": "Trinket1", "ItemId": 11815, "ItemName": "Hand of Justice", "Source": "Dungeon:BRD:Emperor", "Priority": 1 },
+    { "Slot": "Trinket2", "ItemId": 13965, "ItemName": "Blackhand's Breadth", "Source": "Quest:GeneralDrakkisath", "Priority": 1 }
+  ],
+  "MountGoal": {
+    "Type": "EpicMount",
+    "GoldCostCopper": 10000000,
+    "RequiredLevel": 60,
+    "RequiredRidingSkill": 150
+  }
+}
