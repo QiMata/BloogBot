@@ -176,39 +176,38 @@ namespace WoWStateManager
                 }
 
                 // Phase 2: Wait for ready status (navigation data loaded)
+                // For Docker deployments, the status file may have a mismatched PID
+                // (container PID != host PID). If TCP is connected and status says ready,
+                // trust it regardless of PID.
                 if (tcpConnected)
                 {
                     var status = PathfindingServiceStatus.ReadFromFile();
-                    if (status != null)
+                    if (status != null && status.IsReady)
                     {
-                        bool statusMatchesLiveService = IsStatusFromLivePathfindingProcess(status);
-                        if (status.IsReady && statusMatchesLiveService)
-                        {
-                            _serviceState = PathfindingServiceState.Ready;
-                            var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                            var mapsStr = status.LoadedMaps.Count > 0
-                                ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
-                                : "";
-                            Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
-                            return;
-                        }
-
-                        if (attempt % 5 == 0)
-                        {
-                            if (!statusMatchesLiveService)
-                            {
-                                Console.WriteLine(
-                                    $"  PathfindingService status ignored (stale/mismatched PID {status.ProcessId}). Waiting for current ready status...");
-                            }
-                            else
-                            {
-                                Console.WriteLine($"  PathfindingService status: {status.StatusMessage}");
-                            }
-                        }
+                        _serviceState = PathfindingServiceState.Ready;
+                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
+                        var mapsStr = status.LoadedMaps.Count > 0
+                            ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
+                            : "";
+                        Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
+                        return;
                     }
-                    else if (attempt % 5 == 0)
+
+                    // No status file (Docker container writes to its own filesystem).
+                    // If TCP connected, treat as ready after a brief grace period.
+                    if (status == null && attempt >= 5)
                     {
-                        Console.WriteLine("  PathfindingService status file not found yet. Waiting for ready status...");
+                        _serviceState = PathfindingServiceState.Ready;
+                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
+                        Console.WriteLine($"PathfindingService READY (TCP connected, no local status file — likely Docker). {elapsed:F1}s");
+                        return;
+                    }
+
+                    if (attempt % 5 == 0)
+                    {
+                        Console.WriteLine(status != null
+                            ? $"  PathfindingService status: {status.StatusMessage}"
+                            : "  PathfindingService status file not found yet (Docker container uses internal filesystem).");
                     }
                 }
 

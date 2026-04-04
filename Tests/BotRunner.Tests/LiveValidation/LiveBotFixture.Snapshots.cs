@@ -323,6 +323,10 @@ public partial class LiveBotFixture
     /// </summary>
     public async Task<bool> WaitForTeleportSettledAsync(string accountName, float expectedX, float expectedY, int timeoutMs = 3000, string? progressLabel = null)
     {
+        // Require 3 consecutive snapshot readings within 50y XY of target with stable Z.
+        // A single reading can be the locally-set position that gets overwritten by the
+        // server's actual position (e.g. DB login position before teleport ACK arrives).
+        int consecutiveNear = 0;
         float? lastZ = null;
         var sw = Stopwatch.StartNew();
         var lastProgressLog = 0L;
@@ -335,17 +339,25 @@ public partial class LiveBotFixture
                 var dx = pos.X - expectedX;
                 var dy = pos.Y - expectedY;
                 var dist2D = MathF.Sqrt(dx * dx + dy * dy);
-                if (dist2D < 50f && lastZ.HasValue && MathF.Abs(pos.Z - lastZ.Value) < 1f)
+                bool nearTarget = dist2D < 50f;
+                bool zStable = lastZ.HasValue && MathF.Abs(pos.Z - lastZ.Value) < 1f;
+
+                if (nearTarget && zStable)
+                    consecutiveNear++;
+                else
+                    consecutiveNear = nearTarget ? 1 : 0;
+
+                if (consecutiveNear >= 3)
                     return true;
+
                 lastZ = pos.Z;
             }
 
-            // BT-FEEDBACK-001: Log progress every 5s for long-running teleport waits
             if (progressLabel != null && sw.ElapsedMilliseconds - lastProgressLog >= 5000)
             {
                 lastProgressLog = sw.ElapsedMilliseconds;
                 var posStr = pos != null ? $"({pos.X:F0},{pos.Y:F0},{pos.Z:F0})" : "null";
-                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0})... current={posStr} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0})... current={posStr} consecutive={consecutiveNear} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
             }
 
             await Task.Delay(500);
