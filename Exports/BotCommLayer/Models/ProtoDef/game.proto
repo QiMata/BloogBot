@@ -125,6 +125,7 @@ message WoWPlayer {
     map<uint32, uint32> combatRating = 42;
     uint32 corpseRecoveryDelaySeconds = 43;
     repeated uint32 discoveredFlightNodes = 44; // Taxi node IDs the character has discovered
+    map<uint32, int32> reputationStandings = 45; // Faction ID → standing value (from SMSG_INITIALIZE_FACTIONS)
 }
 
 // Reusable message for WoWItem, extending WoWGameObject
