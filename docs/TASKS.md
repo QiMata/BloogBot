@@ -483,7 +483,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.9 | **Create `UseHearthstoneTask.cs`** — Finds hearthstone, casts, detects teleport. | **Done** (d9bdf4bd) |
-| 21.10 | **Hearthstone cooldown tracking** — Track hearthstone cooldown from `SMSG_SPELL_COOLDOWN` or item cooldown field in SMSG_UPDATE_OBJECT. Add `HearthstoneCooldownRemainingSec` to snapshot's MovementData or a new travel-state field. `CrossMapRouter` checks this: if hearthstone is off cooldown AND bind point is within 50y of a good intermediate for the route, prefer hearthstone leg. | Open |
+| 21.10 | **Hearthstone cooldown tracking** — `hearthstoneCooldownSec` field 37 added to MovementData proto. | **Done** (f97a2947) |
 | 21.11 | **Create `SetBindPointTask.cs`** — Already created with innkeeper find/navigate/interact/gossip. | **Done** (75e510e8) |
 | 21.12 | **Innkeeper location data** — `InnkeeperData.cs` with 26 innkeepers (Horde/Alliance/Neutral). | **Done** (session 302) |
 
