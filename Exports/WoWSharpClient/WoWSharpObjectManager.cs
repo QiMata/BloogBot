@@ -35,6 +35,12 @@ namespace WoWSharpClient
     {
         private static WoWSharpObjectManager _instance;
 
+        /// <summary>
+        /// P9.2: Legacy singleton accessor. Use public constructor for multi-bot-per-process mode.
+        /// This shim delegates to a lazily-created instance for backward compatibility during migration.
+        /// New code should create instances directly: new WoWSharpObjectManager().
+        /// </summary>
+        [Obsolete("Use new WoWSharpObjectManager() for per-bot instances. This singleton will be removed after P9.6 migration.")]
         public static WoWSharpObjectManager Instance
         {
             get
@@ -93,7 +99,12 @@ namespace WoWSharpClient
         /// </summary>
         public SplineController SplineCtrl { get; set; } = Splines.Instance;
 
-        private WoWSharpObjectManager() { }
+        /// <summary>
+        /// P9.2: Public constructor for per-bot instances.
+        /// Each BotContext creates its own WoWSharpObjectManager.
+        /// Call Initialize() after construction to wire up the WoWClient connection.
+        /// </summary>
+        public WoWSharpObjectManager() { }
 
 
         public void Initialize(

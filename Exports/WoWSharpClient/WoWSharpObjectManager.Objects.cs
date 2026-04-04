@@ -90,9 +90,11 @@ namespace WoWSharpClient
         }
 
 
-        private static readonly List<WoWObject> _objects = [];
+        /// <summary>P9.2: Instance-scoped object list (was static). Each bot owns its own object collection.</summary>
+        private readonly List<WoWObject> _objects = [];
 
-        private static readonly object _objectsLock = new();
+        /// <summary>P9.2: Instance-scoped lock (was static).</summary>
+        private readonly object _objectsLock = new();
 
 
         /// <summary>
@@ -649,7 +651,7 @@ namespace WoWSharpClient
         }
 
 
-        private static void ApplyFieldDiffs(WoWObject obj, Dictionary<uint, object?> updatedFields)
+        private void ApplyFieldDiffs(WoWObject obj, Dictionary<uint, object?> updatedFields)
         {
             bool auraFieldsModified = false;
             foreach (var (key, value) in updatedFields)
@@ -758,7 +760,7 @@ namespace WoWSharpClient
         }
 
 
-        private static void ApplyObjectFieldDiffs(WoWObject obj, uint key, object value)
+        private void ApplyObjectFieldDiffs(WoWObject obj, uint key, object value)
         {
             var field = (EObjectFields)key;
             switch (field)
@@ -1038,7 +1040,7 @@ namespace WoWSharpClient
         }
 
 
-        private static void ApplyPlayerFieldDiffs(
+        private void ApplyPlayerFieldDiffs(
             WoWPlayer player,
             uint key,
             object value,
