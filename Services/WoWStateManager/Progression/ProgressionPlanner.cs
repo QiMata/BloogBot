@@ -120,6 +120,40 @@ namespace WoWStateManager.Progression
                 }
             }
 
+            // P8: Quest chain progress (P22.23)
+            if (config.QuestChains.Count > 0)
+            {
+                // Get completed quest IDs from quest log entries
+                // questLog1 contains the quest ID in the low 16 bits
+                var completedQuestIds = new System.Collections.Generic.HashSet<uint>();
+                if (player.QuestLogEntries != null)
+                {
+                    foreach (var entry in player.QuestLogEntries)
+                    {
+                        if (entry.QuestLog1 != 0)
+                            completedQuestIds.Add(entry.QuestLog1 & 0xFFFF);
+                    }
+                }
+
+                foreach (var chainId in config.QuestChains)
+                {
+                    var chain = BotRunner.Progression.QuestChainData.GetChain(chainId);
+                    if (chain == null) continue;
+
+                    // Find the first incomplete quest in the chain
+                    foreach (var step in chain.Steps)
+                    {
+                        if (!completedQuestIds.Contains(step.QuestId))
+                        {
+                            _logger.LogDebug("Bot {Account}: quest chain '{Chain}' next step: {Quest} ({QuestId})",
+                                snapshot.AccountName, chain.DisplayName, step.QuestName, step.QuestId);
+                            // TODO: Return TravelTo quest giver + AcceptQuest/CompleteQuest action
+                            break;
+                        }
+                    }
+                }
+            }
+
             return null; // No override — bot self-directs (grind/quest in current zone)
         }
 
