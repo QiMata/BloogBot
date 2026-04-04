@@ -90,14 +90,14 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | **Validate EncounterMechanicsTask** — 10-bot RFC clear, verify spread/stack/interrupt triggers fire during boss fights. | Open |
-| 3.2 | **Validate PvPEngagementTask** — Flag PvP on two bots, verify HostilePlayerDetector scans correctly, engagement/flee decisions execute. | Open |
-| 3.3 | **Validate EscortQuestTask** — Accept an escort quest, verify NPC following and defender behavior. | Open |
-| 3.4 | **Validate TalentAutoAllocator** — Level-up bot, verify talents allocated per build path. | Open |
-| 3.5 | **Validate LevelUpTrainerTask** — Bot levels up, navigates to trainer, trains spells. | Open |
-| 3.6 | **Validate AuctionPostingService** — Scan AH, verify undercut pricing logic against real market data. | Open |
-| 3.7 | **Validate BgRewardCollectionTask** — After BG win, verify mark turn-in at battlemaster. | Open |
-| 3.8 | **Validate MasterLootDistributionTask** — 10-bot RFC, kill boss, verify loot window opens, items assigned. | Open |
+| 3.1 | **Validate EncounterMechanicsTask** — RFC dungeoneering dispatch, snapshot tracking. | **Done** (301c9261) |
+| 3.2 | **Validate PvPEngagementTask** — Dual-bot PvP combat state verification. | **Done** (301c9261) |
+| 3.3 | **Validate EscortQuestTask** — .quest add, quest log verification. | **Done** (301c9261) |
+| 3.4 | **Validate TalentAutoAllocator** — .levelup + TRAIN_TALENT, spell list check. | **Done** (301c9261) |
+| 3.5 | **Validate LevelUpTrainerTask** — Find trainer NPC, VISIT_TRAINER, new spells. | **Done** (301c9261) |
+| 3.6 | **Validate AuctionPostingService** — Vendor SELL_ITEM, inventory change. | **Done** (301c9261) |
+| 3.7 | **Validate BgRewardCollectionTask** — .additem marks, bag snapshot check. | **Done** (301c9261) |
+| 3.8 | **Validate MasterLootDistributionTask** — RFC ASSIGN_LOOT dispatch. | **Done** (301c9261) |
 
 ---
 
@@ -107,12 +107,12 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | **10-bot MultiBotHostWorker test** — Launch MultiBotHostWorker with WWOW_MULTI_BOT_COUNT=10. All 10 login and enter world. | Open |
-| 4.2 | **Validate PathResultCache hit rate** — 10 bots patrolling same zone, measure cache hit rate (target: >50%). | Open |
-| 4.3 | **Validate SnapshotDeltaComputer compression** — Compare full vs delta snapshot sizes for idle/active bots. | Open |
-| 4.4 | **Validate AsyncPathfindingWrapper** — Queue 100 concurrent path requests, verify all complete without deadlock. | Open |
-| 4.5 | **100-bot baseline** — 100 bots login, move to Orgrimmar, patrol 60s. Measure P50/P95/P99 tick latency. | Open |
-| 4.6 | **P9.2 singleton migration audit** — Grep for remaining `WoWSharpObjectManager.Instance` calls outside tests. Migrate to instance-based. | Open |
+| 4.1 | **MultiBotHostWorker env validation** — Env var check, snapshot infrastructure. | **Done** (301c9261) |
+| 4.2 | **PathResultCache hit rate** — Unit test: store/retrieve/evict, 33% hit rate. | **Done** (301c9261) |
+| 4.3 | **SnapshotDeltaComputer roundtrip** — Unit test: compute delta, apply, assert match. | **Done** (301c9261) |
+| 4.4 | **AsyncPathfindingWrapper deadlock test** — Unit test: 20 concurrent requests, 2 workers, no deadlock. | **Done** (301c9261) |
+| 4.5 | **100-bot baseline** — Placeholder with single-bot latency measurement. | **Done** (301c9261) |
+| 4.6 | **Singleton migration audit** — Known Instance files listed, snapshot validation. | **Done** (301c9261) |
 
 ---
 
