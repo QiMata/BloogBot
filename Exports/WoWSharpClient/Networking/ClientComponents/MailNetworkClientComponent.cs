@@ -97,13 +97,28 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Publish()
                 .RefCount();
 
-            // No direct opcode mapping for these in 1.12.1 — operations are confirmed
-            // via SMSG_SEND_MAIL_RESULT with different mailAction values
-            _moneyTakenResults = Observable.Never<(uint MailId, uint Amount)>();
-            _itemTakenResults = Observable.Never<(uint MailId, uint ItemId, uint Quantity)>();
-            _mailReadMarks = Observable.Never<uint>();
-            _mailDeletes = Observable.Never<uint>();
-            _mailReturns = Observable.Never<uint>();
+            // Wire mail take/delete operations from SMSG_SEND_MAIL_RESULT action types (P23.11)
+            _moneyTakenResults = sendResults
+                .Where(r => r.Success && r.Action == "TakeMoney")
+                .Select(r => (r.MailId, Amount: 0u))
+                .Publish().RefCount();
+
+            _itemTakenResults = sendResults
+                .Where(r => r.Success && r.Action == "TakeItem")
+                .Select(r => (r.MailId, ItemId: r.ItemId, Quantity: r.ItemCount))
+                .Publish().RefCount();
+
+            _mailDeletes = sendResults
+                .Where(r => r.Success && r.Action == "Delete")
+                .Select(r => r.MailId)
+                .Publish().RefCount();
+
+            _mailReturns = sendResults
+                .Where(r => r.Success && r.Action == "ReturnToSender")
+                .Select(r => r.MailId)
+                .Publish().RefCount();
+
+            _mailReadMarks = Observable.Never<uint>(); // No explicit read-mark opcode in 1.12.1
 
             _mailboxWindowOpenings = Observable.Empty<ulong>();
             _mailboxWindowClosings = Observable.Empty<Unit>();
@@ -781,12 +796,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         ///   [if mailError == EQUIP_ERROR: equipError(4)]
         ///   [if mailAction == ITEM_TAKEN and success: itemId(4) + itemCount(4)]
         /// </summary>
-        private (bool Success, string Action, string? ErrorMessage) ParseSendMailResult(ReadOnlyMemory<byte> payload)
+        private record MailResultData(bool Success, string Action, string? ErrorMessage, uint MailId, uint ItemId = 0, uint ItemCount = 0);
+
+        private MailResultData ParseSendMailResult(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length < 12) return (false, "Unknown", "Malformed send mail result (< 12 bytes)");
+                if (span.Length < 12) return new(false, "Unknown", "Malformed send mail result (< 12 bytes)", 0);
 
                 uint mailId = BitConverter.ToUInt32(span[..4]);
                 uint mailAction = BitConverter.ToUInt32(span.Slice(4, 4));
@@ -804,7 +821,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 };
 
                 if (mailError == 0) // MAIL_OK
-                    return (true, actionName, null);
+                {
+                    // Parse item taken data: itemId(4) + itemCount(4) after the 12-byte header
+                    uint itemId = 0, itemCount = 0;
+                    if (mailAction == MAIL_ITEM_TAKEN && span.Length >= 20)
+                    {
+                        itemId = BitConverter.ToUInt32(span.Slice(12, 4));
+                        itemCount = BitConverter.ToUInt32(span.Slice(16, 4));
+                    }
+                    return new(true, actionName, null, mailId, itemId, itemCount);
+                }
 
                 var errorName = mailError switch
                 {
@@ -819,12 +845,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _ => $"UnknownError({mailError})"
                 };
 
-                return (false, actionName, $"MailId={mailId} Error={errorName}");
+                return new(false, actionName, $"MailId={mailId} Error={errorName}", mailId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to parse send mail result ({Len} bytes)", payload.Length);
-                return (false, "Unknown", ex.Message);
+                return new(false, "Unknown", ex.Message, 0);
             }
         }
 

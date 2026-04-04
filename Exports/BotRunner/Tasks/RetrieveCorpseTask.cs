@@ -6,6 +6,7 @@ using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
 using System;
+using System.Linq;
 
 namespace BotRunner.Tasks;
 
@@ -65,6 +66,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
     private DateTime _lastTickDiagUtc = DateTime.MinValue;
     private bool _stoppedForRetrieval;
+    private bool _triedSpiritHealer;
 
     // MaNGOS CORPSE_RECLAIM_RADIUS = 39y (3D distance). We compute a dynamic 2D
     // approach distance from the current Z delta so the bot walks close enough in
@@ -466,7 +468,27 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             return;
         }
 
+        // P21.25: Spirit healer auto-navigation — if corpse is very far away (>200y)
+        // and a spirit healer NPC is nearby (<50y), use spirit healer resurrection
+        // instead of running back (accepts 25% durability loss + rez sickness).
         var corpseHorizontalDistance = player.Position.DistanceTo2D(corpsePosition);
+        if (corpseHorizontalDistance > 200f && !_triedSpiritHealer)
+        {
+            var spiritHealer = ObjectManager.Units
+                .FirstOrDefault(u => u.Name != null
+                    && u.Name.Contains("Spirit Healer", StringComparison.OrdinalIgnoreCase)
+                    && u.Position.DistanceTo(player.Position) < 50f);
+
+            if (spiritHealer != null)
+            {
+                Log.Information("[RETRIEVE_CORPSE] Corpse is {Dist:F0}y away. Using nearby spirit healer instead.",
+                    corpseHorizontalDistance);
+                spiritHealer.Interact(); // CMSG_SPIRIT_HEALER_ACTIVATE
+                _triedSpiritHealer = true;
+                // Wait a tick for resurrection to process
+                return;
+            }
+        }
         var corpseDeltaZ = MathF.Abs(player.Position.Z - corpsePosition.Z);
         var corpseNavTarget = BuildCorpseNavigationTarget(player.Position, corpsePosition);
 
