@@ -581,15 +581,15 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 9.12 | **Delta snapshots** — `SnapshotDeltaComputer.cs` with byte-level diff, keyframe interval, ApplyDelta reconstruction. | **Done** (1b4d561e) |
-| 9.13 | **Snapshot batching** — StateManager collects N bot snapshots into one batch before processing coordination logic. `CharacterStateSocketListener` buffers incoming snapshots for 50ms, then processes batch. Coordination scans operate on batch, not individual. Reduces lock contention from O(n) individual operations to O(1) batch operations. | Open |
+| 9.13 | **Snapshot batching** — `SnapshotBatcher.cs` with timer-based flush + max batch size. | **Done** (4a34eafd) |
 | 9.14 | **GZip compression** — `ProtobufCompression.cs` with 1-byte flag header (0x00=raw, 0x01=GZip). Threshold 1KB. Backward-compatible decode. Unit tests pass. | **Done** (pre-existing) |
-| 9.15 | **Connection multiplexing** — Instead of 1 TCP connection per bot to StateManager, multiplex N bots over 1 connection using request IDs. `AsyncRequest.Id` already exists. StateManager routes responses by ID. Target: 3000 bots over 100 connections (30 bots per connection). | Open |
+| 9.15 | **Connection multiplexing** — `ConnectionMultiplexer.cs` with hash-based bot→connection routing. | **Done** (4a34eafd) |
 
 ### 9D — PathfindingService Scaling
 
 | # | Task | Spec |
 |---|------|------|
-| 9.16 | **Sharded PathfindingService** — Run K PathfindingService instances (K = CPU core count / 4). Each loads full map data. Bots are assigned to shards by `accountName.GetHashCode() % K`. `PathfindingClient` receives shard list from config, routes requests to assigned shard. Target: 16-core machine → 4 shards → 256 concurrent handlers. | Open |
+| 9.16 | **Sharded PathfindingService** — `PathfindingShardRouter.cs` with consistent-hash shard assignment. | **Done** (4a34eafd) |
 | 9.17 | **Async pathfinding requests** — `AsyncPathfindingWrapper.cs` with Channel-based queue + configurable worker pool. | **Done** (1b4d561e) |
 | 9.18 | **Physics step batching** — Collect physics inputs from multiple bots, batch into single P/Invoke call that processes N inputs. Add `StepPhysicsV2Batch(PhysicsInput[] inputs, int count, PhysicsOutput[] outputs)` to Navigation.dll. Amortize P/Invoke overhead. Target: process 100 physics steps per call instead of 1. | Open |
 | 9.19 | **Path result caching** — `PathResultCache.cs` LRU cache with grid-quantized keys, 10K entries, hit rate tracking. | **Done** (4bd15864) |
