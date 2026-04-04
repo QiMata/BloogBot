@@ -492,8 +492,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.13 | **Add Deeprun Tram** — Add to `MapTransitionGraph`: Ironforge (Map 0, position near tram entrance) ↔ Stormwind (Map 0, position near tram exit). TransitionType = `Tram`. Add to `TransportData`: Deeprun Tram entries with boarding positions at both stations. Both Alliance-only. Tram is a short ride (~30s). Create `RideDeeprunTramTask.cs` or extend TransportWaitingLogic. | Open |
-| 21.14 | **Add missing dungeon portals to MapTransitionGraph** — Add all vanilla 5-man, 10-man, and 20/40-man instance portals. Missing instances (world entrance coords from MaNGOS `areatrigger_teleport` table): Blackfathom Deeps (48), Razorfen Kraul (47), Razorfen Downs (129), Uldaman (70), Zul'Farrak (209), Maraudon (349), Sunken Temple (109), Blackrock Spire (229), Dire Maul (429), Stratholme (329), Scholomance (289), Gnomeregan (90), Stockade (34), Blackrock Depths (230 — already partial), Onyxia's Lair (249), Molten Core (409), Blackwing Lair (469), AQ20/AQ40 (509/531), Naxxramas (533). Query `areatrigger_teleport` from MaNGOS DB for authoritative entrance coords. | Open |
-| 21.15 | **Add all raid instance portals** — Extend MapTransitionGraph with: Molten Core entrance (Blackrock Mountain, Map 0 → 409), Blackwing Lair entrance (Map 0 → 469, through UBRS), Onyxia's Lair (Map 1, Dustwallow → 249), AQ20 (Map 1, Silithus → 509), AQ40 (Map 1, Silithus → 531), Naxxramas (Map 0, EPL → 533). Include faction restrictions where applicable. | Open |
+| 21.14 | **Add missing dungeon portals to MapTransitionGraph** — All vanilla dungeon/raid maps already defined in MapTransitionGraph.cs. | **Done** (pre-existing) |
+| 21.15 | **Add all raid instance portals** — Already in MapTransitionGraph: MC, BWL, Onyxia, AQ20, AQ40, Naxx. | **Done** (pre-existing) |
 
 ### 21E — Class-Specific Travel (Mage Portals, Warlock Summon)
 
