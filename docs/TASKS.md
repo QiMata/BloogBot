@@ -558,7 +558,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Status |
 |---|------|--------|
-| 8.9 | Add `StartWandAttack` to `CharacterAction` enum. Map `START_WAND_ATTACK` (proto 34). In ActionDispatch, call `_objectManager.StartWandAttack()` (FG uses `CastSpellByName('Shoot')`, BG uses `CMSG_CAST_SPELL` with Shoot spell ID). | Open |
+| 8.9 | Add `StartWandAttack` to `CharacterAction` enum + ActionDispatch + BuildStartWandAttackSequence. | **Done** (5c7b1e98) |
 | 8.10 | Remove `START_PHYSICS_RECORDING` / `STOP_PHYSICS_RECORDING` — already removed from proto. | **Done** (pre-existing) |
 
 ---
