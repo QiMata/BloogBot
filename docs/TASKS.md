@@ -258,7 +258,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | 26.1 | **Create `DungeonTestFixture`** — `DungeonInstanceFixture` base class generates settings JSON, launches 10 bots (1 FG + 9 BG), enables coordinator. | **Done** (1464e7d) |
 | 26.2 | **Create `DungeonEntryData.cs`** — 26 dungeons with entrance/meeting stone positions, level ranges, faction access. | **Done** (1464e7d) |
 | 26.3 | **Implement meeting stone summoning** — File: `Exports/BotRunner/Tasks/Travel/MeetingStoneSummonTask.cs`. Steps: (1) Navigate to meeting stone game object (GameObjectType 23). (2) Interact via `CMSG_MEETINGSTONE_JOIN`. (3) Wait for `SMSG_MEETINGSTONE_SETQUEUE` confirmation. (4) When 3 members are at stone, summoning portal appears. (5) Target absent member, confirm summon. (6) Wait for `SMSG_MEETINGSTONE_COMPLETE`. (7) Repeat for all absent members. Also implement Warlock Ritual of Summoning (spell 698) as alternative path when party has a Warlock. | Open |
-| 26.4 | **Create `SummoningStoneData.cs`** — File: `Exports/BotRunner/Travel/SummoningStoneData.cs`. Meeting stone positions for all vanilla dungeons. Source: `gameobject` table WHERE `type=23` (GAMEOBJECT_TYPE_MEETINGSTONE). ~20 entries covering major dungeons. | Open |
+| 26.4 | **Create `SummoningStoneData.cs`** — Accessor over DungeonEntryData meeting stones. GetByInstanceMapId, GetNearby, AllStones. | **Done** (ce24a5ce) |
 
 ### 26B — Classic Dungeons (Levels 13-30)
 
