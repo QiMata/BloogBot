@@ -1,4 +1,4 @@
-﻿using BotCommLayer;
+using BotCommLayer;
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -6,75 +6,54 @@ using Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+
 namespace BotRunner.Clients
 {
+    /// <summary>
+    /// PathfindingClient — remote path requests + local physics/query operations.
+    ///
+    /// Path computation (FindPath, corridor) goes to the remote PathfindingService.
+    /// All other operations (GroundZ, LOS, physics, navmesh queries) use the local
+    /// in-process Navigation.dll directly.
+    /// </summary>
     public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>, IPhysicsClient
     {
         internal const int DefaultPathRequestTimeoutMs = 30_000;
-        internal const int DefaultQueryTimeoutMs = 10_000;
-        internal const int DefaultPhysicsTimeoutMs = 5_000;
 
         private readonly ILogger? _logger;
         private readonly int _pathRequestTimeoutMs;
-        private readonly int _queryTimeoutMs;
-        private readonly int _physicsTimeoutMs;
         private int _consecutiveFailures;
-        private DateTime _physicsBackoffUntilUtc = DateTime.MinValue;
 
-        internal const int PhysicsFailureBackoffBaseMs = 250;
-        internal const int PhysicsFailureBackoffMaxMs = 2_000;
+        public PathfindingClient() : this(DefaultPathRequestTimeoutMs) { }
 
-        public PathfindingClient()
-            : this(
-                DefaultPathRequestTimeoutMs,
-                DefaultQueryTimeoutMs,
-                DefaultPhysicsTimeoutMs)
-        {
-        }
-
-        protected PathfindingClient(
-            int pathRequestTimeoutMs,
-            int queryTimeoutMs,
-            int physicsTimeoutMs)
-            : base()
+        protected PathfindingClient(int pathRequestTimeoutMs) : base()
         {
             _pathRequestTimeoutMs = pathRequestTimeoutMs;
-            _queryTimeoutMs = queryTimeoutMs;
-            _physicsTimeoutMs = physicsTimeoutMs;
         }
 
         public PathfindingClient(
-            string ipAddress,
-            int port,
-            ILogger logger,
-            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs,
-            int queryTimeoutMs = DefaultQueryTimeoutMs,
-            int physicsTimeoutMs = DefaultPhysicsTimeoutMs)
+            string ipAddress, int port, ILogger logger,
+            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs)
             : base(ipAddress, port, logger)
         {
             _logger = logger;
             _pathRequestTimeoutMs = pathRequestTimeoutMs;
-            _queryTimeoutMs = queryTimeoutMs;
-            _physicsTimeoutMs = physicsTimeoutMs;
         }
 
-        /// <summary>
-        /// True when the last request succeeded. Game loop can check this to decide
-        /// whether to fall back to dead reckoning.
-        /// </summary>
         public bool IsAvailable => _consecutiveFailures == 0;
+
+        // ════════════════════════════════════════════════════════════════
+        //  REMOTE: Path computation (via PathfindingService)
+        // ════════════════════════════════════════════════════════════════
 
         public virtual Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
             => GetPath(mapId, start, end, nearbyObjects: null, smoothPath);
 
         public virtual Position[] GetPath(
-            uint mapId,
-            Position start,
-            Position end,
+            uint mapId, Position start, Position end,
             IReadOnlyList<DynamicObjectProto>? nearbyObjects,
-            bool smoothPath = false,
-            Race race = 0,
-            Gender gender = 0)
+            bool smoothPath = false, Race race = 0, Gender gender = 0)
         {
             try
             {
@@ -97,16 +76,15 @@ namespace BotRunner.Clients
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
-                return response.Path.Corners
-                    .Select(p => new Position(p.X, p.Y, p.Z))
-                    .ToArray();
+                return response.Path.Corners.Select(p => new Position(p.X, p.Y, p.Z)).ToArray();
             }
             catch (Exception ex)
             {
-                NoteFailure("path request", ex, "returning an empty path until the service recovers.");
+                NoteFailure("path request", ex);
                 return [];
             }
         }
+
         public virtual float GetPathingDistance(uint mapId, Position start, Position end)
         {
             var path = GetPath(mapId, start, end);
@@ -115,245 +93,117 @@ namespace BotRunner.Clients
                 distance += path[i].DistanceTo(path[i + 1]);
             return distance;
         }
+
+        // ════���═══════════════════════════════════════════════════════════
+        //  LOCAL: Physics, GroundZ, LOS, Navmesh queries (Navigation.dll)
+        // ═══════════════════════════════════════��════════════════════════
+
+        private const string NavigationDll = "Navigation";
+
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl)]
+        private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
+
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool LineOfSightNative(uint mapId, NativeXYZ from, NativeXYZ to);
+
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool SegmentIntersectsDynamicObjectsNative(
+            uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
+
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsPointOnNavmesh")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool IsPointOnNavmeshNative(
+            uint mapId, float x, float y, float z, float searchRadius,
+            out float nearestX, out float nearestY, out float nearestZ);
+
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "FindNearestWalkablePoint")]
+        private static extern uint FindNearestWalkablePointNative(
+            uint mapId, float x, float y, float z, float searchRadius,
+            out float nearestX, out float nearestY, out float nearestZ);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeXYZ
+        {
+            public float X, Y, Z;
+            public NativeXYZ(float x, float y, float z) { X = x; Y = y; Z = z; }
+        }
+
         public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
         {
             try
             {
-                var request = new PathfindingRequest
-                {
-                    GroundZ = new GetGroundZRequest
-                    {
-                        MapId = mapId,
-                        Position = ToProto(position),
-                        MaxSearchDist = maxSearchDist
-                    }
-                };
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    throw new Exception(response.Error.Message);
-                return (response.GroundZ.GroundZ, response.GroundZ.Found);
+                float gz = GetGroundZNative(mapId, position.X, position.Y, position.Z, maxSearchDist);
+                bool found = gz > -50000f;
+                return (gz, found);
             }
             catch (Exception ex)
             {
-                NoteFailure("ground query", ex, "treating the ground probe as unavailable until the service recovers.");
+                _logger?.LogWarning("Local GetGroundZ failed: {Error}", ex.Message);
                 return (0f, false);
             }
         }
 
-        /// <summary>
-        /// Queries ground Z for multiple positions in a single IPC round-trip.
-        /// Returns an array of (groundZ, found) results, one per input position, in the same order.
-        /// Falls back to individual GetGroundZ calls if the batch request fails (e.g., older service).
-        /// </summary>
         public virtual (float groundZ, bool found)[] BatchGetGroundZ(uint mapId, Position[] positions, float maxSearchDist = 10.0f)
         {
-            if (positions.Length == 0)
-                return [];
-
-            try
-            {
-                var request = new PathfindingRequest
-                {
-                    BatchGroundZ = new BatchGroundZRequest
-                    {
-                        MapId = mapId,
-                        MaxSearchDist = maxSearchDist
-                    }
-                };
-                foreach (var pos in positions)
-                    request.BatchGroundZ.Positions.Add(ToProto(pos));
-
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    throw new Exception(response.Error.Message);
-
-                var results = new (float groundZ, bool found)[response.BatchGroundZ.Results.Count];
-                for (int i = 0; i < results.Length; i++)
-                {
-                    var entry = response.BatchGroundZ.Results[i];
-                    results[i] = (entry.GroundZ, entry.Found);
-                }
-                return results;
-            }
-            catch
-            {
-                // Fallback: individual queries (handles older PathfindingService without batch support)
-                var results = new (float groundZ, bool found)[positions.Length];
-                for (int i = 0; i < positions.Length; i++)
-                {
-                    try { results[i] = GetGroundZ(mapId, positions[i], maxSearchDist); }
-                    catch { results[i] = (0f, false); }
-                }
-                return results;
-            }
+            var results = new (float groundZ, bool found)[positions.Length];
+            for (int i = 0; i < positions.Length; i++)
+                results[i] = GetGroundZ(mapId, positions[i], maxSearchDist);
+            return results;
         }
 
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
         {
             try
             {
-                var request = new PathfindingRequest
-                {
-                    Los = new LineOfSightRequest
-                    {
-                        MapId = mapId,
-                        From = ToProto(from),
-                        To = ToProto(to)
-                    }
-                };
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    throw new Exception(response.Error.Message);
-                return response.Los.InLos;
+                return LineOfSightNative(mapId,
+                    new NativeXYZ(from.X, from.Y, from.Z),
+                    new NativeXYZ(to.X, to.Y, to.Z));
             }
             catch (Exception ex)
             {
-                NoteFailure("line-of-sight query", ex, "treating LOS as blocked until the service recovers.");
+                _logger?.LogWarning("Local LineOfSight failed: {Error}", ex.Message);
                 return false;
             }
         }
 
-        /// <summary>
-        /// Runs a physics step via the centralized PathfindingService.
-        /// On failure, returns a dead-reckoning fallback (position unchanged, simple gravity)
-        /// so the game loop never crashes.
-        /// </summary>
         public virtual PhysicsOutput PhysicsStep(PhysicsInput physicsInput)
         {
-            if (UtcNow < _physicsBackoffUntilUtc)
-                return HoldPosition(physicsInput);
-
-            try
-            {
-                var request = new PathfindingRequest { Step = physicsInput };
-                var response = SendRequest(request, _physicsTimeoutMs);
-                _consecutiveFailures = 0;
-                _physicsBackoffUntilUtc = DateTime.MinValue;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    throw new Exception(response.Error.Message);
-                // Guard against empty/unexpected response (oneof not set → Step is null)
-                var result = response.Step ?? throw new Exception("PathfindingService returned empty Step response");
-
-                // Zero-delta with movement flags means the physics engine blocked us at a wall.
-                // This is CORRECT behavior — do NOT fall back to dead reckoning, which has no
-                // wall collision and causes the bot to walk through dungeon walls.
-                // The NavigationPath layer handles repath/avoidance when the bot is stuck.
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                _consecutiveFailures++;
-                _physicsBackoffUntilUtc = UtcNow.AddMilliseconds(ComputePhysicsFailureBackoffMs(_consecutiveFailures));
-                if (_consecutiveFailures <= 3)
-                    _logger?.LogWarning("PathfindingService physics call failed ({Count}): {Msg}", _consecutiveFailures, ex.Message);
-                else if (_consecutiveFailures == 4)
-                    _logger?.LogError("PathfindingService unreachable — holding position until service recovers.");
-
-                // Hold position instead of dead-reckoning. Dead reckoning has NO wall collision
-                // and causes bots to walk through dungeon walls. Setting GroundZ to -999999
-                // signals to MovementController that no physics ground data is available,
-                // which triggers the Z interpolation fallback (using navmesh waypoint Z)
-                // while keeping XY frozen until the physics service is available.
-                return HoldPosition(physicsInput);
-            }
-        }
-
-        /// <summary>
-        /// Hold position: return the same XY position with GroundZ = -999999 to signal
-        /// "no physics data available." MovementController will freeze XY and interpolate Z
-        /// from navmesh waypoints. This prevents the bot from walking through walls when
-        /// the PathfindingService is still initializing or unreachable.
-        /// </summary>
-        private static PhysicsOutput HoldPosition(PhysicsInput physicsInput)
-        {
+            // Physics is always local now — handled by MovementController's
+            // NativeLocalPhysics. This method exists for IPhysicsClient compatibility
+            // but should not be called in the normal BG bot flow.
             return new PhysicsOutput
             {
                 NewPosX = physicsInput.PosX,
                 NewPosY = physicsInput.PosY,
                 NewPosZ = physicsInput.PosZ,
-                NewVelX = 0,
-                NewVelY = 0,
-                NewVelZ = 0,
                 MovementFlags = physicsInput.MovementFlags,
                 Orientation = physicsInput.Facing,
-                Pitch = physicsInput.SwimPitch,
-                FallTime = 0,
-                GroundZ = -999999f, // Signal: no physics ground data
+                GroundZ = -999999f,
             };
         }
 
-        private void NoteFailure(string operation, Exception ex, string terminalFallback)
-        {
-            _consecutiveFailures++;
-            if (_consecutiveFailures <= 3)
-            {
-                _logger?.LogWarning("PathfindingService {Operation} failed ({Count}): {Msg}",
-                    operation, _consecutiveFailures, ex.Message);
-            }
-            else if (_consecutiveFailures == 4)
-            {
-                _logger?.LogError("PathfindingService unreachable — {Fallback}", terminalFallback);
-            }
-        }
-        /// <summary>
-        /// Check whether the segment (from → to) intersects any registered dynamic object
-        /// (closed door, trophy pillar, etc.) on the given map.
-        /// Returns false when no dynamic objects are registered (fast path).
-        /// Does NOT check static geometry — use IsInLineOfSight for that.
-        /// </summary>
         public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
         {
             try
             {
-                var request = new PathfindingRequest
-                {
-                    SegmentDynCheck = new SegmentDynCheckRequest
-                    {
-                        MapId = mapId,
-                        From = ToProto(from),
-                        To = ToProto(to)
-                    }
-                };
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    return false; // Non-fatal — treat as clear
-                return response.SegmentDynCheck.Intersects;
+                return SegmentIntersectsDynamicObjectsNative(
+                    mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
             }
             catch
             {
-                return false; // Pathfinding service unavailable — assume clear
+                return false;
             }
         }
 
-        /// <summary>
-        /// Check if a position is on or near the navmesh within searchRadius.
-        /// Returns (onNavmesh, nearestPoint on the navmesh surface).
-        /// </summary>
         public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
         {
             try
             {
-                var request = new PathfindingRequest
-                {
-                    NavmeshPoint = new NavmeshPointRequest
-                    {
-                        MapId = mapId,
-                        Position = ToProto(position),
-                        SearchRadius = searchRadius
-                    }
-                };
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    return (false, position);
-                var r = response.NavmeshPoint;
-                return (r.OnNavmesh, new Position(r.NearestPoint.X, r.NearestPoint.Y, r.NearestPoint.Z));
+                bool on = IsPointOnNavmeshNative(mapId, position.X, position.Y, position.Z, searchRadius,
+                    out float nx, out float ny, out float nz);
+                return (on, new Position(nx, ny, nz));
             }
             catch
             {
@@ -361,29 +211,13 @@ namespace BotRunner.Clients
             }
         }
 
-        /// <summary>
-        /// Find the nearest walkable point within searchRadius.
-        /// Returns (areaType, nearestPoint). areaType: 0=not found, 1=ground, 3=steep_slope, 6=water.
-        /// </summary>
         public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
         {
             try
             {
-                var request = new PathfindingRequest
-                {
-                    NearestWalkable = new NearestWalkableRequest
-                    {
-                        MapId = mapId,
-                        Position = ToProto(position),
-                        SearchRadius = searchRadius
-                    }
-                };
-                var response = SendRequest(request, _queryTimeoutMs);
-                _consecutiveFailures = 0;
-                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
-                    return (0, position);
-                var r = response.NearestWalkable;
-                return (r.AreaType, new Position(r.NearestPoint.X, r.NearestPoint.Y, r.NearestPoint.Z));
+                uint areaType = FindNearestWalkablePointNative(mapId, position.X, position.Y, position.Z, searchRadius,
+                    out float nx, out float ny, out float nz);
+                return (areaType, new Position(nx, ny, nz));
             }
             catch
             {
@@ -391,20 +225,23 @@ namespace BotRunner.Clients
             }
         }
 
-        protected virtual PathfindingResponse SendRequest(PathfindingRequest request) => SendMessage(request);
+        // ════════════════════════════════════════════════════════════════
+        //  Helpers
+        // ══��═════════════════════════════════════════════════════════════
 
+        // Test seams — subclasses can override to capture/mock remote requests
+        protected virtual PathfindingResponse SendRequest(PathfindingRequest request) => SendMessage(request);
         protected virtual PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)
             => SendMessage(request, timeoutMs, timeoutMs);
-
         protected virtual DateTime UtcNow => DateTime.UtcNow;
 
-        private static int ComputePhysicsFailureBackoffMs(int consecutiveFailures)
+        private void NoteFailure(string operation, Exception ex)
         {
-            if (consecutiveFailures <= 0)
-                return 0;
-
-            var exponent = Math.Min(consecutiveFailures - 1, 3);
-            return Math.Min(PhysicsFailureBackoffBaseMs * (1 << exponent), PhysicsFailureBackoffMaxMs);
+            _consecutiveFailures++;
+            if (_consecutiveFailures <= 3)
+                _logger?.LogWarning("PathfindingService {Operation} failed ({Count}): {Msg}", operation, _consecutiveFailures, ex.Message);
+            else if (_consecutiveFailures == 4)
+                _logger?.LogError("PathfindingService unreachable for {Operation}.", operation);
         }
 
         private static Game.Position ToProto(Position p) => new() { X = p.X, Y = p.Y, Z = p.Z };

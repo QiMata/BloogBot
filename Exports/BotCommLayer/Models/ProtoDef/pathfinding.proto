@@ -1,50 +1,25 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 
 package pathfinding;
 option csharp_namespace = "Pathfinding";
 
 import "game.proto";
 
-// Main request message - simplified
+// Main request message — path operations only.
+// Physics, GroundZ, LOS, and navmesh queries are handled locally
+// by the bot's in-process Navigation.dll.
 message PathfindingRequest {
     oneof payload {
         CalculatePathRequest path = 1;
-        LineOfSightRequest los = 2;
-        PhysicsInput step = 3;
-        ReadyCheckRequest ready_check = 4;
-        GetGroundZRequest ground_z = 5;
-        BatchGroundZRequest batch_ground_z = 6;
-        SegmentDynCheckRequest segment_dyn_check = 7;
-        NavmeshPointRequest navmesh_point = 8;
-        NearestWalkableRequest nearest_walkable = 9;
     }
 }
 
-// Main response message - simplified
+// Main response message
 message PathfindingResponse {
     oneof payload {
         CalculatePathResponse path = 1;
-        LineOfSightResponse los = 2;
-        PhysicsOutput step = 3;
-        ReadyCheckResponse ready_status = 4;
-        GetGroundZResponse ground_z = 5;
-        BatchGroundZResponse batch_ground_z = 6;
-        SegmentDynCheckResponse segment_dyn_check = 7;
-        NavmeshPointResponse navmesh_point = 8;
-        NearestWalkableResponse nearest_walkable = 9;
         Error error = 99;
     }
-}
-
-// Ready check - allows clients to query if the service is fully initialized
-message ReadyCheckRequest {
-    // Empty - just a ping to check status
-}
-
-message ReadyCheckResponse {
-    bool is_ready = 1;                  // true when navigation data is loaded
-    string status_message = 2;          // Human-readable status (e.g., "Loading maps...", "Ready")
-    repeated uint32 loaded_maps = 3;    // List of map IDs that are currently loaded
 }
 
 // Error message
@@ -69,46 +44,6 @@ message CalculatePathResponse {
     uint32 raw_corner_count = 3;  // Corner count before sanitization (non-finite filtering)
 }
 
-// Line of sight check
-message LineOfSightRequest {
-    uint32 map_id = 1;
-    game.Position from = 2;
-    game.Position to = 3;
-}
-
-message LineOfSightResponse {
-    bool in_los = 1;
-}
-
-// Ground Z query
-message GetGroundZRequest {
-    uint32 map_id = 1;
-    game.Position position = 2;
-    float max_search_dist = 3;
-}
-
-message GetGroundZResponse {
-    float ground_z = 1;
-    bool found = 2;
-}
-
-// Batch ground Z query — allows querying multiple positions in a single IPC round-trip.
-// Primary consumer: NavigationPath.CorrectPathZFromCollision, which queries every waypoint.
-message BatchGroundZRequest {
-    uint32 map_id = 1;
-    repeated game.Position positions = 2;
-    float max_search_dist = 3;          // Applied to all entries; 0 defaults to 10.0
-}
-
-message BatchGroundZResponse {
-    repeated BatchGroundZEntry results = 1;
-}
-
-message BatchGroundZEntry {
-    float ground_z = 1;
-    bool found = 2;
-}
-
 // Dynamic object for physics collision (elevators, doors, trophy pillars)
 message DynamicObjectProto {
     uint64 guid = 1;
@@ -121,50 +56,52 @@ message DynamicObjectProto {
     uint32 go_state = 8;
 }
 
-// Physics input
+// Physics input/output kept as message definitions for local use (IPC between
+// MovementController and in-process Navigation.dll), but NOT sent to the
+// PathfindingService.
 message PhysicsInput {
     // Movement state
     uint32 movement_flags = 1;
-    
+
     // Position & orientation
     float pos_x = 2;
     float pos_y = 3;
     float pos_z = 4;
     float facing = 5;
-    
+
     // Transport
     uint64 transport_guid = 6;
     float transport_offset_x = 7;
     float transport_offset_y = 8;
     float transport_offset_z = 9;
     float transport_orientation = 10;
-    
+
     // Swimming/flying
     float swim_pitch = 11;
-    
+
     // Falling/jumping
     float fall_time = 12;
     float fall_start_z = 39;  // Z when fall began (fed back from output)
-    
+
     // Spline
     float spline_elevation = 13;
-    
+
     // Current velocity
     float vel_x = 14;
     float vel_y = 15;
     float vel_z = 16;
-    
+
     // Movement speeds
     float walk_speed = 17;
     float run_speed = 18;
     float run_back_speed = 19;
     float swim_speed = 20;
     float swim_back_speed = 21;
-    
+
     // Collision
     uint32 race = 22;
     uint32 gender = 23;
-    
+
     // Context
     uint32 map_id = 24;
     float delta_time = 25;
@@ -200,10 +137,6 @@ message PhysicsInput {
 	uint32 step_up_age = 42;       // frames since step-up detected
 
 	// Binary parity: CMovement grounded state persistence.
-	// WoW.exe persists isGrounded in CMovement struct independently of packet flags.
-	// This field carries the previous frame's physics-derived grounded state so
-	// StepV2 can initialize st.isGrounded from physics state, not input packet flags.
-	// Prevents FALLINGFAR feedback loops on uphill terrain.
 	bool was_grounded = 43;
 }
 
@@ -213,23 +146,23 @@ message PhysicsOutput {
     float new_pos_x = 1;
     float new_pos_y = 2;
     float new_pos_z = 3;
-    
+
     // New velocity
     float new_vel_x = 4;
     float new_vel_y = 5;
     float new_vel_z = 6;
-    
+
     // Updated state
     uint32 movement_flags = 7;
     float orientation = 8;
     float pitch = 9;
-    
+
     // Status flags
     bool is_grounded = 10;
     bool is_swimming = 11;
     bool is_flying = 12;
     float fall_time = 13;
-    
+
     // Spline progress (if following path)
     int32 current_spline_index = 14;
     float spline_progress = 15;
@@ -254,55 +187,17 @@ message PhysicsOutput {
 	float standing_on_local_z = 28;
 
 	// Fall tracking
-	float fall_distance = 29;   // Total Z drop on landing (positive = downward)
-	float fall_start_z = 30;    // Z when current fall began
+	float fall_distance = 29;
+	float fall_start_z = 30;
 
-	// Wall contact feedback — from the SIDE pass of the 3-pass physics move.
-	// Path layer uses these to detect wall-blocked movement and trigger recovery.
-	bool hit_wall = 31;          // true if horizontal movement was blocked by a non-walkable wall
-	float wall_normal_x = 32;    // world-space wall surface normal X
-	float wall_normal_y = 33;    // world-space wall surface normal Y
-	float wall_normal_z = 34;    // world-space wall surface normal Z
-	float blocked_fraction = 35; // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
+	// Wall contact feedback
+	bool hit_wall = 31;
+	float wall_normal_x = 32;
+	float wall_normal_y = 33;
+	float wall_normal_z = 34;
+	float blocked_fraction = 35;
 
-	// Step-up height persistence — carry forward to next frame's input
-	float step_up_base_z = 36;     // Z height to maintain (-200000 = inactive)
-	uint32 step_up_age = 37;       // frames since step-up detected
-}
-
-// Segment vs dynamic-objects intersection check.
-// Returns true when the segment passes through a registered dynamic object
-// (closed door, trophy pillar, etc.). Does NOT test static geometry.
-message SegmentDynCheckRequest {
-    uint32 map_id = 1;
-    game.Position from = 2;
-    game.Position to = 3;
-}
-
-message SegmentDynCheckResponse {
-    bool intersects = 1;    // true if any dynamic-object triangle intersects the segment
-}
-
-// Navmesh point query — check if a position is on or near the navmesh
-message NavmeshPointRequest {
-    uint32 map_id = 1;
-    game.Position position = 2;
-    float search_radius = 3;   // XZ search radius (0 defaults to 4.0)
-}
-
-message NavmeshPointResponse {
-    bool on_navmesh = 1;           // true if a walkable polygon was found within search radius
-    game.Position nearest_point = 2;  // closest point on the navmesh surface
-}
-
-// Nearest walkable point query — find closest walkable surface and its area type
-message NearestWalkableRequest {
-    uint32 map_id = 1;
-    game.Position position = 2;
-    float search_radius = 3;   // XZ search radius (0 defaults to 8.0)
-}
-
-message NearestWalkableResponse {
-    uint32 area_type = 1;          // VMaNGOS NavMeshArea (0=not found, 1=ground, 3=steep, 6=water)
-    game.Position nearest_point = 2;
+	// Step-up height persistence
+	float step_up_base_z = 36;
+	uint32 step_up_age = 37;
 }
