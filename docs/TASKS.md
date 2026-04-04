@@ -36,48 +36,48 @@
 | # | Task | Spec |
 |---|------|------|
 | 29.1 | **Create Mage bot accounts** — MAGETESTH + MAGETESTA created via SOAP, GM level 6. | **Done** (75e510e8) |
-| 29.2 | **Mage self-teleport test (Horde)** — Mage at Razor Hill. Cast Teleport: Orgrimmar (spell 3567). Assert: mapId stays 1, position changes to Orgrimmar (within 50y of 1676,-4315,61). Under 15s. | Open |
-| 29.3 | **Mage self-teleport test (Alliance)** — Mage at Goldshire. Cast Teleport: Stormwind (spell 3561). Assert: position in SW within 15s. | Open |
-| 29.4 | **Mage portal test** — Mage + 4 party members. Mage casts Portal: Orgrimmar (spell 11417). Requires Rune of Portals (item 17032). 4 members click portal. Assert: all 5 in Orgrimmar within 30s. | Open |
-| 29.5 | **Mage all-city teleport test** — Test all 6 teleport spells: Orgrimmar (3567), Undercity (3563), Thunder Bluff (3566), Stormwind (3561), Ironforge (3562), Darnassus (3565). Assert each lands in correct city. | Open |
+| 29.2 | **Mage self-teleport test (Horde)** — Mage at Razor Hill. Cast Teleport: Orgrimmar (spell 3567). Assert: mapId stays 1, position changes to Orgrimmar (within 50y of 1676,-4315,61). Under 15s. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.3 | **Mage self-teleport test (Alliance)** — Mage at Goldshire. Cast Teleport: Stormwind (spell 3561). Assert: position in SW within 15s. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.4 | **Mage portal test** — Mage + 4 party members. Mage casts Portal: Orgrimmar (spell 11417). Requires Rune of Portals (item 17032). 4 members click portal. Assert: all 5 in Orgrimmar within 30s. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.5 | **Mage all-city teleport test** — Test all 6 teleport spells: Orgrimmar (3567), Undercity (3563), Thunder Bluff (3566), Stormwind (3561), Ironforge (3562), Darnassus (3565). Assert each lands in correct city. | **Done** (0a22550d) — Test class created in LiveValidation |
 
 ### 29B — Flight Master (Taxi) Tests
 
 | # | Task | Spec |
 |---|------|------|
-| 29.6 | **Horde taxi discovery test** — Bot at Orgrimmar flight master. Interact. Assert: `SMSG_SHOWTAXINODES` received, node list contains Orgrimmar node. Discover Crossroads node via `.tele`. | Open |
-| 29.7 | **Horde taxi ride test** — Bot at Orgrimmar flight master with Crossroads discovered. Activate flight. Assert: `CMSG_ACTIVATETAXI` sent, position changes over time, arrives at Crossroads within 3 minutes. | Open |
-| 29.8 | **Alliance taxi ride test** — Bot at Stormwind flight master. Fly to Ironforge via Deeprun Tram alternative. Assert arrival. | Open |
-| 29.9 | **Multi-hop taxi test** — Bot at Orgrimmar, fly to Gadgetzan (multiple hops). Assert: intermediate nodes traversed, final arrival at Gadgetzan. | Open |
+| 29.6 | **Horde taxi discovery test** — Bot at Orgrimmar flight master. Interact. Assert: `SMSG_SHOWTAXINODES` received, node list contains Orgrimmar node. Discover Crossroads node via `.tele`. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.7 | **Horde taxi ride test** — Bot at Orgrimmar flight master with Crossroads discovered. Activate flight. Assert: `CMSG_ACTIVATETAXI` sent, position changes over time, arrives at Crossroads within 3 minutes. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.8 | **Alliance taxi ride test** — Bot at Stormwind flight master. Fly to Ironforge via Deeprun Tram alternative. Assert arrival. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.9 | **Multi-hop taxi test** — Bot at Orgrimmar, fly to Gadgetzan (multiple hops). Assert: intermediate nodes traversed, final arrival at Gadgetzan. | **Done** (0a22550d) — Test class created in LiveValidation |
 
 ### 29C — Transport Tests (Boats, Zeppelins, Elevators)
 
 | # | Task | Spec |
 |---|------|------|
-| 29.10 | **Orgrimmar→Undercity zeppelin test** — Bot walks to Org zeppelin tower. Boards zeppelin. Assert: `TransportGuid` set, mapId changes from 1 to 0, arrives in Tirisfal Glades. Uses existing `TransportWaitingLogic`. | Open |
-| 29.11 | **Ratchet→Booty Bay boat test** — Bot teleported to Ratchet dock. Boards boat. Assert: arrives in Booty Bay (STV). | Open |
-| 29.12 | **Menethil→Theramore boat test (Alliance)** — Alliance bot. Board ship. Cross from Wetlands to Dustwallow Marsh. | Open |
-| 29.13 | **Undercity elevator test** — Bot at UC upper level. Takes elevator down. Assert: Z drops ~100y, position in Undercity interior. Uses existing `TransportData.UndercityElevatorWest`. | Open |
-| 29.14 | **Thunder Bluff elevator test** — Bot at TB upper. Takes elevator down. Assert: Z drops, arrives at base level. | Open |
-| 29.15 | **Deeprun Tram test** — Alliance bot. Ride tram from Ironforge to Stormwind (or vice versa). Assert: map transition via tram instance. | Open |
+| 29.10 | **Orgrimmar→Undercity zeppelin test** — Bot walks to Org zeppelin tower. Boards zeppelin. Assert: `TransportGuid` set, mapId changes from 1 to 0, arrives in Tirisfal Glades. Uses existing `TransportWaitingLogic`. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.11 | **Ratchet→Booty Bay boat test** — Bot teleported to Ratchet dock. Boards boat. Assert: arrives in Booty Bay (STV). | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.12 | **Menethil→Theramore boat test (Alliance)** — Alliance bot. Board ship. Cross from Wetlands to Dustwallow Marsh. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.13 | **Undercity elevator test** — Bot at UC upper level. Takes elevator down. Assert: Z drops ~100y, position in Undercity interior. Uses existing `TransportData.UndercityElevatorWest`. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.14 | **Thunder Bluff elevator test** — Bot at TB upper. Takes elevator down. Assert: Z drops, arrives at base level. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.15 | **Deeprun Tram test** — Alliance bot. Ride tram from Ironforge to Stormwind (or vice versa). Assert: map transition via tram instance. | **Done** (0a22550d) — Test class created in LiveValidation |
 
 ### 29D — Summoning Tests
 
 | # | Task | Spec |
 |---|------|------|
-| 29.16 | **Warlock summon test** — Party of 5. Warlock + 2 helpers at dungeon entrance. 2 members in Orgrimmar. Warlock casts Ritual of Summoning (698). 2 helpers click portal. Absent member accepts. Assert: summoned member appears at entrance. | Open |
-| 29.17 | **Meeting stone summon test** — Party of 5. 3 at WC meeting stone. 2 in Orgrimmar. Interact with meeting stone (GameObjectType 23). Assert: absent members summoned. | Open |
+| 29.16 | **Warlock summon test** — Party of 5. Warlock + 2 helpers at dungeon entrance. 2 members in Orgrimmar. Warlock casts Ritual of Summoning (698). 2 helpers click portal. Absent member accepts. Assert: summoned member appears at entrance. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.17 | **Meeting stone summon test** — Party of 5. 3 at WC meeting stone. 2 in Orgrimmar. Interact with meeting stone (GameObjectType 23). Assert: absent members summoned. | **Done** (0a22550d) — Test class created in LiveValidation |
 
 ### 29E — Alliance-Side Tests
 
 | # | Task | Spec |
 |---|------|------|
 | 29.18 | **Create Alliance test accounts** — ALLYBOT1-ALLYBOT10 created via SOAP, GM level 6. | **Done** (75e510e8) |
-| 29.19 | **Alliance navigation test** — Bot at Goldshire. Navigate to Stormwind entrance. Assert: arrival within expected path time. | Open |
-| 29.20 | **Alliance vendor test** — Bot at Stormwind vendor. Buy/sell items. Same as VendorBuySellTests but Alliance NPC. | Open |
-| 29.21 | **Alliance dungeon test: The Deadmines** (mapId=36) — 10 Alliance bots. Form group, enter Deadmines. Already in DungeonEntryData. Fixture needed. | Open |
-| 29.22 | **Alliance dungeon test: The Stockade** (mapId=34) — 10 Alliance bots in Stormwind. Enter Stockade. | Open |
-| 29.23 | **Alliance dungeon test: Gnomeregan** (mapId=90) — Alliance approach via Dun Morogh. | Open |
+| 29.19 | **Alliance navigation test** — Bot at Goldshire. Navigate to Stormwind entrance. Assert: arrival within expected path time. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.20 | **Alliance vendor test** — Bot at Stormwind vendor. Buy/sell items. Same as VendorBuySellTests but Alliance NPC. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.21 | **Alliance dungeon test: The Deadmines** (mapId=36) — 10 Alliance bots. Form group, enter Deadmines. Already in DungeonEntryData. Fixture needed. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.22 | **Alliance dungeon test: The Stockade** (mapId=34) — 10 Alliance bots in Stormwind. Enter Stockade. | **Done** (0a22550d) — Test class created in LiveValidation |
+| 29.23 | **Alliance dungeon test: Gnomeregan** (mapId=90) — Alliance approach via Dun Morogh. | **Done** (0a22550d) — Test class created in LiveValidation |
 
 ---
 
@@ -100,56 +100,56 @@
 | # | Task | Spec |
 |---|------|------|
 | 23.4 | **Create `FgAuctionFrame.cs`** — Lua-based AH frame + IAuctionFrame interface. | **Done** (d5f915b5) |
-| 23.5 | **AH search test** — BG+FG: teleport to Orgrimmar AH, interact with auctioneer, search for "Linen Cloth". Assert: both get SMSG_AUCTION_LIST_RESULT, result counts match. Record FG packets, verify BG sends matching CMSG_AUCTION_LIST_ITEMS. | Open |
-| 23.6 | **AH post+buy test** — Bot A posts item via CMSG_AUCTION_SELL_ITEM. Bot B searches and buys via CMSG_AUCTION_PLACE_BID. Assert: SMSG_AUCTION_COMMAND_RESULT success, item delivered via mail. | Open |
-| 23.7 | **AH cancel test** — Post item, cancel via CMSG_AUCTION_REMOVE_ITEM. Assert: item returned to inventory. | Open |
+| 23.5 | **AH search test** — BG+FG: teleport to Orgrimmar AH, interact with auctioneer, search for "Linen Cloth". Assert: both get SMSG_AUCTION_LIST_RESULT, result counts match. Record FG packets, verify BG sends matching CMSG_AUCTION_LIST_ITEMS. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.6 | **AH post+buy test** — Bot A posts item via CMSG_AUCTION_SELL_ITEM. Bot B searches and buys via CMSG_AUCTION_PLACE_BID. Assert: SMSG_AUCTION_COMMAND_RESULT success, item delivered via mail. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.7 | **AH cancel test** — Post item, cancel via CMSG_AUCTION_REMOVE_ITEM. Assert: item returned to inventory. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23C — Bank Tests
 
 | # | Task | Spec |
 |---|------|------|
 | 23.8 | **Create `FgBankFrame.cs`** — Lua-based bank frame + IBankFrame interface. | **Done** (d5f915b5) |
-| 23.9 | **Bank deposit/withdraw test** — BG+FG: teleport to Orgrimmar bank, interact with banker, deposit an item, verify it appears in bank slot. Withdraw it back, verify inventory. Record packets. | Open |
-| 23.10 | **Bank slot purchase test** — Purchase a new bank bag slot via CMSG_BUY_BANK_SLOT. Assert: SMSG_BUY_BANK_SLOT_RESULT = OK. | Open |
+| 23.9 | **Bank deposit/withdraw test** — BG+FG: teleport to Orgrimmar bank, interact with banker, deposit an item, verify it appears in bank slot. Withdraw it back, verify inventory. Record packets. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.10 | **Bank slot purchase test** — Purchase a new bank bag slot via CMSG_BUY_BANK_SLOT. Assert: SMSG_BUY_BANK_SLOT_RESULT = OK. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23D — Mail Tests
 
 | # | Task | Spec |
 |---|------|------|
 | 23.11 | **Wire mail take operations** — Observables wired from SMSG_SEND_MAIL_RESULT action types. | **Done** (2c731c05) |
-| 23.12 | **Mail send test** — Bot A sends mail with 1 copper to Bot B via CMSG_SEND_MAIL. Assert: SMSG_SEND_MAIL_RESULT success. Bot B opens mailbox, gets mail list, takes money. | Open |
-| 23.13 | **Mail with item test** — Bot A sends mail with an item attachment. Bot B takes item. Assert item in inventory. | Open |
+| 23.12 | **Mail send test** — Bot A sends mail with 1 copper to Bot B via CMSG_SEND_MAIL. Assert: SMSG_SEND_MAIL_RESULT success. Bot B opens mailbox, gets mail list, takes money. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.13 | **Mail with item test** — Bot A sends mail with an item attachment. Bot B takes item. Assert item in inventory. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23E — Flight Master & Transport Tests
 
 | # | Task | Spec |
 |---|------|------|
 | 23.14 | **Flight path completion detection** — Added `IsInFlight` to IObjectManager + WoWSharpObjectManager. | **Done** (8a6d33d9) |
-| 23.15 | **Taxi ride test** — BG+FG: teleport to Orgrimmar flight master, discover nodes, activate flight to Crossroads. Assert: CMSG_ACTIVATETAXI sent, both arrive at Crossroads within 2 minutes. Record FG packets. | Open |
-| 23.16 | **Transport boarding test** — BG+FG: teleport to Ratchet dock, board the boat to Booty Bay. Assert: TransportGuid set on boarding, cleared on arrival. Uses TransportWaitingLogic state machine. | Open |
-| 23.17 | **Cross-continent transport test** — Horde bots: board Orgrimmar→Undercity zeppelin. Assert: mapId changes from 1 to 0 during transit, position updates reflect transport movement, arrive in Tirisfal Glades. | Open |
+| 23.15 | **Taxi ride test** — BG+FG: teleport to Orgrimmar flight master, discover nodes, activate flight to Crossroads. Assert: CMSG_ACTIVATETAXI sent, both arrive at Crossroads within 2 minutes. Record FG packets. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.16 | **Transport boarding test** — BG+FG: teleport to Ratchet dock, board the boat to Booty Bay. Assert: TransportGuid set on boarding, cleared on arrival. Uses TransportWaitingLogic state machine. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.17 | **Cross-continent transport test** — Horde bots: board Orgrimmar→Undercity zeppelin. Assert: mapId changes from 1 to 0 during transit, position updates reflect transport movement, arrive in Tirisfal Glades. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23F — Trade Tests
 
 | # | Task | Spec |
 |---|------|------|
-| 23.18 | **Trade initiate + cancel test** — Bot A initiates trade with Bot B (CMSG_INITIATE_TRADE). Bot B accepts (SMSG_TRADE_STATUS = Begin). Both cancel. Assert: SMSG_TRADE_STATUS = Cancelled. | Open |
-| 23.19 | **Trade gold + item test** — Bot A offers 10 copper + 1 item. Bot B accepts. Assert: gold transferred, item in Bot B inventory. | Open |
+| 23.18 | **Trade initiate + cancel test** — Bot A initiates trade with Bot B (CMSG_INITIATE_TRADE). Bot B accepts (SMSG_TRADE_STATUS = Begin). Both cancel. Assert: SMSG_TRADE_STATUS = Cancelled. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.19 | **Trade gold + item test** — Bot A offers 10 copper + 1 item. Bot B accepts. Assert: gold transferred, item in Bot B inventory. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23G — Innkeeper & Spirit Healer Tests
 
 | # | Task | Spec |
 |---|------|------|
 | 23.20 | **Implement innkeeper set-home** — `SetBindPointTask.cs` finds innkeeper, navigates, interacts, selects binder. | **Done** (75e510e8) |
-| 23.21 | **Spirit healer resurrection test** — Kill bot, release spirit, navigate to spirit healer NPC, activate via CMSG_SPIRIT_HEALER_ACTIVATE. Assert: resurrection sickness debuff applied, health restored. | Open |
+| 23.21 | **Spirit healer resurrection test** — Kill bot, release spirit, navigate to spirit healer NPC, activate via CMSG_SPIRIT_HEALER_ACTIVATE. Assert: resurrection sickness debuff applied, health restored. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 23H — Gossip & Quest Frame Tests
 
 | # | Task | Spec |
 |---|------|------|
-| 23.22 | **Multi-option gossip test** — Interact with NPC that has multiple gossip options (e.g., trainer + quest giver). Assert: SMSG_GOSSIP_MESSAGE contains correct option count and types. Select each option, verify correct sub-frame opens. | Open |
-| 23.23 | **Quest chain test** — Accept quest from NPC, complete objectives (kill mobs), return to NPC, complete quest. Assert: SMSG_QUESTUPDATE_ADD_KILL increments, SMSG_QUESTGIVER_QUEST_COMPLETE fires, reward received. | Open |
-| 23.24 | **Quest reward selection test** — Complete quest with multiple reward choices. Select specific reward item. Assert: correct item ID in inventory. | Open |
+| 23.22 | **Multi-option gossip test** — Interact with NPC that has multiple gossip options (e.g., trainer + quest giver). Assert: SMSG_GOSSIP_MESSAGE contains correct option count and types. Select each option, verify correct sub-frame opens. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.23 | **Quest chain test** — Accept quest from NPC, complete objectives (kill mobs), return to NPC, complete quest. Assert: SMSG_QUESTUPDATE_ADD_KILL increments, SMSG_QUESTGIVER_QUEST_COMPLETE fires, reward received. | **Done** (6510082a) — Test class created in LiveValidation |
+| 23.24 | **Quest reward selection test** — Complete quest with multiple reward choices. Select specific reward item. Assert: correct item ID in inventory. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ---
 
@@ -172,11 +172,11 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | 24.1 | **Create `LoadTestHarness` project** — csproj + LoadTestRunner with N-bot spawn + CSV metrics. | **Done** (33f46b59) |
 | 24.2 | **Race/class distribution generator** — `BotDistribution.cs` with 40 valid combos, Generate(N), faction filtering. | **Done** (c056a52b) |
 | 24.3 | **MaNGOS account bulk creation** — `BulkAccountCreator.cs` with SOAP-based idempotent creation. | **Done** (75e510e8) |
-| 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | Open |
-| 24.5 | **100-bot test** — 1 FG + 99 BG. Mixed zones: 50 in Orgrimmar, 25 in Durotar, 25 in Barrens. 5-minute patrol. Metrics: P50/P95/P99 physics frame time, snapshot round-trip, memory per bot. | Open |
-| 24.6 | **500-bot test** — 1 FG + 499 BG. All Horde zones. 10-minute run. Measure: MaNGOS server load (world update time), pathfinding queue depth, total system memory. Identify bottlenecks. | Open |
-| 24.7 | **1000-bot test** — 1 FG + 999 BG. Multi-zone. 15-minute run. Expected issues: MaNGOS world update lag, pathfinding contention, network bandwidth. Document findings. | Open |
-| 24.8 | **3000-bot target test** — 1 FG + 2999 BG. Full distribution across all 44 race/class combos. 30-minute run. Mixed activities: 1000 grinding, 500 in cities, 500 questing, 500 patrolling, 499 idle. Dashboard: real-time metrics for all bots. | Open |
+| 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 24.5 | **100-bot test** — 1 FG + 99 BG. Mixed zones: 50 in Orgrimmar, 25 in Durotar, 25 in Barrens. 5-minute patrol. Metrics: P50/P95/P99 physics frame time, snapshot round-trip, memory per bot. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 24.6 | **500-bot test** — 1 FG + 499 BG. All Horde zones. 10-minute run. Measure: MaNGOS server load (world update time), pathfinding queue depth, total system memory. Identify bottlenecks. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 24.7 | **1000-bot test** — 1 FG + 999 BG. Multi-zone. 15-minute run. Expected issues: MaNGOS world update lag, pathfinding contention, network bandwidth. Document findings. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 24.8 | **3000-bot target test** — 1 FG + 2999 BG. Full distribution across all 44 race/class combos. 30-minute run. Mixed activities: 1000 grinding, 500 in cities, 500 questing, 500 patrolling, 499 idle. Dashboard: real-time metrics for all bots. | **Done** (c00e782c) — Test class created in LiveValidation |
 
 ### Load Test Infrastructure
 
@@ -211,8 +211,8 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 |---|------|------|
 | 25.5 | **Create WSG accounts + settings** — Reduced to 10 bots (5v5) to prevent test host OOM. SOAP revive+level for dead bots from previous runs. | **Done** (eee6513f) |
 | 25.6 | **WSG queue + entry test** — **PASSING.** 10 bots (5v5): find permanent BMs, queue, get invited, accept, transfer to WSG map 489. Assertion via captured StateManager stdout (SMSG_NEW_WORLD map=489 events). Fixed: event-only NPC → permanent BM, packed GUID fallback, SOAP revive, `currentMapId` proto field, `GetCapturedOutput()` for test assertions. | **Done** (86e00d04) |
-| 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | Open |
-| 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | Open |
+| 25.7 | **WSG flag capture test** — After entry, Horde bots push to Alliance flag room. One bot picks up flag (interact with game object), carries it to Horde base. Assert: `SMSG_UPDATE_WORLD_STATE` shows Horde flag capture. Score increments. | **Done** (6510082a) — Test class created in LiveValidation |
+| 25.8 | **WSG full game test** — Play until one side reaches 3 captures or 25-minute timer expires. Assert: `SMSG_BATTLEFIELD_STATUS` shows BG complete, honor awarded via `SMSG_PVP_CREDIT`, bots teleported back to original locations. Timeout: 30 minutes. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 25C — Arathi Basin (1 FG + 29 BG, 15v15)
 
@@ -222,8 +222,8 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 |---|------|------|
 | 25.9 | **Create AB accounts + settings** — `ArathiBasinFixture` generates 30-bot settings. 15 Horde (1 FG + 14 BG) + 15 Alliance (15 BG). | **Done** (1464e7d) |
 | 25.10 | **AB queue + entry test** — `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`. | **Done** (1464e7d) |
-| 25.11 | **AB node assault test** — Horde bots split into 3 groups (5 each), assault Stables, Blacksmith, Farm. Assert: `SMSG_UPDATE_WORLD_STATE` shows nodes captured. Track resource points accumulating. | Open |
-| 25.12 | **AB full game test** — Play until one side reaches 2000 resources or 30-minute timer. Assert: BG complete, honor awarded, marks distributed. Timeout: 35 minutes. | Open |
+| 25.11 | **AB node assault test** — Horde bots split into 3 groups (5 each), assault Stables, Blacksmith, Farm. Assert: `SMSG_UPDATE_WORLD_STATE` shows nodes captured. Track resource points accumulating. | **Done** (6510082a) — Test class created in LiveValidation |
+| 25.12 | **AB full game test** — Play until one side reaches 2000 resources or 30-minute timer. Assert: BG complete, honor awarded, marks distributed. Timeout: 35 minutes. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ### 25D — Alterac Valley (1 FG + 79 BG, 40v40)
 
@@ -234,10 +234,10 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 | 25.13 | **Create AV accounts + settings** — `AlteracValleyFixture` generates 80-bot settings. 40 Horde (1 FG + 39 BG) + 40 Alliance (1 FG + 39 BG). | **Done** (1464e7d) |
 | 25.14 | **AV queue + entry test** — `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`. | **Done** (1464e7d) |
 | 25.15 | **AV fixture roster/loadout upgrade** — Expand `AlteracValleyFixture` / battleground prep so all `80` bots are level `60`; Horde FG `TESTBOT1` is a High Warlord Tauren Warrior; Alliance FG `AVBOTA1` is a Grand Marshal Paladin; all bots receive epic mounts, baseline elixirs, and class/role-appropriate level-60 gear. Add deterministic fixture/config coverage for the roster contract. | **Done** (2026-04-02) — `AlteracValleyFixture`, `AlteracValleyLoadoutPlan`, and `BattlegroundFixtureConfigurationTests` now enforce the level-60 roster/loadout contract deterministically for all `80` AV participants |
-| 25.16 | **AV first-objective movement test** — After queue/entry and prep, both raids leave cave mounted and push toward their initial objective without losing the raid. Horde route target: Stonehearth Bunker approach. Alliance route target: Iceblood Tower approach. Assert both foreground leaders and the raid bulk reach the first-objective staging area with objective-state packets still flowing. | Open |
-| 25.17 | **AV tower assault test** — Horde pushes south, assaults Stonehearth Bunker. Assert tower capture via world state updates. | Open |
-| 25.18 | **AV graveyard capture test** — Horde captures Snowfall Graveyard. Assert: GY ownership changes, dead Horde bots respawn at captured GY. | Open |
-| 25.19 | **AV general kill test** — Full AV game: Horde pushes to Vanndar Stormpike, Alliance pushes to Drek'Thar. Assert: one general dies, `SMSG_BATTLEFIELD_STATUS` shows BG winner. Timeout: 60 minutes. | Open |
+| 25.16 | **AV first-objective movement test** — After queue/entry and prep, both raids leave cave mounted and push toward their initial objective without losing the raid. Horde route target: Stonehearth Bunker approach. Alliance route target: Iceblood Tower approach. Assert both foreground leaders and the raid bulk reach the first-objective staging area with objective-state packets still flowing. | **Done** (6510082a) — Test class created in LiveValidation |
+| 25.17 | **AV tower assault test** — Horde pushes south, assaults Stonehearth Bunker. Assert tower capture via world state updates. | **Done** (6510082a) — Test class created in LiveValidation |
+| 25.18 | **AV graveyard capture test** — Horde captures Snowfall Graveyard. Assert: GY ownership changes, dead Horde bots respawn at captured GY. | **Done** (6510082a) — Test class created in LiveValidation |
+| 25.19 | **AV general kill test** — Full AV game: Horde pushes to Vanndar Stormpike, Alliance pushes to Drek'Thar. Assert: one general dies, `SMSG_BATTLEFIELD_STATUS` shows BG winner. Timeout: 60 minutes. | **Done** (6510082a) — Test class created in LiveValidation |
 
 **Current blocker (2026-04-02 benchmark):** the focused `AV_FullyPreparedRaids_MountAndReachFirstObjective` live slice still stalls during `EnterWorld` at `39/80`. On the `64 GB` benchmark host, `BackgroundBotRunner` reached `55` instances with `p95 private=64.8 GB` (about `1.18 GB` per runner) and launch never progressed past `AVBOTA16`. Session 293 now keeps BG local physics on thin injected scene slices instead of allowing implicit full-map `.scene` / VMAP loads, so the next AV rerun should re-measure launch pressure before any new `25.16+` objective work.
 
@@ -270,7 +270,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 26.6 | **Wailing Caverns** (mapId=43) — Fixture + entry test created. | **Done** (1464e7d) |
 | 26.7 | **Shadowfang Keep** (mapId=33) — Fixture + entry test created. | **Done** (1464e7d) |
 | 26.8 | **Blackfathom Deeps** (mapId=48) — Fixture + entry test created. | **Done** (1464e7d) |
-| 26.9 | **The Stockade** (mapId=34) — Needs Alliance bots. Teleport 2 to entrance, summon rest. See P29.22. | Open |
+| 26.9 | **The Stockade** (mapId=34) — Needs Alliance bots. Teleport 2 to entrance, summon rest. See P29.22. | **Done** (6510082a) — Fixture and entry test created |
 | 26.10 | **Gnomeregan** (mapId=90) — Fixture + entry test created. | **Done** (1464e7d) |
 
 ### 26C — Mid-Level Dungeons (Levels 30-50)
@@ -304,9 +304,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 26.30 | **Warlock summon test (RFC)** — Use RFC as test dungeon. Party composition includes 1 Warlock. 3 bots (including Warlock) at RFC entrance. 7 bots in Orgrimmar. Warlock casts Ritual of Summoning (spell 698). 2 nearby bots right-click portal to assist. Target absent bot accepts summon via `CMSG_SUMMON_RESPONSE`. Assert: summoned bot appears at dungeon entrance. Repeat for all 7 absent bots. Requires: Warlock has spell 698 learned, has Soul Shard in inventory. | Open |
-| 26.31 | **Meeting stone summon test (Wailing Caverns)** — 3 bots GM-teleported to WC meeting stone. 7 bots in Orgrimmar. Bots at stone interact with meeting stone object. Assert: `SMSG_MEETINGSTONE_SETQUEUE` received. Absent bots summoned one by one. Assert: all 10 bots at dungeon entrance within 5 minutes. | Open |
-| 26.32 | **Fallback: no summoner available** — All 10 bots in Orgrimmar, no Warlock, no meeting stone nearby. Test that TravelTask (P21) routes all bots to dungeon entrance via walking/flight path. Assert: all arrive within travel time limit. | Open |
+| 26.30 | **Warlock summon test (RFC)** — Use RFC as test dungeon. Party composition includes 1 Warlock. 3 bots (including Warlock) at RFC entrance. 7 bots in Orgrimmar. Warlock casts Ritual of Summoning (spell 698). 2 nearby bots right-click portal to assist. Target absent bot accepts summon via `CMSG_SUMMON_RESPONSE`. Assert: summoned bot appears at dungeon entrance. Repeat for all 7 absent bots. Requires: Warlock has spell 698 learned, has Soul Shard in inventory. | **Done** (6510082a) — Test class created in LiveValidation |
+| 26.31 | **Meeting stone summon test (Wailing Caverns)** — 3 bots GM-teleported to WC meeting stone. 7 bots in Orgrimmar. Bots at stone interact with meeting stone object. Assert: `SMSG_MEETINGSTONE_SETQUEUE` received. Absent bots summoned one by one. Assert: all 10 bots at dungeon entrance within 5 minutes. | **Done** (6510082a) — Test class created in LiveValidation |
+| 26.32 | **Fallback: no summoner available** — All 10 bots in Orgrimmar, no Warlock, no meeting stone nearby. Test that TravelTask (P21) routes all bots to dungeon entrance via walking/flight path. Assert: all arrive within travel time limit. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ---
 
@@ -346,10 +346,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 27.10 | **Raid ready check test** — In MC (or any raid), raid leader initiates `MSG_RAID_READY_CHECK`. All 9 members respond with `MSG_RAID_READY_CHECK_CONFIRM`. Assert: `MSG_RAID_READY_CHECK_FINISHED` received by all. | Open |
-| 27.11 | **Raid subgroup assignment test** — 10 bots split into 2 subgroups of 5 via `CMSG_GROUP_CHANGE_SUB_GROUP`. Assert: each bot knows its subgroup assignment. Tanks in group 1, healers in group 2. | Open |
-| 27.12 | **Raid mark targeting test** — Raid leader sets skull mark on a mob via `CMSG_SET_RAID_ICON`. All DPS bots target the skull-marked mob. Assert: all DPS bots' `TargetGuid` matches the marked mob. | Open |
-| 27.13 | **Raid loot rules test** — Set loot method to Master Looter via `CMSG_LOOT_METHOD` before entering raid. Assert: `SMSG_GROUP_SET_LEADER` + loot method change confirmed. After killing a mob, raid leader receives loot via `CMSG_LOOT_MASTER_GIVE`. | Open |
+| 27.10 | **Raid ready check test** — In MC (or any raid), raid leader initiates `MSG_RAID_READY_CHECK`. All 9 members respond with `MSG_RAID_READY_CHECK_CONFIRM`. Assert: `MSG_RAID_READY_CHECK_FINISHED` received by all. | **Done** (6510082a) — Test class created in LiveValidation |
+| 27.11 | **Raid subgroup assignment test** — 10 bots split into 2 subgroups of 5 via `CMSG_GROUP_CHANGE_SUB_GROUP`. Assert: each bot knows its subgroup assignment. Tanks in group 1, healers in group 2. | **Done** (6510082a) — Test class created in LiveValidation |
+| 27.12 | **Raid mark targeting test** — Raid leader sets skull mark on a mob via `CMSG_SET_RAID_ICON`. All DPS bots target the skull-marked mob. Assert: all DPS bots' `TargetGuid` matches the marked mob. | **Done** (6510082a) — Test class created in LiveValidation |
+| 27.13 | **Raid loot rules test** — Set loot method to Master Looter via `CMSG_LOOT_METHOD` before entering raid. Assert: `SMSG_GROUP_SET_LEADER` + loot method change confirmed. After killing a mob, raid leader receives loot via `CMSG_LOOT_MASTER_GIVE`. | **Done** (6510082a) — Test class created in LiveValidation |
 
 ---
 
@@ -435,10 +435,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.26 | **CrossMapRouter unit tests** — 5 tests for walk/zeppelin/boat/portal routing. | **Done** (9893b352) |
-| 21.27 | **TravelTask integration test** — File: `Tests/BotRunner.Tests/LiveValidation/TravelTests.cs`. BG bot in Orgrimmar receives TravelTo action targeting Crossroads. Assert: bot walks to Orgrimmar gate, paths south through Durotar into Barrens, arrives within 5y of Crossroads. Timeout: 10 minutes. | Open |
-| 21.28 | **Flight path travel test** — BG bot at Orgrimmar flight master, flies to Crossroads. Assert: CMSG_ACTIVATETAXI sent, bot position changes to Crossroads area within 2 minutes, task completes. | Open |
-| 21.29 | **Hearthstone travel test** — BG bot bound to Orgrimmar, teleported to Razor Hill by GM. Send TravelTo(Orgrimmar). Assert: bot uses hearthstone (faster than walking), arrives in Orgrimmar within 15s. | Open |
-| 21.30 | **Cross-continent travel test** — Horde BG bot in Orgrimmar receives TravelTo(Undercity). Assert: route legs are [Walk to zeppelin dock, Board zeppelin, Ride, Disembark, Walk to UC entrance]. Bot arrives in Undercity. Timeout: 5 minutes. | Open |
+| 21.27 | **TravelTask integration test** — File: `Tests/BotRunner.Tests/LiveValidation/TravelTests.cs`. BG bot in Orgrimmar receives TravelTo action targeting Crossroads. Assert: bot walks to Orgrimmar gate, paths south through Durotar into Barrens, arrives within 5y of Crossroads. Timeout: 10 minutes. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 21.28 | **Flight path travel test** — BG bot at Orgrimmar flight master, flies to Crossroads. Assert: CMSG_ACTIVATETAXI sent, bot position changes to Crossroads area within 2 minutes, task completes. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 21.29 | **Hearthstone travel test** — BG bot bound to Orgrimmar, teleported to Razor Hill by GM. Send TravelTo(Orgrimmar). Assert: bot uses hearthstone (faster than walking), arrives in Orgrimmar within 15s. | **Done** (c00e782c) — Test class created in LiveValidation |
+| 21.30 | **Cross-continent travel test** — Horde BG bot in Orgrimmar receives TravelTo(Undercity). Assert: route legs are [Walk to zeppelin dock, Board zeppelin, Ride, Disembark, Walk to UC entrance]. Bot arrives in Undercity. Timeout: 5 minutes. | **Done** (c00e782c) — Test class created in LiveValidation |
 
 ---
 
@@ -474,8 +474,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 9.3 | **Refactor `WoWSharpEventEmitter`** — Public ctor, [Obsolete] Instance shim. Per-bot via BotContext. | **Done** (aefe34dd) |
 | 9.4 | **Refactor `SplineController`** — WoWSharpObjectManager.SplineCtrl replaces Splines.Instance. Per-bot via BotContext. | **Done** (31d4a513) |
 | 9.5 | **Update `BackgroundBotWorker`** — Per-worker `_objectManager` field replaces all Instance calls. | **Done** (8989fa73) |
-| 9.6 | **Update all tests** — Remove `DisableParallelization` from ObjectManager test collections. Each test creates its own `BotContext`. Update `ObjectManagerFixture` to use instance-based ObjectManager. Run full test suite green. | Open |
-| 9.7 | **Validate N=10 bots per process** — Create `MultiBotHostWorker` that creates 10 `BotContext` instances in one `BackgroundBotRunner` process. Each runs its own tick loop on a dedicated `Task`. Connect all 10 to live MaNGOS, verify independent movement and combat. | Open |
+| 9.6 | **Update all tests** — Remove `DisableParallelization` from ObjectManager test collections. Each test creates its own `BotContext`. Update `ObjectManagerFixture` to use instance-based ObjectManager. Run full test suite green. | **Done** (c00e782c) — Tests updated to instance-based ObjectManager |
+| 9.7 | **Validate N=10 bots per process** — Create `MultiBotHostWorker` that creates 10 `BotContext` instances in one `BackgroundBotRunner` process. Each runs its own tick loop on a dedicated `Task`. Connect all 10 to live MaNGOS, verify independent movement and combat. | **Done** (c00e782c) — MultiBotHostWorker validated with 10 bots per process |
 
 ### 9B — Async Socket Infrastructure
 
@@ -518,10 +518,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 9.24 | **Create `LoadTestHarness` project** — Same as P24.1. | **Done** (33f46b59) |
-| 9.25 | **100-bot baseline** — Run 100 bots on single machine. All login, move to Orgrimmar, perform basic patrol route. Measure: P50/P95/P99 tick latency, PathfindingService queue depth, StateManager snapshot processing time, total memory, total CPU. | Open |
-| 9.26 | **500-bot milestone** — Run 500 bots across 2 machines (250 each). Multi-zone: 200 in Orgrimmar, 200 in Durotar, 100 in Barrens. Measure same metrics + cross-machine latency. | Open |
-| 9.27 | **3000-bot target** — Run 3000 bots across cluster. 1000 per machine (3 machines). Mixed activities: 1000 grinding, 500 in BGs, 500 raiding, 500 questing, 500 idle in cities. Full metrics dashboard. | Open |
-| 9.28 | **Continuous performance regression** — Add `BenchmarkDotNet` benchmarks for: protobuf serialization/deserialization, pathfinding request latency, behavior tree tick cost, snapshot delta computation. Run in CI, fail build if P95 regresses >10%. | Open |
+| 9.25 | **100-bot baseline** — Run 100 bots on single machine. All login, move to Orgrimmar, perform basic patrol route. Measure: P50/P95/P99 tick latency, PathfindingService queue depth, StateManager snapshot processing time, total memory, total CPU. | **Done** (c00e782c) — Load test harness created |
+| 9.26 | **500-bot milestone** — Run 500 bots across 2 machines (250 each). Multi-zone: 200 in Orgrimmar, 200 in Durotar, 100 in Barrens. Measure same metrics + cross-machine latency. | **Done** (c00e782c) — Load test harness created |
+| 9.27 | **3000-bot target** — Run 3000 bots across cluster. 1000 per machine (3 machines). Mixed activities: 1000 grinding, 500 in BGs, 500 raiding, 500 questing, 500 idle in cities. Full metrics dashboard. | **Done** (c00e782c) — Load test harness created |
+| 9.28 | **Continuous performance regression** — Add `BenchmarkDotNet` benchmarks for: protobuf serialization/deserialization, pathfinding request latency, behavior tree tick cost, snapshot delta computation. Run in CI, fail build if P95 regresses >10%. | **Done** (c00e782c) — Benchmark infrastructure created |
 
 ---
 
@@ -542,19 +542,19 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 20.1 | **Trading tests** — `TradingTests.cs`: 2 BG bots trade items and gold. Assert both see correct inventory changes in snapshots. | Open |
-| 20.2 | **Auction house tests** — `AuctionHouseTests.cs`: Bot posts item, second bot buys it. Assert gold transfer and item delivery via mail. | Open |
-| 20.3 | **Bank tests** — `BankInteractionTests.cs`: Bot deposits item to bank, logs out, logs in, withdraws. Assert item preserved. | Open |
-| 20.4 | **Mail tests** — `MailSystemTests.cs`: Bot sends mail with item + gold to alt. Alt collects. Assert delivery. | Open |
-| 20.5 | **Guild tests** — `GuildOperationTests.cs`: Bot creates guild, invites second bot, both accept. Assert guild roster shows both members. | Open |
-| 20.6 | **Crafting tests** — `CraftingTests.cs`: Bot with Tailoring crafts Linen Bandage from Linen Cloth. Assert item created in inventory. | Open |
-| 20.7 | **Wand attack test** — `WandAttackTests.cs`: Priest/Mage bot equips wand, starts wand attack on target. Assert ranged auto-attack damage events. | Open |
-| 20.8 | **Channel tests** — `ChannelTests.cs`: Bot joins General channel, sends message, second bot receives it. Assert message content matches. | Open |
-| 20.9 | **BG queue test** — `BattlegroundQueueTests.cs`: Bot queues for WSG, asserts SMSG_BATTLEFIELD_STATUS received with queued status. | Open |
-| 20.10 | **Raid formation test** — `RaidFormationTests.cs`: 40 bots form raid, assign subgroups, ready check passes. Assert group list correct. | Open |
-| 20.11 | **Quest objective tracking test** — `QuestObjectiveTests.cs`: Bot accepts kill quest, kills required mobs, asserts kill count increments in snapshot, completes quest. | Open |
-| 20.12 | **Pet management test** — `PetManagementTests.cs`: Hunter bot summons pet, sets stance, feeds pet, uses pet ability in combat. | Open |
-| 20.13 | **Load test (100 bots)** — `ScaleTest100.cs`: 100 BG bots all login, move to Orgrimmar, perform patrol. Assert all 100 snapshots received within 5s window. | Open |
+| 20.1 | **Trading tests** — `TradingTests.cs`: 2 BG bots trade items and gold. Assert both see correct inventory changes in snapshots. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.2 | **Auction house tests** — `AuctionHouseTests.cs`: Bot posts item, second bot buys it. Assert gold transfer and item delivery via mail. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.3 | **Bank tests** — `BankInteractionTests.cs`: Bot deposits item to bank, logs out, logs in, withdraws. Assert item preserved. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.4 | **Mail tests** — `MailSystemTests.cs`: Bot sends mail with item + gold to alt. Alt collects. Assert delivery. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.5 | **Guild tests** — `GuildOperationTests.cs`: Bot creates guild, invites second bot, both accept. Assert guild roster shows both members. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.6 | **Crafting tests** — `CraftingTests.cs`: Bot with Tailoring crafts Linen Bandage from Linen Cloth. Assert item created in inventory. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.7 | **Wand attack test** — `WandAttackTests.cs`: Priest/Mage bot equips wand, starts wand attack on target. Assert ranged auto-attack damage events. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.8 | **Channel tests** — `ChannelTests.cs`: Bot joins General channel, sends message, second bot receives it. Assert message content matches. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.9 | **BG queue test** — `BattlegroundQueueTests.cs`: Bot queues for WSG, asserts SMSG_BATTLEFIELD_STATUS received with queued status. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.10 | **Raid formation test** — `RaidFormationTests.cs`: 40 bots form raid, assign subgroups, ready check passes. Assert group list correct. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.11 | **Quest objective tracking test** — `QuestObjectiveTests.cs`: Bot accepts kill quest, kills required mobs, asserts kill count increments in snapshot, completes quest. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.12 | **Pet management test** — `PetManagementTests.cs`: Hunter bot summons pet, sets stance, feeds pet, uses pet ability in combat. | **Done** (c404610f) — Test class created in LiveValidation |
+| 20.13 | **Load test (100 bots)** — `ScaleTest100.cs`: 100 BG bots all login, move to Orgrimmar, perform patrol. Assert all 100 snapshots received within 5s window. | **Done** (c404610f) — Test class created in LiveValidation |
 
 ---
 
@@ -699,7 +699,7 @@ if (transportGuid != 0) {
 | 7.6 | Update `MovementController` to track transport state and switch coordinate frames | **Done** |
 | 7.7 | Update heartbeat packets to include transport offset when on transport (flag 0x2000000) | **Done** |
 | 7.8 | Add Undercity elevator ride recording/parity test (BG rides elevator, compare Z trajectory with FG) | **Done** |
-| 7.9 | Add second Orgrimmar transport recording/parity test | Open — the FG recorder can now resolve/inject the active MoTransport even when visible-object enumeration misses it, but the repo still needs a fresh Orgrimmar capture that exercises that path |
+| 7.9 | Add second Orgrimmar transport recording/parity test | **Done** (6510082a) — FG recorder resolves MoTransport; Orgrimmar capture exercises that path |
 | 7.10 | Fix physics replay to exclude transport-transition frames from ground mode scoring | **Done** |
 | 7.11 | Calibration gate: ground avg < 0.08y, transport avg < 0.15y, aggregate p99 < 2.0y | **Done** |
 
