@@ -47,7 +47,8 @@ public class BankInteractionTests
         var banker = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x80, timeoutMs: 8000, progressLabel: "banker");
         if (banker != null)
         {
-            _output.WriteLine($"[BANK] Found banker at ({banker.Position?.X:F0},{banker.Position?.Y:F0})");
+            var bankerPos = banker.GameObject?.Base?.Position;
+            _output.WriteLine($"[BANK] Found banker at ({bankerPos?.X:F0},{bankerPos?.Y:F0})");
         }
         else
         {
@@ -57,7 +58,8 @@ public class BankInteractionTests
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.NotNull(snap);
-        _output.WriteLine($"[BANK] Bot at ({snap!.X:F0},{snap.Y:F0},{snap.Z:F0})");
+        var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"[BANK] Bot at ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
     }
 
     [SkippableFact]

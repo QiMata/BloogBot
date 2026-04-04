@@ -87,7 +87,7 @@ public class QuestObjectiveTests
         _output.WriteLine($"[TEST] Nearby units: {nearbyUnits.Count}");
 
         // Look for attackable mobs (NpcFlags == 0 means it's not an NPC with services)
-        var mob = nearbyUnits.FirstOrDefault(u => u.NpcFlags == 0 && (u.Health ?? 0) > 0);
+        var mob = nearbyUnits.FirstOrDefault(u => u.NpcFlags == 0 && u.Health > 0);
         if (mob != null)
         {
             _output.WriteLine($"[TEST] Found mob: {mob.GameObject?.Name}, health={mob.Health}, guid=0x{mob.GameObject?.Base?.Guid:X}");
@@ -96,7 +96,7 @@ public class QuestObjectiveTests
             var attackResult = await _bot.SendActionAsync(account, new ActionMessage
             {
                 ActionType = ActionType.StartMeleeAttack,
-                Parameters = { new RequestParameter { UlongParam = mob.GameObject?.Base?.Guid ?? 0 } }
+                Parameters = { new RequestParameter { LongParam = (long)(mob.GameObject?.Base?.Guid ?? 0) } }
             });
             _output.WriteLine($"[TEST] START_MELEE_ATTACK result: {attackResult}");
 

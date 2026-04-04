@@ -49,13 +49,15 @@ public class AuctionHouseTests
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.NotNull(snap);
-        _output.WriteLine($"[AH] Bot position: ({snap!.X:F0},{snap.Y:F0},{snap.Z:F0})");
+        var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"[AH] Bot position: ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
 
         // Look for auctioneer NPC (NPC_FLAG_AUCTIONEER = 0x200000)
         var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 8000, progressLabel: "auctioneer");
         if (auctioneer != null)
         {
-            _output.WriteLine($"[AH] Found auctioneer at ({auctioneer.Position?.X:F0},{auctioneer.Position?.Y:F0})");
+            var auctPos = auctioneer.GameObject?.Base?.Position;
+            _output.WriteLine($"[AH] Found auctioneer at ({auctPos?.X:F0},{auctPos?.Y:F0})");
         }
         else
         {

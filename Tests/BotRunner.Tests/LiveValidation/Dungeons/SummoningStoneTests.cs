@@ -110,7 +110,7 @@ public class SummoningStoneTests
             var interactResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
             {
                 ActionType = ActionType.InteractWith,
-                Parameters = { new RequestParameter { UlongParam = meetingStone.Guid } }
+                Parameters = { new RequestParameter { LongParam = (long)meetingStone.Guid } }
             });
             _output.WriteLine($"[TEST] INTERACT_WITH meeting stone result: {interactResult}");
 

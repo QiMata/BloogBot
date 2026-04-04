@@ -51,7 +51,9 @@ public class TradingTests
         Assert.NotNull(bgSnap);
         Assert.NotNull(fgSnap);
 
-        _output.WriteLine($"[TRADE] BG at ({bgSnap!.X:F0},{bgSnap.Y:F0}), FG at ({fgSnap!.X:F0},{fgSnap.Y:F0})");
+        var bgPos = bgSnap!.Player?.Unit?.GameObject?.Base?.Position;
+        var fgPos = fgSnap!.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"[TRADE] BG at ({bgPos?.X:F0},{bgPos?.Y:F0}), FG at ({fgPos?.X:F0},{fgPos?.Y:F0})");
 
         // Bot A initiates trade with Bot B via OFFER_TRADE action
         var tradeResult = await _bot.SendActionAsync(bgAccount, new ActionMessage

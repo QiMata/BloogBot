@@ -103,7 +103,7 @@ public class SpiritHealerTests
             var interactResult = await _bot.SendActionAsync(account, new ActionMessage
             {
                 ActionType = ActionType.InteractWith,
-                Parameters = { new RequestParameter { UlongParam = spiritHealer.GameObject?.Base?.Guid ?? 0 } }
+                Parameters = { new RequestParameter { LongParam = (long)(spiritHealer.GameObject?.Base?.Guid ?? 0) } }
             });
             _output.WriteLine($"[TEST] INTERACT_WITH spirit healer result: {interactResult}");
 

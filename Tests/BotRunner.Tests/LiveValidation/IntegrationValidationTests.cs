@@ -157,7 +157,7 @@ public class IntegrationValidationTests
         // Verify combat state in snapshot
         var inCombat = await _bot.WaitForSnapshotConditionAsync(
             bgAccount,
-            s => s?.Player?.Unit?.IsInCombat == true,
+            s => (s?.Player?.Unit?.UnitFlags & 0x80000) != 0,
             TimeSpan.FromSeconds(10),
             pollIntervalMs: 300,
             progressLabel: "V3.2 pvp-combat-state");
@@ -194,8 +194,8 @@ public class IntegrationValidationTests
         var snap = await _bot.GetSnapshotAsync(account);
         Assert.NotNull(snap);
 
-        var hasQuest = snap.Player?.QuestLog?.Any(q => q.QuestId == questId) == true;
-        _output.WriteLine($"[BG] Quest {questId} in log: {hasQuest}, quest log count: {snap.Player?.QuestLog?.Count ?? 0}");
+        var hasQuest = snap.Player?.QuestLogEntries?.Any(q => q.QuestId == questId) == true;
+        _output.WriteLine($"[BG] Quest {questId} in log: {hasQuest}, quest log count: {snap.Player?.QuestLogEntries?.Count ?? 0}");
         Assert.True(hasQuest, $"Quest {questId} should appear in quest log after .quest add");
 
         // Cleanup: remove quest

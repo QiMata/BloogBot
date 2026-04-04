@@ -72,7 +72,7 @@ public class WsgObjectiveTests
             var result = await _bot.SendActionAsync(account, new ActionMessage
             {
                 ActionType = ActionType.InteractWith,
-                Parameters = { new RequestParameter { UlongParam = flagObject.Guid } }
+                Parameters = { new RequestParameter { LongParam = (long)flagObject.Guid } }
             });
             _output.WriteLine($"[TEST] INTERACT_WITH result: {result}");
 

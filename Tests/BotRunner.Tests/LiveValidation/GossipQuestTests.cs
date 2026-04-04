@@ -64,7 +64,7 @@ public class GossipQuestTests
         var interactResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.InteractWith,
-            Parameters = { new RequestParameter { UlongParam = npcGuid } }
+            Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
         });
         _output.WriteLine($"[TEST] INTERACT_WITH gossip NPC result: {interactResult}");
         Assert.Equal(ResponseResult.Success, interactResult);
@@ -115,7 +115,7 @@ public class GossipQuestTests
             var interactResult = await _bot.SendActionAsync(account, new ActionMessage
             {
                 ActionType = ActionType.InteractWith,
-                Parameters = { new RequestParameter { UlongParam = npcGuid } }
+                Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
             });
             _output.WriteLine($"[TEST] INTERACT_WITH quest giver result: {interactResult}");
             Assert.Equal(ResponseResult.Success, interactResult);
