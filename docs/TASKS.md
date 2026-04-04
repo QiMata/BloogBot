@@ -169,7 +169,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 
 | # | Task | Spec |
 |---|------|------|
-| 24.1 | **Create `LoadTestHarness` project** — File: `Tests/LoadTests/LoadTestHarness.csproj`. Parameterized test that spawns N headless bots. Each bot: connects to MaNGOS, logs in, creates character (if needed), enters world, performs basic patrol in assigned zone. Outputs CSV metrics per bot: connectionTimeMs, loginTimeMs, enterWorldTimeMs, avgPhysicsFrameMs, avgSnapshotLatencyMs, memoryMB. | Open |
+| 24.1 | **Create `LoadTestHarness` project** — csproj + LoadTestRunner with N-bot spawn + CSV metrics. | **Done** (33f46b59) |
 | 24.2 | **Race/class distribution generator** — `BotDistribution.cs` with 40 valid combos, Generate(N), faction filtering. | **Done** (c056a52b) |
 | 24.3 | **MaNGOS account bulk creation** — `BulkAccountCreator.cs` with SOAP-based idempotent creation. | **Done** (75e510e8) |
 | 24.4 | **10-bot baseline test** — Launch 1 FG + 9 BG bots. All login, enter world, perform 60s patrol in Orgrimmar. Assert: all 10 connect within 30s, all snapshots received, avg physics < 2ms. Measure: total memory, CPU, pathfinding latency. | Open |
@@ -182,7 +182,7 @@ WoW 1.12.1 has 8 races × 9 classes (not all combos valid). Valid Horde combos: 
 
 | # | Task | Spec |
 |---|------|------|
-| 24.9 | **Per-bot metrics collector** — Each bot reports to a central metrics aggregator via UDP. Fields: accountName, frameTimeMs, snapshotLatencyMs, posX, posY, posZ, movementFlags, isConnected, memoryMB. Collector writes to InfluxDB or CSV. | Open |
+| 24.9 | **Per-bot metrics collector** — BotMetricsCollector with UDP + CSV output + summary stats. | **Done** (33f46b59) |
 | 24.10 | **Load test dashboard** — Simple HTML page that reads metrics CSV and displays: total connected bots, avg/P95 physics time, total memory, map showing bot positions. Refreshes every 5s. | Open |
 | 24.11 | **Bot process pooling** — For 3000 bots, run 50-100 bots per process (using the multi-BotContext architecture from P9). Each process loads Navigation.dll once, shares scene data. Reduces total processes from 3000 to 30-60. | Open |
 
@@ -607,7 +607,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 9.24 | **Create `LoadTestHarness` project** — `Tests/LoadTests/LoadTestHarness.csproj`. Parameterized test that spawns N headless bots, connects to MaNGOS, measures: connection time, snapshot round-trip latency, pathfinding request latency, memory per bot, CPU per bot. Outputs CSV metrics. | Open |
+| 9.24 | **Create `LoadTestHarness` project** — Same as P24.1. | **Done** (33f46b59) |
 | 9.25 | **100-bot baseline** — Run 100 bots on single machine. All login, move to Orgrimmar, perform basic patrol route. Measure: P50/P95/P99 tick latency, PathfindingService queue depth, StateManager snapshot processing time, total memory, total CPU. | Open |
 | 9.26 | **500-bot milestone** — Run 500 bots across 2 machines (250 each). Multi-zone: 200 in Orgrimmar, 200 in Durotar, 100 in Barrens. Measure same metrics + cross-machine latency. | Open |
 | 9.27 | **3000-bot target** — Run 3000 bots across cluster. 1000 per machine (3 machines). Mixed activities: 1000 grinding, 500 in BGs, 500 raiding, 500 questing, 500 idle in cities. Full metrics dashboard. | Open |
