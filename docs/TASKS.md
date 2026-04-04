@@ -1044,13 +1044,15 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 301)
 - **Branch:** `main`
-- **Session 301 — Physics parity restored: 666/669 tests pass (6 IPC parity fixed):**
-  - **Reverted aggressive FALLINGFAR fix** (`fb4cbb07`): changing `useAirbornePath` and `st.isGrounded` initialization broke 18 physics replay tests. Original targeted fix (commit `0c416919`, `preserveAirborne` guard) was correct and already in codebase.
-  - **Fixed IPC parity tests** (`bd97203a`): 6 `MovementControllerIpcParityTests` failures were caused by PathfindingClient's `PhysicsStep` returning hold-position stubs after PathfindingService was stripped to path-only. Fix: pass `null` for `IPhysicsClient` so tests use local `NativeLocalPhysics.Step`.
-  - **Physics test suite: 666/669** (2 pre-existing Undercity elevator failures only). This is 6 more passing than session start.
-  - Navigation test still GREEN. Docker containers rebuilt.
-  - Commits: `e9e7f5c5`, `bd97203a`
-  - **Remaining issue:** Live BG bot movement is slow (~1y/s vs 7y/s). The FALLINGFAR feedback loop causes `MoveToward` to route through airborne steering instead of waypoint following. Need to investigate why FALLINGFAR persists in the live BG bot context (but NOT in the physics replay tests). Likely a C# `MovementController` / `WoWSharpObjectManager` interaction issue, not a C++ physics issue.
+- **Session 301 — Binary parity fully restored; workarounds stripped:**
+  - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
+  - **MovementController.cs:** Stripped 87 lines of post-parity workarounds (grace frames, clamp frames, forced FALLINGFAR, NativePhysics.GetGroundZ fallback). Restored original ground snap logic. Only remaining diff from baseline is legitimate local physics infrastructure (IPhysicsClient, SceneDataClient, NativeLocalPhysics.Step path).
+  - **IPC parity tests fixed:** 6 `MovementControllerIpcParityTests` now pass by using local `NativeLocalPhysics.Step` instead of removed remote physics path.
+  - **Idle guard restored** from parity baseline.
+  - **Physics test suite: 666/669** (2 pre-existing Undercity elevator failures). 6 more passing than session start.
+  - Navigation test GREEN. Docker containers rebuilt.
+  - Commits: `e9e7f5c5` through `efb6c93d`
+  - **Next:** Live BG bot Z oscillation (terrain layer disambiguation) blocks normal movement speed. This is a terrain data / AABB query issue on VoT terrain, not a code parity issue.
 - **Session 300 — containerized services operational; PathfindingService stripped to path-only:**
   - Service simplification: PathfindingService 967→260 lines (path-only). Physics/GroundZ/LOS/navmesh local via P/Invoke. Physics.cs deleted.
   - Containerization fixes: GetGroundZ export, ground snap FALLINGFAR, CrashMonitor Docker, scene slice VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID fix.
