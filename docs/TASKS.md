@@ -474,7 +474,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.6 | **Create `TakeFlightPathTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/TakeFlightPathTask.cs`. Steps: (1) Navigate to nearest discovered flight master NPC (use FlightPathData to find position, GoTo sub-task). (2) Interact with flight master (right-click/CMSG_GOSSIP_HELLO). (3) Wait for SMSG_SHOWTAXINODES. (4) Call `FlightMasterNetworkClientComponent.ActivateFlightAsync(masterGuid, sourceNodeId, destNodeId)`. (5) Detect flight completion: position stops changing for 3s after being in-flight (or SMSG_MONSTER_MOVE_TRANSPORT with spline completed). (6) Pop task. Timeout: 5 minutes (longest vanilla flight). | Open |
+| 21.6 | **Create `TakeFlightPathTask.cs`** — Navigate to FM, interact, select taxi node, monitor landing. | **Done** (91434246) |
 | 21.7 | **Integrate flight legs into CrossMapRouter** — Currently `CrossMapRouter.PlanRoute()` plans Walk, Elevator, Boat, Zeppelin, DungeonPortal legs. Add `FlightPath` leg type. When planning a Walk leg >200y on same map, check if a flight path shortcut exists: find nearest discovered flight node to start, find nearest discovered flight node to destination, if flight saves >50% of walk time, insert FlightPath leg. Requires `TravelOptions.DiscoveredFlightNodes`. | Open |
 | 21.8 | **Flight path discovery tracking** — `discoveredFlightNodes` repeated uint32 added to WoWPlayer proto field 44. | **Done** (7b504352) |
 
