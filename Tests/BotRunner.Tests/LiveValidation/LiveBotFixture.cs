@@ -119,6 +119,12 @@ public partial class LiveBotFixture : IAsyncLifetime
     public string? FailureReason { get; private set; }
 
     /// <summary>
+    /// Expected bot count from the settings JSON. ALL configured bots MUST connect.
+    /// Any missing bot is an automatic failure — no partial-count workarounds.
+    /// </summary>
+    public int ExpectedBotCount { get; private set; }
+
+    /// <summary>
     /// Whether PathfindingService is listening on port 5001.
     /// Tests that require pathfinding (corpse run, movement, gathering) should
     /// check this via <c>Skip.IfNot(fixture.IsPathfindingReady, ...)</c>.
@@ -473,36 +479,21 @@ public partial class LiveBotFixture : IAsyncLifetime
 
                 if (everSeenInWorld.Count >= 1)
                 {
-                    // Use the "ever seen" list — these bots have confirmed InWorld at least once
                     AllBots = everSeenInWorld.Values.ToList();
                     IdentifyBots(AllBots);
 
-                    if (HasRequiredRoleCoverage(everSeenInWorld))
+                    // Strict: ALL configured bots must connect. No partial-count workarounds.
+                    if (everSeenInWorld.Count >= ExpectedBotCount && HasRequiredRoleCoverage(everSeenInWorld))
                     {
-                        _logger.LogInformation("[FIXTURE] Required live bots in-world after {Elapsed:F1}s.", sw.Elapsed.TotalSeconds);
+                        _logger.LogInformation("[FIXTURE] All {Count}/{Expected} bots in-world after {Elapsed:F1}s.",
+                            everSeenInWorld.Count, ExpectedBotCount, sw.Elapsed.TotalSeconds);
                         break;
                     }
 
-                    // Give the configured FG/BG roles extra time to surface before
-                    // declaring the fixture partial.
-                    if (sw.Elapsed > TimeSpan.FromSeconds(45))
+                    if ((int)sw.Elapsed.TotalSeconds % 15 == 0 && sw.Elapsed.TotalSeconds > 0)
                     {
-                        // Log any bots that have never been seen in-world
-                        var stuckBots = snapshots
-                            .Where(s => !everSeenInWorld.ContainsKey(s.AccountName) && !string.IsNullOrEmpty(s.AccountName))
-                            .ToList();
-                        foreach (var stuck in stuckBots)
-                        {
-                            _logger.LogWarning("[FIXTURE] Bot stuck: Account='{Account}', ScreenState='{State}' — skipping it.",
-                                stuck.AccountName, stuck.ScreenState);
-                        }
-
-                        _logger.LogWarning("[FIXTURE] Only {Count} bot(s) in-world after {Elapsed:F1}s. Proceeding with available bot(s).",
-                            everSeenInWorld.Count, sw.Elapsed.TotalSeconds);
-                        var missingRoles = GetMissingRequiredRoles(everSeenInWorld);
-                        _logger.LogWarning("[FIXTURE] Missing configured roles after partial startup: {MissingRoles}",
-                            missingRoles.Count == 0 ? "none" : string.Join(", ", missingRoles));
-                        break;
+                        _logger.LogInformation("[FIXTURE] {Count}/{Expected} bots in-world so far... ({Elapsed:F0}s)",
+                            everSeenInWorld.Count, ExpectedBotCount, sw.Elapsed.TotalSeconds);
                     }
                 }
 
@@ -517,6 +508,16 @@ public partial class LiveBotFixture : IAsyncLifetime
             if (AllBots.Count == 0)
             {
                 FailureReason = "No bots entered world within 120s. Check StateManagerSettings.json CharacterSettings.";
+                _logger.LogError("[FIXTURE] {Reason}", FailureReason);
+                return;
+            }
+
+            // P28.1: STRICT bot count assertion. ALL configured bots MUST connect.
+            // Any missing bot is an automatic failure that triggers investigation.
+            if (AllBots.Count < ExpectedBotCount)
+            {
+                FailureReason = $"Only {AllBots.Count}/{ExpectedBotCount} bots entered world. " +
+                    "ALL configured bots must connect — missing bots indicate a crash, disconnect, or config error.";
                 _logger.LogError("[FIXTURE] {Reason}", FailureReason);
                 return;
             }
@@ -745,6 +746,19 @@ public partial class LiveBotFixture : IAsyncLifetime
                 return;
 
             using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+
+            // Count all bots that should run (ShouldRun != false)
+            int configuredBotCount = 0;
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (element.TryGetProperty("ShouldRun", out var sr) && sr.ValueKind == JsonValueKind.False)
+                    continue;
+                if (element.TryGetProperty("AccountName", out _))
+                    configuredBotCount++;
+            }
+            ExpectedBotCount = configuredBotCount;
+            _logger.LogInformation("[FIXTURE] Settings specify {Count} bot(s).", configuredBotCount);
+
             foreach (var element in document.RootElement.EnumerateArray())
             {
                 if (element.TryGetProperty("ShouldRun", out var shouldRunProperty)
