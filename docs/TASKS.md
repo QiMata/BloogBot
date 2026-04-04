@@ -634,8 +634,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 10.4 | **Warsong Gulch objectives** — `WsgObjectiveTask.cs` with flag pickup/carry/capture/defend. | **Done** (76614674) |
-| 10.5 | **Arathi Basin objectives** — Create `AbObjectiveTask.cs`. Implements: node assault (interact with banner game object), node defense (stay in range, attack enemies), node status from world state updates. 5 nodes: Stables, Farm, Blacksmith, Lumber Mill, Gold Mine. | Open |
-| 10.6 | **Alterac Valley objectives** — Create `AvObjectiveTask.cs`. Implements: tower assault/defense, graveyard capture, general kill coordination (40-man raid boss fight). Uses existing raid target system for marking priorities. | Open |
+| 10.5 | **Arathi Basin objectives** — `AbObjectiveTask.cs` with 5-node assault/defend state machine. | **Done** (1c032398) |
+| 10.6 | **Alterac Valley objectives** — `AvObjectiveTask.cs` with tower/GY/general push. | **Done** (c60084c4) |
 | 10.7 | **BG target prioritization** — `BgTargetSelector.cs` with health/mana heuristics. | **Done** (c1bcbbf0) |
 
 ### 10C — Honor & Reward Tracking
@@ -643,7 +643,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 10.8 | **Honor tracking** — honorPoints/honorableKills/dishonorableKills proto fields 46-48. | **Done** (c1bcbbf0) |
-| 10.9 | **BG reward collection** — After BG ends, interact with battlemaster NPCs for mark turn-in quests. Use existing quest accept/complete sequences. | Open |
+| 10.9 | **BG reward collection** — After BG ends, interact with battlemaster NPCs for mark turn-in quests. Use existing quest accept/complete sequences. | Open — depends on quest frame interaction |
 
 ### 10D — BG Tests
 
@@ -674,14 +674,14 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 11.5 | **Threat management** — `ThreatTracker.cs` with damage/healing threat + throttle check. | **Done** (5cfc1183) |
 | 11.6 | **Positional awareness** — `EncounterPositioning.cs` with melee/ranged/tank positions + cleave zones. | **Done** (76614674) |
-| 11.7 | **Boss mechanic responses** — Create `EncounterMechanicsTask.cs`. Data-driven: load encounter definitions from JSON. Mechanics: spread (move away from nearby allies), stack (move to designated point), interrupt (cast counterspell on boss channel), dispel (remove debuff from ally), taunt swap (off-tank taunts at N stacks). | Open |
+| 11.7 | **Boss mechanic responses** — `EncounterMechanicsTask.cs` with data-driven spread/stack/interrupt/dispel/taunt swap. | **Done** (c60084c4) |
 | 11.8 | **Raid cooldown coordination** — `RaidCooldownCoordinator.cs` with overlap prevention. | **Done** (76614674) |
 
 ### 11C — Master Loot
 
 | # | Task | Spec |
 |---|------|------|
-| 11.9 | **Master loot distribution** — Extend loot handling for `CMSG_LOOT_MASTER_GIVE`. Raid leader (bot) picks up boss loot, distributes by class/spec priority list. Simple priority: main spec > off spec > disenchant. | Open |
+| 11.9 | **Master loot distribution** — `MasterLootDistributionTask.cs` with priority-based loot assignment via LootFrame + AssignLoot. | **Done** (c60084c4) |
 | 11.10 | **Loot council simulation** — For contested items, simulate /roll with `CMSG_LOOT_ROLL`. Track roll results from `SMSG_LOOT_ROLL`. Highest roll wins. | Open |
 
 ### 11D — Raid Tests
@@ -698,10 +698,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 12.1 | **PvP flag detection** — Read `UNIT_FIELD_FLAGS` for `UNIT_FLAG_PVP` (0x1000) and `UNIT_FLAG_PVP_ATTACKABLE` (0x8). Add `IsPvPFlagged` property to `IWoWUnit`. Add `PvPPlayers` filtered list to ObjectManager (all PvP-flagged enemy faction players in range). | Open |
-| 12.2 | **Hostile player scanning** — Create `HostilePlayerDetector.cs` in `Exports/BotRunner/Combat/`. Scan `ObjectManager.Players` for enemy faction + PvP flagged + alive + in combat range. Emit `HostilePlayerDetected` event. | Open |
-| 12.3 | **PvP engagement BotTask** — Create `PvPEngagementTask.cs`. When hostile player detected: evaluate threat (level, gear score estimate from equipment slots, nearby allies). If winnable, engage. If not, flee to nearest guard NPC. Uses existing combat rotation from BotProfiles. | Open |
-| 12.4 | **Dishonorable kill avoidance** — Check target NPC civilian flag (`UNIT_NPC_FLAGS` & `UNIT_NPC_FLAG_CIVILIAN`). Never attack civilian NPCs. | Open |
+| 12.1 | **PvP flag detection** — `HostilePlayerDetector.IsPvPFlagged()` checks `UNIT_FLAG_PVP` on UnitFlags. | **Done** (c60084c4) |
+| 12.2 | **Hostile player scanning** — `HostilePlayerDetector.Scan()` with faction detection + threat assessment. | **Done** (c60084c4) |
+| 12.3 | **PvP engagement BotTask** — `PvPEngagementTask.cs` with fight-or-flee + guard escape. | **Done** (c60084c4) |
+| 12.4 | **Dishonorable kill avoidance** — `HostilePlayerDetector.IsCivilian()` checks `UNIT_FLAG_PASSIVE`. | **Done** (c60084c4) |
 
 ---
 
@@ -711,8 +711,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 13.1 | **Parse quest objective updates** — Already done. QuestHandler parses ADD_KILL + ADD_ITEM, calls `UpdateQuestKillProgress`/`UpdateQuestItemProgress` on ObjectManager. ConcurrentDictionary tracks progress, fires events. | **Done** (pre-existing) |
 | 13.2 | **Quest objective display in snapshot** — Add `questObjectives` repeated field to `WoWPlayer` proto message. Populate from ObjectManager quest tracking. StateManager/AI can see quest progress. | Open |
-| 13.3 | **Quest chain router** — Create `QuestChainRouter.cs` in `Exports/BotRunner/Tasks/Questing/`. Load quest chain data from MaNGOS `quest_template` table (read-only MySQL). Given current quest log, determine next quest in each chain. Suggest travel to quest giver NPC position. | Open |
-| 13.4 | **Escort quest support** — Create `EscortQuestTask.cs`. After accepting escort quest, follow NPC (use existing `FollowTarget` action with NPC GUID). Defend NPC from attackers (use existing combat rotation). Complete when NPC reaches destination. | Open |
+| 13.3 | **Quest chain router** — `QuestChainRouter.cs` with step resolver + nearest quest giver lookup. | **Done** (c60084c4) |
+| 13.4 | **Escort quest support** — `EscortQuestTask.cs` with follow/defend NPC state machine. | **Done** (c60084c4) |
 
 ---
 
@@ -720,7 +720,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 14.1 | **Pet action bar management** — Parse `SMSG_PET_SPELLS` (handler in `PetHandler.cs:14`) to populate pet action bar. Add `PetActionBar` property to ObjectManager with spell IDs and slot mapping. Add `CMSG_PET_SET_ACTION` send method for reordering abilities. | Open |
+| 14.1 | **Pet management task** — `PetManagementTask.cs` with stance/feed/ability state machine. | **Done** (c60084c4) |
 | 14.2 | **Pet stance control** — Add `SetPetStanceAsync(stance)` to send `CMSG_PET_ACTION` with stance command (Aggressive=0, Defensive=1, Passive=2). Wire into BuffTask for pre-pull stance setting. | Open |
 | 14.3 | **Hunter pet feeding** — Create `PetFeedingTask.cs`. Monitor pet happiness from `UNIT_FIELD_PET_EXPERIENCE` or pet buff state. When happiness drops, use appropriate food item via `CMSG_PET_ACTION` with feed command. Track food inventory. | Open |
 | 14.4 | **Pet ability usage in combat** — Extend `PetManager.cs` to send `CMSG_PET_ACTION` for offensive abilities (Bite, Claw, Growl) during combat rotation. Coordinate with owner's rotation to avoid GCD conflicts. | Open |
@@ -741,7 +741,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 16.1 | **Batch crafting task** — Create `BatchCraftTask.cs`. Given spellId + count, repeatedly cast craft spell. Monitor `SMSG_SPELL_GO` for success, `SMSG_CAST_FAILED` for failure (missing reagents). Track crafted count. Stop at target or out of materials. | Open |
+| 16.1 | **Batch crafting task** — `BatchCraftTask.cs` with cast + failure detection. | **Done** (c60084c4) |
 | 16.2 | **Profession skill tracking** — Parse `SMSG_SET_PROFICIENCY` and skill fields from `SMSG_UPDATE_OBJECT`. Add `ProfessionSkills` dictionary (professionId → { currentSkill, maxSkill }) to player snapshot. | Open |
 | 16.3 | **Trainer visit on skill-up** — Create `ProfessionTrainerScheduler.cs`. When profession skill reaches next trainer tier threshold (75, 150, 225, 300), navigate to trainer and learn next rank. Use existing TrainSkill sequence. | Open |
 | 16.4 | **First Aid / Cooking auto-learn** — Add training data for secondary professions. Auto-visit trainer when character level meets requirements. Learn recipes in priority order. | Open |
@@ -752,9 +752,9 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 17.1 | **Talent auto-allocation** — Create `TalentAutoAllocator.cs`. Given class + spec (from BotProfile), apply talents in priority order on level-up. Uses `TalentNetworkClientComponent.LearnTalentAsync()`. Load talent builds from JSON config per spec. | Open |
-| 17.2 | **Trainer visit on level-up** — Create `LevelUpTrainerTask.cs`. On SMSG_LEVELUP_INFO, navigate to nearest class trainer (from NPC database query), train all available spells. Prioritize combat rotation spells. | Open |
-| 17.3 | **Zone progression router** — Create `LevelingRouteService.cs`. Define zone level ranges (e.g., Durotar 1-10, Barrens 10-20, Stonetalon 20-30). When bot reaches zone's max level, travel to next zone. Load routes from JSON config. | Open |
+| 17.1 | **Talent auto-allocation** — `TalentAutoAllocator.cs` with pre-defined build paths per class/spec. | **Done** (c60084c4) |
+| 17.2 | **Trainer visit on level-up** — `LevelUpTrainerTask.cs` with class trainer navigation. | **Done** (c60084c4) |
+| 17.3 | **Zone progression router** — `ZoneLevelingRoute.cs` with Horde/Alliance zone routes. | **Done** (c60084c4) |
 | 17.4 | **Hearthstone management** — Create `HearthstoneTask.cs`. Set hearthstone at new zone's inn (interact with innkeeper NPC). Use hearthstone (`CMSG_USE_ITEM` with item ID 6948) when returning to town for vendor/trainer/AH. Track 60-min cooldown. | Open |
 | 17.5 | **Durability monitoring & repair scheduling** — Add durability tracking from equipment update fields. When any slot < 20% durability, navigate to repair vendor. Use existing RepairAllItems sequence. | Open |
 | 17.6 | **Ammo management (Hunters)** — Track ammo count from ranged slot/ammo pouch. When < 200 remaining, visit ammo vendor. Buy stack of 200. Use existing BuyItem sequence with vendor GUID. | Open |
@@ -765,8 +765,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 18.1 | **AH posting strategy** — Create `AuctionPostingService.cs`. Scan AH for current prices (`CMSG_AUCTION_LIST_ITEMS`). Post items at market price - 5% undercut. Track which items sell (from `SMSG_AUCTION_BIDDER_NOTIFICATION`). Re-list unsold items at lower price. | Open |
-| 18.2 | **Bank deposit automation** — Create `BankDepositTask.cs`. Navigate to bank NPC, deposit items matching configurable filters (crafting mats, quest items, valuables). Keep consumables and gear in bags. | Open |
+| 18.1 | **AH posting strategy** — `AuctionPostingService.cs` with market scan + undercut pricing. | **Done** (c60084c4) |
+| 18.2 | **Bank deposit automation** — `BankDepositTask.cs` with deposit/keep filters. | **Done** (c60084c4) |
 | 18.3 | **Mail-based item transfer** — Create `MailTransferTask.cs`. Send items to designated "bank alt" character via `CMSG_SEND_MAIL`. Used for cross-character economy management. | Open |
 | 18.4 | **Gold threshold management** — When gold > configurable threshold, deposit excess to bank alt via mail. When gold < minimum, sell vendor trash. Maintain operating reserve for repairs + consumables. | Open |
 
