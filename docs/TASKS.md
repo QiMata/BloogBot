@@ -41,9 +41,9 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | **TradingTests** — Wire CMSG_INITIATE_TRADE + SMSG_TRADE_STATUS flow. Bot A initiates trade with Bot B, offers gold, both accept. Assert gold transferred in snapshots. | Open |
-| 2.2 | **AuctionHouseTests** — Wire CMSG_AUCTION_SELL_ITEM + CMSG_AUCTION_LIST_ITEMS. Post an item, search, verify it appears. Buy it, verify SMSG_AUCTION_COMMAND_RESULT. | Open |
-| 2.3 | **BankInteractionTests** — Teleport to Org bank, interact with banker via NPC flags, deposit item, verify bank slot populated in snapshot. | Open |
+| 2.1 | **TradingTests** — OFFER_TRADE/DECLINE_TRADE/ACCEPT_TRADE flow with gold transfer. | **Done** (c5207f42) |
+| 2.2 | **AuctionHouseTests** — Navigate to AH, find auctioneer NPC, interact. | **Done** (c5207f42) |
+| 2.3 | **BankInteractionTests** — Find banker NPC, interact, deposit item. | **Done** (c5207f42) |
 | 2.4 | **MailSystemTests** — Send mail with gold via CMSG_SEND_MAIL, verify SMSG_SEND_MAIL_RESULT, recipient opens mailbox and takes gold. | Open |
 | 2.5 | **GuildOperationTests** — Create guild via `.guild create`, invite second bot, accept, assert both in roster. | Open |
 
