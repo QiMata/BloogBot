@@ -445,6 +445,25 @@ public class GatheringProfessionTests
 
     private async Task StageAtValleyCopperRouteStartAsync(string account, string label)
     {
+        // The bot starts at its DB login position in Valley of Trials.
+        // Copper veins are nearby — skip teleport to avoid .go xyz race condition.
+        await _bot.RefreshSnapshotsAsync();
+        var snap = GetSnapshot(label);
+        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        if (pos != null)
+        {
+            var distToRoute = LiveBotFixture.Distance2D(pos.X, pos.Y,
+                GatheringRouteSelection.ValleyCopperRouteStartX,
+                GatheringRouteSelection.ValleyCopperRouteStartY);
+            _output.WriteLine($"[{label}] Current pos=({pos.X:F0},{pos.Y:F0},{pos.Z:F0}), dist to copper route start: {distToRoute:F0}y");
+            if (distToRoute <= 500f)
+            {
+                _output.WriteLine($"[{label}] Already near copper route — using current position.");
+                return;
+            }
+        }
+
+        // If far from VoT, teleport
         var characterName = label == "FG" ? _bot.FgCharacterName : _bot.BgCharacterName;
         if (!string.IsNullOrWhiteSpace(characterName))
         {
@@ -453,12 +472,7 @@ public class GatheringProfessionTests
         }
         else
         {
-            _output.WriteLine(
-                $"[{label}] Staging at Valley copper route start " +
-                $"({GatheringRouteSelection.ValleyCopperRouteStartX:F1}, {GatheringRouteSelection.ValleyCopperRouteStartY:F1}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F1})");
-            await _bot.BotTeleportAsync(
-                account,
-                GatheringRouteSelection.DurotarMap,
+            await _bot.BotTeleportAsync(account, GatheringRouteSelection.DurotarMap,
                 GatheringRouteSelection.ValleyCopperRouteStartX,
                 GatheringRouteSelection.ValleyCopperRouteStartY,
                 GatheringRouteSelection.ValleyCopperRouteStartZ);
@@ -500,24 +514,13 @@ public class GatheringProfessionTests
                     TimeSpan.FromSeconds(5),
                     progressLabel: $"{label} revive");
                 await _bot.RefreshSnapshotsAsync();
-                snap = GetSnapshot(label);
             }
         }
 
-        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-        var needsTeleport = true;
-        if (pos != null)
-        {
-            var distToOrg = LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
-            needsTeleport = distToOrg > 80f;
-        }
-
-        if (needsTeleport)
-        {
-            _output.WriteLine($"[{label}] Moving to safe setup zone (Orgrimmar)");
-            await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
-        }
+        // GM commands (.learn, .setskill, .additem) work from any position.
+        // Skip the Orgrimmar teleport to avoid the .go xyz race condition where
+        // the local snapshot position reverts to the DB login position.
+        _output.WriteLine($"[{label}] Setup from current position (GM commands work anywhere).");
     }
 
     /// <summary>
