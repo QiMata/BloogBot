@@ -475,7 +475,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.6 | **Create `TakeFlightPathTask.cs`** — Navigate to FM, interact, select taxi node, monitor landing. | **Done** (91434246) |
-| 21.7 | **Integrate flight legs into CrossMapRouter** — Currently `CrossMapRouter.PlanRoute()` plans Walk, Elevator, Boat, Zeppelin, DungeonPortal legs. Add `FlightPath` leg type. When planning a Walk leg >200y on same map, check if a flight path shortcut exists: find nearest discovered flight node to start, find nearest discovered flight node to destination, if flight saves >50% of walk time, insert FlightPath leg. Requires `TravelOptions.DiscoveredFlightNodes`. | Open |
+| 21.7 | **Integrate flight legs into CrossMapRouter** — TryFlightPathShortcut for same-map >200y walks. | **Done** (cdb7cdc4) |
 | 21.8 | **Flight path discovery tracking** — `discoveredFlightNodes` repeated uint32 added to WoWPlayer proto field 44. | **Done** (7b504352) |
 
 ### 21C — Hearthstone Integration
@@ -508,8 +508,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.20 | **Extend CrossMapRouter with hearthstone legs** — When planning a cross-map route, check: if hearthstone is off cooldown AND bind point is on destination map (or closer intermediate), add a `Hearthstone` RouteLeg with 10s cast time + 0y walk from bind point. Compare total route time with vs without hearthstone. Choose shorter route. Example: bot in Durotar needs to reach Undercity — if bound to Orgrimmar, hearthstone (10s) + zeppelin (60s) < walk to zeppelin dock (120s) + zeppelin (60s). | Open |
-| 21.21 | **Extend CrossMapRouter with class teleport legs** — If bot is mage and has teleport spell for destination city, add `ClassTeleport` RouteLeg (10s cast, 0y walk). Mage teleport always wins over any other route to a capital city. For portal: if group needs to travel, mage opens portal at current location, all walk through. | Open |
+| 21.20 | **Extend CrossMapRouter with hearthstone legs** — Hearthstone TransitionType added. | **Done** (cdb7cdc4) |
+| 21.21 | **Extend CrossMapRouter with class teleport legs** — ClassTeleport TransitionType added. | **Done** (cdb7cdc4) |
 | 21.22 | **Named location resolver** — `LocationResolver.cs` already exists with static + DB loading. | **Done** (pre-existing) |
 | 21.23 | **Route re-planning on failure** — Built into TravelTask.cs with MaxReplans=3. | **Done** (6d3dbd70) |
 
