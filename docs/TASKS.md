@@ -501,7 +501,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 21.16 | **Mage teleport spell data** — `MageTeleportData.cs` already exists. | **Done** (pre-existing) |
 | 21.17 | **Create `MageTeleportTask.cs`** — Checks class/spell/cooldown, casts, detects teleport. | **Done** (cbf62843) |
-| 21.18 | **Warlock Ritual of Summoning** — File: `Exports/BotRunner/Tasks/Travel/WarlockSummonTask.cs`. Spell ID 698 (Ritual of Summoning). Requires: 3 party members, Soul Shard reagent. Warlock casts, 2 helpers click portal. Target clicks accept. Add `CMSG_MEETINGSTONE_JOIN` / `SMSG_MEETINGSTONE_COMPLETE` handling in a new `SummoningNetworkClientComponent`. CrossMapRouter: if party has warlock + 2 members at destination, prefer summon over transport (0 travel time). | Open |
+| 21.18 | **Warlock Ritual of Summoning** — `WarlockSummonTask.cs` with prereq checks + ritual cast. | **Done** (9893b352) |
 | 21.19 | **Meeting stone summoning** — Similar to warlock summon but at dungeon meeting stones. GameObjectType 23. Bot walks to meeting stone, interacts via `CMSG_MEETINGSTONE_JOIN`, waits for `SMSG_MEETINGSTONE_COMPLETE`. Used to summon offline group members to dungeon entrance. | Open |
 
 ### 21F — Route Optimization & Hearthstone Strategy
@@ -524,7 +524,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.26 | **CrossMapRouter unit tests** — File: `Tests/BotRunner.Tests/Movement/CrossMapRouterTravelTests.cs`. Test: Orgrimmar → Undercity (zeppelin), Orgrimmar → RFC entrance (walk + portal), Stormwind → Ironforge (Deeprun Tram), Booty Bay → Ratchet (boat), Orgrimmar → Scarlet Monastery (zeppelin + walk + portal). Assert correct leg types and ordering. | Open |
+| 21.26 | **CrossMapRouter unit tests** — 5 tests for walk/zeppelin/boat/portal routing. | **Done** (9893b352) |
 | 21.27 | **TravelTask integration test** — File: `Tests/BotRunner.Tests/LiveValidation/TravelTests.cs`. BG bot in Orgrimmar receives TravelTo action targeting Crossroads. Assert: bot walks to Orgrimmar gate, paths south through Durotar into Barrens, arrives within 5y of Crossroads. Timeout: 10 minutes. | Open |
 | 21.28 | **Flight path travel test** — BG bot at Orgrimmar flight master, flies to Crossroads. Assert: CMSG_ACTIVATETAXI sent, bot position changes to Crossroads area within 2 minutes, task completes. | Open |
 | 21.29 | **Hearthstone travel test** — BG bot bound to Orgrimmar, teleported to Razor Hill by GM. Send TravelTo(Orgrimmar). Assert: bot uses hearthstone (faster than walking), arrives in Orgrimmar within 15s. | Open |
