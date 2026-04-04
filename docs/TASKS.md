@@ -1108,8 +1108,26 @@ if (transportGuid != 0) {
 ---
 
 ## Session Handoff
-- **Last updated:** 2026-04-03 (session 299)
+- **Last updated:** 2026-04-03 (session 300)
 - **Branch:** `main`
+- **Session 300 — containerized services fully functional; BG bot movement with local VMAP working; teleport timing issue remains:**
+  - Fixed 4 critical issues blocking containerized service integration:
+    1. `GetGroundZ` missing from Linux `libNavigation.so` (only in PhysicsTestExports.cpp, excluded from Linux builds). Added proper export in `DllMain.cpp`.
+    2. Ground snap FALLINGFAR infinite loop: after 60-frame timeout, FALLINGFAR persisted permanently. Now force-clears airborne flags and queries `NativePhysics.GetGroundZ` for correct altitude.
+    3. CrashMonitor false positives: `IsPortInUse` (bind check) fails for Docker-forwarded ports. Switched to TCP connect check via `IsServiceAvailableAsync`.
+    4. Scene slice mode blocking local VMAP: `m_sceneSliceMode=true` was set eagerly with SceneDataClient present, preventing `SceneQuery::EnsureMapLoaded` from loading local terrain data. Disabled eager scene slice mode so local VMAP loads as fallback.
+  - Also forwarded `WWOW_DATA_DIR` from StateManager to spawned BG bot processes (was missing entirely).
+  - Docker containers rebuilt with `--no-cache` to include the `GetGroundZ` C++ export fix.
+  - BG bot now successfully: loads local Navigation.dll with VMAP data, detects ground surfaces, moves with collision, and receives paths from containerized PathfindingService.
+  - **Remaining blocker for live integration tests:** `.go xyz` teleport timing — the test sets local snapshot position immediately but server-side position update is async. Bot starts navigating from DB login position, not teleport target. Need `WaitForZStabilizationAsync` to verify SERVER position matches target, or use SOAP offline teleport before bot login.
+  - Commits: `b15365e9`, `5ad397d7`, `c32b3523`, `59b8d016`
+  - Validation:
+    - `docker ps` -> `pathfinding-service` and `scene-data-service` both Up, ports 5001/5003
+    - PathfindingService: 0 `GetGroundZ` errors, 700+ corridor path requests served
+    - SceneDataService: ready, 50k+ triangles extracted
+    - BG bot local physics: `[NativeLocalPhysics] Map 1 preloaded` confirmed, ground collision working
+    - Navigation test: bot MOVES with terrain collision (24y travel, Z bouncing 41-72), but navigates from wrong start position due to teleport timing
+  - **Next steps:** Fix teleport timing (use SOAP `.tele name` for offline teleport before bot login, or add server position confirmation wait). Then re-run mining/gathering and combat tests.
 - **Session 299 — split Pathfinding/SceneData services are live on Linux with mounted data volumes; live matrix still pending completion:**
   - Validated the current split-service deployment on `docker-compose.vmangos-linux.yml`: `pathfinding-service` and `scene-data-service` are both running, publishing `5001`/`5003`, and serving from mounted `/wwow-data`.
   - Runtime logs show the expected behavior: Pathfinding preload across the discovered map set and SceneData readiness on `0.0.0.0:5003` with initialized scene/nav coverage.
