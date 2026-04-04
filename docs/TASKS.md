@@ -373,7 +373,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.5 | **Define `GearGoal` model** — `GearGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
-| 22.6 | **Create pre-built BiS gear sets** — File: `Exports/BotRunner/Progression/PreRaidBisSets.cs`. Static data: one `List<GearGoal>` per spec (27 sets). Example for Fury Warrior pre-raid BiS: Lionheart Helm (head, craft), Onyxia Tooth Pendant (neck, Onyxia), Truestrike Shoulders (shoulder, UBRS), Cape of the Black Baron (back, Strat Baron), Savage Gladiator Chain (chest, BRD), etc. Each entry includes item ID, slot, source dungeon/quest/craft, and priority tier. Load from JSON files: `Config/BisSets/WarriorFury.json`. | Open |
+| 22.6 | **Create pre-built BiS gear sets** — `PreRaidBisSets.cs` loads from template JSONs + 4 templates created. | **Done** (28f88d61) |
 | 22.7 | **Gear evaluation against target set** — `GearEvaluationService.EvaluateGaps()` already exists. | **Done** (pre-existing) |
 | 22.8 | **Gear-driven activity selection** — In StateManager's action injection, when bot is idle and has gear gaps: pick highest-priority gap, resolve source to an activity. Source mapping: "Dungeon:X" → push DungeoneeringTask for dungeon X, "Quest:X" → push QuestingTask for quest X, "Craft:X" → push CraftTask (need materials), "AH" → push AH scan + purchase, "Vendor:X" → push TravelTo vendor + BuyItem. | Open |
 
@@ -391,7 +391,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.12 | **Define `ItemGoal` model** — `ItemGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.13 | **Define `MountGoal` model** — `MountGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
-| 22.14 | **Farm loop for rare drops** — Create `FarmBossTask.cs` in `Exports/BotRunner/Tasks/Progression/`. Given a dungeon + boss: (1) Travel to dungeon entrance (via P21 TravelTask). (2) Enter dungeon. (3) Clear to boss (via DungeoneeringTask waypoints). (4) Kill boss. (5) Check loot for target item. (6) If not found: exit dungeon, reset instance (`.instance reset`), repeat. (7) If found: equip/bank item, mark goal complete. Track attempt count for statistics. | Open |
+| 22.14 | **Farm loop for rare drops** — `FarmBossTask.cs` with travel/enter/clear/loot/reset loop. | **Done** (28f88d61) |
 
 ### 22E — Skill & Profession Training
 
@@ -406,7 +406,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.18 | **Gold tracking in progression** — `CharacterBuildConfig.GoldTargetCopper` sets a savings goal (e.g., 1000000 = 100g for epic mount). StateManager reads `player.Coinage` from snapshot. When below target: prioritize gold-earning activities (grinding high-value mobs, gathering valuable herbs/ore, AH flipping). When above target + buffer: allow spending on gear/consumables. | Open |
-| 22.19 | **Mount acquisition flow** — Create `MountAcquisitionTask.cs`. StateManager evaluates MountGoal: (1) Check level requirement met. (2) Check riding skill learned (skill ID 762 for Riding). If not → push trainer visit. (3) Check gold sufficient. If not → push gold farming. (4) When all prerequisites met → TravelTo mount vendor + BuyItem. Vendor locations: Orc Wolf Handler (Orgrimmar), Raptor Handler (Sen'jin), Kodo Handler (Bloodhoof), Skeleton Horse (Brill), Ram Handler (Amberstill), Horse Handler (Eastvale), Saber Handler (Darnassus). | Open |
+| 22.19 | **Mount acquisition flow** — `MountAcquisitionTask.cs` with prereq evaluation + vendor locations. | **Done** (28f88d61) |
 | 22.20 | **Consumable budget management** — `MaxConsumableSpendPerSessionCopper` added to BotBehaviorConfig. | **Done** (e881ed2d) |
 
 ### 22G — Quest Chain Progression
