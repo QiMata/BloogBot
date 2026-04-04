@@ -129,6 +129,7 @@ message WoWPlayer {
     uint32 honorPoints = 46;                    // Lifetime honorable kills
     uint32 honorableKills = 47;                 // Session honorable kills
     uint32 dishonorableKills = 48;              // Dishonorable kills
+    repeated ProfessionSkillEntry professionSkills = 49; // P16.2: Structured profession tracking
 }
 
 // Reusable message for WoWItem, extending WoWGameObject
@@ -159,6 +160,25 @@ message QuestLogEntry {
     uint32 questLog1 = 1;
     uint32 questLog2 = 2;
     uint32 questLog3 = 3;
+    // P13.2: Structured objective tracking
+    uint32 questId = 4;                           // Extracted quest ID from questLog1
+    repeated QuestObjectiveProgress objectives = 5; // Kill/item/explore progress
+}
+
+// P13.2: Individual quest objective progress
+message QuestObjectiveProgress {
+    uint32 objectiveIndex = 1; // 0-3 (max 4 objectives per quest)
+    uint32 currentCount = 2;   // Current kills/items collected
+    uint32 requiredCount = 3;  // Required kills/items
+    string description = 4;    // e.g. "Plainstrider Beaks"
+}
+
+// P16.2: Profession skill tracking
+message ProfessionSkillEntry {
+    uint32 skillId = 1;       // e.g. 164=Blacksmithing, 186=Mining
+    uint32 currentSkill = 2;  // Current skill level (0-300)
+    uint32 maxSkill = 3;      // Current cap (75/150/225/300)
+    string skillName = 4;     // Human-readable name
 }
 
 message Position {

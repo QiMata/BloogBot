@@ -55,7 +55,7 @@ namespace Game {
             "OAEaLwoNTWF4UG93ZXJFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiAB",
             "KA06AjgBGiwKClN0YXRzRW50cnkSCwoDa2V5GAEgASgNEg0KBXZhbHVlGAIg",
             "ASgNOgI4ARoyChBSZXNpc3RhbmNlc0VudHJ5EgsKA2tleRgBIAEoDRINCgV2",
-            "YWx1ZRgCIAEoDToCOAEipxIKCVdvV1BsYXllchIbCgR1bml0GAEgASgLMg0u",
+            "YWx1ZRgCIAEoDToCOAEi3RIKCVdvV1BsYXllchIbCgR1bml0GAEgASgLMg0u",
             "Z2FtZS5Xb1dVbml0EhQKDHBsYXllckJ5dGVzMBgCIAEoDRIUCgxwbGF5ZXJC",
             "eXRlczEYAyABKA0SFAoMcGxheWVyQnl0ZXMyGAQgASgNEhMKC3BsYXllckZs",
             "YWdzGAUgASgNEiwKD3F1ZXN0TG9nRW50cmllcxgGIAMoCzITLmdhbWUuUXVl",
@@ -91,101 +91,111 @@ namespace Game {
             "AygNEkUKE3JlcHV0YXRpb25TdGFuZGluZ3MYLSADKAsyKC5nYW1lLldvV1Bs",
             "YXllci5SZXB1dGF0aW9uU3RhbmRpbmdzRW50cnkSEwoLaG9ub3JQb2ludHMY",
             "LiABKA0SFgoOaG9ub3JhYmxlS2lsbHMYLyABKA0SGQoRZGlzaG9ub3JhYmxl",
-            "S2lsbHMYMCABKA0aMAoOSW52ZW50b3J5RW50cnkSCwoDa2V5GAEgASgNEg0K",
-            "BXZhbHVlGAIgASgEOgI4ARoyChBCYWdDb250ZW50c0VudHJ5EgsKA2tleRgB",
-            "IAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaLgoMS2V5UmluZ0VudHJ5EgsKA2tl",
-            "eRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaMAoOU2tpbGxJbmZvRW50cnkS",
-            "CwoDa2V5GAEgASgNEg0KBXZhbHVlGAIgASgNOgI4ARo1ChNTcGVsbENvb2xk",
-            "b3duc0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoAjoCOAEaMgoQ",
-            "U3BlbGxTdGFja3NFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06",
-            "AjgBGi8KDUJ1ZmZMaXN0RW50cnkSCwoDa2V5GAEgASgNEg0KBXZhbHVlGAIg",
-            "ASgCOgI4ARo0ChJFeHBsb3JlZFpvbmVzRW50cnkSCwoDa2V5GAEgASgNEg0K",
-            "BXZhbHVlGAIgASgNOgI4ARovCg1Qb3NTdGF0c0VudHJ5EgsKA2tleRgBIAEo",
-            "DRINCgV2YWx1ZRgCIAEoDToCOAEaLwoNTmVnU3RhdHNFbnRyeRILCgNrZXkY",
-            "ASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjQKElBvc1Jlc2lzdEJ1ZmZFbnRy",
-            "eRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjQKEk5lZ1Jlc2lz",
-            "dEJ1ZmZFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjMK",
-            "EUNvbWJhdFJhdGluZ0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEo",
-            "DToCOAEaOgoYUmVwdXRhdGlvblN0YW5kaW5nc0VudHJ5EgsKA2tleRgBIAEo",
-            "DRINCgV2YWx1ZRgCIAEoBToCOAEi0QMKB1dvV0l0ZW0SJwoKZ2FtZU9iamVj",
-            "dBgBIAEoCzITLmdhbWUuV29XR2FtZU9iamVjdBINCgVvd25lchgCIAEoBBIR",
-            "Cgljb250YWluZWQYAyABKAQSDwoHY3JlYXRvchgEIAEoBBITCgtnaWZ0Q3Jl",
-            "YXRvchgFIAEoBBISCgpzdGFja0NvdW50GAYgASgNEhAKCGR1cmF0aW9uGAcg",
-            "ASgNEjUKDHNwZWxsQ2hhcmdlcxgIIAMoCzIfLmdhbWUuV29XSXRlbS5TcGVs",
-            "bENoYXJnZXNFbnRyeRIRCglpdGVtRmxhZ3MYCSABKA0SNQoMZW5jaGFudG1l",
-            "bnRzGAogAygLMh8uZ2FtZS5Xb1dJdGVtLkVuY2hhbnRtZW50c0VudHJ5EhIK",
-            "CmR1cmFiaWxpdHkYCyABKA0SFAoMcHJvcGVydHlTZWVkGAwgASgNEhoKEnJh",
-            "bmRvbVByb3BlcnRpZXNJZBgNIAEoDRozChFTcGVsbENoYXJnZXNFbnRyeRIL",
-            "CgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjMKEUVuY2hhbnRtZW50",
-            "c0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEiPgoMV29X",
-            "Q29udGFpbmVyEhsKBGl0ZW0YASABKAsyDS5nYW1lLldvV0l0ZW0SEQoJaXRl",
-            "bVNsb3RzGAIgAygNIkgKDVF1ZXN0TG9nRW50cnkSEQoJcXVlc3RMb2cxGAEg",
-            "ASgNEhEKCXF1ZXN0TG9nMhgCIAEoDRIRCglxdWVzdExvZzMYAyABKA0iKwoI",
-            "UG9zaXRpb24SCQoBeBgBIAEoAhIJCgF5GAIgASgCEgkKAXoYAyABKAIi+wEK",
-            "EkdhbWVPYmplY3RTbmFwc2hvdBIMCgRndWlkGAEgASgEEg0KBWVudHJ5GAIg",
-            "ASgNEhEKCWRpc3BsYXlJZBgDIAEoDRIWCg5nYW1lT2JqZWN0VHlwZRgEIAEo",
-            "DRINCgVmbGFncxgFIAEoDRIPCgdnb1N0YXRlGAYgASgNEiAKCHBvc2l0aW9u",
-            "GAcgASgLMg4uZ2FtZS5Qb3NpdGlvbhIOCgZmYWNpbmcYCCABKAISDAoEbmFt",
-            "ZRgJIAEoCRIYChBkaXN0YW5jZVRvUGxheWVyGAogASgCEg0KBXNjYWxlGAsg",
-            "ASgCEhQKDGFuaW1Qcm9ncmVzcxgMIAEoDSLpAwoMVW5pdFNuYXBzaG90EgwK",
-            "BGd1aWQYASABKAQSDQoFZW50cnkYAiABKA0SDAoEbmFtZRgDIAEoCRIgCghw",
-            "b3NpdGlvbhgEIAEoCzIOLmdhbWUuUG9zaXRpb24SDgoGZmFjaW5nGAUgASgC",
-            "EhUKDW1vdmVtZW50RmxhZ3MYBiABKA0SDgoGaGVhbHRoGAcgASgNEhEKCW1h",
-            "eEhlYWx0aBgIIAEoDRINCgVsZXZlbBgJIAEoDRIRCgl1bml0RmxhZ3MYCiAB",
-            "KA0SGAoQZGlzdGFuY2VUb1BsYXllchgLIAEoAhIWCg5ib3VuZGluZ1JhZGl1",
-            "cxgMIAEoAhITCgtjb21iYXRSZWFjaBgNIAEoAhIQCghucGNGbGFncxgOIAEo",
-            "DRISCgp0YXJnZXRHdWlkGA8gASgEEhAKCGlzUGxheWVyGBAgASgIEhEKCWhh",
-            "c1NwbGluZRgRIAEoCBITCgtzcGxpbmVGbGFncxgSIAEoDRIYChBzcGxpbmVU",
-            "aW1lUGFzc2VkGBMgASgFEhYKDnNwbGluZUR1cmF0aW9uGBQgASgFEi4KFnNw",
-            "bGluZUZpbmFsRGVzdGluYXRpb24YFSABKAsyDi5nYW1lLlBvc2l0aW9uEhcK",
-            "D3NwbGluZU5vZGVDb3VudBgWIAEoDSJtCgtQYWNrZXRFdmVudBITCgt0aW1l",
-            "c3RhbXBNcxgBIAEoBBIOCgZvcGNvZGUYAiABKA0SEgoKaXNPdXRib3VuZBgD",
-            "IAEoCBIPCgdwYXlsb2FkGAQgASgMEhQKDGFmZmVjdGVkR3VpZBgFIAEoBCLb",
-            "BwoMTW92ZW1lbnREYXRhEhUKDW1vdmVtZW50RmxhZ3MYASABKA0SEAoIZmFs",
-            "bFRpbWUYAiABKA0SGQoRanVtcFZlcnRpY2FsU3BlZWQYAyABKAISFAoManVt",
-            "cFNpbkFuZ2xlGAQgASgCEhQKDGp1bXBDb3NBbmdsZRgFIAEoAhIbChNqdW1w",
-            "SG9yaXpvbnRhbFNwZWVkGAYgASgCEhEKCXN3aW1QaXRjaBgHIAEoAhIRCgl3",
-            "YWxrU3BlZWQYCCABKAISEAoIcnVuU3BlZWQYCSABKAISFAoMcnVuQmFja1Nw",
-            "ZWVkGAogASgCEhEKCXN3aW1TcGVlZBgLIAEoAhIVCg1zd2ltQmFja1NwZWVk",
-            "GAwgASgCEhAKCHR1cm5SYXRlGA0gASgCEiAKCHBvc2l0aW9uGA4gASgLMg4u",
-            "Z2FtZS5Qb3NpdGlvbhIOCgZmYWNpbmcYDyABKAISFgoOZnJhbWVUaW1lc3Rh",
-            "bXAYECABKAQSFQoNdHJhbnNwb3J0R3VpZBgRIAEoBBIYChB0cmFuc3BvcnRP",
-            "ZmZzZXRYGBIgASgCEhgKEHRyYW5zcG9ydE9mZnNldFkYEyABKAISGAoQdHJh",
-            "bnNwb3J0T2Zmc2V0WhgUIAEoAhIcChR0cmFuc3BvcnRPcmllbnRhdGlvbhgV",
-            "IAEoAhIXCg9mYWxsU3RhcnRIZWlnaHQYFiABKAISFAoMY3VycmVudFNwZWVk",
-            "GBcgASgCEhQKDGZhbGxpbmdTcGVlZBgYIAEoAhIzChFuZWFyYnlHYW1lT2Jq",
-            "ZWN0cxgZIAMoCzIYLmdhbWUuR2FtZU9iamVjdFNuYXBzaG90EicKC25lYXJi",
-            "eVVuaXRzGBogAygLMhIuZ2FtZS5Vbml0U25hcHNob3QSEwoLc3BsaW5lRmxh",
-            "Z3MYGyABKA0SKAoQc3BsaW5lRmluYWxQb2ludBgcIAEoCzIOLmdhbWUuUG9z",
-            "aXRpb24SGAoQc3BsaW5lVGFyZ2V0R3VpZBgdIAEoBBIeChZzcGxpbmVGaW5h",
-            "bE9yaWVudGF0aW9uGB4gASgCEhgKEHNwbGluZVRpbWVQYXNzZWQYHyABKAUS",
-            "FgoOc3BsaW5lRHVyYXRpb24YICABKAUSEAoIc3BsaW5lSWQYISABKA0SIwoL",
-            "c3BsaW5lTm9kZXMYIiADKAsyDi5nYW1lLlBvc2l0aW9uEi4KFnNwbGluZUZp",
-            "bmFsRGVzdGluYXRpb24YIyABKAsyDi5nYW1lLlBvc2l0aW9uEhIKCnN5c3Rl",
-            "bVRpY2sYJCABKA0SHgoWaGVhcnRoc3RvbmVDb29sZG93blNlYxglIAEoAiL6",
-            "AQoRTW92ZW1lbnRSZWNvcmRpbmcSFQoNY2hhcmFjdGVyTmFtZRgBIAEoCRIN",
-            "CgVtYXBJZBgCIAEoDRIQCgh6b25lTmFtZRgDIAEoCRIZChFzdGFydFRpbWVz",
-            "dGFtcFV0YxgEIAEoBBIXCg9mcmFtZUludGVydmFsTXMYBSABKA0SIgoGZnJh",
-            "bWVzGAYgAygLMhIuZ2FtZS5Nb3ZlbWVudERhdGESEwoLZGVzY3JpcHRpb24Y",
-            "ByABKAkSDAoEcmFjZRgIIAEoDRIOCgZnZW5kZXIYCSABKA0SIgoHcGFja2V0",
-            "cxgKIAMoCzIRLmdhbWUuUGFja2V0RXZlbnQilAEKBEl0ZW0SCgoCaWQYASAB",
-            "KAQSDAoEbmFtZRgCIAEoCRIMCgRzbG90GAMgASgJEhAKCHF1YW50aXR5GAQg",
-            "ASgNEiQKBXN0YXRzGAUgAygLMhUuZ2FtZS5JdGVtLlN0YXRzRW50cnkaLAoK",
-            "U3RhdHNFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBKpkB",
-            "CgRSYWNlEg0KCVJBQ0VfTk9ORRAAEg4KClJBQ0VfSFVNQU4QARIMCghSQUNF",
-            "X09SQxACEg4KClJBQ0VfRFdBUkYQAxISCg5SQUNFX05JR0hUX0VMRhAEEg8K",
-            "C1JBQ0VfVU5ERUFEEAUSDwoLUkFDRV9UQVVSRU4QBhIOCgpSQUNFX0dOT01F",
-            "EAcSDgoKUkFDRV9UUk9MTBAIYgZwcm90bzM="));
+            "S2lsbHMYMCABKA0SNAoQcHJvZmVzc2lvblNraWxscxgxIAMoCzIaLmdhbWUu",
+            "UHJvZmVzc2lvblNraWxsRW50cnkaMAoOSW52ZW50b3J5RW50cnkSCwoDa2V5",
+            "GAEgASgNEg0KBXZhbHVlGAIgASgEOgI4ARoyChBCYWdDb250ZW50c0VudHJ5",
+            "EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaLgoMS2V5UmluZ0Vu",
+            "dHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaMAoOU2tpbGxJ",
+            "bmZvRW50cnkSCwoDa2V5GAEgASgNEg0KBXZhbHVlGAIgASgNOgI4ARo1ChNT",
+            "cGVsbENvb2xkb3duc0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEo",
+            "AjoCOAEaMgoQU3BlbGxTdGFja3NFbnRyeRILCgNrZXkYASABKA0SDQoFdmFs",
+            "dWUYAiABKA06AjgBGi8KDUJ1ZmZMaXN0RW50cnkSCwoDa2V5GAEgASgNEg0K",
+            "BXZhbHVlGAIgASgCOgI4ARo0ChJFeHBsb3JlZFpvbmVzRW50cnkSCwoDa2V5",
+            "GAEgASgNEg0KBXZhbHVlGAIgASgNOgI4ARovCg1Qb3NTdGF0c0VudHJ5EgsK",
+            "A2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaLwoNTmVnU3RhdHNFbnRy",
+            "eRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjQKElBvc1Jlc2lz",
+            "dEJ1ZmZFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjQK",
+            "Ek5lZ1Jlc2lzdEJ1ZmZFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiAB",
+            "KA06AjgBGjMKEUNvbWJhdFJhdGluZ0VudHJ5EgsKA2tleRgBIAEoDRINCgV2",
+            "YWx1ZRgCIAEoDToCOAEaOgoYUmVwdXRhdGlvblN0YW5kaW5nc0VudHJ5EgsK",
+            "A2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoBToCOAEi0QMKB1dvV0l0ZW0SJwoK",
+            "Z2FtZU9iamVjdBgBIAEoCzITLmdhbWUuV29XR2FtZU9iamVjdBINCgVvd25l",
+            "chgCIAEoBBIRCgljb250YWluZWQYAyABKAQSDwoHY3JlYXRvchgEIAEoBBIT",
+            "CgtnaWZ0Q3JlYXRvchgFIAEoBBISCgpzdGFja0NvdW50GAYgASgNEhAKCGR1",
+            "cmF0aW9uGAcgASgNEjUKDHNwZWxsQ2hhcmdlcxgIIAMoCzIfLmdhbWUuV29X",
+            "SXRlbS5TcGVsbENoYXJnZXNFbnRyeRIRCglpdGVtRmxhZ3MYCSABKA0SNQoM",
+            "ZW5jaGFudG1lbnRzGAogAygLMh8uZ2FtZS5Xb1dJdGVtLkVuY2hhbnRtZW50",
+            "c0VudHJ5EhIKCmR1cmFiaWxpdHkYCyABKA0SFAoMcHJvcGVydHlTZWVkGAwg",
+            "ASgNEhoKEnJhbmRvbVByb3BlcnRpZXNJZBgNIAEoDRozChFTcGVsbENoYXJn",
+            "ZXNFbnRyeRILCgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjMKEUVu",
+            "Y2hhbnRtZW50c0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToC",
+            "OAEiPgoMV29XQ29udGFpbmVyEhsKBGl0ZW0YASABKAsyDS5nYW1lLldvV0l0",
+            "ZW0SEQoJaXRlbVNsb3RzGAIgAygNIosBCg1RdWVzdExvZ0VudHJ5EhEKCXF1",
+            "ZXN0TG9nMRgBIAEoDRIRCglxdWVzdExvZzIYAiABKA0SEQoJcXVlc3RMb2cz",
+            "GAMgASgNEg8KB3F1ZXN0SWQYBCABKA0SMAoKb2JqZWN0aXZlcxgFIAMoCzIc",
+            "LmdhbWUuUXVlc3RPYmplY3RpdmVQcm9ncmVzcyJyChZRdWVzdE9iamVjdGl2",
+            "ZVByb2dyZXNzEhYKDm9iamVjdGl2ZUluZGV4GAEgASgNEhQKDGN1cnJlbnRD",
+            "b3VudBgCIAEoDRIVCg1yZXF1aXJlZENvdW50GAMgASgNEhMKC2Rlc2NyaXB0",
+            "aW9uGAQgASgJImIKFFByb2Zlc3Npb25Ta2lsbEVudHJ5Eg8KB3NraWxsSWQY",
+            "ASABKA0SFAoMY3VycmVudFNraWxsGAIgASgNEhAKCG1heFNraWxsGAMgASgN",
+            "EhEKCXNraWxsTmFtZRgEIAEoCSIrCghQb3NpdGlvbhIJCgF4GAEgASgCEgkK",
+            "AXkYAiABKAISCQoBehgDIAEoAiL7AQoSR2FtZU9iamVjdFNuYXBzaG90EgwK",
+            "BGd1aWQYASABKAQSDQoFZW50cnkYAiABKA0SEQoJZGlzcGxheUlkGAMgASgN",
+            "EhYKDmdhbWVPYmplY3RUeXBlGAQgASgNEg0KBWZsYWdzGAUgASgNEg8KB2dv",
+            "U3RhdGUYBiABKA0SIAoIcG9zaXRpb24YByABKAsyDi5nYW1lLlBvc2l0aW9u",
+            "Eg4KBmZhY2luZxgIIAEoAhIMCgRuYW1lGAkgASgJEhgKEGRpc3RhbmNlVG9Q",
+            "bGF5ZXIYCiABKAISDQoFc2NhbGUYCyABKAISFAoMYW5pbVByb2dyZXNzGAwg",
+            "ASgNIukDCgxVbml0U25hcHNob3QSDAoEZ3VpZBgBIAEoBBINCgVlbnRyeRgC",
+            "IAEoDRIMCgRuYW1lGAMgASgJEiAKCHBvc2l0aW9uGAQgASgLMg4uZ2FtZS5Q",
+            "b3NpdGlvbhIOCgZmYWNpbmcYBSABKAISFQoNbW92ZW1lbnRGbGFncxgGIAEo",
+            "DRIOCgZoZWFsdGgYByABKA0SEQoJbWF4SGVhbHRoGAggASgNEg0KBWxldmVs",
+            "GAkgASgNEhEKCXVuaXRGbGFncxgKIAEoDRIYChBkaXN0YW5jZVRvUGxheWVy",
+            "GAsgASgCEhYKDmJvdW5kaW5nUmFkaXVzGAwgASgCEhMKC2NvbWJhdFJlYWNo",
+            "GA0gASgCEhAKCG5wY0ZsYWdzGA4gASgNEhIKCnRhcmdldEd1aWQYDyABKAQS",
+            "EAoIaXNQbGF5ZXIYECABKAgSEQoJaGFzU3BsaW5lGBEgASgIEhMKC3NwbGlu",
+            "ZUZsYWdzGBIgASgNEhgKEHNwbGluZVRpbWVQYXNzZWQYEyABKAUSFgoOc3Bs",
+            "aW5lRHVyYXRpb24YFCABKAUSLgoWc3BsaW5lRmluYWxEZXN0aW5hdGlvbhgV",
+            "IAEoCzIOLmdhbWUuUG9zaXRpb24SFwoPc3BsaW5lTm9kZUNvdW50GBYgASgN",
+            "Im0KC1BhY2tldEV2ZW50EhMKC3RpbWVzdGFtcE1zGAEgASgEEg4KBm9wY29k",
+            "ZRgCIAEoDRISCgppc091dGJvdW5kGAMgASgIEg8KB3BheWxvYWQYBCABKAwS",
+            "FAoMYWZmZWN0ZWRHdWlkGAUgASgEItsHCgxNb3ZlbWVudERhdGESFQoNbW92",
+            "ZW1lbnRGbGFncxgBIAEoDRIQCghmYWxsVGltZRgCIAEoDRIZChFqdW1wVmVy",
+            "dGljYWxTcGVlZBgDIAEoAhIUCgxqdW1wU2luQW5nbGUYBCABKAISFAoManVt",
+            "cENvc0FuZ2xlGAUgASgCEhsKE2p1bXBIb3Jpem9udGFsU3BlZWQYBiABKAIS",
+            "EQoJc3dpbVBpdGNoGAcgASgCEhEKCXdhbGtTcGVlZBgIIAEoAhIQCghydW5T",
+            "cGVlZBgJIAEoAhIUCgxydW5CYWNrU3BlZWQYCiABKAISEQoJc3dpbVNwZWVk",
+            "GAsgASgCEhUKDXN3aW1CYWNrU3BlZWQYDCABKAISEAoIdHVyblJhdGUYDSAB",
+            "KAISIAoIcG9zaXRpb24YDiABKAsyDi5nYW1lLlBvc2l0aW9uEg4KBmZhY2lu",
+            "ZxgPIAEoAhIWCg5mcmFtZVRpbWVzdGFtcBgQIAEoBBIVCg10cmFuc3BvcnRH",
+            "dWlkGBEgASgEEhgKEHRyYW5zcG9ydE9mZnNldFgYEiABKAISGAoQdHJhbnNw",
+            "b3J0T2Zmc2V0WRgTIAEoAhIYChB0cmFuc3BvcnRPZmZzZXRaGBQgASgCEhwK",
+            "FHRyYW5zcG9ydE9yaWVudGF0aW9uGBUgASgCEhcKD2ZhbGxTdGFydEhlaWdo",
+            "dBgWIAEoAhIUCgxjdXJyZW50U3BlZWQYFyABKAISFAoMZmFsbGluZ1NwZWVk",
+            "GBggASgCEjMKEW5lYXJieUdhbWVPYmplY3RzGBkgAygLMhguZ2FtZS5HYW1l",
+            "T2JqZWN0U25hcHNob3QSJwoLbmVhcmJ5VW5pdHMYGiADKAsyEi5nYW1lLlVu",
+            "aXRTbmFwc2hvdBITCgtzcGxpbmVGbGFncxgbIAEoDRIoChBzcGxpbmVGaW5h",
+            "bFBvaW50GBwgASgLMg4uZ2FtZS5Qb3NpdGlvbhIYChBzcGxpbmVUYXJnZXRH",
+            "dWlkGB0gASgEEh4KFnNwbGluZUZpbmFsT3JpZW50YXRpb24YHiABKAISGAoQ",
+            "c3BsaW5lVGltZVBhc3NlZBgfIAEoBRIWCg5zcGxpbmVEdXJhdGlvbhggIAEo",
+            "BRIQCghzcGxpbmVJZBghIAEoDRIjCgtzcGxpbmVOb2RlcxgiIAMoCzIOLmdh",
+            "bWUuUG9zaXRpb24SLgoWc3BsaW5lRmluYWxEZXN0aW5hdGlvbhgjIAEoCzIO",
+            "LmdhbWUuUG9zaXRpb24SEgoKc3lzdGVtVGljaxgkIAEoDRIeChZoZWFydGhz",
+            "dG9uZUNvb2xkb3duU2VjGCUgASgCIvoBChFNb3ZlbWVudFJlY29yZGluZxIV",
+            "Cg1jaGFyYWN0ZXJOYW1lGAEgASgJEg0KBW1hcElkGAIgASgNEhAKCHpvbmVO",
+            "YW1lGAMgASgJEhkKEXN0YXJ0VGltZXN0YW1wVXRjGAQgASgEEhcKD2ZyYW1l",
+            "SW50ZXJ2YWxNcxgFIAEoDRIiCgZmcmFtZXMYBiADKAsyEi5nYW1lLk1vdmVt",
+            "ZW50RGF0YRITCgtkZXNjcmlwdGlvbhgHIAEoCRIMCgRyYWNlGAggASgNEg4K",
+            "BmdlbmRlchgJIAEoDRIiCgdwYWNrZXRzGAogAygLMhEuZ2FtZS5QYWNrZXRF",
+            "dmVudCKUAQoESXRlbRIKCgJpZBgBIAEoBBIMCgRuYW1lGAIgASgJEgwKBHNs",
+            "b3QYAyABKAkSEAoIcXVhbnRpdHkYBCABKA0SJAoFc3RhdHMYBSADKAsyFS5n",
+            "YW1lLkl0ZW0uU3RhdHNFbnRyeRosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEo",
+            "DRINCgV2YWx1ZRgCIAEoDToCOAEqmQEKBFJhY2USDQoJUkFDRV9OT05FEAAS",
+            "DgoKUkFDRV9IVU1BThABEgwKCFJBQ0VfT1JDEAISDgoKUkFDRV9EV0FSRhAD",
+            "EhIKDlJBQ0VfTklHSFRfRUxGEAQSDwoLUkFDRV9VTkRFQUQQBRIPCgtSQUNF",
+            "X1RBVVJFThAGEg4KClJBQ0VfR05PTUUQBxIOCgpSQUNFX1RST0xMEAhiBnBy",
+            "b3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Race), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWObject), global::Game.WoWObject.Parser, new[]{ "Guid", "MapId", "ZoneId", "ObjectType", "ScaleX", "Height", "Facing", "Position" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWGameObject), global::Game.WoWGameObject.Parser, new[]{ "Base", "GoState", "Level", "FactionTemplate", "DisplayId", "Flags", "DynamicFlags", "Name", "Entry", "GameObjectType", "ArtKit", "AnimProgress" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWUnit), global::Game.WoWUnit.Parser, new[]{ "GameObject", "Charm", "Summon", "CharmedBy", "SummonedBy", "CreatedBy", "TargetGuid", "Persuaded", "ChannelObject", "ChannelSpellId", "Health", "MaxHealth", "Power", "MaxPower", "Stats", "Resistances", "Bytes0", "Bytes1", "Bytes2", "MountDisplayId", "UnitFlags", "MovementFlags", "DynamicFlags", "NpcFlags", "Auras", "AuraFlags", "AuraLevels", "AuraApplications", "AuraState", "PetNumber", "BoundingRadius", "CombatReach", "UnitReaction" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, }),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWPlayer), global::Game.WoWPlayer.Parser, new[]{ "Unit", "PlayerBytes0", "PlayerBytes1", "PlayerBytes2", "PlayerFlags", "QuestLogEntries", "Inventory", "BagContents", "KeyRing", "FarsightGuid", "ComboTargetGuid", "PlayerXP", "SkillInfo", "SpellList", "SpellCooldowns", "SpellStacks", "BuffList", "CharacterPoints1", "CharacterPoints2", "TrackCreatures", "TrackResources", "BlockPercent", "DodgePercent", "ParryPercent", "CritPercent", "RangedCritPercent", "ExploredZones", "RestStateExperience", "Coinage", "PosModDamageDone", "NegModDamageDone", "PctModDamageDone", "PosStats", "NegStats", "PosResistBuff", "NegResistBuff", "AmmoId", "SelfResSpell", "PvpMedals", "SessionKills", "WatchedFactionIndex", "CombatRating", "CorpseRecoveryDelaySeconds", "DiscoveredFlightNodes", "ReputationStandings", "HonorPoints", "HonorableKills", "DishonorableKills" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, null, null, null, null, null, null, null, null, null, null, }),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWPlayer), global::Game.WoWPlayer.Parser, new[]{ "Unit", "PlayerBytes0", "PlayerBytes1", "PlayerBytes2", "PlayerFlags", "QuestLogEntries", "Inventory", "BagContents", "KeyRing", "FarsightGuid", "ComboTargetGuid", "PlayerXP", "SkillInfo", "SpellList", "SpellCooldowns", "SpellStacks", "BuffList", "CharacterPoints1", "CharacterPoints2", "TrackCreatures", "TrackResources", "BlockPercent", "DodgePercent", "ParryPercent", "CritPercent", "RangedCritPercent", "ExploredZones", "RestStateExperience", "Coinage", "PosModDamageDone", "NegModDamageDone", "PctModDamageDone", "PosStats", "NegStats", "PosResistBuff", "NegResistBuff", "AmmoId", "SelfResSpell", "PvpMedals", "SessionKills", "WatchedFactionIndex", "CombatRating", "CorpseRecoveryDelaySeconds", "DiscoveredFlightNodes", "ReputationStandings", "HonorPoints", "HonorableKills", "DishonorableKills", "ProfessionSkills" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, null, null, null, null, null, null, null, null, null, null, }),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWItem), global::Game.WoWItem.Parser, new[]{ "GameObject", "Owner", "Contained", "Creator", "GiftCreator", "StackCount", "Duration", "SpellCharges", "ItemFlags", "Enchantments", "Durability", "PropertySeed", "RandomPropertiesId" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, }),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWContainer), global::Game.WoWContainer.Parser, new[]{ "Item", "ItemSlots" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.QuestLogEntry), global::Game.QuestLogEntry.Parser, new[]{ "QuestLog1", "QuestLog2", "QuestLog3" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.QuestLogEntry), global::Game.QuestLogEntry.Parser, new[]{ "QuestLog1", "QuestLog2", "QuestLog3", "QuestId", "Objectives" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.QuestObjectiveProgress), global::Game.QuestObjectiveProgress.Parser, new[]{ "ObjectiveIndex", "CurrentCount", "RequiredCount", "Description" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.ProfessionSkillEntry), global::Game.ProfessionSkillEntry.Parser, new[]{ "SkillId", "CurrentSkill", "MaxSkill", "SkillName" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.Position), global::Game.Position.Parser, new[]{ "X", "Y", "Z" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer", "Scale", "AnimProgress" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.UnitSnapshot), global::Game.UnitSnapshot.Parser, new[]{ "Guid", "Entry", "Name", "Position", "Facing", "MovementFlags", "Health", "MaxHealth", "Level", "UnitFlags", "DistanceToPlayer", "BoundingRadius", "CombatReach", "NpcFlags", "TargetGuid", "IsPlayer", "HasSpline", "SplineFlags", "SplineTimePassed", "SplineDuration", "SplineFinalDestination", "SplineNodeCount" }, null, null, null, null),
@@ -2718,6 +2728,7 @@ namespace Game {
       honorPoints_ = other.honorPoints_;
       honorableKills_ = other.honorableKills_;
       dishonorableKills_ = other.dishonorableKills_;
+      professionSkills_ = other.professionSkills_.Clone();
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3301,6 +3312,20 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "professionSkills" field.</summary>
+    public const int ProfessionSkillsFieldNumber = 49;
+    private static readonly pb::FieldCodec<global::Game.ProfessionSkillEntry> _repeated_professionSkills_codec
+        = pb::FieldCodec.ForMessage(394, global::Game.ProfessionSkillEntry.Parser);
+    private readonly pbc::RepeatedField<global::Game.ProfessionSkillEntry> professionSkills_ = new pbc::RepeatedField<global::Game.ProfessionSkillEntry>();
+    /// <summary>
+    /// P16.2: Structured profession tracking
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<global::Game.ProfessionSkillEntry> ProfessionSkills {
+      get { return professionSkills_; }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3364,6 +3389,7 @@ namespace Game {
       if (HonorPoints != other.HonorPoints) return false;
       if (HonorableKills != other.HonorableKills) return false;
       if (DishonorableKills != other.DishonorableKills) return false;
+      if(!professionSkills_.Equals(other.professionSkills_)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3419,6 +3445,7 @@ namespace Game {
       if (HonorPoints != 0) hash ^= HonorPoints.GetHashCode();
       if (HonorableKills != 0) hash ^= HonorableKills.GetHashCode();
       if (DishonorableKills != 0) hash ^= DishonorableKills.GetHashCode();
+      hash ^= professionSkills_.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3578,6 +3605,7 @@ namespace Game {
         output.WriteRawTag(128, 3);
         output.WriteUInt32(DishonorableKills);
       }
+      professionSkills_.WriteTo(output, _repeated_professionSkills_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3729,6 +3757,7 @@ namespace Game {
         output.WriteRawTag(128, 3);
         output.WriteUInt32(DishonorableKills);
       }
+      professionSkills_.WriteTo(ref output, _repeated_professionSkills_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3849,6 +3878,7 @@ namespace Game {
       if (DishonorableKills != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(DishonorableKills);
       }
+      size += professionSkills_.CalculateSize(_repeated_professionSkills_codec);
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -3974,6 +4004,7 @@ namespace Game {
       if (other.DishonorableKills != 0) {
         DishonorableKills = other.DishonorableKills;
       }
+      professionSkills_.Add(other.professionSkills_);
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -4190,6 +4221,10 @@ namespace Game {
             DishonorableKills = input.ReadUInt32();
             break;
           }
+          case 394: {
+            professionSkills_.AddEntriesFrom(input, _repeated_professionSkills_codec);
+            break;
+          }
         }
       }
     #endif
@@ -4404,6 +4439,10 @@ namespace Game {
           }
           case 384: {
             DishonorableKills = input.ReadUInt32();
+            break;
+          }
+          case 394: {
+            professionSkills_.AddEntriesFrom(ref input, _repeated_professionSkills_codec);
             break;
           }
         }
@@ -5324,6 +5363,8 @@ namespace Game {
       questLog1_ = other.questLog1_;
       questLog2_ = other.questLog2_;
       questLog3_ = other.questLog3_;
+      questId_ = other.questId_;
+      objectives_ = other.objectives_.Clone();
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5369,6 +5410,35 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "questId" field.</summary>
+    public const int QuestIdFieldNumber = 4;
+    private uint questId_;
+    /// <summary>
+    /// P13.2: Structured objective tracking
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint QuestId {
+      get { return questId_; }
+      set {
+        questId_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "objectives" field.</summary>
+    public const int ObjectivesFieldNumber = 5;
+    private static readonly pb::FieldCodec<global::Game.QuestObjectiveProgress> _repeated_objectives_codec
+        = pb::FieldCodec.ForMessage(42, global::Game.QuestObjectiveProgress.Parser);
+    private readonly pbc::RepeatedField<global::Game.QuestObjectiveProgress> objectives_ = new pbc::RepeatedField<global::Game.QuestObjectiveProgress>();
+    /// <summary>
+    /// Kill/item/explore progress
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<global::Game.QuestObjectiveProgress> Objectives {
+      get { return objectives_; }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5387,6 +5457,8 @@ namespace Game {
       if (QuestLog1 != other.QuestLog1) return false;
       if (QuestLog2 != other.QuestLog2) return false;
       if (QuestLog3 != other.QuestLog3) return false;
+      if (QuestId != other.QuestId) return false;
+      if(!objectives_.Equals(other.objectives_)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5397,6 +5469,8 @@ namespace Game {
       if (QuestLog1 != 0) hash ^= QuestLog1.GetHashCode();
       if (QuestLog2 != 0) hash ^= QuestLog2.GetHashCode();
       if (QuestLog3 != 0) hash ^= QuestLog3.GetHashCode();
+      if (QuestId != 0) hash ^= QuestId.GetHashCode();
+      hash ^= objectives_.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5427,6 +5501,11 @@ namespace Game {
         output.WriteRawTag(24);
         output.WriteUInt32(QuestLog3);
       }
+      if (QuestId != 0) {
+        output.WriteRawTag(32);
+        output.WriteUInt32(QuestId);
+      }
+      objectives_.WriteTo(output, _repeated_objectives_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -5449,6 +5528,11 @@ namespace Game {
         output.WriteRawTag(24);
         output.WriteUInt32(QuestLog3);
       }
+      if (QuestId != 0) {
+        output.WriteRawTag(32);
+        output.WriteUInt32(QuestId);
+      }
+      objectives_.WriteTo(ref output, _repeated_objectives_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -5468,6 +5552,10 @@ namespace Game {
       if (QuestLog3 != 0) {
         size += 1 + pb::CodedOutputStream.ComputeUInt32Size(QuestLog3);
       }
+      if (QuestId != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(QuestId);
+      }
+      size += objectives_.CalculateSize(_repeated_objectives_codec);
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -5489,6 +5577,10 @@ namespace Game {
       if (other.QuestLog3 != 0) {
         QuestLog3 = other.QuestLog3;
       }
+      if (other.QuestId != 0) {
+        QuestId = other.QuestId;
+      }
+      objectives_.Add(other.objectives_);
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -5518,6 +5610,14 @@ namespace Game {
           }
           case 24: {
             QuestLog3 = input.ReadUInt32();
+            break;
+          }
+          case 32: {
+            QuestId = input.ReadUInt32();
+            break;
+          }
+          case 42: {
+            objectives_.AddEntriesFrom(input, _repeated_objectives_codec);
             break;
           }
         }
@@ -5551,6 +5651,662 @@ namespace Game {
             QuestLog3 = input.ReadUInt32();
             break;
           }
+          case 32: {
+            QuestId = input.ReadUInt32();
+            break;
+          }
+          case 42: {
+            objectives_.AddEntriesFrom(ref input, _repeated_objectives_codec);
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
+  /// P13.2: Individual quest objective progress
+  /// </summary>
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class QuestObjectiveProgress : pb::IMessage<QuestObjectiveProgress>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<QuestObjectiveProgress> _parser = new pb::MessageParser<QuestObjectiveProgress>(() => new QuestObjectiveProgress());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<QuestObjectiveProgress> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[7]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public QuestObjectiveProgress() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public QuestObjectiveProgress(QuestObjectiveProgress other) : this() {
+      objectiveIndex_ = other.objectiveIndex_;
+      currentCount_ = other.currentCount_;
+      requiredCount_ = other.requiredCount_;
+      description_ = other.description_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public QuestObjectiveProgress Clone() {
+      return new QuestObjectiveProgress(this);
+    }
+
+    /// <summary>Field number for the "objectiveIndex" field.</summary>
+    public const int ObjectiveIndexFieldNumber = 1;
+    private uint objectiveIndex_;
+    /// <summary>
+    /// 0-3 (max 4 objectives per quest)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint ObjectiveIndex {
+      get { return objectiveIndex_; }
+      set {
+        objectiveIndex_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "currentCount" field.</summary>
+    public const int CurrentCountFieldNumber = 2;
+    private uint currentCount_;
+    /// <summary>
+    /// Current kills/items collected
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint CurrentCount {
+      get { return currentCount_; }
+      set {
+        currentCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "requiredCount" field.</summary>
+    public const int RequiredCountFieldNumber = 3;
+    private uint requiredCount_;
+    /// <summary>
+    /// Required kills/items
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint RequiredCount {
+      get { return requiredCount_; }
+      set {
+        requiredCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "description" field.</summary>
+    public const int DescriptionFieldNumber = 4;
+    private string description_ = "";
+    /// <summary>
+    /// e.g. "Plainstrider Beaks"
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string Description {
+      get { return description_; }
+      set {
+        description_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as QuestObjectiveProgress);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(QuestObjectiveProgress other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (ObjectiveIndex != other.ObjectiveIndex) return false;
+      if (CurrentCount != other.CurrentCount) return false;
+      if (RequiredCount != other.RequiredCount) return false;
+      if (Description != other.Description) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (ObjectiveIndex != 0) hash ^= ObjectiveIndex.GetHashCode();
+      if (CurrentCount != 0) hash ^= CurrentCount.GetHashCode();
+      if (RequiredCount != 0) hash ^= RequiredCount.GetHashCode();
+      if (Description.Length != 0) hash ^= Description.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (ObjectiveIndex != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(ObjectiveIndex);
+      }
+      if (CurrentCount != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CurrentCount);
+      }
+      if (RequiredCount != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(RequiredCount);
+      }
+      if (Description.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(Description);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (ObjectiveIndex != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(ObjectiveIndex);
+      }
+      if (CurrentCount != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CurrentCount);
+      }
+      if (RequiredCount != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(RequiredCount);
+      }
+      if (Description.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(Description);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (ObjectiveIndex != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(ObjectiveIndex);
+      }
+      if (CurrentCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(CurrentCount);
+      }
+      if (RequiredCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(RequiredCount);
+      }
+      if (Description.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(Description);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(QuestObjectiveProgress other) {
+      if (other == null) {
+        return;
+      }
+      if (other.ObjectiveIndex != 0) {
+        ObjectiveIndex = other.ObjectiveIndex;
+      }
+      if (other.CurrentCount != 0) {
+        CurrentCount = other.CurrentCount;
+      }
+      if (other.RequiredCount != 0) {
+        RequiredCount = other.RequiredCount;
+      }
+      if (other.Description.Length != 0) {
+        Description = other.Description;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            ObjectiveIndex = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            CurrentCount = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            RequiredCount = input.ReadUInt32();
+            break;
+          }
+          case 34: {
+            Description = input.ReadString();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            ObjectiveIndex = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            CurrentCount = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            RequiredCount = input.ReadUInt32();
+            break;
+          }
+          case 34: {
+            Description = input.ReadString();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
+  /// P16.2: Profession skill tracking
+  /// </summary>
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class ProfessionSkillEntry : pb::IMessage<ProfessionSkillEntry>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<ProfessionSkillEntry> _parser = new pb::MessageParser<ProfessionSkillEntry>(() => new ProfessionSkillEntry());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<ProfessionSkillEntry> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[8]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProfessionSkillEntry() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProfessionSkillEntry(ProfessionSkillEntry other) : this() {
+      skillId_ = other.skillId_;
+      currentSkill_ = other.currentSkill_;
+      maxSkill_ = other.maxSkill_;
+      skillName_ = other.skillName_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ProfessionSkillEntry Clone() {
+      return new ProfessionSkillEntry(this);
+    }
+
+    /// <summary>Field number for the "skillId" field.</summary>
+    public const int SkillIdFieldNumber = 1;
+    private uint skillId_;
+    /// <summary>
+    /// e.g. 164=Blacksmithing, 186=Mining
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint SkillId {
+      get { return skillId_; }
+      set {
+        skillId_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "currentSkill" field.</summary>
+    public const int CurrentSkillFieldNumber = 2;
+    private uint currentSkill_;
+    /// <summary>
+    /// Current skill level (0-300)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint CurrentSkill {
+      get { return currentSkill_; }
+      set {
+        currentSkill_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "maxSkill" field.</summary>
+    public const int MaxSkillFieldNumber = 3;
+    private uint maxSkill_;
+    /// <summary>
+    /// Current cap (75/150/225/300)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint MaxSkill {
+      get { return maxSkill_; }
+      set {
+        maxSkill_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "skillName" field.</summary>
+    public const int SkillNameFieldNumber = 4;
+    private string skillName_ = "";
+    /// <summary>
+    /// Human-readable name
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string SkillName {
+      get { return skillName_; }
+      set {
+        skillName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as ProfessionSkillEntry);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(ProfessionSkillEntry other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (SkillId != other.SkillId) return false;
+      if (CurrentSkill != other.CurrentSkill) return false;
+      if (MaxSkill != other.MaxSkill) return false;
+      if (SkillName != other.SkillName) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (SkillId != 0) hash ^= SkillId.GetHashCode();
+      if (CurrentSkill != 0) hash ^= CurrentSkill.GetHashCode();
+      if (MaxSkill != 0) hash ^= MaxSkill.GetHashCode();
+      if (SkillName.Length != 0) hash ^= SkillName.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (SkillId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SkillId);
+      }
+      if (CurrentSkill != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CurrentSkill);
+      }
+      if (MaxSkill != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(MaxSkill);
+      }
+      if (SkillName.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(SkillName);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (SkillId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SkillId);
+      }
+      if (CurrentSkill != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CurrentSkill);
+      }
+      if (MaxSkill != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(MaxSkill);
+      }
+      if (SkillName.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(SkillName);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (SkillId != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(SkillId);
+      }
+      if (CurrentSkill != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(CurrentSkill);
+      }
+      if (MaxSkill != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(MaxSkill);
+      }
+      if (SkillName.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(SkillName);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(ProfessionSkillEntry other) {
+      if (other == null) {
+        return;
+      }
+      if (other.SkillId != 0) {
+        SkillId = other.SkillId;
+      }
+      if (other.CurrentSkill != 0) {
+        CurrentSkill = other.CurrentSkill;
+      }
+      if (other.MaxSkill != 0) {
+        MaxSkill = other.MaxSkill;
+      }
+      if (other.SkillName.Length != 0) {
+        SkillName = other.SkillName;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            SkillId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            CurrentSkill = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            MaxSkill = input.ReadUInt32();
+            break;
+          }
+          case 34: {
+            SkillName = input.ReadString();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            SkillId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            CurrentSkill = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            MaxSkill = input.ReadUInt32();
+            break;
+          }
+          case 34: {
+            SkillName = input.ReadString();
+            break;
+          }
         }
       }
     }
@@ -5573,7 +6329,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[7]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[9]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -5849,7 +6605,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[8]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[10]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -6487,7 +7243,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[9]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[11]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -7529,7 +8285,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[10]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[12]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -7893,7 +8649,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[11]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[13]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -9460,7 +10216,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[12]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[14]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -9990,7 +10746,7 @@ namespace Game {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Game.GameReflection.Descriptor.MessageTypes[13]; }
+      get { return global::Game.GameReflection.Descriptor.MessageTypes[15]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

@@ -87,6 +87,11 @@ namespace WoWSharpClient
 
         // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
 
+        /// <summary>
+        /// P9.4: Per-instance SplineController. Falls back to Splines.Instance for backward compatibility.
+        /// Set this to a per-bot SplineController for multi-bot-per-process mode.
+        /// </summary>
+        public SplineController SplineCtrl { get; set; } = Splines.Instance;
 
         private WoWSharpObjectManager() { }
 
@@ -155,7 +160,7 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnSpellGo += EventEmitter_OnSpellGo;
 
             // Restore player control when server-driven spline completes
-            Splines.Instance.OnSplineCompleted += OnSplineCompleted;
+            SplineCtrl.OnSplineCompleted += OnSplineCompleted;
 
             _loginScreen = new(_woWClient);
             _realmScreen = new(_woWClient);
@@ -287,7 +292,7 @@ namespace WoWSharpClient
                 var deltaSec = (float)delta.TotalMilliseconds / 1000f;
 
                 // 1. Advance every monster/NPC spline before physics
-                Splines.Instance.Update((float)delta.TotalMilliseconds);
+                SplineCtrl.Update((float)delta.TotalMilliseconds);
 
                 // 1a. Keep passenger world positions in sync with moving transports.
                 SyncTransportPassengerWorldPositions();

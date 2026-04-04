@@ -634,7 +634,7 @@ namespace WoWSharpClient
             // SplineType.Stop means the server cancelled the spline
             if (block.SplineType == SplineType.Stop)
             {
-                Splines.Instance.Remove(guid);
+                SplineCtrl.Remove(guid);
                 if (isLocalPlayer && !_isInControl)
                 {
                     _isInControl = true;
@@ -669,7 +669,7 @@ namespace WoWSharpClient
                 durationMs: block.SplineTimestamp
             );
 
-            Splines.Instance.AddOrUpdate(spline, currentWorldTimeMs);
+            SplineCtrl.AddOrUpdate(spline, currentWorldTimeMs);
 
             // For local player: suppress physics while server controls movement
             if (isLocalPlayer)
