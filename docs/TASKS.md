@@ -413,8 +413,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.21 | **Quest chain goal config** — `CharacterBuildConfig.QuestChains` is a list like: `["OnyxiaAttunement", "MoltenCoreAttunement", "ClassQuestWhirlwindAxe"]`. Each references a named chain defined in `QuestChainData.cs`. A chain is an ordered list of quest IDs with NPC locations and prerequisites. | Open |
-| 22.22 | **Quest chain data** — File: `Exports/BotRunner/Progression/QuestChainData.cs`. Define key vanilla quest chains as ordered lists: Onyxia attunement (Alliance/Horde variants), MC attunement, BWL attunement, class-specific quests (Warrior Whirlwind Axe, Warlock mount, Paladin mount, Sunken Temple class quests), key zone chains (Defias Brotherhood, Legend of Stalvan, Missing Diplomat). ~20 chains with full quest ID sequences. Source: MaNGOS `quest_template` table. | Open |
+| 22.21 | **Quest chain goal config** — `QuestChains` field already in CharacterBuildConfig. | **Done** (pre-existing) |
+| 22.22 | **Quest chain data** — `QuestChainData.cs` with 7 chains (attunements, class quests, zone chains). | **Done** (e5e3c6d6) |
 | 22.23 | **Quest chain progress tracking** — StateManager reads completed quest IDs from snapshot (parse quest log entries and compare against chain requirements). For each active chain goal: determine next incomplete quest, push appropriate activity (TravelTo quest giver, accept, complete objectives, turn in). | Open |
 
 ### 22H — Progression Planner (StateManager Decision Layer)
