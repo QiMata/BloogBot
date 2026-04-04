@@ -95,6 +95,13 @@ namespace WoWStateManager
                 _configuration["SceneDataService:Port"]
                 ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
                 ?? "5003";
+            // Forward WWOW_DATA_DIR so the BG bot's local Navigation.dll can find
+            // terrain/collision data (maps/, vmaps/, scenes/). Without this, the local
+            // physics engine has no geometry and the bot falls through the world.
+            var wwowDataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+            if (!string.IsNullOrEmpty(wwowDataDir))
+                psi.Environment["WWOW_DATA_DIR"] = wwowDataDir;
+
             psi.Environment["CharacterStateListener__IpAddress"] = _configuration["CharacterStateClient:IpAddress"] ?? "127.0.0.1";
             psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "5002";
             psi.Environment["RealmEndpoint__IpAddress"] = _configuration["RealmEndpoint:IpAddress"] ?? "127.0.0.1";

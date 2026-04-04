@@ -214,10 +214,16 @@ internal static class NativeLocalPhysics
         if (_preloadedMapIdSet.Contains(mapId))
             return;
 
+        Console.WriteLine($"[NativeLocalPhysics] Preloading map {mapId}...");
+        Console.Out.Flush();
+
         if (TestPreloadMapOverride != null)
             TestPreloadMapOverride(mapId);
         else
             NativePhysics.PreloadMap(mapId);
+
+        Console.WriteLine($"[NativeLocalPhysics] Map {mapId} preloaded.");
+        Console.Out.Flush();
 
         _preloadedMapIdSet.Add(mapId);
         _preloadedMapIds.Add(mapId);
@@ -245,6 +251,8 @@ internal static class NativeLocalPhysics
             return;
 
         var dataDir = ResolveDataDirectory();
+        Console.WriteLine($"[NativeLocalPhysics] ResolveDataDirectory => '{dataDir ?? "(null)"}'");
+        Console.Out.Flush();
 
         if (!string.IsNullOrEmpty(dataDir))
         {
@@ -252,6 +260,13 @@ internal static class NativeLocalPhysics
                 TestSetDataDirectoryOverride(dataDir);
             else
                 NativePhysics.SetDataDirectory(dataDir);
+            Console.WriteLine($"[NativeLocalPhysics] SetDataDirectory('{dataDir}') called.");
+            Console.Out.Flush();
+        }
+        else
+        {
+            Console.WriteLine("[NativeLocalPhysics] WARNING: No data directory found. Physics will have no terrain data.");
+            Console.Out.Flush();
         }
 
         _initialized = true;
