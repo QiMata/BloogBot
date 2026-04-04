@@ -599,7 +599,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 9.20 | **Partitioned StateManager** — Run M StateManager instances. Each manages a shard of bots by zone/map. Bots connect to their zone's StateManager. Cross-zone coordination via inter-StateManager gossip protocol. File: `Services/WoWStateManager/StateManagerCluster.cs`. | Open |
-| 9.21 | **Replace `Dictionary<string, ...> + lock`** — Use `ConcurrentDictionary` everywhere. Remove `_managedServicesLock`. Use `ConcurrentDictionary.AddOrUpdate()` for atomic operations. Partition coordination scan: combat coordinator only scans bots in same zone/area. | Open |
+| 9.21 | **Replace `Dictionary<string, ...> + lock`** — Already using ConcurrentDictionary in CharacterStateSocketListener. | **Done** (pre-existing) |
 | 9.22 | **Replace thread-per-bot log pipes** — Current: 1 `BotLogPipeServer` per bot (named pipe + thread). Replace with structured logging via `ILogger` + Serilog sink that writes to shared log file with bot ID tag. Eliminate 3000 pipe threads. | Open |
 | 9.23 | **Bot process pooling** — Instead of 1 OS process per bot, run `MultiBotHostWorker` processes that each host 50-100 `BotContext` instances. 3000 bots = 30-60 processes instead of 3000. Each process manages its own `WoWClient` connections. StateManager launches and monitors host processes, not individual bots. | Open |
 
