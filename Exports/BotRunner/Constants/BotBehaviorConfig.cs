@@ -118,6 +118,13 @@ public class BotBehaviorConfig
     public int CraftMaterialThreshold { get; set; } = 5;
 
     // ── Economy ─────────────────────────────────────────────
+    /// <summary>
+    /// Maximum copper to spend on consumables (food/drink/potions) per session.
+    /// 0 = unlimited. When budget exceeded, rely on natural regen instead of buying.
+    /// Ensures bots save copper for mounts/gear when a gold target is set.
+    /// </summary>
+    public int MaxConsumableSpendPerSessionCopper { get; set; } = 0;
+
     /// <summary>Detection range for auctioneers (yards).</summary>
     public float AuctioneerDetectRange { get; set; } = 50.0f;
 
