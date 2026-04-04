@@ -1,6 +1,7 @@
 using Communication;
 using WoWStateManager.Settings;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace WoWStateManager.Progression
 {
@@ -18,11 +19,12 @@ namespace WoWStateManager.Progression
         /// Priority order:
         ///   1. Survival (dead/ghost) — deferred to BotRunner's autonomous death recovery
         ///   2. Level-up training — visit trainer when new spells are available
-        ///   3. Gear — farm BiS upgrades for high-priority slots
-        ///   4. Mount — gold farm or mount purchase at level 40+
-        ///   5. Gold — grind if below savings target
-        ///   6. Profession — level gathering/crafting to configured targets
-        ///   7. Default — null (bot self-directs)
+        ///   3. Gear — farm BiS item from highest-priority gap
+        ///   4. Reputation — grind rep for goals below target
+        ///   5. Mount — gold farm or purchase at level 40+/60
+        ///   6. Gold — grind if below savings target
+        ///   7. Profession — train if at tier boundary
+        ///   8. Default — null (bot self-directs: grind/quest)
         /// </summary>
         public ActionMessage? GetNextAction(WoWActivitySnapshot snapshot, CharacterBuildConfig? config)
         {
@@ -34,46 +36,137 @@ namespace WoWStateManager.Progression
             var player = snapshot.Player;
             if (player?.Unit?.GameObject == null) return null;
 
-            // P1: Survival — handled by BotRunner's autonomous death recovery, skip here
+            // P1: Survival — handled by BotRunner's autonomous death recovery
 
-            // P2: Level-up training
-            // Future: check player level vs last-trained level, return trainer visit action
-            // Requires trainer location data and spell availability tracking
+            // P2: Level-up training — deferred to auto-train on level-up event
 
-            // P3: Gear — BiS gap analysis
-            // Future: compare equipped items vs BiS list from BuildConfig, return farm activity
-
-            // P4: Mount goal
-            if (config.GoldTargetCopper > 0)
+            // P3: Gear-driven activity (P22.8)
+            if (config.TargetGearSet != null && config.TargetGearSet.Count > 0)
             {
-                var currentGold = player.Coinage;
-                if (currentGold < (uint)config.GoldTargetCopper)
+                var highestPriorityGap = config.TargetGearSet
+                    .OrderBy(g => g.Priority)
+                    .FirstOrDefault(g => !IsGearSlotFilled(player, g));
+
+                if (highestPriorityGap != null)
                 {
-                    _logger.LogDebug("Bot {Account} needs gold: {Current}/{Target} copper",
-                        snapshot.AccountName, currentGold, config.GoldTargetCopper);
-                    // Don't override active actions — just log for now
-                    // Future: inject grinding activity when bot is idle
+                    var activity = ResolveGearSource(highestPriorityGap.Source, snapshot);
+                    if (activity != null)
+                    {
+                        _logger.LogDebug("Bot {Account}: gear gap in {Slot} — {Item} from {Source}",
+                            snapshot.AccountName, highestPriorityGap.Slot, highestPriorityGap.ItemName, highestPriorityGap.Source);
+                        return activity;
+                    }
                 }
             }
 
-            // P5: Gold — same check as mount for now (gold target covers both)
+            // P4: Reputation-driven activity (P22.11)
+            if (config.ReputationGoals != null)
+            {
+                foreach (var repGoal in config.ReputationGoals)
+                {
+                    // Check if reputation is below target using snapshot's reputationStandings
+                    if (player.ReputationStandings.TryGetValue((uint)repGoal.FactionId, out var currentRep))
+                    {
+                        var targetStandingValue = GetStandingThreshold(repGoal.TargetStanding);
+                        if (currentRep < targetStandingValue)
+                        {
+                            var activity = ResolveRepSource(repGoal.GrindMethod, snapshot);
+                            if (activity != null)
+                            {
+                                _logger.LogDebug("Bot {Account}: rep gap for {Faction} ({Current}/{Target})",
+                                    snapshot.AccountName, repGoal.FactionName, currentRep, targetStandingValue);
+                                return activity;
+                            }
+                        }
+                    }
+                }
+            }
 
-            // P6: Profession training
+            // P5: Mount goal (P22.18 gold tracking)
+            if (config.MountGoal != null)
+            {
+                var mountLevel = config.MountGoal.RequiredLevel;
+                var playerLevel = player.Unit?.GameObject?.Level ?? 0;
+                if (playerLevel >= (uint)mountLevel && player.Coinage < (uint)config.MountGoal.GoldCostCopper)
+                {
+                    _logger.LogDebug("Bot {Account}: needs {Gold}c for mount (has {Have}c)",
+                        snapshot.AccountName, config.MountGoal.GoldCostCopper, player.Coinage);
+                    // Gold farming — return null to let bot grind (default behavior earns gold)
+                }
+            }
+
+            // P6: Gold savings target (P22.18)
+            if (config.GoldTargetCopper > 0 && player.Coinage < (uint)config.GoldTargetCopper)
+            {
+                _logger.LogDebug("Bot {Account}: gold {Current}/{Target}c",
+                    snapshot.AccountName, player.Coinage, config.GoldTargetCopper);
+                // Let bot grind naturally — no override
+            }
+
+            // P7: Profession training (P22.15)
             foreach (var skillTarget in config.SkillPriorities)
             {
                 var parts = skillTarget.Split(':');
-                if (parts.Length != 2) continue;
+                if (parts.Length != 2 || !int.TryParse(parts[1], out var targetLevel)) continue;
                 var profName = parts[0];
-                if (!int.TryParse(parts[1], out var targetLevel)) continue;
 
-                // Check if skill is below target
-                // skillInfo map is keyed by skill line ID — we'd need a profession name -> skill ID mapping
-                // For now, log the gap
-                _logger.LogDebug("Bot {Account} has profession goal: {Prof} to {Level}",
-                    snapshot.AccountName, profName, targetLevel);
+                // Check if at tier boundary (75, 150, 225) needing trainer visit (P22.17)
+                var currentLevel = GetProfessionLevel(player, profName);
+                if (currentLevel > 0 && currentLevel < targetLevel && IsAtTierBoundary(currentLevel))
+                {
+                    _logger.LogDebug("Bot {Account}: {Prof} at tier boundary {Level}, needs trainer",
+                        snapshot.AccountName, profName, currentLevel);
+                    // TODO: Return TravelTo trainer + TrainSkill action
+                }
             }
 
-            return null; // No override — bot self-directs
+            return null; // No override — bot self-directs (grind/quest in current zone)
         }
+
+        private static bool IsGearSlotFilled(Game.WoWPlayer player, GearGoalEntry goal)
+        {
+            // Check if the target item ID is in the player's inventory or equipment
+            // Simplified: check bagContents for the item ID
+            return player.BagContents.Values.Contains((uint)goal.ItemId)
+                || player.Inventory.Values.Any(guid => guid != 0); // Placeholder — needs item ID comparison
+        }
+
+        private static ActionMessage? ResolveGearSource(string source, WoWActivitySnapshot snapshot)
+        {
+            // Source format: "Dungeon:StratholmeBaron", "Quest:InMyHour", "Vendor:X", "Craft:X", "AH"
+            if (string.IsNullOrEmpty(source)) return null;
+
+            // TODO: Map source to ActionMessage for DungeoneeringTask, QuestingTask, etc.
+            // For now, return null (bot self-directs to grind)
+            return null;
+        }
+
+        private static ActionMessage? ResolveRepSource(string grindMethod, WoWActivitySnapshot snapshot)
+        {
+            // GrindMethod: "Quests", "Dungeon:Stratholme", "Turnin:RuneclothBandage", "Mob:TimbermawFurbolg"
+            if (string.IsNullOrEmpty(grindMethod)) return null;
+
+            // TODO: Map grind method to ActionMessage
+            return null;
+        }
+
+        private static int GetStandingThreshold(string standing) => standing switch
+        {
+            "Friendly" => 3000,
+            "Honored" => 9000,
+            "Revered" => 21000,
+            "Exalted" => 42000,
+            _ => 0,
+        };
+
+        private static int GetProfessionLevel(Game.WoWPlayer player, string professionName)
+        {
+            // TODO: Map profession name to skill ID and check skillInfo
+            // SkillInfo in proto is map<uint32, uint32> — need profession name → ID mapping
+            return 0;
+        }
+
+        private static bool IsAtTierBoundary(int currentLevel)
+            => currentLevel == 75 || currentLevel == 150 || currentLevel == 225;
     }
 }
