@@ -2796,3 +2796,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 3.2 | Compare BG fishing packets against FG capture | **Done** — `Fishing_ComparePacketSequences_BgMatchesFgReference` test + `CompareFishingPacketCsvSequences` wired into dual-fishing test via PacketSequenceComparator. Compares fishing-critical opcodes (CAST_SPELL, SPELL_GO, CHANNEL_START, CUSTOM_ANIM) with movement opcodes excluded. |
 | 3.3 | Harden BG fishing parity to match FG packet/timing | **Done** — Covered by AssertFishingPacketParity timing assertions (cast→spellGo, spellGo→channelStart, customAnim→use) + P3.2 opcode sequence comparison |
 
+
+## P6/P7/Physics Checklist (Archived 2026-04-04 — reference data)
+
+Moved to ARCHIVE.md during validation phase reset. P6 (AABB collision) and P7 (transport transforms) are WoW.exe binary parity reference — constants and decompilation data preserved here for reference.
