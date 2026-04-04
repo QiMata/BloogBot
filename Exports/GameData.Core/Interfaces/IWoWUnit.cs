@@ -98,6 +98,12 @@ namespace GameData.Core.Interfaces
 #endif
         ulong SummonedByGuid { get; }
         uint MountDisplayId { get; }
+#if NET8_0_OR_GREATER
+        /// <summary>True when the unit has a mount display (UNIT_FIELD_MOUNTDISPLAYID != 0).</summary>
+        bool IsMounted => MountDisplayId != 0;
+#else
+        bool IsMounted { get; }
+#endif
         UnitReaction UnitReaction { get; }
         UnitFlags UnitFlags { get; }
         MovementFlags MovementFlags { get; }
