@@ -564,5 +564,43 @@ namespace WoWSharpClient
 
             try { await ah.CloseAuctionHouseAsync(ct); } catch { }
         }
+
+
+        // ===== Trade operations (BG: CMSG packets via TradeNetworkClientComponent) =====
+
+        public async Task InitiateTradeAsync(ulong playerGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.TradeAgent.InitiateTradeAsync(playerGuid, ct);
+        }
+
+        public async Task SetTradeGoldAsync(uint copper, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.TradeAgent.OfferMoneyAsync(copper, ct);
+        }
+
+        public async Task SetTradeItemAsync(byte tradeSlot, byte bagId, byte slotId, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.TradeAgent.OfferItemAsync(tradeSlot, bagId, slotId, ct);
+        }
+
+        public async Task AcceptTradeAsync(CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.TradeAgent.AcceptTradeAsync(ct);
+        }
+
+        public async Task CancelTradeAsync(CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.TradeAgent.CancelTradeAsync(ct);
+        }
     }
 }

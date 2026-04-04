@@ -319,10 +319,23 @@ namespace GameData.Core.Interfaces
         public Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
         public Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
         public Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default) => Task.CompletedTask;
+
+        // Trade — FG: TradeFrame, BG: CMSG packets via TradeNetworkClientComponent
+        public Task InitiateTradeAsync(ulong playerGuid, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetTradeGoldAsync(uint copper, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetTradeItemAsync(byte tradeSlot, byte bagId, byte slotId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AcceptTradeAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public Task CancelTradeAsync(CancellationToken ct = default) => Task.CompletedTask;
 #else
         Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default);
         Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default);
         Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default);
+
+        Task InitiateTradeAsync(ulong playerGuid, CancellationToken ct = default);
+        Task SetTradeGoldAsync(uint copper, CancellationToken ct = default);
+        Task SetTradeItemAsync(byte tradeSlot, byte bagId, byte slotId, CancellationToken ct = default);
+        Task AcceptTradeAsync(CancellationToken ct = default);
+        Task CancelTradeAsync(CancellationToken ct = default);
 #endif
     }
 }
