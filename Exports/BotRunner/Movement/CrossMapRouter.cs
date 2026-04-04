@@ -44,13 +44,91 @@ public class CrossMapRouter
         FlightPathData.Faction faction,
         IReadOnlyCollection<uint>? discoveredFlightNodes = null)
     {
-        // Same map — check for elevator crossing or simple walk
+        // Same map — check for elevator crossing, flight path shortcut, or simple walk
         if (startMapId == destMapId)
-            return PlanSameMapRoute(startMapId, startPos, destPos);
+        {
+            var route = PlanSameMapRoute(startMapId, startPos, destPos);
+
+            // P21.7: If walk distance >200y and flight nodes are discovered, try flight path shortcut
+            if (discoveredFlightNodes != null && discoveredFlightNodes.Count > 0)
+            {
+                var flightRoute = TryFlightPathShortcut(startMapId, startPos, destPos, faction, discoveredFlightNodes);
+                if (flightRoute != null && EstimateRouteTime(flightRoute) < EstimateRouteTime(route) * 0.5f)
+                    return flightRoute;
+            }
+
+            return route;
+        }
 
         // Cross-map — find transition chain
         return PlanCrossMapRoute(startMapId, startPos, destMapId, destPos, faction, discoveredFlightNodes);
     }
+
+    /// <summary>
+    /// P21.7: Try to find a flight path shortcut for a same-map route.
+    /// Returns null if no shortcut saves >50% of walk time.
+    /// </summary>
+    private List<RouteLeg>? TryFlightPathShortcut(
+        uint mapId, Position start, Position end,
+        FlightPathData.Faction faction,
+        IReadOnlyCollection<uint> discoveredNodes)
+    {
+        var allNodes = FlightPathData.GetNodesForFaction((int)mapId, faction)
+            .Where(n => discoveredNodes.Contains(n.NodeId))
+            .ToList();
+
+        if (allNodes.Count < 2) return null;
+
+        // Find nearest discovered flight node to start and destination
+        var nearStart = allNodes
+            .OrderBy(n => Distance2D(start, new Position(n.X, n.Y, n.Z)))
+            .FirstOrDefault();
+        var nearEnd = allNodes
+            .Where(n => n.NodeId != nearStart?.NodeId)
+            .OrderBy(n => Distance2D(end, new Position(n.X, n.Y, n.Z)))
+            .FirstOrDefault();
+
+        if (nearStart == null || nearEnd == null) return null;
+
+        var walkToFM = Distance2D(start, new Position(nearStart.X, nearStart.Y, nearStart.Z));
+        var walkFromFM = Distance2D(new Position(nearEnd.X, nearEnd.Y, nearEnd.Z), end);
+        var directWalk = Distance2D(start, end);
+
+        // Only use flight if walk-to-FM + walk-from-FM < direct walk * 0.7
+        if (walkToFM + walkFromFM > directWalk * 0.7f) return null;
+
+        var legs = new List<RouteLeg>();
+
+        // Walk to flight master
+        if (walkToFM > 5f)
+        {
+            legs.Add(new RouteLeg(TransitionType.Walk, mapId, start,
+                new Position(nearStart.X, nearStart.Y, nearStart.Z),
+                null, null, null, null, null, walkToFM / WALK_SPEED));
+        }
+
+        // Flight
+        float flightTime = Distance2D(
+            new Position(nearStart.X, nearStart.Y, nearStart.Z),
+            new Position(nearEnd.X, nearEnd.Y, nearEnd.Z)) / 40f; // ~40y/s flight speed
+        legs.Add(new RouteLeg(TransitionType.FlightPath, mapId,
+            new Position(nearStart.X, nearStart.Y, nearStart.Z),
+            new Position(nearEnd.X, nearEnd.Y, nearEnd.Z),
+            null, null, null, nearStart.NodeId, nearEnd.NodeId, flightTime));
+
+        // Walk from destination FM to target
+        if (walkFromFM > 5f)
+        {
+            legs.Add(new RouteLeg(TransitionType.Walk, mapId,
+                new Position(nearEnd.X, nearEnd.Y, nearEnd.Z), end,
+                null, null, null, null, null, walkFromFM / WALK_SPEED));
+        }
+
+        return legs;
+    }
+
+    private static float EstimateRouteTime(List<RouteLeg> legs)
+        => legs.Sum(l => l.EstimatedTimeSec);
 
     // =========================================================================
     // SAME-MAP ROUTING
@@ -275,5 +353,12 @@ public class CrossMapRouter
         float dy = a.Y - b.Y;
         float dz = a.Z - b.Z;
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    private static float Distance2D(Position a, Position b)
+    {
+        float dx = a.X - b.X;
+        float dy = a.Y - b.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
     }
 }

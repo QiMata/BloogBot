@@ -26,6 +26,10 @@ public enum TransitionType
     DungeonPortal,
     /// <summary>Ride the Deeprun Tram between Ironforge and Stormwind.</summary>
     Tram,
+    /// <summary>Use hearthstone to teleport to bind point (10s cast).</summary>
+    Hearthstone,
+    /// <summary>Use class-specific teleport (Mage Teleport, 10s cast, capital city).</summary>
+    ClassTeleport,
 }
 
 /// <summary>
