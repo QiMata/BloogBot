@@ -11,6 +11,10 @@ namespace WoWSharpClient
     {
         private static WoWSharpEventEmitter _instance;
 
+        /// <summary>
+        /// P9.3: Legacy singleton accessor. New code should create per-bot instances.
+        /// </summary>
+        [Obsolete("Use new WoWSharpEventEmitter() for per-bot instances. This singleton will be removed after P9.6 migration.")]
         public static WoWSharpEventEmitter Instance
         {
             get
@@ -125,7 +129,8 @@ namespace WoWSharpClient
         public event EventHandler<CharDeleteResponse> OnCharacterDeleteResponse;
         public event EventHandler<GameObjectCreatedArgs> OnGameObjectCreated;
 
-        private WoWSharpEventEmitter() { }
+        /// <summary>P9.3: Public constructor for per-bot instances.</summary>
+        public WoWSharpEventEmitter() { }
         /// <summary>
         /// Clear every handler from every event/delegate on the singleton.
         /// Call this from your test fixture’s Dispose().
