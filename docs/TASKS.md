@@ -25,22 +25,6 @@
 
 ---
 
-## P28 — Test Audit & Cleanup
-
-**Goal:** Clean up existing LiveValidation tests that have accumulated unnecessary teleporting and convoluted workarounds. ALL bots in every config MUST connect — any crash, disconnect, or missing bot is an automatic failure that triggers investigation. No workarounds for missing bots. Tests must have TIGHT assertions that fail fast on any disruption.
-
-| # | Task | Status |
-|---|------|--------|
-| 28.1 | **ALL tests: strict bot count assertions** — Every test config specifies exact bot count. ALL bots must connect. Any missing bot, crash, or disconnect is an automatic failure and must be investigated. No partial-count workarounds. `Assert.Equal(expectedCount, actualCount)` everywhere. | Open |
-| 28.2 | **StarterQuestTests: remove pre-flight Orgrimmar teleport** — Removed lines 72-77. Teleports directly to quest area now. | **Done** (bea79f70) |
-| 28.3 | **EquipmentEquipTests: targeted slot clear** — VMaNGOS has no `.unequip` command. `.reset items` is the only option to clear mainhand. Server limitation, not test issue. | Won't Fix |
-| 28.4 | **All DungeonInstanceFixture-based tests: strict bot count** — Every dungeon test must Assert.Equal on expected bot count. Crash = failure = investigate. | Open |
-| 28.5 | **BG fixtures: strict bot count** — WSG must have exactly 20, AB exactly 30, AV exactly 80. Any missing bot = failure. | **Done** (2026-04-01) — `CoordinatorFixtureBase.WaitForExactBotCountAsync` enforces exact counts for all BG fixtures; `CoordinatorStrictCountTests` and live AB rerun verify the gate |
-| 28.6 | **DeathCorpseRunTests CRASH-001** — Already documented at line 71-78 with VA address and investigation doc reference. | **Done** (pre-existing) |
-| 28.7 | **Move OrgrimmarGroundZAnalysisTests** — Moved from LiveValidation/ to Diagnostics/ directory. | **Done** |
-
----
-
 ## P29 — Fast Travel & Navigation Tests
 
 **Goal:** Test coverage for ALL fast-travel systems in vanilla WoW: mage teleports/portals, flight masters (taxi), boats, zeppelins, elevators, Deeprun Tram, meeting stones, warlock summoning. Both Horde and Alliance sides.

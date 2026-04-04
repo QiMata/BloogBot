@@ -1984,3 +1984,15 @@ Stripped PathfindingService to path-only. Physics, GroundZ, LOS, navmesh queries
 | CrashMonitor Docker | Switched from bind check to TCP connect for Docker ports |
 | Scene slice mode | Disabled eager mode to allow local VMAP fallback |
 | WWOW_DATA_DIR | Forwarded from StateManager to BG bot processes |
+
+## P28 — Test Audit & Cleanup — Archived session 301
+
+| # | Task | Status |
+|---|------|--------|
+| 28.1 | ALL tests: strict bot count assertions | Done (badd0995) — LiveBotFixture.ExpectedBotCount |
+| 28.2 | StarterQuestTests: remove pre-flight Org teleport | Done (bea79f70) |
+| 28.3 | EquipmentEquipTests: targeted slot clear | Won't Fix (VMaNGOS limitation) |
+| 28.4 | DungeonInstanceFixture strict bot count | Done (inherits P28.1) |
+| 28.5 | BG fixtures: strict bot count | Done (2026-04-01) |
+| 28.6 | DeathCorpseRunTests CRASH-001 | Done (pre-existing) |
+| 28.7 | Move OrgrimmarGroundZAnalysisTests | Done |
