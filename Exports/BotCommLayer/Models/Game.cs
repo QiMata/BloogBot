@@ -139,7 +139,7 @@ namespace Game {
             "Di5nYW1lLlBvc2l0aW9uEhcKD3NwbGluZU5vZGVDb3VudBgWIAEoDSJtCgtQ",
             "YWNrZXRFdmVudBITCgt0aW1lc3RhbXBNcxgBIAEoBBIOCgZvcGNvZGUYAiAB",
             "KA0SEgoKaXNPdXRib3VuZBgDIAEoCBIPCgdwYXlsb2FkGAQgASgMEhQKDGFm",
-            "ZmVjdGVkR3VpZBgFIAEoBCK7BwoMTW92ZW1lbnREYXRhEhUKDW1vdmVtZW50",
+            "ZmVjdGVkR3VpZBgFIAEoBCLbBwoMTW92ZW1lbnREYXRhEhUKDW1vdmVtZW50",
             "RmxhZ3MYASABKA0SEAoIZmFsbFRpbWUYAiABKA0SGQoRanVtcFZlcnRpY2Fs",
             "U3BlZWQYAyABKAISFAoManVtcFNpbkFuZ2xlGAQgASgCEhQKDGp1bXBDb3NB",
             "bmdsZRgFIAEoAhIbChNqdW1wSG9yaXpvbnRhbFNwZWVkGAYgASgCEhEKCXN3",
@@ -160,20 +160,20 @@ namespace Game {
             "ZVRpbWVQYXNzZWQYHyABKAUSFgoOc3BsaW5lRHVyYXRpb24YICABKAUSEAoI",
             "c3BsaW5lSWQYISABKA0SIwoLc3BsaW5lTm9kZXMYIiADKAsyDi5nYW1lLlBv",
             "c2l0aW9uEi4KFnNwbGluZUZpbmFsRGVzdGluYXRpb24YIyABKAsyDi5nYW1l",
-            "LlBvc2l0aW9uEhIKCnN5c3RlbVRpY2sYJCABKA0i+gEKEU1vdmVtZW50UmVj",
-            "b3JkaW5nEhUKDWNoYXJhY3Rlck5hbWUYASABKAkSDQoFbWFwSWQYAiABKA0S",
-            "EAoIem9uZU5hbWUYAyABKAkSGQoRc3RhcnRUaW1lc3RhbXBVdGMYBCABKAQS",
-            "FwoPZnJhbWVJbnRlcnZhbE1zGAUgASgNEiIKBmZyYW1lcxgGIAMoCzISLmdh",
-            "bWUuTW92ZW1lbnREYXRhEhMKC2Rlc2NyaXB0aW9uGAcgASgJEgwKBHJhY2UY",
-            "CCABKA0SDgoGZ2VuZGVyGAkgASgNEiIKB3BhY2tldHMYCiADKAsyES5nYW1l",
-            "LlBhY2tldEV2ZW50IpQBCgRJdGVtEgoKAmlkGAEgASgEEgwKBG5hbWUYAiAB",
-            "KAkSDAoEc2xvdBgDIAEoCRIQCghxdWFudGl0eRgEIAEoDRIkCgVzdGF0cxgF",
-            "IAMoCzIVLmdhbWUuSXRlbS5TdGF0c0VudHJ5GiwKClN0YXRzRW50cnkSCwoD",
-            "a2V5GAEgASgNEg0KBXZhbHVlGAIgASgNOgI4ASqZAQoEUmFjZRINCglSQUNF",
-            "X05PTkUQABIOCgpSQUNFX0hVTUFOEAESDAoIUkFDRV9PUkMQAhIOCgpSQUNF",
-            "X0RXQVJGEAMSEgoOUkFDRV9OSUdIVF9FTEYQBBIPCgtSQUNFX1VOREVBRBAF",
-            "Eg8KC1JBQ0VfVEFVUkVOEAYSDgoKUkFDRV9HTk9NRRAHEg4KClJBQ0VfVFJP",
-            "TEwQCGIGcHJvdG8z"));
+            "LlBvc2l0aW9uEhIKCnN5c3RlbVRpY2sYJCABKA0SHgoWaGVhcnRoc3RvbmVD",
+            "b29sZG93blNlYxglIAEoAiL6AQoRTW92ZW1lbnRSZWNvcmRpbmcSFQoNY2hh",
+            "cmFjdGVyTmFtZRgBIAEoCRINCgVtYXBJZBgCIAEoDRIQCgh6b25lTmFtZRgD",
+            "IAEoCRIZChFzdGFydFRpbWVzdGFtcFV0YxgEIAEoBBIXCg9mcmFtZUludGVy",
+            "dmFsTXMYBSABKA0SIgoGZnJhbWVzGAYgAygLMhIuZ2FtZS5Nb3ZlbWVudERh",
+            "dGESEwoLZGVzY3JpcHRpb24YByABKAkSDAoEcmFjZRgIIAEoDRIOCgZnZW5k",
+            "ZXIYCSABKA0SIgoHcGFja2V0cxgKIAMoCzIRLmdhbWUuUGFja2V0RXZlbnQi",
+            "lAEKBEl0ZW0SCgoCaWQYASABKAQSDAoEbmFtZRgCIAEoCRIMCgRzbG90GAMg",
+            "ASgJEhAKCHF1YW50aXR5GAQgASgNEiQKBXN0YXRzGAUgAygLMhUuZ2FtZS5J",
+            "dGVtLlN0YXRzRW50cnkaLAoKU3RhdHNFbnRyeRILCgNrZXkYASABKA0SDQoF",
+            "dmFsdWUYAiABKA06AjgBKpkBCgRSYWNlEg0KCVJBQ0VfTk9ORRAAEg4KClJB",
+            "Q0VfSFVNQU4QARIMCghSQUNFX09SQxACEg4KClJBQ0VfRFdBUkYQAxISCg5S",
+            "QUNFX05JR0hUX0VMRhAEEg8KC1JBQ0VfVU5ERUFEEAUSDwoLUkFDRV9UQVVS",
+            "RU4QBhIOCgpSQUNFX0dOT01FEAcSDgoKUkFDRV9UUk9MTBAIYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Race), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -188,7 +188,7 @@ namespace Game {
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer", "Scale", "AnimProgress" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.UnitSnapshot), global::Game.UnitSnapshot.Parser, new[]{ "Guid", "Entry", "Name", "Position", "Facing", "MovementFlags", "Health", "MaxHealth", "Level", "UnitFlags", "DistanceToPlayer", "BoundingRadius", "CombatReach", "NpcFlags", "TargetGuid", "IsPlayer", "HasSpline", "SplineFlags", "SplineTimePassed", "SplineDuration", "SplineFinalDestination", "SplineNodeCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.PacketEvent), global::Game.PacketEvent.Parser, new[]{ "TimestampMs", "Opcode", "IsOutbound", "Payload", "AffectedGuid" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementData), global::Game.MovementData.Parser, new[]{ "MovementFlags", "FallTime", "JumpVerticalSpeed", "JumpSinAngle", "JumpCosAngle", "JumpHorizontalSpeed", "SwimPitch", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "TurnRate", "Position", "Facing", "FrameTimestamp", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "FallStartHeight", "CurrentSpeed", "FallingSpeed", "NearbyGameObjects", "NearbyUnits", "SplineFlags", "SplineFinalPoint", "SplineTargetGuid", "SplineFinalOrientation", "SplineTimePassed", "SplineDuration", "SplineId", "SplineNodes", "SplineFinalDestination", "SystemTick" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementData), global::Game.MovementData.Parser, new[]{ "MovementFlags", "FallTime", "JumpVerticalSpeed", "JumpSinAngle", "JumpCosAngle", "JumpHorizontalSpeed", "SwimPitch", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "TurnRate", "Position", "Facing", "FrameTimestamp", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "FallStartHeight", "CurrentSpeed", "FallingSpeed", "NearbyGameObjects", "NearbyUnits", "SplineFlags", "SplineFinalPoint", "SplineTargetGuid", "SplineFinalOrientation", "SplineTimePassed", "SplineDuration", "SplineId", "SplineNodes", "SplineFinalDestination", "SystemTick", "HearthstoneCooldownSec" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementRecording), global::Game.MovementRecording.Parser, new[]{ "CharacterName", "MapId", "ZoneName", "StartTimestampUtc", "FrameIntervalMs", "Frames", "Description", "Race", "Gender", "Packets" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.Item), global::Game.Item.Parser, new[]{ "Id", "Name", "Slot", "Quantity", "Stats" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, })
           }));
@@ -7827,6 +7827,7 @@ namespace Game {
       splineNodes_ = other.splineNodes_.Clone();
       splineFinalDestination_ = other.splineFinalDestination_ != null ? other.splineFinalDestination_.Clone() : null;
       systemTick_ = other.systemTick_;
+      hearthstoneCooldownSec_ = other.hearthstoneCooldownSec_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -8302,6 +8303,21 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "hearthstoneCooldownSec" field.</summary>
+    public const int HearthstoneCooldownSecFieldNumber = 37;
+    private float hearthstoneCooldownSec_;
+    /// <summary>
+    /// Remaining hearthstone cooldown in seconds (0 = ready)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float HearthstoneCooldownSec {
+      get { return hearthstoneCooldownSec_; }
+      set {
+        hearthstoneCooldownSec_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -8353,6 +8369,7 @@ namespace Game {
       if(!splineNodes_.Equals(other.splineNodes_)) return false;
       if (!object.Equals(SplineFinalDestination, other.SplineFinalDestination)) return false;
       if (SystemTick != other.SystemTick) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(HearthstoneCooldownSec, other.HearthstoneCooldownSec)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -8396,6 +8413,7 @@ namespace Game {
       hash ^= splineNodes_.GetHashCode();
       if (splineFinalDestination_ != null) hash ^= SplineFinalDestination.GetHashCode();
       if (SystemTick != 0) hash ^= SystemTick.GetHashCode();
+      if (HearthstoneCooldownSec != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(HearthstoneCooldownSec);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -8549,6 +8567,10 @@ namespace Game {
         output.WriteRawTag(160, 2);
         output.WriteUInt32(SystemTick);
       }
+      if (HearthstoneCooldownSec != 0F) {
+        output.WriteRawTag(173, 2);
+        output.WriteFloat(HearthstoneCooldownSec);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -8694,6 +8716,10 @@ namespace Game {
         output.WriteRawTag(160, 2);
         output.WriteUInt32(SystemTick);
       }
+      if (HearthstoneCooldownSec != 0F) {
+        output.WriteRawTag(173, 2);
+        output.WriteFloat(HearthstoneCooldownSec);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -8805,6 +8831,9 @@ namespace Game {
       }
       if (SystemTick != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(SystemTick);
+      }
+      if (HearthstoneCooldownSec != 0F) {
+        size += 2 + 4;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -8928,6 +8957,9 @@ namespace Game {
       }
       if (other.SystemTick != 0) {
         SystemTick = other.SystemTick;
+      }
+      if (other.HearthstoneCooldownSec != 0F) {
+        HearthstoneCooldownSec = other.HearthstoneCooldownSec;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -9101,6 +9133,10 @@ namespace Game {
             SystemTick = input.ReadUInt32();
             break;
           }
+          case 301: {
+            HearthstoneCooldownSec = input.ReadFloat();
+            break;
+          }
         }
       }
     #endif
@@ -9271,6 +9307,10 @@ namespace Game {
           }
           case 288: {
             SystemTick = input.ReadUInt32();
+            break;
+          }
+          case 301: {
+            HearthstoneCooldownSec = input.ReadFloat();
             break;
           }
         }

@@ -261,6 +261,7 @@ message MovementData {
     // System tick (GetTickCount / Environment.TickCount) for sub-frame timing.
     // Same clock as FallStartTime — enables exact fall duration calculation.
     uint32 systemTick = 36;
+    float hearthstoneCooldownSec = 37; // Remaining hearthstone cooldown in seconds (0 = ready)
 }
 
 // A complete movement recording session for physics engine testing
