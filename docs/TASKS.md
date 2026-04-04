@@ -364,8 +364,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.1 | **Add `CharacterBuildConfig` to CharacterSettings** — Added TargetGearSet, ReputationGoals, ItemGoals, MountGoal fields. | **Done** (c15b6773) |
-| 22.2 | **Make spec configurable** — In `BackgroundBotWorker.CreateClassContainer()`, replace hardcoded spec switch with lookup from `CharacterSettings.BuildConfig.SpecName`. Fall back to current defaults if not set. Same change in FG's `CombatRotationFactory`. This means a Warrior bot can be configured as Arms, Fury, OR Protection from JSON config without code changes. | Open |
-| 22.3 | **Make talent build configurable** — In `TalentBuildDefinitions`, add `GetBuild(string buildName)` that resolves by name. `CharacterBuildConfig.TalentBuildName` selects which build. Add support for custom builds: `List<(int tab, int talent)> CustomTalentOrder` field in config for user-defined allocation orders. TalentService reads from config instead of hardcoded class→build mapping. | Open |
+| 22.2 | **Make spec configurable** — Already wired: BuildConfig.SpecName → WWOW_CHARACTER_SPEC → BotProfileResolver.Resolve. | **Done** (pre-existing) |
+| 22.3 | **Make talent build configurable** — Already wired: BuildConfig.TalentBuildName → WWOW_TALENT_BUILD env var. | **Done** (pre-existing) |
 | 22.4 | **Add build config to proto snapshot** — Add `CharacterBuildConfig buildConfig = 21` field to `WoWActivitySnapshot` (or a new `CharacterGoals` sub-message). StateManager populates from CharacterSettings. BotRunner reads to drive behavior. DecisionEngineService reads to prioritize actions toward goals. | Open |
 
 ### 22B — Gear Progression System (BiS Lists & Target Sets)
