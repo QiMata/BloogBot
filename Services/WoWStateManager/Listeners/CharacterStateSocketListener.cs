@@ -327,6 +327,23 @@ namespace WoWStateManager.Listeners
                 InjectCombatActions(accountName, response);
             }
 
+            // Populate CharacterGoals and TravelObjective on snapshot from BuildConfig (P21.5 / P22.4)
+            {
+                var charSettings = _characterSettings.Find(cs => cs.AccountName == accountName);
+                if (charSettings?.BuildConfig != null)
+                {
+                    var bc = charSettings.BuildConfig;
+                    response.CharacterGoals = new Communication.CharacterGoals
+                    {
+                        SpecName = bc.SpecName ?? "",
+                        TalentBuildName = bc.TalentBuildName ?? "",
+                        GoldTargetCopper = bc.GoldTargetCopper,
+                    };
+                    foreach (var sp in bc.SkillPriorities) response.CharacterGoals.SkillPriorities.Add(sp);
+                    foreach (var qc in bc.QuestChains) response.CharacterGoals.QuestChains.Add(qc);
+                }
+            }
+
             // Progression planning — lowest priority, only if no combat/dungeon action was injected
             if (response.CurrentAction == null)
             {
