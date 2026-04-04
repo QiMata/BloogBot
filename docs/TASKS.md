@@ -999,13 +999,11 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 302)
 - **Branch:** `main`
-- **Session 302 — 66 items shipped, 135/305 done (44.3%). Phases P8/P28 archived:**
-  - **P8 archived** (10/10), **P28 archived** (7/7).
-  - **P22** (32/33): All models, tasks, tests, planner logic, templates done. Only UI (22.28) remains.
-  - **P21** (17/30): TravelTask, TakeFlightPath, MageTeleport, WarlockSummon, UseHearthstone, SetBindPoint, TravelOptions, InnkeeperData, CrossMapRouter tests, StateManager travel coordination.
-  - **P23** (5): PacketSequenceComparator, IsInFlight, FgAuctionFrame, FgBankFrame.
-  - **P24** (3). **P26** (1). **P29** (2).
-  - Commits: `fcba3c26` through `7a81f66b`
+- **Session 302 — 87 items shipped, 156/305 done (51.1%). Phases P8/P28 archived. CROSSED 50%:**
+  - **P22** (32/33, 97%). **P21** (26/30, 87%). **P19** (4/4, 100%). **P10** (3/7 confirmed). **P11** (2/11 confirmed).
+  - **P24** (5/11). **P23** (6/21). **P9** (5/27 confirmed including ConcurrentDictionary).
+  - New: LoadTestHarness project, BotMetricsCollector, MeetingStoneSummon, GraveyardData, flight/hearthstone/teleport in CrossMapRouter, spirit healer, mail observables, IsMounted, BG component confirmed.
+  - Commits: `fcba3c26` through `cad4ad5e`
 - **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
   - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
