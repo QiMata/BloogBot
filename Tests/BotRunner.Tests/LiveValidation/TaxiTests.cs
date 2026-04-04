@@ -1,14 +1,15 @@
+using System;
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// P29.6–29.9: Flight master (taxi) tests.
-/// Validates taxi node discovery, single-hop rides, and multi-hop flights
-/// for both Horde and Alliance.
+/// V2.11: Taxi tests. Teleport near Org flight master, VISIT_FLIGHT_MASTER,
+/// SELECT_TAXI_NODE, verify position changes over time.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~TaxiTests" --configuration Release
 /// </summary>
@@ -17,6 +18,12 @@ public class TaxiTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
+
+    private const int MapId = 1; // Kalimdor
+    // Near Orgrimmar flight master (Doras)
+    private const float OrgFmX = 1676.25f, OrgFmY = -4313.45f, OrgFmZ = 64.72f;
+    // Crossroads approximate landing position
+    private const float CrossroadsX = -441.0f, CrossroadsY = -2596.0f;
 
     public TaxiTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -27,60 +34,148 @@ public class TaxiTests
     }
 
     /// <summary>
-    /// P29.6: Bot at Orgrimmar flight master. Interact.
-    /// Assert: SMSG_SHOWTAXINODES received, node list contains Orgrimmar node.
-    /// Discover Crossroads node via .tele.
+    /// V2.11: Bot at Orgrimmar flight master. VISIT_FLIGHT_MASTER discovers taxi nodes.
     /// </summary>
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Taxi_HordeDiscovery()
     {
+        var account = _bot.BgAccountName!;
+
+        await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.BotTeleportAsync(account, MapId, OrgFmX, OrgFmY, OrgFmZ);
+        await _bot.WaitForTeleportSettledAsync(account, OrgFmX, OrgFmY);
+        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG taxi-setup");
+
+        // Find flight master NPC
+        var fmUnit = await _bot.WaitForNearbyUnitAsync(
+            account,
+            (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER,
+            timeoutMs: 15000,
+            progressLabel: "BG flight-master-lookup");
+        Assert.NotNull(fmUnit);
+        _output.WriteLine($"[TEST] Found flight master: {fmUnit!.GameObject?.Name}, guid=0x{fmUnit.GameObject?.Base?.Guid:X}");
+
+        // Visit flight master to discover nodes
+        var visitResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.VisitFlightMaster
+        });
+        _output.WriteLine($"[TEST] VISIT_FLIGHT_MASTER result: {visitResult}");
+        Assert.Equal(ResponseResult.Success, visitResult);
+
+        // Wait for interaction to complete
+        await Task.Delay(3000);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
+        var snap = await _bot.GetSnapshotAsync(account);
         Assert.NotNull(snap);
-        _output.WriteLine("[TEST] snapshot received — P29.6 Horde taxi discovery");
+        _output.WriteLine("[TEST] Taxi discovery complete -- flight master visited");
     }
 
     /// <summary>
-    /// P29.7: Bot at Orgrimmar flight master with Crossroads discovered.
-    /// Activate flight via CMSG_ACTIVATETAXI. Assert: position changes over time,
-    /// arrives at Crossroads within 3 minutes.
+    /// V2.11: Bot at Orgrimmar, takes taxi to Crossroads. Position changes over time.
     /// </summary>
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Taxi_HordeRide_OrgToXroads()
     {
+        var account = _bot.BgAccountName!;
+
+        await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.BotTeleportAsync(account, MapId, OrgFmX, OrgFmY, OrgFmZ);
+        await _bot.WaitForTeleportSettledAsync(account, OrgFmX, OrgFmY);
+        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG taxi-ride-setup");
+
+        // Visit flight master first to open taxi map
+        var visitResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.VisitFlightMaster
+        });
+        Assert.Equal(ResponseResult.Success, visitResult);
+        await Task.Delay(2000);
+
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
-        Assert.NotNull(snap);
-        _output.WriteLine("[TEST] snapshot received — P29.7 Horde taxi ride Org to Crossroads");
+        var startSnap = await _bot.GetSnapshotAsync(account);
+        var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(startPos);
+        _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
+
+        // Select Crossroads taxi node (node index varies; use SELECT_TAXI_NODE)
+        var selectResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.SelectTaxiNode,
+            Parameters = { new RequestParameter { IntParam = 25 } } // Crossroads node ID
+        });
+        _output.WriteLine($"[TEST] SELECT_TAXI_NODE result: {selectResult}");
+
+        // Wait for position to change (taxi ride takes ~2 minutes)
+        var moved = await _bot.WaitForPositionChangeAsync(account, startPos.X, startPos.Y, startPos.Z,
+            timeoutMs: 180000, progressLabel: "BG taxi-ride-org-xroads");
+        _output.WriteLine($"[TEST] Position changed during taxi ride: {moved}");
+        Assert.True(moved, "Bot position should change during taxi flight");
+
+        await _bot.RefreshSnapshotsAsync();
+        var endSnap = await _bot.GetSnapshotAsync(account);
+        var endPos = endSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"[TEST] End position: ({endPos?.X:F1}, {endPos?.Y:F1})");
     }
 
     /// <summary>
-    /// P29.8: Alliance bot at Stormwind flight master. Fly to Ironforge.
-    /// Assert: arrival at Ironforge.
+    /// V2.11: Alliance taxi ride placeholder -- requires Alliance character.
     /// </summary>
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Taxi_AllianceRide()
     {
+        var account = _bot.BgAccountName!;
+
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
+        var snap = await _bot.GetSnapshotAsync(account);
         Assert.NotNull(snap);
-        _output.WriteLine("[TEST] snapshot received — P29.8 Alliance taxi ride");
+        _output.WriteLine($"[TEST] Character: {snap!.CharacterName}, MapId={snap.CurrentMapId}");
+        // Alliance taxi tests require an Alliance character -- validate fixture is ready
+        Assert.NotNull(snap.Player);
     }
 
     /// <summary>
-    /// P29.9: Bot at Orgrimmar, fly to Gadgetzan (multiple hops).
-    /// Assert: intermediate nodes traversed, final arrival at Gadgetzan.
+    /// V2.11: Multi-hop taxi from Org to Gadgetzan.
     /// </summary>
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Taxi_MultiHop_OrgToGadgetzan()
     {
+        var account = _bot.BgAccountName!;
+
+        await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.BotTeleportAsync(account, MapId, OrgFmX, OrgFmY, OrgFmZ);
+        await _bot.WaitForTeleportSettledAsync(account, OrgFmX, OrgFmY);
+        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG multihop-setup");
+
+        // Visit flight master
+        var visitResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.VisitFlightMaster
+        });
+        Assert.Equal(ResponseResult.Success, visitResult);
+        await Task.Delay(2000);
+
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
-        Assert.NotNull(snap);
-        _output.WriteLine("[TEST] snapshot received — P29.9 Multi-hop taxi Org to Gadgetzan");
+        var startSnap = await _bot.GetSnapshotAsync(account);
+        var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(startPos);
+        _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
+
+        // Select Gadgetzan taxi node
+        var selectResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.SelectTaxiNode,
+            Parameters = { new RequestParameter { IntParam = 39 } } // Gadgetzan node ID
+        });
+        _output.WriteLine($"[TEST] SELECT_TAXI_NODE (Gadgetzan) result: {selectResult}");
+
+        // Verify movement starts (multi-hop flight is long, just verify departure)
+        var moved = await _bot.WaitForPositionChangeAsync(account, startPos.X, startPos.Y, startPos.Z,
+            timeoutMs: 60000, progressLabel: "BG taxi-multihop");
+        Assert.True(moved, "Bot should depart on multi-hop taxi flight");
     }
 }
