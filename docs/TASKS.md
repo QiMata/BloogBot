@@ -999,13 +999,13 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 302)
 - **Branch:** `main`
-- **Session 302 — 54 items shipped, 123/305 done (40.3%). Phases P8/P28 archived:**
+- **Session 302 — 66 items shipped, 135/305 done (44.3%). Phases P8/P28 archived:**
   - **P8 archived** (10/10), **P28 archived** (7/7).
-  - **P22** (20): CharacterBuildConfig, goal models, QuestChainData, CharacterGoals/ProgressionStatus proto, BiS loader, FarmBossTask, MountAcquisitionTask, ConfigurableSpecTests, GearEvaluationTests, templates.
-  - **P21** (14): TravelObjective, TravelTo, TravelTask, TravelOptions, UseHearthstone, SetBindPoint, TakeFlightPath, MageTeleport, InnkeeperData, discoveredFlightNodes, Deeprun Tram, portals, route re-planning.
-  - **P23** (5): PacketSequenceComparator, IsInFlight, FgAuctionFrame, FgBankFrame, IAuction/IBankFrame interfaces.
-  - **P24** (3): BotDistribution, BulkAccountCreator, accounts. **P26** (1). **P29** (2).
-  - Commits: `fcba3c26` through `7d65ff5f`
+  - **P22** (32/33): All models, tasks, tests, planner logic, templates done. Only UI (22.28) remains.
+  - **P21** (17/30): TravelTask, TakeFlightPath, MageTeleport, WarlockSummon, UseHearthstone, SetBindPoint, TravelOptions, InnkeeperData, CrossMapRouter tests, StateManager travel coordination.
+  - **P23** (5): PacketSequenceComparator, IsInFlight, FgAuctionFrame, FgBankFrame.
+  - **P24** (3). **P26** (1). **P29** (2).
+  - Commits: `fcba3c26` through `7a81f66b`
 - **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
   - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
