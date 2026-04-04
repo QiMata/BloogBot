@@ -429,7 +429,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.27 | **Create template configs** — File: `Config/CharacterTemplates/`. One JSON file per archetype: `FuryWarriorPreRaid.json`, `HolyPriestMCReady.json`, `FrostMageAoEFarmer.json`, `AfflictionWarlockSoloGrinder.json`, etc. Each template is a complete `CharacterBuildConfig` with spec, talents, BiS gear, rep goals, quest chains, profession targets, gold target, mount goal. ~15 templates covering common vanilla archetypes. Users pick a template when adding a new bot to StateManagerSettings. | Open |
+| 22.27 | **Create template configs** — 4 JSON templates: FuryWarrior, HolyPriest, FrostMage, ProtWarrior. | **Done** (69cdb6a1) |
 | 22.28 | **Template assignment in UI** — When WoWStateManagerUI adds a new character, show a dropdown of available templates. Selected template populates `CharacterSettings.BuildConfig`. User can then customize individual fields. | Open |
 
 ### 22J — Progression Tests
