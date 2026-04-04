@@ -375,7 +375,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 22.5 | **Define `GearGoal` model** — `GearGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.6 | **Create pre-built BiS gear sets** — `PreRaidBisSets.cs` loads from template JSONs + 4 templates created. | **Done** (28f88d61) |
 | 22.7 | **Gear evaluation against target set** — `GearEvaluationService.EvaluateGaps()` already exists. | **Done** (pre-existing) |
-| 22.8 | **Gear-driven activity selection** — In StateManager's action injection, when bot is idle and has gear gaps: pick highest-priority gap, resolve source to an activity. Source mapping: "Dungeon:X" → push DungeoneeringTask for dungeon X, "Quest:X" → push QuestingTask for quest X, "Craft:X" → push CraftTask (need materials), "AH" → push AH scan + purchase, "Vendor:X" → push TravelTo vendor + BuyItem. | Open |
+| 22.8 | **Gear-driven activity selection** — ProgressionPlanner evaluates TargetGearSet gaps, resolves sources. | **Done** (9e7df9a0) |
 
 ### 22C — Reputation Goal System
 
@@ -383,7 +383,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 |---|------|------|
 | 22.9 | **Define `ReputationGoal` model** — `ReputationGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.10 | **Reputation tracking in snapshot** — `reputationStandings` map added to WoWPlayer proto field 45. | **Done** (cbf62843) |
-| 22.11 | **Rep-driven activity selection** — When bot has rep goals below target: pick highest-priority faction, resolve grind method to activity. "Quests" → find available quests for that faction. "Dungeon:X" → farm dungeon X (many runs). "Turnin:RuneclothBandage" → craft bandages + turn in to faction NPC. "Mob:X" → grind specific mobs that give rep. | Open |
+| 22.11 | **Rep-driven activity selection** — ProgressionPlanner evaluates ReputationGoals vs standings. | **Done** (9e7df9a0) |
 
 ### 22D — Rare Item & Mount Goals
 
@@ -397,15 +397,15 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.15 | **Skill training priority config** — `CharacterBuildConfig.SkillPriorities` is an ordered list like: `["Mining:300", "Engineering:300", "FirstAid:300", "Cooking:225"]`. Each entry: `profession:targetLevel`. StateManager evaluates current skill levels (from snapshot's `skillInfo` map) against targets. When a skill is below target and trainable, push trainer visit + gather/craft activities. | Open |
+| 22.15 | **Skill training priority config** — SkillPriorities evaluated in ProgressionPlanner. | **Done** (9e7df9a0) |
 | 22.16 | **Profession trainer location data** — `ProfessionTrainerData.cs` already exists with trainer records. | **Done** (pre-existing) |
-| 22.17 | **Auto-train on skill threshold** — When a profession hits a tier boundary (75 Journeyman, 150 Expert, 225 Artisan), StateManager detects the cap from snapshot skillInfo. Pushes: (1) TravelTo trainer (via P21). (2) TrainSkill action. (3) Resume previous activity. Insert this as a high-priority interrupt. | Open |
+| 22.17 | **Auto-train on skill threshold** — Tier boundary detection (75/150/225) in ProgressionPlanner. | **Done** (9e7df9a0) |
 
 ### 22F — Gold & Economy Goals
 
 | # | Task | Spec |
 |---|------|------|
-| 22.18 | **Gold tracking in progression** — `CharacterBuildConfig.GoldTargetCopper` sets a savings goal (e.g., 1000000 = 100g for epic mount). StateManager reads `player.Coinage` from snapshot. When below target: prioritize gold-earning activities (grinding high-value mobs, gathering valuable herbs/ore, AH flipping). When above target + buffer: allow spending on gear/consumables. | Open |
+| 22.18 | **Gold tracking in progression** — GoldTargetCopper + MountGoal.GoldCost evaluated. | **Done** (9e7df9a0) |
 | 22.19 | **Mount acquisition flow** — `MountAcquisitionTask.cs` with prereq evaluation + vendor locations. | **Done** (28f88d61) |
 | 22.20 | **Consumable budget management** — `MaxConsumableSpendPerSessionCopper` added to BotBehaviorConfig. | **Done** (e881ed2d) |
 
