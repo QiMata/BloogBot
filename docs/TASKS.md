@@ -124,7 +124,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 23.14 | **Flight path completion detection** — Track player position during taxi flight. Detect arrival when position stops changing after flight start. Add `IsInFlight` property to ObjectManager. Wire `SMSG_MONSTER_MOVE` spline completion for taxi. | Open |
+| 23.14 | **Flight path completion detection** — Added `IsInFlight` to IObjectManager + WoWSharpObjectManager. | **Done** (8a6d33d9) |
 | 23.15 | **Taxi ride test** — BG+FG: teleport to Orgrimmar flight master, discover nodes, activate flight to Crossroads. Assert: CMSG_ACTIVATETAXI sent, both arrive at Crossroads within 2 minutes. Record FG packets. | Open |
 | 23.16 | **Transport boarding test** — BG+FG: teleport to Ratchet dock, board the boat to Booty Bay. Assert: TransportGuid set on boarding, cleared on arrival. Uses TransportWaitingLogic state machine. | Open |
 | 23.17 | **Cross-continent transport test** — Horde bots: board Orgrimmar→Undercity zeppelin. Assert: mapId changes from 1 to 0 during transit, position updates reflect transport movement, arrive in Tirisfal Glades. | Open |
