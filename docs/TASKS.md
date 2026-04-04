@@ -464,10 +464,10 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 21.1 | **Add `TravelObjective` proto message** — Add to `communication.proto`: `message TravelObjective { uint32 targetMapId = 1; game.Position targetPosition = 2; string targetLocationName = 3; bool allowHearthstone = 4; bool allowClassTeleport = 5; }`. Add `TravelObjective travelObjective = 20;` field to `WoWActivitySnapshot` (StateManager sets this). Add `TRAVEL_TO = 76` to ActionType enum. Add matching `TravelTo` to `CharacterAction` enum and wire in `ActionMapping.cs`. | Open |
+| 21.1 | **Add `TravelObjective` proto message** — TRAVEL_TO=79, TravelObjective proto, CharacterAction.TravelTo, ActionMapping. | **Done** (5409506e) |
 | 21.2 | **Create `TravelTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/TravelTask.cs`. Constructor takes `(IBotContext, uint targetMapId, Position targetPos, TravelOptions)`. On first `Update()`: call `CrossMapRouter.PlanRoute()` to get `List<RouteLeg>`. Push sub-tasks in reverse order (stack is LIFO). Each sub-task pops itself on completion; TravelTask monitors progress. If a leg fails (stuck >30s), re-plan from current position. Arrival: within 5y of target on correct map. | Open |
 | 21.3 | **Create `TravelOptions` record** — TravelFaction, AllowHearthstone/ClassTeleport/FlightPath, DiscoveredFlightNodes, HearthstoneBind. | **Done** (190d1e65) |
-| 21.4 | **Wire TravelTo in ActionDispatch** — In `BotRunnerService.ActionDispatch.cs`, handle `CharacterAction.TravelTo`. Params: `[targetMapId (int), targetX (float), targetY (float), targetZ (float)]`. Push `TravelTask` onto bot task stack. | Open |
+| 21.4 | **Wire TravelTo in ActionDispatch** — Same-map GOTO, cross-map placeholder for P21.2. | **Done** (5409506e) |
 | 21.5 | **StateManager travel coordination** — In `CharacterStateSocketListener`, when injecting coordinated actions, check if bot has a `TravelObjective`. If bot is not already executing a TravelTo action and is idle, inject `ActionType.TRAVEL_TO` with the objective's target. StateManager sets `TravelObjective` on the snapshot based on higher-level goals (grind zone assignment, dungeon entrance, vendor trip, etc.). | Open |
 
 ### 21B — Flight Path Integration
