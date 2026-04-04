@@ -439,8 +439,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | 22.29 | **Gear evaluation test** — 3 tests: empty slots, matched slot, priority ordering. | **Done** (d5f915b5) |
 | 22.30 | **ProgressionPlanner priority test** — 7 tests for config/gold/skill/quest evaluation. | **Done** (26801e1f) |
 | 22.31 | **Configurable spec test** — 6 tests for BotProfileResolver.Resolve with spec overrides. | **Done** (3e20b43d) |
-| 22.32 | **Talent auto-allocation test** — `Tests/BotRunner.Tests/Progression/TalentAllocationTests.cs`. Given custom talent build order in config, assert TalentService follows the custom order instead of hardcoded default. | Open |
-| 22.33 | **Rep tracking test** — `Tests/BotRunner.Tests/Progression/ReputationTrackingTests.cs`. Mock snapshot with Argent Dawn at Honored. Config has goal Exalted. Assert: ProgressionPlanner returns Stratholme farming activity (Argent Dawn rep source). | Open |
+| 22.32 | **Talent auto-allocation test** — 8 tests for TalentBuildDefinitions.GetBuild per spec. | **Done** (f3748499) |
+| 22.33 | **Rep tracking test** — 4 tests for ProgressionPlanner reputation goal evaluation. | **Done** (f3748499) |
 
 ---
 
