@@ -382,7 +382,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 22.9 | **Define `ReputationGoal` model** — `ReputationGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
-| 22.10 | **Reputation tracking in snapshot** — Parse reputation data from `SMSG_INITIALIZE_FACTIONS` (field 6 in player init) and `SMSG_SET_FACTION_STANDING`. Add `map<uint32, int32> reputationStandings = 44` to `WoWPlayer` proto (factionId → standing value). BotRunner populates from ObjectManager faction data. StateManager compares against ReputationGoals. | Open |
+| 22.10 | **Reputation tracking in snapshot** — `reputationStandings` map added to WoWPlayer proto field 45. | **Done** (cbf62843) |
 | 22.11 | **Rep-driven activity selection** — When bot has rep goals below target: pick highest-priority faction, resolve grind method to activity. "Quests" → find available quests for that faction. "Dungeon:X" → farm dungeon X (many runs). "Turnin:RuneclothBandage" → craft bandages + turn in to faction NPC. "Mob:X" → grind specific mobs that give rep. | Open |
 
 ### 22D — Rare Item & Mount Goals
@@ -500,7 +500,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 | # | Task | Spec |
 |---|------|------|
 | 21.16 | **Mage teleport spell data** — `MageTeleportData.cs` already exists. | **Done** (pre-existing) |
-| 21.17 | **Create `MageTeleportTask.cs`** — File: `Exports/BotRunner/Tasks/Travel/MageTeleportTask.cs`. If bot IS a mage: (1) Check spell known. (2) Check cooldown. (3) Check reagent (for portal). (4) Stop movement. (5) Cast spell. (6) Detect teleport (mapId change or position delta >100y). If bot is NOT a mage but party has one: request mage to cast portal via party chat or coordinated action. | Open |
+| 21.17 | **Create `MageTeleportTask.cs`** — Checks class/spell/cooldown, casts, detects teleport. | **Done** (cbf62843) |
 | 21.18 | **Warlock Ritual of Summoning** — File: `Exports/BotRunner/Tasks/Travel/WarlockSummonTask.cs`. Spell ID 698 (Ritual of Summoning). Requires: 3 party members, Soul Shard reagent. Warlock casts, 2 helpers click portal. Target clicks accept. Add `CMSG_MEETINGSTONE_JOIN` / `SMSG_MEETINGSTONE_COMPLETE` handling in a new `SummoningNetworkClientComponent`. CrossMapRouter: if party has warlock + 2 members at destination, prefer summon over transport (0 travel time). | Open |
 | 21.19 | **Meeting stone summoning** — Similar to warlock summon but at dungeon meeting stones. GameObjectType 23. Bot walks to meeting stone, interacts via `CMSG_MEETINGSTONE_JOIN`, waits for `SMSG_MEETINGSTONE_COMPLETE`. Used to summon offline group members to dungeon entrance. | Open |
 
