@@ -363,7 +363,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.1 | **Add `CharacterBuildConfig` to CharacterSettings** — File: `Services/WoWStateManager/Settings/CharacterBuildConfig.cs`. New class referenced by `CharacterSettings.BuildConfig`. Fields: `string SpecName` (e.g., "WarriorFury", "PriestShadow" — matches BotProfile names), `string TalentBuildName` (key into TalentBuildDefinitions, defaults to spec's default), `List<GearGoal> TargetGearSet` (BiS list by slot), `List<ReputationGoal> ReputationGoals`, `List<ItemGoal> ItemGoals` (rare drops/quest rewards), `MountGoal? MountGoal`, `int GoldTargetCopper` (savings goal in copper), `List<string> SkillPriorities` (profession/skill training order), `List<string> QuestChains` (quest chain IDs to complete). Serialized as part of `StateManagerSettings.json`. | Open |
+| 22.1 | **Add `CharacterBuildConfig` to CharacterSettings** — Added TargetGearSet, ReputationGoals, ItemGoals, MountGoal fields. | **Done** (c15b6773) |
 | 22.2 | **Make spec configurable** — In `BackgroundBotWorker.CreateClassContainer()`, replace hardcoded spec switch with lookup from `CharacterSettings.BuildConfig.SpecName`. Fall back to current defaults if not set. Same change in FG's `CombatRotationFactory`. This means a Warrior bot can be configured as Arms, Fury, OR Protection from JSON config without code changes. | Open |
 | 22.3 | **Make talent build configurable** — In `TalentBuildDefinitions`, add `GetBuild(string buildName)` that resolves by name. `CharacterBuildConfig.TalentBuildName` selects which build. Add support for custom builds: `List<(int tab, int talent)> CustomTalentOrder` field in config for user-defined allocation orders. TalentService reads from config instead of hardcoded class→build mapping. | Open |
 | 22.4 | **Add build config to proto snapshot** — Add `CharacterBuildConfig buildConfig = 21` field to `WoWActivitySnapshot` (or a new `CharacterGoals` sub-message). StateManager populates from CharacterSettings. BotRunner reads to drive behavior. DecisionEngineService reads to prioritize actions toward goals. | Open |
@@ -372,7 +372,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.5 | **Define `GearGoal` model** — File: `Exports/BotRunner/Progression/GearGoal.cs`. Record: `GearGoal(EquipSlot Slot, int TargetItemId, string ItemName, string Source, int Priority)`. Source examples: "Dungeon:StratholmeBaron" (boss drop), "Quest:InMyHour" (quest reward), "Vendor:OrgWeaponsmith" (vendor purchase), "Craft:ArcaniteReaper" (crafted), "AH" (auction house). Priority: 1=immediate, 2=next upgrade, 3=eventual BiS. | Open |
+| 22.5 | **Define `GearGoal` model** — `GearGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.6 | **Create pre-built BiS gear sets** — File: `Exports/BotRunner/Progression/PreRaidBisSets.cs`. Static data: one `List<GearGoal>` per spec (27 sets). Example for Fury Warrior pre-raid BiS: Lionheart Helm (head, craft), Onyxia Tooth Pendant (neck, Onyxia), Truestrike Shoulders (shoulder, UBRS), Cape of the Black Baron (back, Strat Baron), Savage Gladiator Chain (chest, BRD), etc. Each entry includes item ID, slot, source dungeon/quest/craft, and priority tier. Load from JSON files: `Config/BisSets/WarriorFury.json`. | Open |
 | 22.7 | **Gear evaluation against target set** — Extend `EquipmentService` with `EvaluateAgainstBiS(IObjectManager, List<GearGoal>)`. Returns: `List<GearGap>` — slots where current item != target item, sorted by priority. Each gap includes: slot, current item ID, target item ID, source (where to get it). StateManager uses this to decide: "bot needs Cape of the Black Baron → assign Stratholme Baron farming". | Open |
 | 22.8 | **Gear-driven activity selection** — In StateManager's action injection, when bot is idle and has gear gaps: pick highest-priority gap, resolve source to an activity. Source mapping: "Dungeon:X" → push DungeoneeringTask for dungeon X, "Quest:X" → push QuestingTask for quest X, "Craft:X" → push CraftTask (need materials), "AH" → push AH scan + purchase, "Vendor:X" → push TravelTo vendor + BuyItem. | Open |
@@ -381,7 +381,7 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.9 | **Define `ReputationGoal` model** — File: `Exports/BotRunner/Progression/ReputationGoal.cs`. Record: `ReputationGoal(int FactionId, string FactionName, ReputationStanding TargetStanding, string GrindMethod)`. Standings enum: Hated, Hostile, Unfriendly, Neutral, Friendly, Honored, Revered, Exalted. GrindMethod: "Quests", "Dungeon:Stratholme", "Turnin:RuneclothBandage", "Mob:TimbermawFurbolg". | Open |
+| 22.9 | **Define `ReputationGoal` model** — `ReputationGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.10 | **Reputation tracking in snapshot** — Parse reputation data from `SMSG_INITIALIZE_FACTIONS` (field 6 in player init) and `SMSG_SET_FACTION_STANDING`. Add `map<uint32, int32> reputationStandings = 44` to `WoWPlayer` proto (factionId → standing value). BotRunner populates from ObjectManager faction data. StateManager compares against ReputationGoals. | Open |
 | 22.11 | **Rep-driven activity selection** — When bot has rep goals below target: pick highest-priority faction, resolve grind method to activity. "Quests" → find available quests for that faction. "Dungeon:X" → farm dungeon X (many runs). "Turnin:RuneclothBandage" → craft bandages + turn in to faction NPC. "Mob:X" → grind specific mobs that give rep. | Open |
 
@@ -389,8 +389,8 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 
 | # | Task | Spec |
 |---|------|------|
-| 22.12 | **Define `ItemGoal` model** — File: `Exports/BotRunner/Progression/ItemGoal.cs`. Record: `ItemGoal(int ItemId, string ItemName, string Source, int Quantity, bool IsMount, float EstimatedDropRate)`. Examples: Baron Rivendare's Deathcharger (item 13335, Source: "Boss:Stratholme:BaronRivendare", dropRate: 0.02), Ironfoe (item 11684, Source: "Boss:BRD:EmperorDagranThaurissan", dropRate: 0.04), Eye of Sulfuras (item 17204, Source: "Boss:MoltenCore:Ragnaros", dropRate: 0.03). | Open |
-| 22.13 | **Define `MountGoal` model** — File: `Exports/BotRunner/Progression/MountGoal.cs`. Record: `MountGoal(MountType Type, int? TargetItemId, int GoldCostCopper, int RequiredLevel, int RequiredRidingSkill)`. Types: `BasicMount` (level 40, 100% speed, ~90g), `EpicMount` (level 60, 60% speed, ~900g), `RareDrop` (Baron mount, ZG tiger, AQ mount). StateManager checks: does bot have riding skill? enough gold? correct level? If not, prioritize gold farming or trainer visit. | Open |
+| 22.12 | **Define `ItemGoal` model** — `ItemGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
+| 22.13 | **Define `MountGoal` model** — `MountGoalEntry` in CharacterBuildConfig.cs. | **Done** (c15b6773) |
 | 22.14 | **Farm loop for rare drops** — Create `FarmBossTask.cs` in `Exports/BotRunner/Tasks/Progression/`. Given a dungeon + boss: (1) Travel to dungeon entrance (via P21 TravelTask). (2) Enter dungeon. (3) Clear to boss (via DungeoneeringTask waypoints). (4) Kill boss. (5) Check loot for target item. (6) If not found: exit dungeon, reset instance (`.instance reset`), repeat. (7) If found: equip/bank item, mark goal complete. Track attempt count for statistics. | Open |
 
 ### 22E — Skill & Profession Training
