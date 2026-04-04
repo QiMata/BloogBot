@@ -1044,13 +1044,13 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-03 (session 300)
 - **Branch:** `main`
-- **Session 300 — containerized services fully functional; PathfindingService stripped to path-only; BG bot movement with local VMAP working:**
-  - **Service simplification:** PathfindingService stripped from 967→260 lines. Now handles ONLY path requests. Physics, GroundZ, LOS, navmesh queries all moved to local Navigation.dll P/Invoke in PathfindingClient. Deleted Physics.cs (406 lines) from PathfindingService.
-  - **Containerization fixes:** GetGroundZ export, ground snap FALLINGFAR loop, CrashMonitor Docker ports, scene slice mode VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID-matching status file fix.
-  - **Current state:** PathfindingService serves paths (42 maps loaded, confirmed via DIAG). BG bot moves with local VMAP terrain collision (341y travel logged). Navigation test reaches timeout but does move.
-  - **Remaining blocker:** `.go xyz` teleport race condition. Snapshot shows teleport target (locally set), but server position reverts to DB login position when the ObjectManager receives the server's position update. Bot computes path from login position, not teleport target. Fix: either (a) wait for server-confirmed position before sending GOTO, or (b) use SOAP offline teleport before bot login.
-  - Commits: `b15365e9` through `daa8e85d`
-  - **Next steps:** Fix teleport position race, then re-run gathering/combat/navigation tests.
+- **Session 300 — NavigationTests PASSING; containerized services operational; physics wall-contact bug identified:**
+  - **Service simplification:** PathfindingService 967→260 lines (path-only). Physics/GroundZ/LOS/navmesh local via P/Invoke. Physics.cs deleted.
+  - **Containerization fixes:** GetGroundZ export, ground snap FALLINGFAR, CrashMonitor Docker, scene slice VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID fix.
+  - **Navigation test GREEN:** Bot navigates VoT (-601,-4297)→(-630,-4340) via containerized PathfindingService. 78s arrival. Teleport race avoided by using login position.
+  - **Mining test progress:** 15 copper candidates found, GatheringRouteTask dispatched, bot navigates. BUT: ~1y/s speed (expected 7y/s). Root cause: `CollisionStepWoW` `wallHit=1 nZ=1.0` — `ResolveGroundedWallContacts` blocks horizontal movement on flat terrain.
+  - Commits: `b15365e9` through `8faa5618`
+  - **Next blocker:** Physics `ResolveGroundedWallContacts` treating flat terrain as wall. Pre-existing bug, not containerization. Once fixed, mining/gathering/combat should pass at normal speed.
 - **Session 299 — split Pathfinding/SceneData services are live on Linux with mounted data volumes; live matrix still pending completion:**
   - Validated the current split-service deployment on `docker-compose.vmangos-linux.yml`: `pathfinding-service` and `scene-data-service` are both running, publishing `5001`/`5003`, and serving from mounted `/wwow-data`.
   - Runtime logs show the expected behavior: Pathfinding preload across the discovered map set and SceneData readiness on `0.0.0.0:5003` with initialized scene/nav coverage.
