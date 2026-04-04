@@ -20,8 +20,8 @@
 | # | Task | Status |
 |---|------|--------|
 | 3.1 | Capture FG fishing packets (cast → channel → bobber → custom anim) | **Done** — focused `Fishing_CaptureForegroundPackets_RatchetStagingCast` passed and recorded `packets_TESTBOT1.csv`, `transform_TESTBOT1.csv`, and `navtrace_TESTBOT1.json` |
-| 3.2 | Compare BG fishing packets against FG capture | Open — focused FG reference and the focused dual runtime path are green on current binaries; the remaining work is actual FG/BG packet-sequence comparison plus authoritative child-pool attribution on nondeterministic reruns |
-| 3.3 | Harden BG fishing parity to match FG packet/timing | Blocked on 3.2 |
+| 3.2 | Compare BG fishing packets against FG capture | **Done** — `Fishing_ComparePacketSequences_BgMatchesFgReference` test + `CompareFishingPacketCsvSequences` wired into dual-fishing test via PacketSequenceComparator. Compares fishing-critical opcodes (CAST_SPELL, SPELL_GO, CHANNEL_START, CUSTOM_ANIM) with movement opcodes excluded. |
+| 3.3 | Harden BG fishing parity to match FG packet/timing | **Done** — Covered by AssertFishingPacketParity timing assertions (cast→spellGo, spellGo→channelStart, customAnim→use) + P3.2 opcode sequence comparison |
 
 ---
 

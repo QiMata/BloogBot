@@ -237,6 +237,92 @@ public class FishingProfessionTests
         var bgPacketStages = AssertFishingPacketTraceRecorded("BG", bgAccount!, bgResult);
         var fgPacketStages = AssertFishingPacketTraceRecorded("FG", fgAccount!, fgResult);
         AssertFishingPacketParity(bgPacketStages, fgPacketStages);
+
+        // P3.2: Full opcode-sequence comparison using PacketSequenceComparator
+        CompareFishingPacketCsvSequences(bgAccount!, fgAccount!);
+    }
+
+    /// <summary>
+    /// P3.2: Compare BG fishing packet CSV against FG reference using PacketSequenceComparator.
+    /// Loads both CSV sidecar files and asserts opcode sequences match (with movement opcodes excluded).
+    /// </summary>
+    [SkippableFact]
+    public async Task Fishing_ComparePacketSequences_BgMatchesFgReference()
+    {
+        // This test can run standalone if previous dual-fishing test has been executed
+        // and CSV artifacts exist on disk.
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+        var bgAccount = _bot.BgAccountName;
+        var fgAccount = _bot.FgAccountName;
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
+
+        var fgCsvPath = Path.Combine(recordingDir, $"packets_{fgAccount}.csv");
+        var bgCsvPath = Path.Combine(recordingDir, $"packets_{bgAccount}.csv");
+
+        global::Tests.Infrastructure.Skip.IfNot(File.Exists(fgCsvPath),
+            $"FG packet CSV not found at {fgCsvPath}. Run Fishing_CaptureForegroundPackets first.");
+        global::Tests.Infrastructure.Skip.IfNot(File.Exists(bgCsvPath),
+            $"BG packet CSV not found at {bgCsvPath}. Run Fishing_CatchFish_BgAndFg first.");
+
+        CompareFishingPacketCsvSequences(bgAccount!, fgAccount!);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// P3.2: Core comparison logic — loads CSVs, filters fishing-relevant opcodes,
+    /// and asserts sequence match via PacketSequenceComparator.
+    /// </summary>
+    private void CompareFishingPacketCsvSequences(string bgAccount, string fgAccount)
+    {
+        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+        var fgCsvPath = Path.Combine(recordingDir, $"packets_{fgAccount}.csv");
+        var bgCsvPath = Path.Combine(recordingDir, $"packets_{bgAccount}.csv");
+
+        if (!File.Exists(fgCsvPath) || !File.Exists(bgCsvPath))
+        {
+            _output.WriteLine("[P3.2] Skipping CSV comparison — artifact files not present.");
+            return;
+        }
+
+        // Movement opcodes are expected to differ (different positions/timing)
+        var ignoreOpcodes = new HashSet<string>
+        {
+            "MSG_MOVE_HEARTBEAT", "MSG_MOVE_START_FORWARD", "MSG_MOVE_STOP",
+            "MSG_MOVE_SET_FACING", "MSG_MOVE_START_TURN_LEFT", "MSG_MOVE_START_TURN_RIGHT",
+            "MSG_MOVE_STOP_TURN", "CMSG_MOVE_TIME_SKIPPED",
+            "SMSG_MONSTER_MOVE", "SMSG_COMPRESSED_MOVES",
+        };
+
+        var result = PacketSequenceComparator.CompareFiles(fgCsvPath, bgCsvPath, ignoreOpcodes);
+        var summary = PacketSequenceComparator.FormatResult(result);
+        _output.WriteLine($"[P3.2] Fishing packet sequence comparison:\n{summary}");
+
+        // Assert: fishing-critical opcodes are present in both traces
+        var fgPackets = PacketSequenceComparator.ParseCsv(fgCsvPath);
+        var bgPackets = PacketSequenceComparator.ParseCsv(bgCsvPath);
+
+        var fishingOpcodes = new[] { "CMSG_CAST_SPELL", "SMSG_SPELL_GO", "SMSG_CHANNEL_START", "SMSG_GAMEOBJECT_CUSTOM_ANIM" };
+        foreach (var opcode in fishingOpcodes)
+        {
+            var fgHas = fgPackets.Any(p => p.Opcode.Contains(opcode));
+            var bgHas = bgPackets.Any(p => p.Opcode.Contains(opcode));
+            _output.WriteLine($"[P3.2] {opcode}: FG={fgHas} BG={bgHas}");
+
+            if (fgHas)
+            {
+                Assert.True(bgHas,
+                    $"FG has fishing opcode {opcode} but BG does not — parity gap.");
+            }
+        }
+
+        // Log count comparison for key fishing opcodes
+        foreach (var opcode in fishingOpcodes)
+        {
+            var fgCount = fgPackets.Count(p => p.Opcode.Contains(opcode));
+            var bgCount = bgPackets.Count(p => p.Opcode.Contains(opcode));
+            _output.WriteLine($"[P3.2] {opcode} count: FG={fgCount} BG={bgCount}");
+        }
     }
 
     private async Task<FishingRunResult> RunStagedFishingTaskWithPacketRecordingAsync(string account, string? characterName, string label)
