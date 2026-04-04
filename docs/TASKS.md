@@ -1044,15 +1044,17 @@ if (transportGuid != 0) {
 ## Session Handoff
 - **Last updated:** 2026-04-04 (session 301)
 - **Branch:** `main`
-- **Session 301 — Binary parity fully restored; workarounds stripped:**
+- **Session 301 — Binary parity fully restored; all non-binary fallbacks removed:**
   - **C++ PhysicsEngine.cpp:** ZERO diff from parity baseline (70c72973). Binary parity preserved.
-  - **MovementController.cs:** Stripped 87 lines of post-parity workarounds (grace frames, clamp frames, forced FALLINGFAR, NativePhysics.GetGroundZ fallback). Restored original ground snap logic. Only remaining diff from baseline is legitimate local physics infrastructure (IPhysicsClient, SceneDataClient, NativeLocalPhysics.Step path).
-  - **IPC parity tests fixed:** 6 `MovementControllerIpcParityTests` now pass by using local `NativeLocalPhysics.Step` instead of removed remote physics path.
-  - **Idle guard restored** from parity baseline.
-  - **Physics test suite: 666/669** (2 pre-existing Undercity elevator failures). 6 more passing than session start.
-  - Navigation test GREEN. Docker containers rebuilt.
-  - Commits: `e9e7f5c5` through `efb6c93d`
-  - **Next:** Live BG bot Z oscillation (terrain layer disambiguation) blocks normal movement speed. This is a terrain data / AABB query issue on VoT terrain, not a code parity issue.
+  - **MovementController.cs:** Physics is ALWAYS local via NativeLocalPhysics.Step. Removed `_physics.PhysicsStep` remote path entirely. Restored original ground snap logic (stripped 87 lines of workarounds). Restored idle guard.
+  - **PathfindingClient:** Removed `IPhysicsClient` implementation and PhysicsStep hold-position stub. No pretend physics.
+  - **ObjectManager:** `_physicsClient` always null, `_useLocalPhysics` always true. Removed PathfindingClient-as-physics fallback chain.
+  - **Deleted:** FrameAheadSimulator (dead code), PathfindingClientDeadReckoningTests, NativePathfindingClient helper.
+  - **IPC parity tests fixed:** 6 tests now pass using local NativeLocalPhysics.
+  - **Physics test suite: 666/669** (2 pre-existing Undercity elevator). Navigation test GREEN.
+  - Net: -978 lines of fallback/workaround code removed.
+  - Commits: `e9e7f5c5` through `6498df1a`
+  - **Next:** Live BG bot Z oscillation (terrain layer disambiguation) on VoT terrain. Pre-existing terrain data issue, not code parity.
 - **Session 300 — containerized services operational; PathfindingService stripped to path-only:**
   - Service simplification: PathfindingService 967→260 lines (path-only). Physics/GroundZ/LOS/navmesh local via P/Invoke. Physics.cs deleted.
   - Containerization fixes: GetGroundZ export, ground snap FALLINGFAR, CrashMonitor Docker, scene slice VMAP fallback, WWOW_DATA_DIR forwarding, StateManager PID fix.
