@@ -86,8 +86,9 @@ namespace WoWSharpClient.Movement
         // geometry below the navmesh walking surface.
         private const float PATH_GROUND_Z_TOLERANCE = 3.0f;
 
-        private int _teleportClampFrames = 0;
-        private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
+        // Removed: _teleportClampFrames, TELEPORT_CLAMP_MAX_FRAMES, _teleportZGraceFrames,
+        // _noGroundFrameCount — workarounds that broke binary parity. Restored original
+        // ground snap logic from parity baseline (70c72973).
 
         // Network timing
         private uint _lastPacketTime;
@@ -291,101 +292,33 @@ namespace WoWSharpClient.Movement
                 // Only clamp when there's no ground at all (missing navmesh/collision), which prevents
                 // fallthrough at docks/bridges/beaches where the navmesh sees the ocean floor.
                 bool physicsFoundGround = _prevGroundZ > -50000f;
-                _noGroundFrameCount = physicsFoundGround ? 0 : _noGroundFrameCount + 1;
-
                 if (!float.IsNaN(_teleportZ) && _player.Position.Z < _teleportZ && !physicsFoundGround)
                 {
-                    _teleportZGraceFrames++;
-                    if (_teleportZGraceFrames > TELEPORT_Z_GRACE_DURATION)
-                    {
-                        Log.Warning("[MovementController] Ground snap found no support below teleport target after {Frames} frames: " +
-                            "posZ={PosZ:F1} teleportZ={TeleZ:F1}. Clamping to teleport Z.",
-                            _teleportZGraceFrames, _player.Position.Z, _teleportZ);
-                        _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
-                        _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                        _velocity = Vector3.Zero;
-                        _fallTimeMs = 0;
-                    }
-                }
-                else
-                {
-                    _teleportZGraceFrames = 0;
+                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _velocity = Vector3.Zero;
+                    _fallTimeMs = 0;
                 }
 
                 // Guard against physics finding geometry ABOVE the teleport target (roofs, WMO
                 // surfaces, bridges). The server is authoritative on post-teleport position —
                 // if the player is significantly above teleport Z, physics found a ceiling/roof,
-                // not the intended ground surface. Reject that contact for a short grace window
-                // so the bot can keep falling while local scene data catches up.
+                // not the intended ground surface. Clamp back to teleport Z.
                 if (!float.IsNaN(_teleportZ) && _player.Position.Z > _teleportZ + GROUND_SNAP_MAX_DROP)
                 {
-                    _teleportClampFrames++;
-                    if (_teleportClampFrames <= TELEPORT_CLAMP_MAX_FRAMES)
-                    {
-                        if (_teleportClampFrames == 1 || (_teleportClampFrames % 30) == 0)
-                        {
-                            Log.Warning("[MovementController] Ground snap rejected geometry above teleport target: " +
-                                "posZ={PosZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1} rejectFrames={Frames}.",
-                                _player.Position.Z, _teleportZ, _prevGroundZ, _teleportClampFrames);
-                        }
-
-                        _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
-                        _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
-                        _player.MovementFlags &= ~MovementFlags.MOVEFLAG_JUMPING;
-                        _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, -0.1f));
-                        _fallTimeMs = Math.Max(_fallTimeMs, (uint)MathF.Max(1f, deltaSec * 1000f));
-                        _prevGroundZ = -50001f;
-                        _prevGroundNormal = new Vector3(0, 0, 1);
-                        _pendingDepen = Vector3.Zero;
-                        _standingOnInstanceId = 0;
-                        _standingOnLocal = Vector3.Zero;
-                        _hasPhysicsGroundContact = false;
-                        _wasGroundedLastFrame = false;
-                        physicsFoundGround = false;
-                    }
-                }
-                else
-                {
-                    _teleportClampFrames = 0;
+                    Log.Warning("[MovementController] Ground snap found geometry above teleport target: " +
+                        "posZ={PosZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1}. Clamping to teleport Z.",
+                        _player.Position.Z, _teleportZ, _prevGroundZ);
+                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _velocity = Vector3.Zero;
+                    _fallTimeMs = 0;
                 }
 
                 bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
                 if (!stillFalling || _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
                 {
                     _needsGroundSnap = false;
-
-                    // If we timed out while still falling, force-clear airborne flags.
-                    // Without this, FALLINGFAR persists permanently and the bot can never
-                    // move (airborne steering only, zero-delta physics).
-                    // Try to find actual ground Z via native GetGroundZ so we don't leave
-                    // the bot stranded at a wrong altitude (e.g. Z=147 on an Org rooftop).
-                    if (stillFalling && _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
-                    {
-                        float correctedZ = _player.Position.Z;
-                        try
-                        {
-                            float nativeGround = NativePhysics.GetGroundZ(
-                                _player.MapId, _player.Position.X, _player.Position.Y,
-                                _player.Position.Z + 5f, 200f);
-                            if (nativeGround > -50000f)
-                                correctedZ = nativeGround + 0.5f;
-                        }
-                        catch
-                        {
-                            // Navigation.dll not loaded (FG bot) — use teleportZ as fallback
-                            if (!float.IsNaN(_teleportZ))
-                                correctedZ = _teleportZ;
-                        }
-
-                        Log.Warning("[MovementController] Ground snap timed out at {Frames} frames with FALLINGFAR still set. " +
-                            "Force-clearing airborne flags. posZ={PosZ:F1} correctedZ={CorrectedZ:F1} teleportZ={TeleZ:F1} groundZ={GroundZ:F1}",
-                            _groundSnapFrames, _player.Position.Z, correctedZ, _teleportZ, _prevGroundZ);
-                        _player.Position = new Position(_player.Position.X, _player.Position.Y, correctedZ);
-                        _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                        _velocity = Vector3.Zero;
-                        _fallTimeMs = 0;
-                        _wasGroundedLastFrame = true;
-                    }
 
                     Log.Information("[MovementController] Post-teleport ground snap complete: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X} frames={Frames}",
                         _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags, _groundSnapFrames);
@@ -698,7 +631,7 @@ namespace WoWSharpClient.Movement
         // a teleport occurred during the gRPC call and the result is stale.
         private float _physicsInputX, _physicsInputY, _physicsInputZ;
         private uint _physicsInputFlags;
-        private int _noGroundFrameCount = 0;
+        // _noGroundFrameCount removed — workaround
         private int _falseFreefallCount = 0;
         private float _ffsStartZ = float.NaN;  // Z where FFS first engaged — tracks cumulative drift
         // Track whether _prevGroundZ was established from actual physics ground contact
@@ -715,7 +648,7 @@ namespace WoWSharpClient.Movement
         /// In production, this is set by ApplyPhysicsResult from physics output.
         /// </summary>
         public void SetGroundedState(bool grounded) => _wasGroundedLastFrame = grounded;
-        private int _teleportZGraceFrames = 0;
+        // _teleportZGraceFrames removed — workaround
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
         private ulong _lastTransportGuid = player.TransportGuid;
@@ -1383,9 +1316,7 @@ namespace WoWSharpClient.Movement
             _needsGroundSnap = true;
             _groundSnapFrames = 0;
             _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
-            _teleportZGraceFrames = 0; // Reset grace countdown on new teleport
-            _teleportClampFrames = 0;
-            _noGroundFrameCount = 0;
+            // Ground snap state reset on new teleport
 
             _currentPath = null;
             _currentWaypointIndex = 0;
