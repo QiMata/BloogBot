@@ -175,6 +175,7 @@ public class GatheringProfessionTests
     {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         await _bot.RefreshSnapshotsAsync();
         uint skillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
@@ -200,6 +201,7 @@ public class GatheringProfessionTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(fgAccount == null, "FG bot not available.");
         global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot not actionable.");
+        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
 
         var valleyCandidates = await LoadValleyCopperCandidatesAsync();
 
@@ -224,6 +226,7 @@ public class GatheringProfessionTests
     {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         await _bot.RefreshSnapshotsAsync();
         uint skillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
@@ -249,6 +252,7 @@ public class GatheringProfessionTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(fgAccount == null, "FG bot not available.");
         global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot not actionable.");
+        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
 
         var herbCandidates = await LoadDurotarHerbCandidatesAsync();
 

@@ -34,6 +34,7 @@ public class AllianceNavigationTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Alliance_GoldshireToStormwind()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -48,6 +49,7 @@ public class AllianceNavigationTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Alliance_VendorBuySell()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -62,6 +64,7 @@ public class AllianceNavigationTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Alliance_Deadmines_Entry()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -75,6 +78,7 @@ public class AllianceNavigationTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Alliance_Stockade_Entry()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -88,6 +92,7 @@ public class AllianceNavigationTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Alliance_Gnomeregan_Entry()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

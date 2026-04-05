@@ -65,6 +65,7 @@ public class MovementSpeedTests
     public async Task BG_Durotar_WindingPathSpeed()
     {
         var bg = _bot.BgAccountName;
+        await _bot.EnsureCleanSlateAsync(bg!, "BG");
         _output.WriteLine("=== BG Movement: Durotar Winding Path (141y) ===");
         _output.WriteLine($"Start: ({StartX}, {StartY}, {StartZ})");
         _output.WriteLine($"Target: ({TargetX}, {TargetY}, {TargetZ})");

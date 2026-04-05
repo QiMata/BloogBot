@@ -30,6 +30,7 @@ public class ScaleTest100
     public async Task Scale_100Bots_AllSnapshotsReceived()
     {
         _output.WriteLine("[SCALE] 100-bot test requires dedicated test harness — see LoadTestRunner");
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

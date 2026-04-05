@@ -35,6 +35,8 @@ public class ArathiBasinTests
     public async Task AB_AllBotsEnterWorld()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await BgTestHelper.WaitForBotsAsync(_bot, _output, ArathiBasinFixture.TotalBotCount, "AB");
     }
 
@@ -42,6 +44,8 @@ public class ArathiBasinTests
     public async Task AB_QueueAndEnterBattleground()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.EnsurePreparedAsync();
         await BgTestHelper.WaitForBotsAsync(_bot, _output, ArathiBasinFixture.TotalBotCount, "AB");
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, ArathiBasinFixture.AbMapId, ArathiBasinFixture.TotalBotCount, "AB");
@@ -66,6 +70,8 @@ public class AlteracValleyTests
     public async Task AV_AllBotsEnterWorld()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
     }
 
@@ -73,6 +79,8 @@ public class AlteracValleyTests
     public async Task AV_QueueAndEnterBattleground()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.EnsurePreparedAsync();
         await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, AlteracValleyFixture.TotalBotCount, "AV");
@@ -82,6 +90,8 @@ public class AlteracValleyTests
     public async Task AV_FullyPreparedRaids_MountAndReachFirstObjective()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.EnsureObjectivePreparedAsync();
         await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, AlteracValleyFixture.TotalBotCount, "AV");

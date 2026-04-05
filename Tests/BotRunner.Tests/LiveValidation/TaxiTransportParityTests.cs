@@ -29,6 +29,7 @@ public class TaxiTransportParityTests
     public async Task Taxi_Ride_FgBgParity()
     {
         // P23.15: Both FG and BG take a taxi ride — arrival position matches
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class TaxiTransportParityTests
     public async Task Transport_Board_FgBgParity()
     {
         // P23.16: Both FG and BG board a transport (zeppelin/boat) — position tracking consistent
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -51,6 +53,7 @@ public class TaxiTransportParityTests
     public async Task Transport_CrossContinent_FgBgParity()
     {
         // P23.17: Both FG and BG complete a cross-continent transport — map transition and final position match
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

@@ -209,6 +209,8 @@ public class RagefireChasmTests
         // No restart needed.
         Console.Error.WriteLine($"[RFC] Fixture ready={_bot.IsReady}, bots={_bot.AllBots.Count}");
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         // ===== Phase: Bots enter world =====
         // ALL bots must connect. Any missing bot = automatic failure (crash/disconnect is a bug).

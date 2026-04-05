@@ -51,6 +51,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_FlatPath()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Road path heading NE — gradual uphill (56.5→64.8 over ~55y).
         // Ground Z from GetGroundZ: start=56.47, target=64.81
         await RunParityTest(
@@ -63,6 +66,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_HillPath()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Start from the road, walk toward the cave entrance (uphill).
         // Ground Z from GetGroundZ: start=57.39, target=61.41
         await RunParityTest(
@@ -75,6 +81,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_Durotar_RoadPath()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Road near Razor Hill — relatively flat, long straight
         await RunParityTest(
             name: "Durotar — Road Path",
@@ -86,6 +95,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_Durotar_RoadPath_TurnStart()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         await RunParityTest(
             name: "Durotar - Road Path (turn start)",
             startX: -500f, startY: -4800f, startZ: 38f,
@@ -103,6 +115,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_Durotar_RoadPath_Redirect()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         await RunRedirectParityTest(
             name: "Durotar - Road Path (mid-route redirect / pause-resume)",
             startX: -500f, startY: -4800f, startZ: 38f,
@@ -115,6 +130,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_LongDiagonal()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity.
         // Ground Z: start=57.39, target=66.30
         await RunParityTest(
@@ -127,6 +145,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_ReverseHill()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Reverse of HillPath — start uphill, walk toward the road (downhill).
         // Ground Z: start=61.41, target=57.39
         await RunParityTest(
@@ -146,6 +167,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_LedgeDrop()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Start on elevated terrain near the cave, walk downhill to the road.
         // The elevation drop triggers FALLINGFAR → landing flag transition.
         // Ground Z: start=64.62, target=59.67
@@ -159,6 +183,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_SteepClimb()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Start at the road, walk steeply uphill toward the high ground north of cave.
         // Ground Z: start=57.39, target=64.82
         await RunParityTest(
@@ -171,6 +198,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_Durotar_ObstacleDense()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Route along Valley of Trials path (open terrain with some objects nearby).
         // Replaces the old route through dense trees at (-356,-4490) → (-310,-4530)
         // where target Z was 148.43 (unreachable hillside) causing both bots to get stuck.
@@ -185,6 +215,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_Durotar_WindingPath()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Longer path from Razor Hill area across varied terrain — road, dirt, slight hills.
         // Exercises: sustained FORWARD flag, multiple waypoint transitions, facing changes,
         // speed consistency over distance.
@@ -198,6 +231,9 @@ public class MovementParityTests
     [SkippableFact]
     public async Task Parity_ValleyOfTrials_SteepDescent()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         // Start on high ground, descend steeply toward the valley floor.
         // Ground Z: start=64.82, target=57.35
         await RunParityTest(

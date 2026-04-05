@@ -45,6 +45,9 @@ public class ConsumableUsageTests
         // === Background Bot ===
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
         bool bgPassed = await RunConsumableScenario(bgAccount, () => _bot.BackgroundBot?.Player, "BG");
 

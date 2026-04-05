@@ -26,6 +26,8 @@ public class WarsongGulchTests
     public async Task WSG_CoordinatorQueuesAndEntersBattleground()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         await _bot.EnsurePreparedAsync();
         await BgTestHelper.WaitForBotsAsync(_bot, _output, WarsongGulchFixture.TotalBotCount, "WSG");

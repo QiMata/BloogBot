@@ -29,6 +29,9 @@ public class CombatFgTests
     {
         var combatAccount = _bot.CombatTestAccountName;
         Assert.NotNull(combatAccount);
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         Assert.True(string.Equals(combatAccount, _bot.FgAccountName, StringComparison.OrdinalIgnoreCase),
             $"COMBATTEST ({combatAccount}) should be the FG bot after CombatFg config");
 

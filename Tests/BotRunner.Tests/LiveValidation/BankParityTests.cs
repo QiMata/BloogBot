@@ -29,6 +29,7 @@ public class BankParityTests
     public async Task Bank_DepositWithdraw_FgBgParity()
     {
         // P23.9: Both FG and BG deposit then withdraw an item — inventory state matches
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class BankParityTests
     public async Task Bank_PurchaseSlot_FgBgParity()
     {
         // P23.10: Both FG and BG purchase a bank slot — slot count increases
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

@@ -30,6 +30,9 @@ public class CombatBgTests
     {
         var combatAccount = _bot.CombatTestAccountName;
         Assert.NotNull(combatAccount);
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         Assert.True(!string.Equals(combatAccount, _bot.FgAccountName, StringComparison.OrdinalIgnoreCase),
             $"COMBATTEST ({combatAccount}) should NOT be the FG bot after CombatBg config");
 

@@ -29,6 +29,7 @@ public class AuctionHouseParityTests
     public async Task AH_Search_FgBgParity()
     {
         // P23.5: Both FG and BG bots search AH — results must match
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class AuctionHouseParityTests
     public async Task AH_PostAndBuy_FgBgParity()
     {
         // P23.6: FG posts item, BG buys — gold and item transfer verified on both sides
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -51,6 +53,7 @@ public class AuctionHouseParityTests
     public async Task AH_Cancel_FgBgParity()
     {
         // P23.7: Both FG and BG cancel an auction — item returned to inventory
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

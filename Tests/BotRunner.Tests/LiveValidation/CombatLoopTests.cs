@@ -54,6 +54,9 @@ public class CombatLoopTests
     {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         var bgPassed = false;
         var fgPassed = false;
 

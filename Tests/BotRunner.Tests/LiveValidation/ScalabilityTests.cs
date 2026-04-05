@@ -26,6 +26,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_6_ObjectManager_TestMigration()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -39,6 +40,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_7_MultiBotValidation_N10()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -52,6 +54,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_25_Scalability_100BotBaseline()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -65,6 +68,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_26_Scalability_500Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -78,6 +82,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_27_Scalability_3000Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -91,6 +96,7 @@ public class ScalabilityTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P9_28_BenchmarkDotNet_RegressionSuite()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

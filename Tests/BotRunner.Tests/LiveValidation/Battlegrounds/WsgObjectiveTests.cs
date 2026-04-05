@@ -42,6 +42,7 @@ public class WsgObjectiveTests
     {
         // V2.8: Bot teleports into WSG, locates enemy flag object, interacts with it
         var account = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(account, "BG");
 
         // Teleport to WSG map near the Horde flag room
         _output.WriteLine($"[TEST] Teleporting to WSG map (mapId={WsgMapId})");
@@ -97,6 +98,7 @@ public class WsgObjectiveTests
     {
         // V2.8: Bot enters WSG map, verifies map transition and snapshot state
         var account = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(account, "BG");
 
         await _bot.BotTeleportAsync(account, WsgMapId, HordeFlagX, HordeFlagY, HordeFlagZ);
         await Task.Delay(3000);

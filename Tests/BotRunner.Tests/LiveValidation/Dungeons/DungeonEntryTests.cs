@@ -153,132 +153,208 @@ public static class DungeonEntryTestRunner
 [Collection(ShadowfangKeepCollection.Name)]
 public class ShadowfangKeepTests(ShadowfangKeepFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task SFK_GroupFormAndEnter() =>
+    [SkippableFact] public async Task SFK_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(BlackfathomDeepsCollection.Name)]
 public class BlackfathomDeepsTests(BlackfathomDeepsFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task BFD_GroupFormAndEnter() =>
+    [SkippableFact] public async Task BFD_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(GnomereganCollection.Name)]
 public class GnomereganTests(GnomereganFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task GNOMER_GroupFormAndEnter() =>
+    [SkippableFact] public async Task GNOMER_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(RazorfenKraulCollection.Name)]
 public class RazorfenKraulTests(RazorfenKraulFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task RFK_GroupFormAndEnter() =>
+    [SkippableFact] public async Task RFK_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(ScarletMonasteryCollection.Name)]
 public class ScarletMonasteryTests(ScarletMonasteryFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task SM_GroupFormAndEnter() =>
+    [SkippableFact] public async Task SM_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(RazorfenDownsCollection.Name)]
 public class RazorfenDownsTests(RazorfenDownsFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task RFD_GroupFormAndEnter() =>
+    [SkippableFact] public async Task RFD_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(UldamanCollection.Name)]
 public class UldamanTests(UldamanFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task ULDA_GroupFormAndEnter() =>
+    [SkippableFact] public async Task ULDA_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(ZulFarrakCollection.Name)]
 public class ZulFarrakTests(ZulFarrakFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task ZF_GroupFormAndEnter() =>
+    [SkippableFact] public async Task ZF_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(MaraudonCollection.Name)]
 public class MaraudonTests(MaraudonFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task MARA_GroupFormAndEnter() =>
+    [SkippableFact] public async Task MARA_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(SunkenTempleCollection.Name)]
 public class SunkenTempleTests(SunkenTempleFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task ST_GroupFormAndEnter() =>
+    [SkippableFact] public async Task ST_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(BlackrockDepthsCollection.Name)]
 public class BlackrockDepthsTests(BlackrockDepthsFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task BRD_GroupFormAndEnter() =>
+    [SkippableFact] public async Task BRD_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(LowerBlackrockSpireCollection.Name)]
 public class LowerBlackrockSpireTests(LowerBlackrockSpireFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task LBRS_GroupFormAndEnter() =>
+    [SkippableFact] public async Task LBRS_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(UpperBlackrockSpireCollection.Name)]
 public class UpperBlackrockSpireTests(UpperBlackrockSpireFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task UBRS_GroupFormAndEnter() =>
+    [SkippableFact] public async Task UBRS_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(DireMaulEastCollection.Name)]
 public class DireMaulEastTests(DireMaulEastFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task DME_GroupFormAndEnter() =>
+    [SkippableFact] public async Task DME_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(DireMaulWestCollection.Name)]
 public class DireMaulWestTests(DireMaulWestFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task DMW_GroupFormAndEnter() =>
+    [SkippableFact] public async Task DMW_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(DireMaulNorthCollection.Name)]
 public class DireMaulNorthTests(DireMaulNorthFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task DMN_GroupFormAndEnter() =>
+    [SkippableFact] public async Task DMN_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(StratholmeLivingCollection.Name)]
 public class StratholmeLivingTests(StratholmeLivingFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task STRAT_LIVE_GroupFormAndEnter() =>
+    [SkippableFact] public async Task STRAT_LIVE_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(StratholmeUndeadCollection.Name)]
 public class StratholmeUndeadTests(StratholmeUndeadFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task STRAT_UD_GroupFormAndEnter() =>
+    [SkippableFact] public async Task STRAT_UD_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }
 
 [Collection(ScholomanceCollection.Name)]
 public class ScholomanceTests(ScholomanceFixture bot, ITestOutputHelper output)
 {
-    [SkippableFact] public async Task SCHOLO_GroupFormAndEnter() =>
+    [SkippableFact] public async Task SCHOLO_GroupFormAndEnter()
+    {
+        if (!string.IsNullOrWhiteSpace(bot.BgAccountName))
+            await bot.EnsureCleanSlateAsync(bot.BgAccountName!, "BG");
         await DungeonEntryTestRunner.RunDungeonEntryTest(bot, output);
+    }
 }

@@ -29,6 +29,7 @@ public class AbObjectiveTests
     public async Task AB_NodeAssault_BotCapturesUncontested()
     {
         // P25.11: Bot assaults an uncontested AB node — node flag changes to team color
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class AbObjectiveTests
     public async Task AB_FullGame_CompletesToVictoryOrDefeat()
     {
         // P25.12: Bot plays a full AB game — match concludes with a result
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

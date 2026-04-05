@@ -29,6 +29,7 @@ public class AvObjectiveTests
     public async Task AV_FirstObjective_BotCompletesInitialTask()
     {
         // P25.16: Bot completes the first AV objective (e.g., Snowfall GY or Stonehearth bunker)
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class AvObjectiveTests
     public async Task AV_TowerAssault_BotAssaultsTower()
     {
         // P25.17: Bot assaults an enemy tower — tower begins burning
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -51,6 +53,7 @@ public class AvObjectiveTests
     public async Task AV_GraveyardCapture_BotCapturesGY()
     {
         // P25.18: Bot captures an enemy graveyard — GY ownership changes
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -62,6 +65,7 @@ public class AvObjectiveTests
     public async Task AV_GeneralKill_BotParticipatesInBossKill()
     {
         // P25.19: Bot participates in killing the enemy general — AV match ends
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

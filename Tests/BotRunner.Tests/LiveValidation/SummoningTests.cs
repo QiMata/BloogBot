@@ -34,6 +34,7 @@ public class SummoningTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task WarlockSummon_RitualOfSummoning()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -49,6 +50,7 @@ public class SummoningTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task MeetingStoneSummon_WailingCaverns()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

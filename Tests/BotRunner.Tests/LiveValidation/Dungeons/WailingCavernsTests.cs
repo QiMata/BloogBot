@@ -46,6 +46,8 @@ public class WailingCavernsTests
     public async Task WC_GroupFormAndEnterDungeon()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
+        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         // Phase 1: Bots enter world
         await WaitForProgressAsync(

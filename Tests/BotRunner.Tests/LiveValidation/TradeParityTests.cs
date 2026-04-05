@@ -29,6 +29,7 @@ public class TradeParityTests
     public async Task Trade_InitiateCancel_FgBgParity()
     {
         // P23.18: Both FG and BG initiate and cancel a trade — no items or gold lost
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -40,6 +41,7 @@ public class TradeParityTests
     public async Task Trade_GoldAndItem_FgBgParity()
     {
         // P23.19: Both FG and BG complete a trade with gold+item — inventories and gold updated correctly
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

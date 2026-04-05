@@ -26,6 +26,7 @@ public class LoadTestMilestoneTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P24_4_LoadTest_10BotBaseline()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -39,6 +40,7 @@ public class LoadTestMilestoneTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P24_5_LoadTest_100Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -52,6 +54,7 @@ public class LoadTestMilestoneTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P24_6_LoadTest_500Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -65,6 +68,7 @@ public class LoadTestMilestoneTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P24_7_LoadTest_1000Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);
@@ -78,6 +82,7 @@ public class LoadTestMilestoneTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task P24_8_LoadTest_3000Bot()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
         Assert.NotNull(snap);

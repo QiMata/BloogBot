@@ -49,6 +49,7 @@ public class ScalabilityValidationTests
     public async Task V4_1_MultiBotHostWorker_EnvVarConfiguration_Launches()
     {
         _output.WriteLine("=== V4.1 MultiBotHostWorker Env Var Check ===");
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         // Verify the env vars that MultiBotHostWorker reads are configurable
         var botCount = Environment.GetEnvironmentVariable("WWOW_MULTI_BOT_COUNT");
@@ -90,6 +91,7 @@ public class ScalabilityValidationTests
         _output.WriteLine("=== V4.5 100-Bot Baseline ===");
         _output.WriteLine("[NOTE] Full 100-bot test: see ScaleTest100.cs and LoadTestMilestoneTests.cs");
         _output.WriteLine("[NOTE] Requires WWOW_MULTI_BOT_COUNT=100 with MultiBotHostWorker");
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         // Validate current infrastructure is responsive as baseline
         var sw = Stopwatch.StartNew();
@@ -117,6 +119,7 @@ public class ScalabilityValidationTests
     public async Task V4_6_SingletonMigrationAudit_InstanceCallsTracked()
     {
         _output.WriteLine("=== V4.6 Singleton Migration Audit ===");
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         // Known files with WoWSharpObjectManager.Instance references
         // These are tracked for migration to DI-based injection.

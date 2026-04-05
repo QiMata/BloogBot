@@ -42,6 +42,9 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         var hasFg = _bot.IsFgActionable;
 
         // Setup both bots in parallel (items + location).
@@ -82,6 +85,9 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         var hasFg = _bot.IsFgActionable;
 
         // Setup both bots at AH location in parallel.
@@ -116,6 +122,9 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
+        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
         var hasFg = _bot.IsFgActionable;
 
         // Send gold via SOAP and setup location in parallel for both bots.
