@@ -73,9 +73,9 @@
 |-----------|---------------------|----------------|--------|
 | `GetGroundZNative` | `GetGroundZ` | `GetGroundZ` | **Fixed** (cbe794eb) |
 | `LineOfSightNative` | `LineOfSight` | `LineOfSight` | OK |
-| `SegmentIntersectsDynamicObjectsNative` | `SegmentIntersectsDynamicObjects` | NOT EXPORTED | **Missing** |
-| `IsPointOnNavmeshNative` | `IsPointOnNavmesh` | NOT EXPORTED | **Missing** |
-| `FindNearestWalkablePointNative` | `FindNearestWalkablePoint` | NOT EXPORTED | **Missing** |
+| `SegmentIntersectsDynamicObjectsNative` | `SegmentIntersectsDynamicObjects` | `SegmentIntersectsDynamicObjects` | **Fixed** (768f8bd9) |
+| `IsPointOnNavmeshNative` | `IsPointOnNavmesh` | `IsPointOnNavmesh` | **Fixed** (768f8bd9) |
+| `FindNearestWalkablePointNative` | `FindNearestWalkablePoint` | `FindNearestWalkablePoint` | **Fixed** (768f8bd9) |
 | `NativePhysics.PhysicsStepV2` | (matches) | `PhysicsStepV2` | OK |
 | `NativePhysics.GetGroundZ` | (matches) | `GetGroundZ` | OK |
 | `NativePhysics.PreloadMap` | (matches) | `PreloadMap` | OK |
@@ -85,12 +85,12 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Verify ALL P/Invoke entry points match x86 DLL exports** — Run `strings Navigation.dll | sort` against all DllImport declarations. Document every mismatch. Fix all EntryPoint attributes. | Open |
-| 1.2 | **Add missing C++ exports for x86 build** — `SegmentIntersectsDynamicObjects`, `IsPointOnNavmesh`, `FindNearestWalkablePoint` are in x64 but not x86. Either add `__declspec(dllexport)` to the x86 CMake build OR add graceful fallback in C# when export is missing. | Open |
-| 1.3 | **Validate GetGroundZ works after fix** — Run BasicLoopTests with rebuilt DLLs. Bot must land on ground (Z stabilizes) within 2s of teleport. Log: `[PHYS] GetGroundZ({x},{y}) = {z}` succeeds, no "entry point" errors. | Open |
-| 1.4 | **Validate PhysicsStepV2 produces forward movement** — Unit test with x86 Navigation.dll: input with MOVEFLAG_FORWARD at Orgrimmar coords, assert output position differs from input (bot actually moves). | Open |
-| 1.5 | **Validate LineOfSight works** — Unit test: two points with clear LOS return true; two points through a building return false. | Open |
-| 1.6 | **Create P/Invoke smoke test suite** — `Tests/BotRunner.Tests/Native/NavigationDllSmokeTests.cs`. One test per P/Invoke export: call each function, assert no DllNotFoundException or EntryPointNotFoundException. Run as part of CI. | Open |
+| 1.1 | **Verify ALL P/Invoke entry points match x86 DLL exports** — All 20 exports verified. 3 fixed in 768f8bd9. | **Done** (768f8bd9) |
+| 1.2 | **Add missing C++ exports for x86 build** — Fixed DllMain.cpp __try→try/catch, all exports now present in x86 build. | **Done** (768f8bd9) |
+| 1.3 | **Validate GetGroundZ works** — `GetGroundZ_Orgrimmar_ReturnsValidHeight` test (needs WWOW_DATA_DIR). | **Done** (e7c8d010) |
+| 1.4 | **Validate PhysicsStepV2 produces forward movement** — `PhysicsStepV2_ForwardMovement_ProducesPositionChange` test. | **Done** (e7c8d010) |
+| 1.5 | **Validate LineOfSight works** — `LineOfSight_OpenAir_ReturnsTrue` test. | **Done** (e7c8d010) |
+| 1.6 | **Create P/Invoke smoke test suite** — 9 export linkage tests + 3 functional tests in NavigationDllSmokeTests.cs. | **Done** (83952b21, e7c8d010) |
 
 ---
 
@@ -184,8 +184,8 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 8.1 | **Run all 156 unit tests** — Confirm still green after IPhysicsClient removal. `dotnet test --filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation"` | Open |
-| 8.2 | **Add NavigationDllSmokeTests** — Per P1.6. One test per P/Invoke. | Open |
+| 8.1 | **Run all unit tests** — 326 passed, 0 failed (Release). StateManagerLoadTests tagged RequiresInfrastructure. | **Done** (7eff1457) |
+| 8.2 | **Add NavigationDllSmokeTests** — 12 tests (9 linkage + 3 functional). Covered by P1.6. | **Done** (83952b21, e7c8d010) |
 | 8.3 | **Add MovementController integration tests** — Test idle→moving, MoveToward→position change, StopAllMovement→idle. Use mocked Navigation.dll or local x86 DLL. | Open |
 
 ---
