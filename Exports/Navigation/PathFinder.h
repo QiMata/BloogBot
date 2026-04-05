@@ -121,6 +121,7 @@ private:
 	bool           m_useStraightPath;  // type of path will be generated
 	bool           m_forceDestination; // when set, we will always arrive at given point
 	unsigned int         m_pointPathLimit;   // limit point path size; min(this, MAX_POINT_PATH_LENGTH)
+	float          m_capsuleRadius;     // P11.2: bot capsule radius for edge nudging (0 = disabled)
 
 	Vector3        m_startPosition;    // {x, y, z} of current location
 	Vector3        m_endPosition;      // {x, y, z} of the destination

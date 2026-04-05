@@ -392,6 +392,7 @@ namespace
 PathFinder::PathFinder(unsigned int mapId, unsigned int instanceId) :
 m_polyLength(0), m_type(PATHFIND_BLANK),
 m_useStraightPath(false), m_forceDestination(false), m_pointPathLimit(MAX_POINT_PATH_LENGTH),
+m_capsuleRadius(0.3064f), // Default Orc capsule radius — P11.2
 m_mapId(mapId), m_instanceId(instanceId), m_navMesh(NULL), m_navMeshQuery(NULL)
 {
 	//printf("++ PathFinder::PathInfo for ME \n");
@@ -794,6 +795,47 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 	for (unsigned int i = 0; i < pointCount; ++i)
 	{
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
+	}
+
+	// P11.2: Nudge interior waypoints away from polygon edges by capsule radius.
+	// When the smooth path hugs a wall, the bot's capsule clips the corner.
+	// For each interior point, compute the direction from prev→next and offset
+	// the waypoint inward (perpendicular to path direction) if it would clip.
+	if (pointCount > 2 && m_capsuleRadius > 0.0f)
+	{
+		for (unsigned int i = 1; i < pointCount - 1; ++i)
+		{
+			// Direction from prev to next waypoint (skip current)
+			Vector3 dir = m_pathPoints[i + 1] - m_pathPoints[i - 1];
+			dir.y = 0; // XZ plane only
+			float len2d = sqrtf(dir.x * dir.x + dir.z * dir.z);
+			if (len2d < 0.01f) continue;
+
+			// Check if this waypoint is near a polygon edge using navmesh
+			float pos[3] = { m_pathPoints[i].z, m_pathPoints[i].y, m_pathPoints[i].x }; // Convert to Detour coords
+			float closest[3];
+			dtPolyRef nearPoly;
+			float extents[3] = { m_capsuleRadius * 2.0f, 4.0f, m_capsuleRadius * 2.0f };
+			if (dtStatusSucceed(m_navMeshQuery->findNearestPoly(pos, extents, &m_filter, &nearPoly, closest)))
+			{
+				// Distance from waypoint to nearest poly center
+				float dx = pos[0] - closest[0];
+				float dz = pos[2] - closest[2];
+				float distToEdge = sqrtf(dx * dx + dz * dz);
+
+				// If the waypoint is very close to where findNearestPoly snapped it,
+				// it's already well-centered. Only nudge if it moved significantly.
+				if (distToEdge > 0.01f && distToEdge < m_capsuleRadius)
+				{
+					// Nudge toward the poly center by the deficit
+					float nudge = m_capsuleRadius - distToEdge;
+					float nx = (closest[0] - pos[0]) / distToEdge * nudge;
+					float nz = (closest[2] - pos[2]) / distToEdge * nudge;
+					m_pathPoints[i].z += nx; // Detour X → our Z
+					m_pathPoints[i].x += nz; // Detour Z → our X
+				}
+			}
+		}
 	}
 
 	// RefinePathForWalkability and SimplifyPathForWalkability DISABLED:
