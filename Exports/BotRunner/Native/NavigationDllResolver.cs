@@ -29,9 +29,31 @@ public static class NavigationDllResolver
         if (_registered) return;
         _registered = true;
 
+        // Register for BotRunner assembly (PathfindingClient P/Invoke)
         NativeLibrary.SetDllImportResolver(
             typeof(NavigationDllResolver).Assembly,
             ResolveNavigationDll);
+
+        // Register for WoWSharpClient assembly (NativePhysicsInterop P/Invoke)
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.GetName().Name == "WoWSharpClient")
+            {
+                try { NativeLibrary.SetDllImportResolver(asm, ResolveNavigationDll); }
+                catch { /* Already registered or not applicable */ }
+                break;
+            }
+        }
+
+        // Handle late-loaded assemblies
+        AppDomain.CurrentDomain.AssemblyLoad += (_, args) =>
+        {
+            if (args.LoadedAssembly.GetName().Name == "WoWSharpClient")
+            {
+                try { NativeLibrary.SetDllImportResolver(args.LoadedAssembly, ResolveNavigationDll); }
+                catch { /* Already registered */ }
+            }
+        };
     }
 
     private static IntPtr ResolveNavigationDll(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
