@@ -3,16 +3,24 @@ using System;
 
 namespace BackgroundBotRunner;
 
+/// <summary>
+/// Physics is ALWAYS local via NativeLocalPhysics.Step().
+/// This enum controls how scene collision data is loaded.
+/// </summary>
 public enum BackgroundPhysicsMode
 {
-    SharedPathfinding,
+    /// <summary>Local physics with on-demand map preload or scene slices.</summary>
     LocalInProcess,
 }
 
+/// <summary>
+/// Runtime resolution of how local physics gets its scene data.
+/// </summary>
 public enum BackgroundPhysicsRuntimeMode
 {
-    SharedPathfinding,
+    /// <summary>Scene triangles streamed from SceneDataService.</summary>
     LocalSceneSlices,
+    /// <summary>Full map data preloaded from disk (mmaps/vmaps).</summary>
     LocalPreloadedMaps,
 }
 
@@ -22,52 +30,30 @@ public static class BackgroundPhysicsModeResolver
     private const string ConfigurationKey = "BackgroundBotRunner:PhysicsMode";
 
     public static BackgroundPhysicsMode Resolve(string? rawValue)
-    {
-        if (string.IsNullOrWhiteSpace(rawValue))
-            return BackgroundPhysicsMode.LocalInProcess;
-
-        return rawValue.Trim().ToLowerInvariant() switch
-        {
-            "local" or "inprocess" or "native" => BackgroundPhysicsMode.LocalInProcess,
-            "shared" or "remote" or "pathfindingservice" => BackgroundPhysicsMode.SharedPathfinding,
-            _ => BackgroundPhysicsMode.LocalInProcess,
-        };
-    }
+        => BackgroundPhysicsMode.LocalInProcess;
 
     public static BackgroundPhysicsMode Resolve(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-
-        var rawValue = Environment.GetEnvironmentVariable(EnvironmentVariableName);
-        if (string.IsNullOrWhiteSpace(rawValue))
-            rawValue = configuration[ConfigurationKey];
-
-        return Resolve(rawValue);
+        return BackgroundPhysicsMode.LocalInProcess;
     }
 
     public static string Describe(BackgroundPhysicsMode mode)
-        => mode switch
-        {
-            BackgroundPhysicsMode.LocalInProcess => "local Navigation.dll physics per process",
-            _ => "shared PathfindingService physics",
-        };
+        => "local Navigation.dll physics per process";
 }
 
 public static class BackgroundPhysicsRuntimeModeResolver
 {
     public static BackgroundPhysicsRuntimeMode Resolve(BackgroundPhysicsMode requestedMode, bool sceneDataEndpointConfigured)
-        => requestedMode switch
-        {
-            BackgroundPhysicsMode.SharedPathfinding => BackgroundPhysicsRuntimeMode.SharedPathfinding,
-            _ when sceneDataEndpointConfigured => BackgroundPhysicsRuntimeMode.LocalSceneSlices,
-            _ => BackgroundPhysicsRuntimeMode.LocalPreloadedMaps,
-        };
+        => sceneDataEndpointConfigured
+            ? BackgroundPhysicsRuntimeMode.LocalSceneSlices
+            : BackgroundPhysicsRuntimeMode.LocalPreloadedMaps;
 
     public static string Describe(BackgroundPhysicsRuntimeMode mode)
         => mode switch
         {
             BackgroundPhysicsRuntimeMode.LocalSceneSlices => "local Navigation.dll physics with SceneDataService slices",
             BackgroundPhysicsRuntimeMode.LocalPreloadedMaps => "local Navigation.dll physics with on-demand per-map preload",
-            _ => "shared PathfindingService physics",
+            _ => "local Navigation.dll physics",
         };
 }
