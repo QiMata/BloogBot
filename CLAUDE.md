@@ -212,6 +212,25 @@ Update `docs/TASKS.md` Session Handoff section with:
 - Never overwrite existing docs without reading them first
 - Use the toolbox/codebase search before guessing at schemas or patterns
 
+## Project Naming Conventions
+
+| Pattern | Example | Rule |
+|---------|---------|------|
+| Core libraries | `GameData.Core`, `BotRunner`, `BotCommLayer` | PascalCase, no prefix |
+| WoW client | `WoWSharpClient` | WoW prefix with correct casing (capital W-o-W) |
+| Services | `PathfindingService`, `SceneDataService`, `WoWStateManager` | PascalCase + "Service" suffix |
+| Bot runners | `BackgroundBotRunner`, `ForegroundBotRunner` | Mode + "BotRunner" |
+| Test projects | `{ProjectName}.Tests` | Match source project name exactly |
+| Tools | PascalCase descriptive | `RecordingMaintenance`, `GameObjectExporter` |
+| C++ native | `Navigation.dll`, `Physics.dll`, `Loader.dll` | Short, no namespace prefix |
+
+**Known issues (tracked in P10):**
+- `WowSharpClient.NetworkTests` — should be `WoWSharpClient.NetworkTests` (casing)
+- `WWoWBot.AI.Tests` / `BloogBot.AI` — prefix mismatch (legacy)
+- `pfprobe` / `wwow-path-probe` — informal tool names
+
+**Do NOT rename:** `BotRunner` (704 file references) or `BotCommLayer` (42 references) — risk too high for cosmetic benefit.
+
 ## Key References
 
 | Document | Purpose |
@@ -224,3 +243,4 @@ Update `docs/TASKS.md` Session Handoff section with:
 | `docs/IPC_COMMUNICATION.md` | Socket/Protobuf IPC details |
 | `docs/physics/README.md` | Physics engine documentation index |
 | `docs/server-protocol/` | WoW 1.12.1 protocol reference (7 docs) |
+| `docs/dll-separation-audit.md` | Navigation.dll export → DLL mapping |

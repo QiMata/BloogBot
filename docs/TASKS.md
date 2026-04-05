@@ -241,10 +241,10 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 | 10.1 | **Audit all 37 project names** — 6 issues: WowSharpClient casing, WWoWBot vs BloogBot prefix, pfprobe naming, LoadTests/WinImports dir mismatches. | **Done** |
 | 10.2 | **Fix `WowSharpClient.NetworkTests` casing** — Should be `WoWSharpClient.NetworkTests` to match the main project. Rename csproj + directory + namespace. | Open |
 | 10.3 | **Fix `WWoWBot.AI.Tests` vs `BloogBot.AI`** — Align naming. Either both use `BloogBot` or both use `WWoW`. | Open |
-| 10.4 | **Evaluate `BotRunner` rename** — Is `BotRunner` clear enough? It's the core orchestration engine. Consider: keep as-is (too many references to rename safely) vs alias in docs. | Open |
-| 10.5 | **Evaluate `BotCommLayer` rename** — Communication layer. Could be `WoW.Communication` but 200+ references. Cost/benefit analysis. | Open |
+| 10.4 | **Evaluate `BotRunner` rename** — 704 file references. Keep as-is — rename risk too high for cosmetic benefit. | **Done** — keep |
+| 10.5 | **Evaluate `BotCommLayer` rename** — 42 file references. Feasible but low priority. Keep as-is for now. | **Done** — keep |
 | 10.6 | **Clean up tool project names** — `pfprobe` → `PathfindingProbe`, `wwow-path-probe` → merge with pfprobe or clarify distinction. | Open |
-| 10.7 | **Document naming conventions** — Add section to `CLAUDE.md` or `DEVELOPMENT_GUIDE.md` with project naming rules for future additions. | Open |
+| 10.7 | **Document naming conventions** — Added to CLAUDE.md: pattern table, known issues, do-not-rename list. | **Done** |
 
 ---
 
