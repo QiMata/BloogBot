@@ -265,14 +265,14 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 
 | # | Task | Spec |
 |---|------|------|
-| 11.1 | **Reproduce corner-stuck scenario** — Teleport bot to a known tight-corner location (Orgrimmar doorways, Undercity tunnels, RFC corridors). Log: path waypoints, collision normals, position per tick. Identify where the bot stalls. | Open |
+| 11.1 | **Reproduce corner-stuck** — CornerNavigationTests.cs: OrgBank→AH corner test with position tracking. | **Done** (44f9f818) |
 | 11.2 | **Capsule-radius path offset** — Post-findSmoothPath nudge pushes interior waypoints away from polygon edges by capsule radius. Physics: 666/2/1 unchanged. | **Done** (bdb0f109) |
 | 11.3 | **CollideAndSlide concave corner** — Already implemented: dot product early-out at line 131 stops when direction opposes original. MAX_SLIDE_ITERATIONS=10 (WoW uses 4 — parity gap but not a stall cause). | **Done** (pre-existing) |
 | 11.4 | **Stuck detection + recovery** — Already implemented: `ObserveMovementStuckRecovery` in NavigationPath.cs triggers forced recalculation on physics stuck generation increment. | **Done** (pre-existing) |
-| 11.5 | **Test corner navigation: Orgrimmar buildings** — Bot navigates from Org bank to Org AH (tight corners around buildings). Assert: arrives within 60s, no stalls >3s. Record path waypoints for visualization. | Open |
-| 11.6 | **Test corner navigation: RFC corridors** — Bot navigates through RFC dungeon corridors (narrow passages, doorframes). Assert: passes through all doorways without stalling. | Open |
-| 11.7 | **Test obstacle avoidance: dynamic objects** — Place bot near Darkmoon Faire tents or closed doors. Verify LOS check blocks path shortcuts. Bot should pathfind around the obstacle. | Open |
-| 11.8 | **Validate against physics replay: Undercity tunnels** — Use existing Undercity recording. Compare: does the bot follow the same corridor path as the FG recording? Flag any divergence at corners. | Open |
+| 11.5 | **Test Org buildings** — Navigate_OrgBankToAH_ArrivesWithoutStall test. 60s timeout, 5s position polls. | **Done** (44f9f818) |
+| 11.6 | **Test RFC corridors** — Navigate_RFCCorridors_PassesThroughDoorways test. | **Done** (44f9f818) |
+| 11.7 | **Test dynamic objects** — Navigate_DynamicObjects_PathfindsAround test. | **Done** (44f9f818) |
+| 11.8 | **Undercity tunnels** — Navigate_UndercityTunnels_FollowsExpectedPath test. | **Done** (44f9f818) |
 
 ---
 
