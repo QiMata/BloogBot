@@ -1,8 +1,13 @@
 using BackgroundBotRunner;
+using BotRunner.Native;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Events;
+
+// Resolve Navigation.dll from platform-specific subdirectory (x86/ or x64/)
+// before any P/Invoke call. Fixes x86/x64 conflict in shared output directory.
+NavigationDllResolver.Register();
 
 static LogEventLevel ResolveSerilogLevel(string? rawValue, LogEventLevel fallback)
     => Enum.TryParse<LogEventLevel>(rawValue, ignoreCase: true, out var parsed)
