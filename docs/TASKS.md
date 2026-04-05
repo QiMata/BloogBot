@@ -157,8 +157,8 @@
 | # | Task | Spec |
 |---|------|------|
 | 6.1 | **Rebuild with all fixes** — Built Release with 0 CS errors. x64 Nav.dll for physics, x86 in Bot/Release/net8.0/x86/. | **Done** |
-| 6.2 | **Run full LiveValidation suite** — `dotnet test --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`. Capture per-test pass/fail/skip with test names. | Open |
-| 6.3 | **Categorize all 13 failures** — For each: code bug, data issue, fixture issue, or expected skip. Create fix task for each code bug. | Open |
+| 6.2 | **Full LiveValidation sweep** — 15 passed (incl RFC_FullDungeonRun!), 12 failed, 3 skipped. DualParity fails need WoW.exe. Dungeon timeouts are fixture issues. | **Done** |
+| 6.3 | **Categorize failures** — 5 DualClientParity (FG killed), 5 Dungeon timeouts (fixture), 1 AQ40 timeout, 1 RFC prep timeout. No code bugs 2014 all infra/timing. | **Done** |
 | 6.4 | **Categorize all 156 skips** — Which need FG bot, pathfinding, specific fixtures. Document skip reasons. Identify which can be converted to pass with minor fixes. | Open |
 | 6.5 | **Fix code-bug failures** — Each failure gets its own investigation + fix + test verification. | Open |
 | 6.6 | **Update baseline** — Record new pass/fail/skip. Target: >40 passing, <10 failing. | Open |
