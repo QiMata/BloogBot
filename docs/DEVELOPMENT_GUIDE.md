@@ -471,6 +471,46 @@ Or use Visual Studio Test Explorer.
 - **Discussions**: Questions, ideas
 - **Code Review**: Learn from PR feedback
 
+## Docker Services
+
+### Quick Start
+```bash
+# Start PathfindingService + SceneDataService (requires D:/MaNGOS/data with mmaps/, vmaps/)
+docker compose -f docker-compose.vmangos-linux.yml up -d pathfinding-service scene-data-service
+
+# Verify services
+docker ps  # Should show pathfinding-service (5001) and scene-data-service (5003)
+```
+
+### Service Architecture
+| Service | Port | Purpose | Data Volume |
+|---------|------|---------|-------------|
+| pathfinding-service | 5001 | Detour A* path queries | mmaps/, maps/ |
+| scene-data-service | 5003 | VMAP/ADT scene triangles | vmaps/ |
+| war-worldserver | 8085 | VMaNGOS game server | Full WoW data |
+
+### Data Volumes
+Both services mount `D:/MaNGOS/data` (configurable via `WWOW_VMANGOS_DATA_DIR`) to `/wwow-data`. This directory must contain:
+- `mmaps/` — Pathfinding navmesh tiles (required for pathfinding-service)
+- `vmaps/` — Visual map data (required for scene-data-service)
+- `maps/` — Map geometry (required for terrain queries)
+
+### Troubleshooting
+- **"Local GetGroundZ failed"** — Navigation.dll x86/x64 mismatch. BotRunner.Tests needs x86, Physics.Tests needs x64.
+- **Container shows "Up" but tests skip** — Check if WWOW_DATA_DIR is set in the container (`docker inspect <name>`)
+- **Health check failing** — TCP connect to port. Ensure port is exposed and service has finished loading map data (15s start period).
+
+### Building Navigation.dll
+```bash
+# x64 (for Physics.Tests + Docker PathfindingService)
+"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" \
+  Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
+
+# x86 (for BotRunner.Tests + FG bot)
+"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" \
+  Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145
+```
+
 ---
 
 *Welcome to the WWoW development team! Whether you're here to improve AI behavior, add new features, or fix bugs, your contributions help build a more realistic virtual world.*
