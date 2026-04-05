@@ -13,6 +13,34 @@
 
 ---
 
+## P0 — Native DLL Separation: Physics, Scene, Pathfinding (Priority: CRITICAL)
+
+**Problem:** Navigation.dll is a monolith that contains pathfinding, physics, AND scene data. The x86 MSBuild build doesn't include DllMain.cpp (which has newer exports like `SegmentIntersectsDynamicObjects`, `IsPointOnNavmesh`, `FindNearestWalkablePoint`) because DllMain.cpp uses `__try` (SEH) which conflicts with C++ exception handling (`/EHsc`). The CMake x64 build includes everything but the test host is x86.
+
+**Architecture goal (matching WoW.exe binary):**
+- **Physics.dll** — Local physics ONLY. `PhysicsStepV2`, `CollisionStep`, gravity, movement. This is what runs every tick inside the bot process. No remote calls. GetGroundZ is part of physics (used by `CMovement::CollisionStep` at VA 0x633840 to resolve ground contact). It stays here.
+- **SceneData.dll** — Scene collision geometry loading (VMAP triangles, ADT terrain). Serves data to Physics.dll. Can run as local DLL or Docker service for headless bots.
+- **Navigation.dll** — Pathfinding ONLY. Detour navmesh A* path queries. Runs as Docker service. No physics, no GetGroundZ.
+
+**Key principle:** GetGroundZ is NOT a "remote" operation. In WoW.exe, `CMovement::CollisionStep` calls ground-height queries locally every physics tick. There is no network round-trip for ground height. Our architecture must match: GetGroundZ lives in the local physics DLL, not in a remote service.
+
+| # | Task | Spec |
+|---|------|------|
+| 0.1 | **Audit current Navigation.dll exports** — Map every export to its category: physics (PhysicsStepV2, GetGroundZ, CollideAndSlide), scene (QueryTerrainTriangles, InjectSceneTriangles), pathfinding (FindPath, FindSmoothPath). Document which belong in which DLL. | Open |
+| 0.2 | **Design Physics.dll API** — Define the exported functions: `PhysicsStepV2`, `GetGroundZ`, `GetTerrainHeight`, `LineOfSight`, `SweepCapsule`, `CollisionStep`, `InitializePhysics`, `ShutdownPhysics`, `PreloadMap`, `SetDataDirectory`. These are the functions called every tick by MovementController. | Open |
+| 0.3 | **Design Navigation.dll API (path-only)** — `FindPath`, `FindSmoothPath`, `CorridorUpdate`, `PathArrFree`. No physics, no GetGroundZ. This is what the Docker PathfindingService wraps. | Open |
+| 0.4 | **Design SceneData.dll API** — `QueryTerrainTriangles`, `InjectSceneTriangles`, `ClearSceneCache`, `SetSceneSliceMode`, `LoadDynamicObjectMapping`, `RegisterDynamicObject`, `UnregisterDynamicObject`. Scene geometry loading and serving. | Open |
+| 0.5 | **Create Physics.dll CMake project** — New CMakeLists.txt in `Exports/Physics/`. Compiles PhysicsEngine.cpp, PhysicsCollideSlide.cpp, PhysicsMovement.cpp, PhysicsGroundSnap.cpp + terrain query code. Builds both x86 and x64. | Open |
+| 0.6 | **Create SceneData.dll CMake project** — `Exports/SceneData/`. Compiles VMAP loading, ADT parsing, triangle extraction. x64 only (Docker service). | Open |
+| 0.7 | **Refactor Navigation.dll to path-only** — Remove physics and scene code. Keep only Detour navmesh, PathFinder, MoveMap. x64 only (Docker service). | Open |
+| 0.8 | **Update C# P/Invoke declarations** — PathfindingClient loads Navigation.dll (paths). NativeLocalPhysics loads Physics.dll (physics). SceneDataClient loads SceneData.dll (scene). Update DllImport constants. | Open |
+| 0.9 | **Update Docker builds** — PathfindingService Dockerfile builds Navigation.dll (path-only). SceneDataService Dockerfile builds SceneData.dll. Physics.dll is local (no Docker). | Open |
+| 0.10 | **Build x86 Physics.dll** — Must build for x86 (test host) AND x64 (production). Both targets in CMake. Verify all exports present in both architectures. | Open |
+| 0.11 | **Integration test: Physics.dll local step** — Bot teleports, PhysicsStepV2 from Physics.dll resolves ground contact, bot lands. No remote calls. | Open |
+| 0.12 | **Integration test: Navigation.dll remote path** — Bot requests path from Docker PathfindingService. Navigation.dll (path-only) returns waypoints. | Open |
+
+---
+
 ## Critical Bug — FIXED in cbe794eb
 
 **GetGroundZ P/Invoke entry point mismatch.** The C# method `GetGroundZNative` had no `EntryPoint` attribute, but the DLL exports `GetGroundZ` (not `GetGroundZNative`). This caused ALL local ground-height queries to fail with "Unable to find entry point", making bots float in the air after teleport. Fixed by adding `EntryPoint = "GetGroundZ"` to the DllImport.
