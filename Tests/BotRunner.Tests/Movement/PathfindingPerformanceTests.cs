@@ -16,6 +16,7 @@ using Xunit.Abstractions;
 
 namespace BotRunner.Tests.Movement;
 
+[Trait("Category", "RequiresInfrastructure")]
 public class PathfindingPerformanceTests(ITestOutputHelper output)
 {
     // ── Kalimdor (MapId=1) coordinates ──
