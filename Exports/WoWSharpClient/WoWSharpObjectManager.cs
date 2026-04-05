@@ -103,8 +103,16 @@ namespace WoWSharpClient
         /// P9.2: Public constructor for per-bot instances.
         /// Each BotContext creates its own WoWSharpObjectManager.
         /// Call Initialize() after construction to wire up the WoWClient connection.
+        ///
+        /// IMPORTANT: During migration, the first instance created also becomes the
+        /// legacy singleton so that handlers using Instance still work. This will be
+        /// removed once all handlers are migrated to instance-based access.
         /// </summary>
-        public WoWSharpObjectManager() { }
+        public WoWSharpObjectManager()
+        {
+            // Bridge: first instance created becomes the legacy singleton
+            _instance ??= this;
+        }
 
 
         public void Initialize(
