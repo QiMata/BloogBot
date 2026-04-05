@@ -215,10 +215,10 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 |---|------|------|
 | 9.1 | **Audit all LiveValidation test files** — 29 files found missing EnsureCleanSlateAsync. All fixed. | **Done** (adf54d6c) |
 | 9.2 | **Add EnsureCleanSlateAsync to every test method** — 103 methods across 29 files. 121 calls added. Zero remaining gaps. | **Done** (adf54d6c) |
-| 9.3 | **Verify test isolation** — Run the 5 most state-dependent tests (Trading, Bank, Mail, Guild, Quest) in sequence 3 times. Assert: all pass every run, no state leakage. | Open |
-| 9.4 | **Add explicit teardown for guild/group tests** — Guild tests must `.guild delete` at the end. Group tests must `LEAVE_GROUP`/`DISBAND_GROUP`. Trade tests must `DECLINE_TRADE` if still open. | Open |
-| 9.5 | **Standardize test structure** — Every LiveValidation test follows: `Setup (EnsureCleanSlate + GM commands) → Action (SendActionAsync) → Assert (snapshot verification) → Cleanup (if needed)`. Document this pattern in `Tests/CLAUDE.md`. | Open |
-| 9.6 | **Fix tests that use wrong LiveBotFixture API** — Audit for: `_bot.TeleportAsync` (should be `_bot.BotTeleportAsync`), `snap.X/Y/Z` (should be `snap.Player?.Unit?.GameObject?.Base?.Position`), `snap.RecentChatMessages` (may not exist). Fix all API mismatches. | Open |
+| 9.3 | **Verify test isolation** — Needs LiveValidation run with StateManager. Blocked on P6.2. | Blocked |
+| 9.4 | **Add explicit teardown for guild/group tests** — GuildOperationTests already has `.guild delete`. Trade tests have `DECLINE_TRADE`. Group tests need `DISBAND_GROUP` at end. | Open |
+| 9.5 | **Standardize test structure** — Documented in Tests/CLAUDE.md with full pattern + rules. | **Done** (c17ceeeb) |
+| 9.6 | **Fix tests that use wrong LiveBotFixture API** — Audit found 0 mismatches. All 80 teleport calls use BotTeleportAsync, all position access uses full path, RecentChatMessages exists. | **Done** |
 
 ---
 
