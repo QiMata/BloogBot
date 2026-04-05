@@ -36,19 +36,14 @@
 #define __declspec(x) __attribute__((visibility("default")))
 #endif
 
-#ifndef __try
-#define __try try
-#endif
-
-#ifndef __except
-#define __except(x) catch (...)
-#endif
+// All __try/__except replaced with standard try/catch(...) to fix MSVC C2712.
+// With /EHa, catch(...) catches both C++ and SEH exceptions.
 
 #ifndef EXCEPTION_EXECUTE_HANDLER
 #define EXCEPTION_EXECUTE_HANDLER 1
 #endif
 
-static inline unsigned long GetExceptionCode()
+static inline unsigned long 0
 {
     return 0;
 }
@@ -225,15 +220,15 @@ static void PreloadMapInner(uint32_t mapId)
 
 extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
 {
-    __try
+    try
     {
         PreloadMapInner(mapId);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         OutputDebugStringA("[Navigation.dll] SEH exception in PreloadMap\n");
         fprintf(stderr, "[Navigation.dll] SEH exception in PreloadMap (code=0x%08lx)\n",
-                GetExceptionCode());
+                0);
     }
 }
 
@@ -246,7 +241,7 @@ extern "C" __declspec(dllexport) bool InjectSceneTriangles(
     const SceneCache::InjectedTriangle* triangles,
     int triangleCount)
 {
-    __try
+    try
     {
         if (!g_initialized)
             InitializeAllSystems();
@@ -263,7 +258,7 @@ extern "C" __declspec(dllexport) bool InjectSceneTriangles(
         SceneQuery::SetSceneCache(mapId, cache);
         return true;
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         return false;
     }
@@ -287,7 +282,7 @@ extern "C" __declspec(dllexport) int QueryTerrainAABBTriangles(
     ExportedAABBContact* outContacts,
     int maxContacts)
 {
-    __try
+    try
     {
         if (!g_initialized)
             InitializeAllSystems();
@@ -322,7 +317,7 @@ extern "C" __declspec(dllexport) int QueryTerrainAABBTriangles(
 
         return count;
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         return 0;
     }
@@ -330,20 +325,20 @@ extern "C" __declspec(dllexport) int QueryTerrainAABBTriangles(
 
 extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
 {
-    __try
+    try
     {
         SceneQuery::ClearSceneCache(mapId);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER) {}
+    catch (...) {}
 }
 
 extern "C" __declspec(dllexport) void SetSceneSliceMode(bool enabled)
 {
-    __try
+    try
     {
         SceneQuery::SetSceneSliceMode(enabled);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER) {}
+    catch (...) {}
 }
 
 // Set the data directory for all subsystems (MapLoader, VMapManager, SceneQuery).
@@ -351,7 +346,7 @@ extern "C" __declspec(dllexport) void SetSceneSliceMode(bool enabled)
 // physics to configure the data root when WWOW_DATA_DIR may not be set.
 extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
 {
-    __try
+    try
     {
         if (!dataDir)
             return;
@@ -382,7 +377,7 @@ extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
                 g_mapLoader->Initialize(mapPath);
         }
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         OutputDebugStringA("[Navigation.dll] SEH exception in SetDataDirectory\n");
     }
@@ -390,7 +385,7 @@ extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
 
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
-    __try
+    try
     {
         if (!g_initialized)
             InitializeAllSystems();
@@ -405,11 +400,11 @@ extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ en
             *length = 0;
         return nullptr;
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         OutputDebugStringA("[Navigation.dll] SEH exception in FindPath\n");
         fprintf(stderr, "[Navigation.dll] SEH exception in FindPath (code=0x%08lx)\n",
-                GetExceptionCode());
+                0);
 
         if (length)
             *length = 0;
@@ -457,15 +452,15 @@ static PhysicsOutput PhysicsStepV2Inner(const PhysicsInput& input)
 
 extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput& input)
 {
-    __try
+    try
     {
         return PhysicsStepV2Inner(input);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         OutputDebugStringA("[Navigation.dll] SEH exception in PhysicsStepV2\n");
         fprintf(stderr, "[Navigation.dll] SEH exception in PhysicsStepV2 (code=0x%08lx)\n",
-                GetExceptionCode());
+                0);
         return MakePassthroughOutput(input);
     }
 }
@@ -1266,7 +1261,7 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
 {
     CorridorResult result = {};
 
-    __try
+    try
     {
         if (!g_initialized)
             InitializeAllSystems();
@@ -1391,10 +1386,10 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         fprintf(stderr, "[CORRIDOR] handle=%u corners=%d pos=(%.1f,%.1f,%.1f)\n",
                 handle, straightCount, result.posX, result.posY, result.posZ);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         fprintf(stderr, "[Navigation.dll] SEH exception in FindPathCorridor (code=0x%08lx)\n",
-                GetExceptionCode());
+                0);
     }
 
     return result;
@@ -1409,7 +1404,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
     CorridorResult result = {};
     result.handle = handle;
 
-    __try
+    try
     {
         // Hold the corridor mutex for the ENTIRE operation to prevent:
         // 1. Use-after-free: another thread calling CorridorDestroy while we use ci
@@ -1447,10 +1442,10 @@ extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
 
         FillCorners(ci, result);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
         fprintf(stderr, "[Navigation.dll] SEH exception in CorridorUpdate (code=0x%08lx)\n",
-                GetExceptionCode());
+                0);
     }
 
     return result;
@@ -1463,7 +1458,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
     CorridorResult result = {};
     result.handle = handle;
 
-    __try
+    try
     {
         std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
@@ -1481,10 +1476,9 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
 
         FillCorners(ci, result);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    catch (...)
     {
-        fprintf(stderr, "[Navigation.dll] SEH exception in CorridorMoveTarget (code=0x%08lx)\n",
-                GetExceptionCode());
+        fprintf(stderr, "[Navigation.dll] exception in CorridorMoveTarget\n");
     }
 
     return result;
