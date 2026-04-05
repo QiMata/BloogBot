@@ -120,7 +120,7 @@
 | 3.1 | **Verify Docker container running** — Up 37h, port 5001, Linux container, WWOW_DATA_DIR=/wwow-data, volume D:/MaNGOS/data→/wwow-data. | **Done** |
 | 3.2 | **Verify path request round-trip** — BG bot sends CalculatePathRequest(mapId=1, start=OrgBank, end=OrgAH). Assert: non-empty waypoint array returned. Log latency. | Open |
 | 3.3 | **Verify WWOW_DATA_DIR volume mount** — Container has mmaps/, maps/, vmaps/ from host volume. `docker exec pathfinding-service ls /data/mmaps` shows map tiles. | Open |
-| 3.4 | **Add health check to docker-compose** — PathfindingService HEALTHCHECK: TCP connect to 5001. StateManager `depends_on` with condition. | Open |
+| 3.4 | **Add health check to docker-compose** — TCP healthcheck on 5001, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
 | 3.5 | **Test pathfinding under load** — 10 concurrent path requests from different map positions. Assert: all return valid paths within 5s. No deadlocks. | Open |
 
 ---
@@ -134,7 +134,7 @@
 | 4.1 | **Verify Docker container running** — Up 37h, port 5003, Linux container, same volume mount. | **Done** |
 | 4.2 | **Verify scene slice request** — BG bot requests scene slice for Orgrimmar area. Assert: triangle data returned. | Open |
 | 4.3 | **Verify VMAP data accessible** — Container has vmaps/ from host volume. Scene queries return non-empty triangle sets. | Open |
-| 4.4 | **Add health check to docker-compose** — TCP connect to 5003. StateManager `depends_on`. | Open |
+| 4.4 | **Add health check to docker-compose** — TCP healthcheck on 5003, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
 
 ---
 
@@ -171,8 +171,8 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 7.1 | **Review docker-compose.windows.yml** — Verify services, ports, volumes, env vars. | Open |
-| 7.2 | **Ensure consistent WWOW_DATA_DIR** — Both services read from same host volume mount. | Open |
+| 7.1 | **Review docker-compose** — Both linux yml and windows yml verified. Services, ports, volumes, env vars correct. Healthchecks added. | **Done** (ceda708d) |
+| 7.2 | **Ensure consistent WWOW_DATA_DIR** — Both services use D:/MaNGOS/data→/wwow-data. WWOW_DATA_DIR=/wwow-data in both. | **Done** |
 | 7.3 | **End-to-end Docker test** — `docker compose up -d`, run BasicLoopTests, bots enter world and MOVE (not float). | Open |
 | 7.4 | **Document setup in DEVELOPMENT_GUIDE.md** — Prerequisites, data volumes, commands. | Open |
 
