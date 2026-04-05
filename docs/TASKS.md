@@ -156,7 +156,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 6.1 | **Rebuild with all fixes** — `dotnet build WestworldOfWarcraft.sln --configuration Release`. Copy x86 Navigation.dll. Verify 0 CS errors. | Open |
+| 6.1 | **Rebuild with all fixes** — Built Release with 0 CS errors. x64 Nav.dll for physics, x86 in Bot/Release/net8.0/x86/. | **Done** |
 | 6.2 | **Run full LiveValidation suite** — `dotnet test --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`. Capture per-test pass/fail/skip with test names. | Open |
 | 6.3 | **Categorize all 13 failures** — For each: code bug, data issue, fixture issue, or expected skip. Create fix task for each code bug. | Open |
 | 6.4 | **Categorize all 156 skips** — Which need FG bot, pathfinding, specific fixtures. Document skip reasons. Identify which can be converted to pass with minor fixes. | Open |
@@ -174,7 +174,7 @@
 | 7.1 | **Review docker-compose** — Both linux yml and windows yml verified. Services, ports, volumes, env vars correct. Healthchecks added. | **Done** (ceda708d) |
 | 7.2 | **Ensure consistent WWOW_DATA_DIR** — Both services use D:/MaNGOS/data→/wwow-data. WWOW_DATA_DIR=/wwow-data in both. | **Done** |
 | 7.3 | **End-to-end Docker test** — `docker compose up -d`, run BasicLoopTests, bots enter world and MOVE (not float). | Open |
-| 7.4 | **Document setup in DEVELOPMENT_GUIDE.md** — Prerequisites, data volumes, commands. | Open |
+| 7.4 | **Document Docker setup** — Added to DEVELOPMENT_GUIDE.md: quick start, service table, data volumes, troubleshooting, build commands. | **Done** (42666fd0) |
 
 ---
 
