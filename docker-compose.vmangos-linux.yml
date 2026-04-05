@@ -78,6 +78,12 @@ services:
       - "5001:5001"
     volumes:
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5001' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   scene-data-service:
     build:
@@ -96,6 +102,12 @@ services:
       - "5003:5003"
     volumes:
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5003' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 networks:
   gameserver-net:
