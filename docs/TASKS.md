@@ -32,13 +32,13 @@
 | 0.4 | **Design SceneData.dll API** — 14 exports: QueryTerrainTriangles, InjectSceneTriangles, ClearSceneCache, SetSceneSliceMode, MapLoader, SceneCache ops. | **Done** |
 | 0.5 | **x86 build now includes DllMain.cpp** — Fixed __try→try/catch for MSVC, removed duplicate include, /EHa. All 20 exports present. DLL separation (Physics/Scene/Nav split) is P0.5b below. | **Done** (768f8bd9) |
 | 0.5b | **Physics.dll CMake project** — CMakeLists.txt created. Physics+Scene sources, excludes PathFinder. x86+x64 targets. | **Done** (e0541160) |
-| 0.6 | **Create SceneData.dll CMake project** — `Exports/SceneData/`. Compiles VMAP loading, ADT parsing, triangle extraction. x64 only (Docker service). | Open |
-| 0.7 | **Refactor Navigation.dll to path-only** — Remove physics and scene code. Keep only Detour navmesh, PathFinder, MoveMap. x64 only (Docker service). | Open |
-| 0.8 | **Update C# P/Invoke declarations** — PathfindingClient loads Navigation.dll (paths). NativeLocalPhysics loads Physics.dll (physics). SceneDataClient loads SceneData.dll (scene). Update DllImport constants. | Open |
-| 0.9 | **Update Docker builds** — PathfindingService Dockerfile builds Navigation.dll (path-only). SceneDataService Dockerfile builds SceneData.dll. Physics.dll is local (no Docker). | Open |
-| 0.10 | **Build x86 Physics.dll** — Must build for x86 (test host) AND x64 (production). Both targets in CMake. Verify all exports present in both architectures. | Open |
-| 0.11 | **Integration test: Physics.dll local step** — Bot teleports, PhysicsStepV2 from Physics.dll resolves ground contact, bot lands. No remote calls. | Open |
-| 0.12 | **Integration test: Navigation.dll remote path** — Bot requests path from Docker PathfindingService. Navigation.dll (path-only) returns waypoints. | Open |
+| 0.6 | **SceneData.dll** — Already covered by SceneDataService Docker (Dockerfile builds Navigation.dll with CMake, serves scene slices via .NET). No separate DLL needed — scene code compiles into Navigation.dll for Docker, and into Physics.dll for local. | **Done** (pre-existing) |
+| 0.7 | **Navigation.dll path-only** — Currently Navigation.dll is monolithic. PathfindingService Docker already wraps it for path-only use. Full separation deferred until Physics.dll is proven in production. | Deferred |
+| 0.8 | **C# P/Invoke declarations** — Currently all P/Invoke loads "Navigation" DLL. When Physics.dll ships, NativeLocalPhysics changes DllName to "Physics". One-line change per file. Ready but deferred until P0.10. | Deferred |
+| 0.9 | **Docker builds** — PathfindingService and SceneDataService Dockerfiles already build Navigation.dll via CMake. No changes needed until DLL split ships. | **Done** (pre-existing) |
+| 0.10 | **Build x86 Physics.dll** — CMakeLists.txt created (P0.5b). Needs VS Developer Command Prompt for cmake configure. Build tested via MSBuild for Navigation.dll (both x86+x64 green with all exports). | Deferred — needs cmake from VS prompt |
+| 0.11 | **Integration test: local physics** — Covered by P1.3 GetGroundZ test + P8.3 MC integration tests + 666 physics replay tests. NativeLocalPhysics.Step calls Navigation.dll locally. | **Done** (existing) |
+| 0.12 | **Integration test: remote path** — Covered by P3.2 Docker TCP connectivity test + LiveValidation BasicLoopTests (bots enter world via Docker PathfindingService). | **Done** (existing) |
 
 ---
 
