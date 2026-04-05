@@ -240,7 +240,7 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 |---|------|------|
 | 10.1 | **Audit all 37 project names** — 6 issues: WowSharpClient casing, WWoWBot vs BloogBot prefix, pfprobe naming, LoadTests/WinImports dir mismatches. | **Done** |
 | 10.2 | **Fix WowSharpClient.NetworkTests casing** — Renamed to WoWSharpClient.NetworkTests. Dir + csproj + sln updated. | **Done** (6c7701c5) |
-| 10.3 | **Fix `WWoWBot.AI.Tests` vs `BloogBot.AI`** — Align naming. Either both use `BloogBot` or both use `WWoW`. | Open |
+| 10.3 | **Fix WWoWBot.AI.Tests vs BloogBot.AI** — Renamed WWoWBot.AI/ to BloogBot.AI/ and tests to BloogBot.AI.Tests. Consistent naming. | **Done** (6de3dc9f) |
 | 10.4 | **Evaluate `BotRunner` rename** — 704 file references. Keep as-is — rename risk too high for cosmetic benefit. | **Done** — keep |
 | 10.5 | **Evaluate `BotCommLayer` rename** — 42 file references. Feasible but low priority. Keep as-is for now. | **Done** — keep |
 | 10.6 | **Clean up tool project names** — `pfprobe` → `PathfindingProbe`, `wwow-path-probe` → merge with pfprobe or clarify distinction. | Open |
