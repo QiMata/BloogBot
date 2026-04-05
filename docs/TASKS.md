@@ -8,10 +8,11 @@
 5. Every fix must include or update a focused test.
 6. After each shipped delta, commit and push before ending the pass.
 7. **Previous implementation phases (P3-P29, V1-V4) are archived** — see `docs/ARCHIVE.md`.
+8. **Navigation.dll x86 for tests:** BotRunner.Tests targets x86 (for FG WoW.exe compat). Copy `Exports/Navigation/cmake_build_x86/Release/Navigation.dll` to `Bot/Release/net8.0/Navigation.dll` before running LiveValidation tests. The x64 build causes `0x8007000B` ("incorrect format") on local GetGroundZ/LineOfSight P/Invoke.
 
 ---
 
-## Test Baseline (2026-04-04, post T1+T2)
+## Test Baseline (2026-04-05, post singleton fix + x86 Nav.dll)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
