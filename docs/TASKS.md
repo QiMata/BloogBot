@@ -238,7 +238,7 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 
 | # | Task | Spec |
 |---|------|------|
-| 10.1 | **Audit all 37 project names** — List every .csproj, its namespace, and its purpose. Flag naming inconsistencies (BloogBot vs WWoW, case mismatches, unclear names). | Open |
+| 10.1 | **Audit all 37 project names** — 6 issues: WowSharpClient casing, WWoWBot vs BloogBot prefix, pfprobe naming, LoadTests/WinImports dir mismatches. | **Done** |
 | 10.2 | **Fix `WowSharpClient.NetworkTests` casing** — Should be `WoWSharpClient.NetworkTests` to match the main project. Rename csproj + directory + namespace. | Open |
 | 10.3 | **Fix `WWoWBot.AI.Tests` vs `BloogBot.AI`** — Align naming. Either both use `BloogBot` or both use `WWoW`. | Open |
 | 10.4 | **Evaluate `BotRunner` rename** — Is `BotRunner` clear enough? It's the core orchestration engine. Consider: keep as-is (too many references to rename safely) vs alias in docs. | Open |
