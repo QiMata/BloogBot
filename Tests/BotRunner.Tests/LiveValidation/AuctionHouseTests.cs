@@ -36,6 +36,7 @@ public class AuctionHouseTests
     public async Task AH_NavigateToAuctioneer_SnapshotShowsNearbyNpc()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Teleport to Org AH area
         await _bot.BotTeleportAsync(bgAccount, MapId, AhX, AhY, AhZ);
@@ -70,6 +71,7 @@ public class AuctionHouseTests
     public async Task AH_InteractWithAuctioneer_OpensAhFrame()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup at AH
         await _bot.BotTeleportAsync(bgAccount, MapId, AhX, AhY, AhZ);

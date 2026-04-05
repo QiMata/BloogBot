@@ -40,6 +40,10 @@ public class TradingTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot not available for dual-bot trade test");
 
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        if (!string.IsNullOrWhiteSpace(fgAccount))
+            await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
+
         // Setup: teleport both bots to Orgrimmar, same location
         await _bot.BotTeleportAsync(bgAccount, MapId, TradeX, TradeY, TradeZ);
         await _bot.BotTeleportAsync(fgAccount!, MapId, TradeX + 1, TradeY, TradeZ);
@@ -84,6 +88,10 @@ public class TradingTests
         var bgAccount = _bot.BgAccountName!;
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot not available for dual-bot trade test");
+
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        if (!string.IsNullOrWhiteSpace(fgAccount))
+            await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
 
         // Setup: ensure both bots have gold via GM
         await _bot.SendGmChatCommandAsync(bgAccount, ".modify money 100");

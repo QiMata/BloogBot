@@ -36,6 +36,10 @@ public class GuildOperationTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot not available for dual-bot guild test");
 
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        if (!string.IsNullOrWhiteSpace(fgAccount))
+            await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
+
         // Teleport both bots to Orgrimmar
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);
         await _bot.BotTeleportAsync(fgAccount!, MapId, OrgX + 2, OrgY, OrgZ);

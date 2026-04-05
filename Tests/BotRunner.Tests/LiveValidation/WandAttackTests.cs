@@ -44,6 +44,7 @@ public class WandAttackTests
     public async Task Wand_ShootTarget_DealsDamage()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar for GM commands
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);

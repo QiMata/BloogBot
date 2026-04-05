@@ -34,6 +34,7 @@ public class BattlegroundQueueTests
     public async Task BG_QueueForWSG_ReceivesQueuedStatus()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);

@@ -35,6 +35,7 @@ public class BankInteractionTests
     public async Task Bank_NavigateToBanker_FindsBankerNpc()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Teleport to Orgrimmar bank
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgBankX, OrgBankY, OrgBankZ);
@@ -67,6 +68,7 @@ public class BankInteractionTests
     public async Task Bank_DepositAndWithdraw_ItemPreserved()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: give bot an item to deposit
         await _bot.SendGmChatCommandAsync(bgAccount, ".additem 2589 1"); // Linen Cloth

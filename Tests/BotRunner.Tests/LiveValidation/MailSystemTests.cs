@@ -33,6 +33,7 @@ public class MailSystemTests
     public async Task Mail_SendGold_RecipientReceives()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar mailbox
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
@@ -84,6 +85,7 @@ public class MailSystemTests
     public async Task Mail_SendItem_RecipientReceivesItem()
     {
         var bgAccount = _bot.BgAccountName!;
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar mailbox
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
