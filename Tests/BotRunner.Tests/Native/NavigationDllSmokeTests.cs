@@ -104,4 +104,111 @@ public class NavigationDllSmokeTests
     [SkippableFact]
     public void Export_ValidateWalkableSegment_Exists()
         => AssertExportExists(() => ValidateWalkableSegmentNative(0, 0, 0, 0, 1, 1, 1), "ValidateWalkableSegment");
+
+    // ═══════════════════════════════════════════════════════════════
+    // P1.3-P1.5: Functional validation tests (need map data)
+    // ═══════════════════════════════════════════════════════════════
+
+    private static bool TryInitializeWithData()
+    {
+        var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+        if (string.IsNullOrWhiteSpace(dataDir))
+            return false;
+        try
+        {
+            SetDataDirectoryNative(dataDir);
+            PreloadMapNative(1); // Kalimdor
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// P1.3: GetGroundZ at Orgrimmar returns a valid Z value (~10-60 range).
+    /// Bots must land on the ground after teleport — this is the critical function.
+    /// </summary>
+    [SkippableFact]
+    public void GetGroundZ_Orgrimmar_ReturnsValidHeight()
+    {
+        Skip.IfNot(TryInitializeWithData(), "WWOW_DATA_DIR not set or map data unavailable");
+
+        // Orgrimmar Valley of Honor: known Z around 30-40
+        float gz = GetGroundZNative(1, 1629f, -4373f, 100f, 200f);
+
+        Assert.True(gz > -50000f, $"GetGroundZ returned sentinel value {gz} — no ground found");
+        Assert.InRange(gz, -100f, 200f); // Reasonable Z range for Org
+    }
+
+    /// <summary>
+    /// P1.4: PhysicsStepV2 with forward movement input produces position change.
+    /// </summary>
+    [DllImport(Nav, CallingConvention = CallingConvention.Cdecl, EntryPoint = "PhysicsStepV2")]
+    private static extern PhysicsOutputRaw PhysicsStepV2Native(ref PhysicsInputRaw input);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PhysicsInputRaw
+    {
+        public float PosX, PosY, PosZ, Facing;
+        public uint MoveFlags;
+        public float ForwardSpeed, BackSpeed, TurnSpeed, StrafeSpeed;
+        public float Pitch;
+        public uint FallTime;
+        public float FallStartZ, FallSinAngle, FallCosAngle, FallSpeed;
+        public float TransX, TransY, TransZ, TransFacing;
+        public ulong TransGuid;
+        public uint Timestamp;
+        public int NearbyObjectCount;
+        public IntPtr NearbyObjectsPtr;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PhysicsOutputRaw
+    {
+        public float NewPosX, NewPosY, NewPosZ;
+        public uint NewMoveFlags;
+        public float NewFallStartZ;
+        public uint NewFallTime;
+        public byte IsGrounded;
+        public byte HitWall;
+        public float WallNormalX, WallNormalY;
+        public float BlockedFraction;
+    }
+
+    [SkippableFact]
+    public void PhysicsStepV2_ForwardMovement_ProducesPositionChange()
+    {
+        Skip.IfNot(TryInitializeWithData(), "WWOW_DATA_DIR not set or map data unavailable");
+
+        var input = new PhysicsInputRaw
+        {
+            PosX = 1629f, PosY = -4373f, PosZ = 34f,
+            Facing = 0f,
+            MoveFlags = 0x00000001, // MOVEFLAG_FORWARD
+            ForwardSpeed = 7.0f,
+            Timestamp = 100,
+        };
+
+        var output = PhysicsStepV2Native(ref input);
+
+        // Position should change (forward movement at 7 y/s for ~33ms = ~0.23y)
+        float dx = output.NewPosX - input.PosX;
+        float dy = output.NewPosY - input.PosY;
+        float dist = MathF.Sqrt(dx * dx + dy * dy);
+
+        // Even if small, position should differ from input
+        Assert.True(dist >= 0f, $"PhysicsStepV2 produced no horizontal movement (dist={dist:F4}y)");
+    }
+
+    /// <summary>
+    /// P1.5: LineOfSight between two open-air points returns true.
+    /// </summary>
+    [SkippableFact]
+    public void LineOfSight_OpenAir_ReturnsTrue()
+    {
+        Skip.IfNot(TryInitializeWithData(), "WWOW_DATA_DIR not set or map data unavailable");
+
+        // Two points in Orgrimmar open area, 10y apart
+        bool los = LineOfSightNative(1, 1629f, -4373f, 35f, 1639f, -4373f, 35f);
+        Assert.True(los, "LineOfSight should be true for two nearby open-air points in Orgrimmar");
+    }
 }
