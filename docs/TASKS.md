@@ -95,15 +95,15 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. These are the foundation. | Open |
-| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Open |
-| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Open |
-| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Open |
-| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Open |
-| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Open |
-| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Open |
-| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Open |
-| 3.9 | **Run all LiveValidation suite** — Full sweep, document pass/fail counts. | Open |
+| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. | Blocked — needs StateManager + bot processes running |
+| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Blocked — needs StateManager |
+| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Blocked — needs StateManager |
+| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Blocked — needs StateManager |
+| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Blocked — needs StateManager |
+| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Blocked — needs StateManager |
+| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Blocked — needs StateManager |
+| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Blocked — needs StateManager |
+| 3.9 | **Run all LiveValidation suite** — Full sweep, document pass/fail counts. | Blocked — needs StateManager |
 
 ---
 
@@ -113,9 +113,9 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | **Quest objective proto round-trip test** — Populate QuestLogEntry.objectives in WoWSharpObjectManager, serialize to proto, deserialize in StateManager, verify fields. | Open |
-| 4.2 | **Profession skill proto round-trip test** — Populate WoWPlayer.professionSkills, serialize, deserialize, verify skillId/currentSkill/maxSkill. | Open |
-| 4.3 | **Build template proto round-trip test** — Set CharacterDefinition.build_template, verify it survives IPC round-trip. | Open |
+| 4.1 | **Quest objective proto round-trip test** — QuestLogEntry.objectives serialize/deserialize verified (7 tests). | **Done** (aaafc820) |
+| 4.2 | **Profession skill proto round-trip test** — ProfessionSkillEntry serialize/deserialize verified. | **Done** (aaafc820) |
+| 4.3 | **Build template proto round-trip test** — CharacterDefinition.build_template survives round-trip. | **Done** (aaafc820) |
 
 ---
 
