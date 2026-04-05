@@ -61,7 +61,6 @@ namespace WoWSharpClient
         private WoWClient _woWClient;
 
         private PathfindingClient _pathfindingClient;
-        private IPhysicsClient? _physicsClient;
         private SceneDataClient? _sceneDataClient;
         private bool _useLocalPhysics;
 
@@ -119,7 +118,6 @@ namespace WoWSharpClient
             WoWClient wowClient,
             PathfindingClient pathfindingClient,
             ILogger<WoWSharpObjectManager> logger,
-            IPhysicsClient? physicsClient = null,
             SceneDataClient? sceneDataClient = null,
             bool useLocalPhysics = false
         )
@@ -132,9 +130,6 @@ namespace WoWSharpClient
             _logger = logger;
             _pathfindingClient = pathfindingClient;
             _useLocalPhysics = useLocalPhysics;
-            // Physics is always local via NativeLocalPhysics.
-            _physicsClient = null;
-            _useLocalPhysics = true;
             _sceneDataClient = sceneDataClient;
             _woWClient = wowClient;
             _worldTimeTracker = new WorldTimeTracker();
@@ -192,11 +187,10 @@ namespace WoWSharpClient
             // Initialize movement controller when we have a player
             if (Player != null
                 && _woWClient != null
-                && (_useLocalPhysics || _physicsClient != null || _sceneDataClient != null))
+                && (_useLocalPhysics || _sceneDataClient != null))
             {
                 _movementController = new MovementController(
                     _woWClient,
-                    _physicsClient,
                     (WoWLocalPlayer)Player,
                     _sceneDataClient
                 );

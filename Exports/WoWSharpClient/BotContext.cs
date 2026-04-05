@@ -40,9 +40,6 @@ public class BotContext : IDisposable
     /// <summary>The bot's pathfinding client (A* path requests).</summary>
     public PathfindingClient? PathfindingClient { get; set; }
 
-    /// <summary>The bot's physics client (local or remote).</summary>
-    public IPhysicsClient? PhysicsClient { get; set; }
-
     /// <summary>Whether this bot context has been fully initialized.</summary>
     public bool IsInitialized => ObjectManager?.Player != null;
 

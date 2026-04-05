@@ -73,7 +73,7 @@ public class MovementControllerRecordedFrameTests
         NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
         NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
 
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
         return (controller, player);
     }
 
@@ -824,7 +824,7 @@ public class MovementControllerRecordedFrameTests
 
         NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
         NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
 
         // Set target 50y north
         controller.SetTargetWaypoint(new Position(285f, -4690f, 12f));
@@ -927,7 +927,7 @@ public class MovementControllerRecordedFrameTests
 
         NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
         NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
         // No SetTargetWaypoint / SetPath call
 
         SetPhysicsOverride(input =>
@@ -998,7 +998,7 @@ public class MovementControllerRecordedFrameTests
 
         NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
         NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
         controller.SetTargetWaypoint(new Position(285f, -4690f, 12f));
 
         // Perfect flat physics
@@ -1154,7 +1154,7 @@ public class MovementControllerRecordedFrameTests
         var initialFrame = CreateSegmentInitialFrame(recording, start);
         var (_, player) = CreateController(initialFrame);
         // Re-wire with our capturing mock client (CreateController already set overrides)
-        var capturingController = new MovementController(mockClient.Object, null, player);
+        var capturingController = new MovementController(mockClient.Object, player);
 
         float facing = frames[start].Facing;
         capturingController.SetTargetWaypoint(new Position(

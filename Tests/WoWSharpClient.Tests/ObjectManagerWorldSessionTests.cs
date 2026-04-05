@@ -40,16 +40,12 @@ public class ObjectManagerWorldSessionTests
             _fixture._woWClient.Object,
             _fixture._pathfindingClient.Object,
             NullLogger<WoWSharpObjectManager>.Instance,
-            physicsClient: null,
             sceneDataClient: null,
             useLocalPhysics: true);
 
-        var physicsClientField = typeof(WoWSharpObjectManager).GetField("_physicsClient", BindingFlags.Instance | BindingFlags.NonPublic);
         var sceneDataClientField = typeof(WoWSharpObjectManager).GetField("_sceneDataClient", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        Assert.NotNull(physicsClientField);
         Assert.NotNull(sceneDataClientField);
-        Assert.Null(physicsClientField!.GetValue(objectManager));
         Assert.Null(sceneDataClientField!.GetValue(objectManager));
     }
 
@@ -62,7 +58,6 @@ public class ObjectManagerWorldSessionTests
             _fixture._woWClient.Object,
             _fixture._pathfindingClient.Object,
             NullLogger<WoWSharpObjectManager>.Instance,
-            physicsClient: null,
             sceneDataClient: null,
             useLocalPhysics: true);
 

@@ -100,7 +100,7 @@ namespace BotRunner.Clients
 
         private const string NavigationDll = "Navigation";
 
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
         private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
 
         [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]

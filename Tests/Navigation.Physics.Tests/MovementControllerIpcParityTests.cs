@@ -98,8 +98,7 @@ public sealed class MovementControllerIpcParityTests : IDisposable
             SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
         };
 
-        // Physics is local (NativeLocalPhysics.Step) — pass null for IPhysicsClient.
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
         // Simulate teleport: Reset() sets _needsGroundSnap=true so physics runs even when idle
         controller.Reset(teleportZ);
 
@@ -181,9 +180,8 @@ public sealed class MovementControllerIpcParityTests : IDisposable
             SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
         };
 
-        // Physics is local (NativeLocalPhysics.Step) — pass null for IPhysicsClient.
         // PathfindingService no longer handles PhysicsStep; it's path-only.
-        var controller = new MovementController(mockClient.Object, null, player);
+        var controller = new MovementController(mockClient.Object, player);
         controller.SetPath([new Position(sx, sy, sz), new Position(tx, ty, sz)]);
 
         int airborne = 0;

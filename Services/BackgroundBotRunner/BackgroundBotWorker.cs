@@ -227,7 +227,6 @@ namespace BackgroundBotRunner
                 // Physics is always local via NativeLocalPhysics — no remote physics fallback.
                 objectManager.Initialize(wowClient, pathfindingClient,
                     _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
-                    physicsClient: null,
                     sceneDataClient: runtimeMode == BackgroundPhysicsRuntimeMode.LocalSceneSlices ? sceneDataClient : null,
                     useLocalPhysics: true);
             }
@@ -235,7 +234,6 @@ namespace BackgroundBotRunner
             {
                 objectManager.Initialize(wowClient, pathfindingClient,
                     _loggerFactory.CreateLogger<WoWSharpObjectManager>(),
-                    physicsClient: null,
                     useLocalPhysics: true);
             }
 

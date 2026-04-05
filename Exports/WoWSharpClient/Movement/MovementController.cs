@@ -1,5 +1,4 @@
-﻿using BotRunner.Clients;
-using GameData.Core.Enums;
+﻿using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 using Serilog;
@@ -13,14 +12,12 @@ using WoWSharpClient.Parsers;
 
 namespace WoWSharpClient.Movement
 {
-    public class MovementController(WoWClient client, IPhysicsClient? physics, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null)
+    public class MovementController(WoWClient client, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null)
     {
         private readonly WoWClient _client = client;
-        // _physics is intentionally unused — physics is always local via NativeLocalPhysics.
-        // The parameter remains for API compatibility with callers that pass PathfindingClient.
         private readonly WoWLocalPlayer _player = player;
         private readonly SceneDataClient? _sceneDataClient = sceneDataClient;
-        private readonly bool _nativeSceneModeConfigured = ConfigureNativeSceneMode(physics, sceneDataClient);
+        private readonly bool _nativeSceneModeConfigured = ConfigureNativeSceneMode(sceneDataClient);
         // Physics state
         private Vector3 _velocity = Vector3.Zero;
         // Keep fall time in milliseconds to match WoW movement packet expectations.
@@ -168,7 +165,7 @@ namespace WoWSharpClient.Movement
         public List<PhysicsFrameRecord> GetRecordedFrames() => new(_recordedFrames);
         public void ClearRecordedFrames() => _recordedFrames.Clear();
 
-        private static bool ConfigureNativeSceneMode(IPhysicsClient? physics, SceneDataClient? sceneDataClient)
+        private static bool ConfigureNativeSceneMode(SceneDataClient? sceneDataClient)
         {
             // Do NOT enable scene slice mode eagerly — it prevents local VMAP loading
             // which is needed for ground detection until the SceneDataService actually

@@ -74,7 +74,7 @@ namespace WoWSharpClient.Tests.Movement
                 };
             };
 
-            _controller = new MovementController(_mockClient.Object, null, _player);
+            _controller = new MovementController(_mockClient.Object, _player);
         }
 
         public void Dispose()
@@ -886,7 +886,7 @@ namespace WoWSharpClient.Tests.Movement
                 };
             };
 
-            var controller = new MovementController(_mockClient.Object, null, _player);
+            var controller = new MovementController(_mockClient.Object, _player);
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             controller.Update(0.05f, 1000);
@@ -922,7 +922,7 @@ namespace WoWSharpClient.Tests.Movement
             };
 
             var snapshot = ReplaceTrackedObjects(transport, nearbyDoor);
-            var controller = new MovementController(_mockClient.Object, physics: null, _player);
+            var controller = new MovementController(_mockClient.Object, _player);
 
             try
             {
@@ -982,7 +982,7 @@ namespace WoWSharpClient.Tests.Movement
             {
                 NativeLocalPhysics.TestSetSceneSliceModeOverride = enabled => sceneSliceModeEnabled = enabled;
                 var sceneDataClient = new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>());
-                var controller = new MovementController(_mockClient.Object, physics: null, _player, sceneDataClient);
+                var controller = new MovementController(_mockClient.Object, _player, sceneDataClient);
                 var stepCallCount = 0;
 
                 SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => false;
@@ -1044,7 +1044,6 @@ namespace WoWSharpClient.Tests.Movement
 
                 _ = new MovementController(
                     _mockClient.Object,
-                    physics: null,
                     _player,
                     new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
 
@@ -1067,7 +1066,6 @@ namespace WoWSharpClient.Tests.Movement
 
                 _ = new MovementController(
                     _mockClient.Object,
-                    physics: null,
                     _player);
 
                 Assert.False(enabled);
