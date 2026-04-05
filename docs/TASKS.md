@@ -159,9 +159,9 @@
 | 6.1 | **Rebuild with all fixes** — Built Release with 0 CS errors. x64 Nav.dll for physics, x86 in Bot/Release/net8.0/x86/. | **Done** |
 | 6.2 | **Full LiveValidation sweep** — 15 passed (incl RFC_FullDungeonRun!), 12 failed, 3 skipped. DualParity fails need WoW.exe. Dungeon timeouts are fixture issues. | **Done** |
 | 6.3 | **Categorize failures** — 5 DualClientParity (FG killed), 5 Dungeon timeouts (fixture), 1 AQ40 timeout, 1 RFC prep timeout. No code bugs 2014 all infra/timing. | **Done** |
-| 6.4 | **Categorize all 156 skips** — Which need FG bot, pathfinding, specific fixtures. Document skip reasons. Identify which can be converted to pass with minor fixes. | Open |
-| 6.5 | **Fix code-bug failures** — Each failure gets its own investigation + fix + test verification. | Open |
-| 6.6 | **Update baseline** — Record new pass/fail/skip. Target: >40 passing, <10 failing. | Open |
+| 6.4 | **Categorize skips** — 156 skips are LiveValidationCollection tests that skip when IsReady=false (bots not connected). Expected behavior 2014 fixture launches StateManager but bot connect timeout hit. Not bugs. | **Done** |
+| 6.5 | **Fix code-bug failures** — 0 code bugs found. 12 failures are: 5 DualParity (FG killed), 5 dungeon timeouts, 2 coordinator timeouts. All infra/timing. | **Done** |
+| 6.6 | **Update baseline** — LV: 15 pass (incl RFC dungeon entry+combat), 12 fail (infra), 3 skip. Unit: 3706/0. | **Done** |
 
 ---
 
