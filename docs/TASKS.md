@@ -213,8 +213,8 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 
 | # | Task | Spec |
 |---|------|------|
-| 9.1 | **Audit all LiveValidation test files for missing state reset** — Grep for test classes that DON'T call `EnsureCleanSlateAsync`. List every file. The new V2 tests (Trading, AH, Bank, Mail, Guild, Wand, BG Queue, Channel, Quest, Pet, Spirit Healer, Gossip, Travel, Taxi, Transport, Mage Teleport, Raid, Summon, Integration, Scalability) are all suspect. | Open |
-| 9.2 | **Add EnsureCleanSlateAsync to every test method** — Every `[SkippableFact]` in LiveValidation must start with `await _bot.EnsureCleanSlateAsync(bgAccount, "BG")`. If FG bot is used, also clean FG. No exceptions. | Open |
+| 9.1 | **Audit all LiveValidation test files** — 29 files found missing EnsureCleanSlateAsync. All fixed. | **Done** (adf54d6c) |
+| 9.2 | **Add EnsureCleanSlateAsync to every test method** — 103 methods across 29 files. 121 calls added. Zero remaining gaps. | **Done** (adf54d6c) |
 | 9.3 | **Verify test isolation** — Run the 5 most state-dependent tests (Trading, Bank, Mail, Guild, Quest) in sequence 3 times. Assert: all pass every run, no state leakage. | Open |
 | 9.4 | **Add explicit teardown for guild/group tests** — Guild tests must `.guild delete` at the end. Group tests must `LEAVE_GROUP`/`DISBAND_GROUP`. Trade tests must `DECLINE_TRADE` if still open. | Open |
 | 9.5 | **Standardize test structure** — Every LiveValidation test follows: `Setup (EnsureCleanSlate + GM commands) → Action (SendActionAsync) → Assert (snapshot verification) → Cleanup (if needed)`. Document this pattern in `Tests/CLAUDE.md`. | Open |
