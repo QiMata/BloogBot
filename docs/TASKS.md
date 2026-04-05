@@ -107,7 +107,7 @@
 | 2.3 | **Verify heartbeat packet emission** — MovementController must send MSG_MOVE_HEARTBEAT every 100ms (WoW.exe binary constant at 0x5E2110). Capture: count heartbeats over 5s of forward movement, assert 45-55 heartbeats. | Open |
 | 2.4 | **Verify collision slide behavior** — Bot walks into a wall, verify CollideAndSlide produces slide along wall (not stop). Compare against physics replay test cases. | Open |
 | 2.5 | **Verify gravity/falling behavior** — Bot walks off a ledge, verify FALLINGFAR flag set, terminal velocity approached, landing detected. Compare against physics replay ground-contact tests. | Open |
-| 2.6 | **Diff MovementController against parity baseline** — `git diff 70c72973 HEAD -- Exports/WoWSharpClient/Movement/MovementController.cs`. Review every change since parity baseline. Flag any behavior change that doesn't have binary evidence. | Open |
+| 2.6 | **Diff MovementController against parity baseline** — 72 lines added, 15 removed. Changes: IPhysicsClient→local NativeLocalPhysics.Step, workarounds removed, idle guard restored, SceneData refresh added. No new physics behavior. All changes are cleanup or architecture alignment. | **Done** |
 
 ---
 
