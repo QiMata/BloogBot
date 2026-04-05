@@ -240,13 +240,24 @@ public partial class LiveBotFixture
             }
         }
 
+        // Step 2: Leave any existing group/raid (prevents "party is full" spam on next formation)
+        if (snap?.PartyLeaderGuid != 0)
+        {
+            _logger.LogInformation("[{Label}] Leaving existing group (leader={Leader:X})", label, snap.PartyLeaderGuid);
+            await SendActionAsync(account, new Communication.ActionMessage
+            {
+                ActionType = Communication.ActionType.LeaveGroup
+            });
+            await Task.Delay(500);
+        }
+
         if (!teleportToSafeZone)
         {
             _logger.LogInformation("[{Label}] CleanSlate skipping safe-zone teleport; caller will stage location explicitly.", label);
             return;
         }
 
-        // Step 2: Teleport to safe zone (prevents position contamination from previous test).
+        // Step 3: Teleport to safe zone (prevents position contamination from previous test).
         // Skip if already near safe zone to avoid command floods when bot is stalled.
         var alreadyNearSafeZone = false;
         if (pos != null)
