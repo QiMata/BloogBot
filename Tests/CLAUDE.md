@@ -129,7 +129,8 @@ public async Task Feature_Scenario_ExpectedBehavior()
 ```
 
 ### Key Rules
-- **EnsureCleanSlateAsync** resets: `.gm on`, `.reset items`, teleport to Org safe zone
+- **EnsureCleanSlateAsync** resets: revive → leave group → teleport to Org safe zone → `.gm off`
+- **GM Mode is DANGEROUS**: `.gm on` corrupts VMaNGOS UnitReaction bits. Mobs won't aggro, combat breaks. EnsureCleanSlateAsync turns `.gm off` at the end. If your test needs GM commands, do them BEFORE EnsureCleanSlateAsync returns, or call `.gm on` then `.gm off` explicitly after setup.
 - **Position access**: `snap.Player?.Unit?.GameObject?.Base?.Position` (NOT `snap.X`)
 - **Teleport**: `_bot.BotTeleportAsync(account, mapId, x, y, z)` (NOT `TeleportAsync`)
 - **NPC detection**: `_bot.WaitForNearbyUnitAsync(account, npcFlags, timeout)`

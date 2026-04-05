@@ -278,6 +278,12 @@ public partial class LiveBotFixture
             await BotTeleportAsync(account, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
         }
         await WaitForZStabilizationAsync(account, waitMs: 2000);
+
+        // Step 4: Turn GM mode OFF. GM mode corrupts UnitReaction bits on VMaNGOS —
+        // mobs won't aggro and combat detection breaks. The server doesn't fully
+        // reset reaction flags when toggling .gm off, but leaving GM ON is worse.
+        // All GM setup (.learn, .additem, .go xyz) should happen BEFORE this point.
+        await SendGmChatCommandAsync(account, ".gm off");
     }
 
     // ---- GM Command Helpers (via SOAP — independent of bots) ----
