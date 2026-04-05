@@ -23,6 +23,7 @@ namespace BotRunner.Tests.IPC;
 /// Simulates N concurrent bots sending realistic snapshots at 10Hz (100ms interval).
 /// Measures: throughput (msg/s), latency (P50/P95/P99), error rate.
 /// </summary>
+[Trait("Category", "RequiresInfrastructure")]
 public class StateManagerLoadTests
 {
     private readonly ITestOutputHelper _output;
