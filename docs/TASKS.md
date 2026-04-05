@@ -95,15 +95,15 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. | Blocked — needs StateManager + bot processes running |
-| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Blocked — needs StateManager |
-| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Blocked — needs StateManager |
-| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Blocked — needs StateManager |
-| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Blocked — needs StateManager |
-| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Blocked — needs StateManager |
-| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Blocked — needs StateManager |
-| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Blocked — needs StateManager |
-| 3.9 | **Run all LiveValidation suite** — Full sweep, document pass/fail counts. | Blocked — needs StateManager |
+| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. | In progress — fixture launches StateManager+WoW.exe, 120s bot connect timeout |
+| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Pending T3.9 |
+| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Pending T3.9 |
+| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Pending T3.9 |
+| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Pending T3.9 |
+| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Pending T3.9 |
+| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Pending T3.9 |
+| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Pending T3.9 |
+| 3.9 | **Run all LiveValidation suite** — Full sweep running in background. Awaiting results. | In progress |
 
 ---
 
