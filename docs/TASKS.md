@@ -58,20 +58,18 @@ Last run categorization:
 
 ---
 
-## D1 — Physics.dll DLL Separation (Priority: High)
+## D1 — Navigation.dll Architecture Fix (Priority: High)
 
-**Split Navigation.dll into Physics.dll (local) + Navigation.dll (path-only, Docker).**
+**Problem:** StateManager targets x86 → launches BackgroundBotRunner as x86 → needs x86 Navigation.dll. But physics tests target x64 → need x64 Navigation.dll. Both output to `Bot/Release/net8.0/Navigation.dll`. Whoever builds last wins, breaking the other.
 
-CMake project exists at `Exports/Physics/CMakeLists.txt`. Needs VS Developer Command Prompt to configure.
+**Current workaround:** x86 build at `Bot/Release/net8.0/x86/Navigation.dll`. Must manually copy to main dir before running bots. Gets overwritten by x64 MSBuild.
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Build Physics.dll x64** — `cmake -B build_x64 -A x64` from VS Developer Command Prompt. Fix any compile errors. Verify all physics exports present. | Open |
-| 1.2 | **Build Physics.dll x86** — Same with `-A Win32`. Verify x86 exports match x64. | Open |
-| 1.3 | **Refactor Navigation.dll to path-only** — Create a new CMakeLists.txt or vcxproj that only includes PathFinder.cpp, MoveMap.cpp, Detour. No physics, no scene. Build x64 only. | Open |
-| 1.4 | **Update C# P/Invoke DllName** — NativeLocalPhysics: change `"Navigation"` to `"Physics"`. PathfindingClient stays `"Navigation"`. Test both load correctly. | Open |
-| 1.5 | **Update Docker PathfindingService** — Dockerfile builds path-only Navigation.dll. Verify path requests still work. | Open |
-| 1.6 | **Run full test suite with split DLLs** — Physics tests use Physics.dll, pathfinding tests use Navigation.dll. All 3706+ tests pass. | Open |
+| 1.1 | **Auto-select Navigation.dll by platform** — BackgroundBotRunner should load from `x86/Navigation.dll` subdirectory when running as x86. Use `NativeLibrary.SetDllImportResolver` or `[DllImport]` with runtime path. | Open |
+| 1.2 | **Add post-build copy step** — MSBuild x86 build should copy to `Bot/Release/net8.0/x86/`. x64 build stays in main dir. Neither overwrites the other. | Open |
+| 1.3 | **Verify both architectures coexist** — Physics tests (x64) and LiveValidation tests (x86) both pass in the same output directory without manual DLL swapping. | Open |
+| 1.4 | **Physics.dll DLL split** — CMake project at `Exports/Physics/CMakeLists.txt`. Separate physics+scene from pathfinding. Deferred until architecture issue resolved. | Open |
 
 ---
 
