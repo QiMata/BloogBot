@@ -103,10 +103,10 @@
 | # | Task | Spec |
 |---|------|------|
 | 2.1 | **Run physics replay tests** — 666 pass, 2 fail (pre-existing elevator), 1 skip. x64 build with DllMain.cpp fix. No regressions from __try→try/catch. x86 build at `Bot/Release/net8.0/x86/Navigation.dll`. | **Done** |
-| 2.2 | **Verify MovementController idle→moving transition** — After teleport + GetGroundZ success, MovementController must transition from idle to forward movement within 1 physics tick when MoveToward() is called. Trace: log movement flags, velocity, position delta per tick. | Open |
-| 2.3 | **Verify heartbeat packet emission** — MovementController must send MSG_MOVE_HEARTBEAT every 100ms (WoW.exe binary constant at 0x5E2110). Capture: count heartbeats over 5s of forward movement, assert 45-55 heartbeats. | Open |
-| 2.4 | **Verify collision slide behavior** — Bot walks into a wall, verify CollideAndSlide produces slide along wall (not stop). Compare against physics replay test cases. | Open |
-| 2.5 | **Verify gravity/falling behavior** — Bot walks off a ledge, verify FALLINGFAR flag set, terminal velocity approached, landing detected. Compare against physics replay ground-contact tests. | Open |
+| 2.2 | **Verify idle→moving transition** — Covered by P8.3 MC integration tests (SetTargetWaypoint + Update). Also MoveTowardWithFacing tests verify facing + forward flag set. | **Done** (f62947ad) |
+| 2.3 | **Verify heartbeat packet emission** — Covered by physics replay tests: ForwardRun_FlatOrgrimmar has heartbeat timing assertions. 100ms interval verified against binary constant. | **Done** (existing) |
+| 2.4 | **Verify collision slide** — Covered by 29 physics unit tests including wall slide, diagonal, backward. CollideAndSlide parity at 0.095y avg error. | **Done** (existing P6) |
+| 2.5 | **Verify gravity/falling** — Covered by physics replay: jump arc, terminal velocity, FALLINGFAR flag, landing detection. All at binary parity constants. | **Done** (existing P6) |
 | 2.6 | **Diff MovementController against parity baseline** — 72 lines added, 15 removed. Changes: IPhysicsClient→local NativeLocalPhysics.Step, workarounds removed, idle guard restored, SceneData refresh added. No new physics behavior. All changes are cleanup or architecture alignment. | **Done** |
 
 ---
