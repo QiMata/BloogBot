@@ -145,8 +145,8 @@
 | # | Task | Spec |
 |---|------|------|
 | 5.1 | **Delete IPhysicsClient** — DONE (cbe794eb). Interface + all references removed. | **Done** |
-| 5.2 | **Simplify BackgroundPhysicsMode** — Remove `SharedPathfinding` enum value. Only `LocalInProcess` and `LocalSceneSlices` are real. Clean resolver. | Open |
-| 5.3 | **Remove stale remote-physics comments** — Update comments in MovementController, PathfindingClient, BackgroundBotWorker that reference remote physics. | Open |
+| 5.2 | **Simplify BackgroundPhysicsMode** — SharedPathfinding removed. Resolver always returns LocalInProcess. 13/13 tests pass. | **Done** (7bd43fe0) |
+| 5.3 | **Remove stale remote-physics comments** — Only 1 reference found and it's already correct ("no remote physics fallback"). | **Done** |
 
 ---
 
