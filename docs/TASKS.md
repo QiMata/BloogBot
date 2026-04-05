@@ -266,7 +266,7 @@ await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
 | # | Task | Spec |
 |---|------|------|
 | 11.1 | **Reproduce corner-stuck scenario** — Teleport bot to a known tight-corner location (Orgrimmar doorways, Undercity tunnels, RFC corridors). Log: path waypoints, collision normals, position per tick. Identify where the bot stalls. | Open |
-| 11.2 | **Add capsule-radius path offset** — After string-pull produces waypoints, offset each waypoint away from nearby navmesh edges by capsule radius. This prevents the path from clipping walls. Implement in `PathFinder::findSmoothPath`. | Open |
+| 11.2 | **Capsule-radius path offset** — Post-findSmoothPath nudge pushes interior waypoints away from polygon edges by capsule radius. Physics: 666/2/1 unchanged. | **Done** (bdb0f109) |
 | 11.3 | **CollideAndSlide concave corner** — Already implemented: dot product early-out at line 131 stops when direction opposes original. MAX_SLIDE_ITERATIONS=10 (WoW uses 4 — parity gap but not a stall cause). | **Done** (pre-existing) |
 | 11.4 | **Stuck detection + recovery** — Already implemented: `ObserveMovementStuckRecovery` in NavigationPath.cs triggers forced recalculation on physics stuck generation increment. | **Done** (pre-existing) |
 | 11.5 | **Test corner navigation: Orgrimmar buildings** — Bot navigates from Org bank to Org AH (tight corners around buildings). Assert: arrives within 60s, no stalls >3s. Record path waypoints for visualization. | Open |
