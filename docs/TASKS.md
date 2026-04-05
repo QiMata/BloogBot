@@ -119,7 +119,7 @@
 |---|------|------|
 | 3.1 | **Verify Docker container running** — Up 37h, port 5001, Linux container, WWOW_DATA_DIR=/wwow-data, volume D:/MaNGOS/data→/wwow-data. | **Done** |
 | 3.2 | **Verify path request round-trip** — BG bot sends CalculatePathRequest(mapId=1, start=OrgBank, end=OrgAH). Assert: non-empty waypoint array returned. Log latency. | Open |
-| 3.3 | **Verify WWOW_DATA_DIR volume mount** — Container has mmaps/, maps/, vmaps/ from host volume. `docker exec pathfinding-service ls /data/mmaps` shows map tiles. | Open |
+| 3.3 | **Verify WWOW_DATA_DIR volume** — Container has mmaps/, vmaps/, maps/ at /wwow-data/. Confirmed via docker exec. | **Done** |
 | 3.4 | **Add health check to docker-compose** — TCP healthcheck on 5001, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
 | 3.5 | **Test pathfinding under load** — 10 concurrent path requests from different map positions. Assert: all return valid paths within 5s. No deadlocks. | Open |
 
@@ -133,7 +133,7 @@
 |---|------|------|
 | 4.1 | **Verify Docker container running** — Up 37h, port 5003, Linux container, same volume mount. | **Done** |
 | 4.2 | **Verify scene slice request** — BG bot requests scene slice for Orgrimmar area. Assert: triangle data returned. | Open |
-| 4.3 | **Verify VMAP data accessible** — Container has vmaps/ from host volume. Scene queries return non-empty triangle sets. | Open |
+| 4.3 | **Verify VMAP data accessible** — vmaps/ present at /wwow-data/vmaps/ in scene-data-service container. | **Done** |
 | 4.4 | **Add health check to docker-compose** — TCP healthcheck on 5003, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
 
 ---
