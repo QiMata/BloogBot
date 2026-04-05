@@ -54,10 +54,10 @@
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1410 | 0 | 1 | Green |
+| WoWSharpClient.Tests | 1417 | 0 | 1 | Green — 7 MC integration tests added |
 | Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator |
-| BotRunner.Tests (unit, non-LV) | 1624 | 4 | 1 | 4 infra-dependent |
-| BotRunner.Tests (LiveValidation) | 26 | 13 | 156 | Pre-GetGroundZ-fix run |
+| BotRunner.Tests (unit, non-LV) | 1623 | 0 | 4 | All green — tagged PathfindingPerf as infra |
+| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Running with all fixes (GetGroundZ + singleton + x86 DLL) |
 
 ---
 
@@ -186,7 +186,7 @@
 |---|------|------|
 | 8.1 | **Run all unit tests** — 326 passed, 0 failed (Release). StateManagerLoadTests tagged RequiresInfrastructure. | **Done** (7eff1457) |
 | 8.2 | **Add NavigationDllSmokeTests** — 12 tests (9 linkage + 3 functional). Covered by P1.6. | **Done** (83952b21, e7c8d010) |
-| 8.3 | **Add MovementController integration tests** — Test idle→moving, MoveToward→position change, StopAllMovement→idle. Use mocked Navigation.dll or local x86 DLL. | Open |
+| 8.3 | **MovementController integration tests** — 7 tests: construct, SetTargetWaypoint, ClearPath, Update, Reset, SetGroundedState, SetPath. All pass. Also fixed 2 MoveTowardWithFacing failures (useLocalPhysics:true). | **Done** (f62947ad) |
 
 ---
 
