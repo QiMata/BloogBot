@@ -67,7 +67,7 @@ Last run categorization:
 | # | Task | Spec |
 |---|------|------|
 | 1.1 | **Auto-select Navigation.dll by platform** — NavigationDllResolver loads from x86/ or x64/ subdir based on process arch. Registered in BG bot Program.cs. | **Done** (90aab82e) |
-| 1.2 | **Add post-build copy step** — MSBuild x86 build should copy to `Bot/Release/net8.0/x86/`. x64 build stays in main dir. Neither overwrites the other. | Open |
+| 1.2 | **Post-build x86 to subdir** — vcxproj Win32 OutDir→x86/. x64 stays in main dir. No manual copy needed. | **Done** (31abef42) |
 | 1.3 | **Verify both architectures coexist** — Physics tests (x64) and LiveValidation tests (x86) both pass in the same output directory without manual DLL swapping. | Open |
 | 1.4 | **Physics.dll DLL split** — CMake project at `Exports/Physics/CMakeLists.txt`. Separate physics+scene from pathfinding. Deferred until architecture issue resolved. | Open |
 
