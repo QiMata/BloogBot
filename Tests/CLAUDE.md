@@ -89,3 +89,56 @@ dotnet test --filter "FullyQualifiedName~MovementRecording"       # Specific tes
 - Results directory: `TestResults/`
 - Format: `.trx` (Test Results XML)
 - RunSettings: Embedded in each test csproj (no `--settings` flag needed)
+
+## LiveValidation Test Pattern (MANDATORY)
+
+Every LiveValidation test method MUST follow this structure:
+
+```csharp
+[SkippableFact]
+[Trait("Category", "RequiresInfrastructure")]
+public async Task Feature_Scenario_ExpectedBehavior()
+{
+    // 1. GUARD — skip if fixture not ready
+    var bgAccount = _bot.BgAccountName!;
+
+    // 2. SETUP — reset bot state (MANDATORY — prevents cross-test contamination)
+    await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+    // If using FG bot:
+    // if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
+    //     await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
+
+    // 3. GM SETUP — items, spells, teleport
+    await _bot.SendGmChatCommandAsync(bgAccount, ".additem 2589 1");
+    await _bot.BotTeleportAsync(bgAccount, 1, 1629f, -4373f, 34f);
+    await Task.Delay(3000);
+
+    // 4. ACTION — send bot task via IPC
+    var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
+    {
+        ActionType = ActionType.InteractWith,
+    });
+
+    // 5. ASSERT — verify via snapshot
+    await _bot.RefreshSnapshotsAsync();
+    var snap = await _bot.GetSnapshotAsync(bgAccount);
+    Assert.NotNull(snap);
+
+    // 6. CLEANUP (if needed) — guild delete, group disband, etc.
+}
+```
+
+### Key Rules
+- **EnsureCleanSlateAsync** resets: `.gm on`, `.reset items`, teleport to Org safe zone
+- **Position access**: `snap.Player?.Unit?.GameObject?.Base?.Position` (NOT `snap.X`)
+- **Teleport**: `_bot.BotTeleportAsync(account, mapId, x, y, z)` (NOT `TeleportAsync`)
+- **NPC detection**: `_bot.WaitForNearbyUnitAsync(account, npcFlags, timeout)`
+- **Skip guards**: `global::Tests.Infrastructure.Skip.IfNot(...)` (avoid ambiguity with xUnit.Skip)
+- **No state leakage**: Guild tests `.guild delete`, group tests `DISBAND_GROUP`, trade tests `DECLINE_TRADE`
+
+### Navigation.dll Architecture
+- **BotRunner.Tests** targets x86 (for FG WoW.exe injection compat) → needs x86 Navigation.dll
+- **Navigation.Physics.Tests** targets x64 → needs x64 Navigation.dll
+- Both share `Bot/Release/net8.0/` output directory → default is x64
+- For LiveValidation: copy `Exports/Navigation/cmake_build_x86/Release/Navigation.dll` or build with `MSBuild -p:Platform=x86`
+- x86 build also at `Bot/Release/net8.0/x86/Navigation.dll`
