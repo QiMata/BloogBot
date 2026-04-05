@@ -161,6 +161,92 @@
 
 ---
 
+## P9 — Integration Test State Reset & Scrub (Priority: High)
+
+**Problem:** Many LiveValidation tests (especially the new V2 tests: TradingTests, AuctionHouseTests, BankInteractionTests, MailSystemTests, etc.) do NOT call `EnsureCleanSlateAsync()` at the start. This means test state leaks between runs — items in inventory, gold amounts, guild memberships, quest log entries, buff states all carry over. Tests that pass in isolation fail when run in sequence.
+
+**The existing pattern (from working tests like BgInteractionTests, CraftingProfessionTests):**
+```csharp
+// START of every test method:
+await _bot.EnsureCleanSlateAsync(bgAccount, "BG");  // .reset items, .gm on, teleport to safe zone
+await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
+
+// ... test body ...
+
+// END: no explicit teardown needed — next test's EnsureCleanSlate handles it
+```
+
+**`EnsureCleanSlateAsync` does:**
+1. `.gm on` — enable GM mode
+2. `.reset items` — strip all inventory/gear
+3. Teleport to Orgrimmar safe zone (away from mobs)
+4. Wait for position to stabilize
+
+| # | Task | Spec |
+|---|------|------|
+| 9.1 | **Audit all LiveValidation test files for missing state reset** — Grep for test classes that DON'T call `EnsureCleanSlateAsync`. List every file. The new V2 tests (Trading, AH, Bank, Mail, Guild, Wand, BG Queue, Channel, Quest, Pet, Spirit Healer, Gossip, Travel, Taxi, Transport, Mage Teleport, Raid, Summon, Integration, Scalability) are all suspect. | Open |
+| 9.2 | **Add EnsureCleanSlateAsync to every test method** — Every `[SkippableFact]` in LiveValidation must start with `await _bot.EnsureCleanSlateAsync(bgAccount, "BG")`. If FG bot is used, also clean FG. No exceptions. | Open |
+| 9.3 | **Verify test isolation** — Run the 5 most state-dependent tests (Trading, Bank, Mail, Guild, Quest) in sequence 3 times. Assert: all pass every run, no state leakage. | Open |
+| 9.4 | **Add explicit teardown for guild/group tests** — Guild tests must `.guild delete` at the end. Group tests must `LEAVE_GROUP`/`DISBAND_GROUP`. Trade tests must `DECLINE_TRADE` if still open. | Open |
+| 9.5 | **Standardize test structure** — Every LiveValidation test follows: `Setup (EnsureCleanSlate + GM commands) → Action (SendActionAsync) → Assert (snapshot verification) → Cleanup (if needed)`. Document this pattern in `Tests/CLAUDE.md`. | Open |
+| 9.6 | **Fix tests that use wrong LiveBotFixture API** — Audit for: `_bot.TeleportAsync` (should be `_bot.BotTeleportAsync`), `snap.X/Y/Z` (should be `snap.Player?.Unit?.GameObject?.Base?.Position`), `snap.RecentChatMessages` (may not exist). Fix all API mismatches. | Open |
+
+---
+
+## P10 — Project & Namespace Naming Review (Priority: Medium)
+
+**Goal:** Audit all project names, namespaces, and class names for consistency, clarity, and alignment with the architecture. Rename where improvements can be made.
+
+**Current naming concerns:**
+- `BloogBot.AI` vs `WWoWBot.AI.Tests` — inconsistent prefix (BloogBot vs WWoW)
+- `BotRunner` — generic name, could be `WoW.BotEngine` or `WoW.BotOrchestration`
+- `WoWSharpClient` — good but sometimes aliased as `WowSharpClient` (case inconsistency in `WowSharpClient.NetworkTests`)
+- `BotCommLayer` — could be `WoW.IPC` or `WoW.Communication`
+- `WinProcessImports` — very specific, could be under a parent `WoW.Native` namespace
+- `GameData.Core` — good
+- `BotProfiles` — good
+- `pfprobe` / `wwow-path-probe` — tool naming inconsistency
+
+| # | Task | Spec |
+|---|------|------|
+| 10.1 | **Audit all 37 project names** — List every .csproj, its namespace, and its purpose. Flag naming inconsistencies (BloogBot vs WWoW, case mismatches, unclear names). | Open |
+| 10.2 | **Fix `WowSharpClient.NetworkTests` casing** — Should be `WoWSharpClient.NetworkTests` to match the main project. Rename csproj + directory + namespace. | Open |
+| 10.3 | **Fix `WWoWBot.AI.Tests` vs `BloogBot.AI`** — Align naming. Either both use `BloogBot` or both use `WWoW`. | Open |
+| 10.4 | **Evaluate `BotRunner` rename** — Is `BotRunner` clear enough? It's the core orchestration engine. Consider: keep as-is (too many references to rename safely) vs alias in docs. | Open |
+| 10.5 | **Evaluate `BotCommLayer` rename** — Communication layer. Could be `WoW.Communication` but 200+ references. Cost/benefit analysis. | Open |
+| 10.6 | **Clean up tool project names** — `pfprobe` → `PathfindingProbe`, `wwow-path-probe` → merge with pfprobe or clarify distinction. | Open |
+| 10.7 | **Document naming conventions** — Add section to `CLAUDE.md` or `DEVELOPMENT_GUIDE.md` with project naming rules for future additions. | Open |
+
+---
+
+## P11 — Pathfinding Corner & Obstacle Avoidance (Priority: High)
+
+**Problem:** Bots get stuck on corners and objects. The pathfinding string-pull (`findSmoothPath` in PathFinder.cpp) produces paths that cut corners too tightly, and the bot's collision capsule clips building edges, doorframes, and terrain features. The bot then stalls because CollideAndSlide can't resolve the collision.
+
+**Root cause candidates:**
+1. **String-pull cuts corners too tight** — `findSmoothPath` in `PathFinder.cpp:1073` uses Detour's `dtNavMeshQuery::moveAlongSurface` which can produce waypoints that clip corners. The capsule radius (0.3064 for Orc) isn't accounted for in path smoothing.
+2. **No capsule-width path offset** — Waypoints are on the navmesh centerline, but the bot has a physical radius. Paths near walls need to be offset inward by capsule radius.
+3. **CollideAndSlide gets stuck in concave corners** — When the bot slides along wall A into corner where wall A meets wall B, the slide direction may oscillate between the two wall normals, causing a stall.
+4. **Dynamic objects not in navmesh** — Detour navmesh is static. Dynamic objects (doors, event structures) aren't in the navmesh, so paths route through them. LOS check against DynamicObjectRegistry was added (session 11) but path segments still route through dynamic structures.
+
+**WoW.exe binary reference:**
+- String-pull uses `dtNavMeshQuery::findStraightPath` (VA 0x6B2A40) with `DT_STRAIGHTPATH_AREA_CROSSINGS` flag
+- Capsule sweep uses WoW.exe's `CMovement::CollisionStep` (VA 0x633840) — already implemented in PhysicsEngine.cpp
+- Corner resolution uses iterative slide with max 4 iterations (VA 0x633A10)
+
+| # | Task | Spec |
+|---|------|------|
+| 11.1 | **Reproduce corner-stuck scenario** — Teleport bot to a known tight-corner location (Orgrimmar doorways, Undercity tunnels, RFC corridors). Log: path waypoints, collision normals, position per tick. Identify where the bot stalls. | Open |
+| 11.2 | **Add capsule-radius path offset** — After string-pull produces waypoints, offset each waypoint away from nearby navmesh edges by capsule radius. This prevents the path from clipping walls. Implement in `PathFinder::findSmoothPath`. | Open |
+| 11.3 | **Fix CollideAndSlide concave corner resolution** — When slide direction oscillates (dot product with previous slide < 0), clamp to the corner bisector or stop. Compare against WoW.exe's 4-iteration limit at VA 0x633A10. The current implementation in `PhysicsCollideSlide.cpp` may lack this. | Open |
+| 11.4 | **Add stuck detection + recovery in NavigationPath** — `NavigationPath.GetNextWaypoint()` already has `MovementStuckRecoveryGeneration` support. Verify: if bot hasn't moved >0.5y in 3s, trigger path recalculation with a wider search. Log stuck events. | Open |
+| 11.5 | **Test corner navigation: Orgrimmar buildings** — Bot navigates from Org bank to Org AH (tight corners around buildings). Assert: arrives within 60s, no stalls >3s. Record path waypoints for visualization. | Open |
+| 11.6 | **Test corner navigation: RFC corridors** — Bot navigates through RFC dungeon corridors (narrow passages, doorframes). Assert: passes through all doorways without stalling. | Open |
+| 11.7 | **Test obstacle avoidance: dynamic objects** — Place bot near Darkmoon Faire tents or closed doors. Verify LOS check blocks path shortcuts. Bot should pathfind around the obstacle. | Open |
+| 11.8 | **Validate against physics replay: Undercity tunnels** — Use existing Undercity recording. Compare: does the bot follow the same corridor path as the FG recording? Flag any divergence at corners. | Open |
+
+---
+
 ## Canonical Commands
 
 ```bash
