@@ -95,15 +95,15 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | **Run BasicLoopTests + CharacterLifecycleTests** — Confirm bots login, enter world, move. | In progress — fixture launches StateManager+WoW.exe, 120s bot connect timeout |
-| 3.2 | **Run CombatBgTests + CombatFgTests** — Confirm combat works for both bot types. | Pending T3.9 |
-| 3.3 | **Run VendorBuySellTests** — Confirm buy/sell at vendor works. | Pending T3.9 |
-| 3.4 | **Run EconomyInteractionTests** — Confirm bank/AH/mail interactions work. | Pending T3.9 |
-| 3.5 | **Run TradingTests** — Confirm dual-bot trade flow works. | Pending T3.9 |
-| 3.6 | **Run GroupFormationTests** — Confirm party/raid formation works. | Pending T3.9 |
-| 3.7 | **Run NavigationTests** — Confirm pathfinding-based movement works. | Pending T3.9 |
-| 3.8 | **Run TaxiTests against live flight master** — Confirm CMSG_ACTIVATETAXI flow. | Pending T3.9 |
-| 3.9 | **Run all LiveValidation suite** — Full sweep running in background. Awaiting results. | In progress |
+| 3.1 | **BasicLoopTests** — 2/2 PASSED. Fixed P9.2 singleton bridge (f0d1f2dc). | **Done** |
+| 3.2 | **CombatBg+FgTests** — 0/2 skipped (CombatBgBotFixture uses different bot collection). | Skipped |
+| 3.3 | **VendorBuySellTests** — 2/2 PASSED. | **Done** |
+| 3.4 | **EconomyInteractionTests** — Pending T3.9 full sweep. | Pending |
+| 3.5 | **TradingTests** — Pending T3.9 full sweep. | Pending |
+| 3.6 | **GroupFormationTests** — 0/1 skipped (needs FG actionable probe). | Skipped |
+| 3.7 | **NavigationTests** — Pending T3.9 full sweep. | Pending |
+| 3.8 | **TaxiTests** — Pending T3.9 full sweep. | Pending |
+| 3.9 | **Full LiveValidation suite** — Running in background. | In progress |
 
 ---
 
