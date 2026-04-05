@@ -102,7 +102,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 2.1 | **Run 666 physics replay tests with x86 Navigation.dll** — `dotnet test Tests/Navigation.Physics.Tests/ --configuration Release`. Assert: 666 pass, 2 fail (pre-existing elevator), 1 skip. Any new failures = regression. | Open |
+| 2.1 | **Run physics replay tests** — 666 pass, 2 fail (pre-existing elevator), 1 skip. x64 build with DllMain.cpp fix. No regressions from __try→try/catch. x86 build at `Bot/Release/net8.0/x86/Navigation.dll`. | **Done** |
 | 2.2 | **Verify MovementController idle→moving transition** — After teleport + GetGroundZ success, MovementController must transition from idle to forward movement within 1 physics tick when MoveToward() is called. Trace: log movement flags, velocity, position delta per tick. | Open |
 | 2.3 | **Verify heartbeat packet emission** — MovementController must send MSG_MOVE_HEARTBEAT every 100ms (WoW.exe binary constant at 0x5E2110). Capture: count heartbeats over 5s of forward movement, assert 45-55 heartbeats. | Open |
 | 2.4 | **Verify collision slide behavior** — Bot walks into a wall, verify CollideAndSlide produces slide along wall (not stop). Compare against physics replay test cases. | Open |
