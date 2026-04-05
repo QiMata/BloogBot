@@ -31,7 +31,7 @@
 | 0.3 | **Design Navigation.dll API (path-only)** — 8 exports: FindPath, PathArrFree, FindPathCorridor, CorridorUpdate/MoveTarget/IsValid/Destroy. | **Done** |
 | 0.4 | **Design SceneData.dll API** — 14 exports: QueryTerrainTriangles, InjectSceneTriangles, ClearSceneCache, SetSceneSliceMode, MapLoader, SceneCache ops. | **Done** |
 | 0.5 | **x86 build now includes DllMain.cpp** — Fixed __try→try/catch for MSVC, removed duplicate include, /EHa. All 20 exports present. DLL separation (Physics/Scene/Nav split) is P0.5b below. | **Done** (768f8bd9) |
-| 0.5b | **Create Physics.dll CMake project** — Separate Physics.dll from Navigation.dll. CMakeLists.txt in `Exports/Physics/`. x86+x64. | Open |
+| 0.5b | **Physics.dll CMake project** — CMakeLists.txt created. Physics+Scene sources, excludes PathFinder. x86+x64 targets. | **Done** (e0541160) |
 | 0.6 | **Create SceneData.dll CMake project** — `Exports/SceneData/`. Compiles VMAP loading, ADT parsing, triangle extraction. x64 only (Docker service). | Open |
 | 0.7 | **Refactor Navigation.dll to path-only** — Remove physics and scene code. Keep only Detour navmesh, PathFinder, MoveMap. x64 only (Docker service). | Open |
 | 0.8 | **Update C# P/Invoke declarations** — PathfindingClient loads Navigation.dll (paths). NativeLocalPhysics loads Physics.dll (physics). SceneDataClient loads SceneData.dll (scene). Update DllImport constants. | Open |
