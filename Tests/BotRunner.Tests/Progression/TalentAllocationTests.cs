@@ -6,13 +6,14 @@ namespace BotRunner.Tests.Progression;
 /// <summary>
 /// Tests that TalentBuildDefinitions resolves builds by name correctly,
 /// verifying the configurable talent build system.
+/// Format: "Spec Class" (e.g., "Arms Warrior", "Frost Mage").
 /// </summary>
 public class TalentAllocationTests
 {
     [Fact]
     public void GetBuild_WarriorArms_ReturnsBuildOrder()
     {
-        var build = TalentBuildDefinitions.GetBuild("WarriorArms");
+        var build = TalentBuildDefinitions.GetBuild("Arms Warrior");
         Assert.NotNull(build);
         Assert.NotEmpty(build);
     }
@@ -20,7 +21,7 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_WarriorFury_ReturnsBuildOrder()
     {
-        var build = TalentBuildDefinitions.GetBuild("WarriorFury");
+        var build = TalentBuildDefinitions.GetBuild("Fury Warrior");
         Assert.NotNull(build);
         Assert.NotEmpty(build);
     }
@@ -28,7 +29,7 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_WarriorProtection_ReturnsBuildOrder()
     {
-        var build = TalentBuildDefinitions.GetBuild("WarriorProtection");
+        var build = TalentBuildDefinitions.GetBuild("Protection Warrior");
         Assert.NotNull(build);
         Assert.NotEmpty(build);
     }
@@ -36,7 +37,7 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_MageFrost_ReturnsBuildOrder()
     {
-        var build = TalentBuildDefinitions.GetBuild("MageFrost");
+        var build = TalentBuildDefinitions.GetBuild("Frost Mage");
         Assert.NotNull(build);
         Assert.NotEmpty(build);
     }
@@ -44,7 +45,7 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_PriestShadow_ReturnsBuildOrder()
     {
-        var build = TalentBuildDefinitions.GetBuild("PriestShadow");
+        var build = TalentBuildDefinitions.GetBuild("Shadow Priest");
         Assert.NotNull(build);
         Assert.NotEmpty(build);
     }
@@ -59,7 +60,7 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_BuildsHaveValidTabAndPos()
     {
-        var build = TalentBuildDefinitions.GetBuild("WarriorArms");
+        var build = TalentBuildDefinitions.GetBuild("Arms Warrior");
         Assert.NotNull(build);
         foreach (var (tab, pos) in build)
         {
@@ -71,8 +72,8 @@ public class TalentAllocationTests
     [Fact]
     public void GetBuild_DifferentSpecsSameClass_DifferentBuilds()
     {
-        var arms = TalentBuildDefinitions.GetBuild("WarriorArms");
-        var fury = TalentBuildDefinitions.GetBuild("WarriorFury");
+        var arms = TalentBuildDefinitions.GetBuild("Arms Warrior");
+        var fury = TalentBuildDefinitions.GetBuild("Fury Warrior");
         Assert.NotNull(arms);
         Assert.NotNull(fury);
         // Different specs should allocate to different primary tabs
