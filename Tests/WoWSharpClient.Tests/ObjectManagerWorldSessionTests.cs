@@ -1158,7 +1158,8 @@ public class ObjectManagerWorldSessionTests
         WoWSharpObjectManager.Instance.Initialize(
             _fixture._woWClient.Object,
             _fixture._pathfindingClient.Object,
-            NullLogger<WoWSharpObjectManager>.Instance);
+            NullLogger<WoWSharpObjectManager>.Instance,
+            useLocalPhysics: true);
     }
 
     private static Mock<IWorldClient> CreateWorldClientRecorder(out List<(Opcode opcode, byte[] payload)> sentPackets)
