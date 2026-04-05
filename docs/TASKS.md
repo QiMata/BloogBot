@@ -103,7 +103,7 @@
 | 3.6 | **GroupFormationTests** — 0/1 skipped (needs FG actionable probe). | Skipped |
 | 3.7 | **NavigationTests** — Pending T3.9 full sweep. | Pending |
 | 3.8 | **TaxiTests** — Pending T3.9 full sweep. | Pending |
-| 3.9 | **Full LiveValidation suite** — Running in background. | In progress |
+| 3.9 | **Full LiveValidation suite** — 26 passed, 13 failed, 156 skipped (195 total, 36min). Re-running with verbose output for failure details. | In progress |
 
 ---
 
