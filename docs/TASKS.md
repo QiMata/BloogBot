@@ -11,13 +11,13 @@
 
 ---
 
-## Test Baseline (2026-04-04)
+## Test Baseline (2026-04-04, post T1+T2)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1410 | 0 | 1 | Green after V1.1 NearbyObjects fix |
-| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator Z sync |
-| BotRunner.Tests (non-infra) | 624 | 12 | 4 | 12 failures from infra-dependent LiveValidation |
+| WoWSharpClient.Tests | 1410 | 0 | 1 | Green |
+| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator |
+| BotRunner.Tests (non-LV, non-infra) | 1624 | 4 | 1 | 4 infra-dependent (PathPerf 2, StateLoad 2) |
 
 ---
 
@@ -82,10 +82,10 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | **Fix 12 BotRunner.Tests failures** — Run `dotnet test Tests/BotRunner.Tests/ --filter "Category!=RequiresInfrastructure"`, identify and fix each failure. Most are likely infra-dependent tests missing the `RequiresInfrastructure` trait. | Open |
-| 2.2 | **Ensure V4.2-V4.4 unit tests pass** — Run the ScalabilityUnitTests (PathResultCache, SnapshotDeltaComputer, AsyncPathfindingWrapper). These should pass without infrastructure. | Open |
-| 2.3 | **Run full WoWSharpClient.Tests and confirm 1410/0/1** — Regression check after all changes. | Open |
-| 2.4 | **Run full Physics tests and confirm 666/2/1** — Regression check. | Open |
+| 2.1 | **Fix BotRunner.Tests failures** — Fixed 7 TalentAllocationTests (wrong name format). Remaining 4: PathfindingPerformance (2, needs native DLL), StateManagerLoad (2, needs infra). | **Done** (cdaab68b) |
+| 2.2 | **Ensure new unit tests pass** — 149 T1 tests + 8 TalentAllocation = all green. ScalabilityUnitTests included in T1.16-T1.20. | **Done** (c590bbdd) |
+| 2.3 | **WoWSharpClient.Tests regression** — 1410/0/1 confirmed. | **Done** |
+| 2.4 | **Physics tests regression** — 666/2/1 confirmed (2 pre-existing elevator). | **Done** |
 
 ---
 
