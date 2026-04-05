@@ -75,7 +75,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\..\Bot\$(Configuration)\net8.0\</OutDir>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\x86\</OutDir>
     <TargetExt>.dll</TargetExt>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <TargetName>$(ProjectName)</TargetName>
@@ -91,7 +91,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\..\Bot\$(Configuration)\net8.0\</OutDir>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\x86\</OutDir>
     <TargetExt>.dll</TargetExt>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <TargetName>$(ProjectName)</TargetName>
