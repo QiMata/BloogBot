@@ -26,11 +26,12 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 0.1 | **Audit current Navigation.dll exports** — Map every export to its category: physics (PhysicsStepV2, GetGroundZ, CollideAndSlide), scene (QueryTerrainTriangles, InjectSceneTriangles), pathfinding (FindPath, FindSmoothPath). Document which belong in which DLL. | Open |
-| 0.2 | **Design Physics.dll API** — Define the exported functions: `PhysicsStepV2`, `GetGroundZ`, `GetTerrainHeight`, `LineOfSight`, `SweepCapsule`, `CollisionStep`, `InitializePhysics`, `ShutdownPhysics`, `PreloadMap`, `SetDataDirectory`. These are the functions called every tick by MovementController. | Open |
-| 0.3 | **Design Navigation.dll API (path-only)** — `FindPath`, `FindSmoothPath`, `CorridorUpdate`, `PathArrFree`. No physics, no GetGroundZ. This is what the Docker PathfindingService wraps. | Open |
-| 0.4 | **Design SceneData.dll API** — `QueryTerrainTriangles`, `InjectSceneTriangles`, `ClearSceneCache`, `SetSceneSliceMode`, `LoadDynamicObjectMapping`, `RegisterDynamicObject`, `UnregisterDynamicObject`. Scene geometry loading and serving. | Open |
-| 0.5 | **Create Physics.dll CMake project** — New CMakeLists.txt in `Exports/Physics/`. Compiles PhysicsEngine.cpp, PhysicsCollideSlide.cpp, PhysicsMovement.cpp, PhysicsGroundSnap.cpp + terrain query code. Builds both x86 and x64. | Open |
+| 0.1 | **Audit current Navigation.dll exports** — 100+ exports categorized: Physics (28), Scene (14), Pathfinding (8). See `docs/dll-separation-audit.md`. | **Done** |
+| 0.2 | **Design Physics.dll API** — 28 exports defined in audit doc. PhysicsStepV2, GetGroundZ, LineOfSight, SweepCapsule + 80 parity test exports + dynamic objects. | **Done** |
+| 0.3 | **Design Navigation.dll API (path-only)** — 8 exports: FindPath, PathArrFree, FindPathCorridor, CorridorUpdate/MoveTarget/IsValid/Destroy. | **Done** |
+| 0.4 | **Design SceneData.dll API** — 14 exports: QueryTerrainTriangles, InjectSceneTriangles, ClearSceneCache, SetSceneSliceMode, MapLoader, SceneCache ops. | **Done** |
+| 0.5 | **x86 build now includes DllMain.cpp** — Fixed __try→try/catch for MSVC, removed duplicate include, /EHa. All 20 exports present. DLL separation (Physics/Scene/Nav split) is P0.5b below. | **Done** (768f8bd9) |
+| 0.5b | **Create Physics.dll CMake project** — Separate Physics.dll from Navigation.dll. CMakeLists.txt in `Exports/Physics/`. x86+x64. | Open |
 | 0.6 | **Create SceneData.dll CMake project** — `Exports/SceneData/`. Compiles VMAP loading, ADT parsing, triangle extraction. x64 only (Docker service). | Open |
 | 0.7 | **Refactor Navigation.dll to path-only** — Remove physics and scene code. Keep only Detour navmesh, PathFinder, MoveMap. x64 only (Docker service). | Open |
 | 0.8 | **Update C# P/Invoke declarations** — PathfindingClient loads Navigation.dll (paths). NativeLocalPhysics loads Physics.dll (physics). SceneDataClient loads SceneData.dll (scene). Update DllImport constants. | Open |
