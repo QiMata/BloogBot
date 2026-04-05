@@ -31,50 +31,50 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 1.1 | **ThreatTracker tests** — RecordDamage accumulates, RecordHealing at 0.5x, ShouldThrottle at 90%, GetHighestThreat returns tank, Reset clears. File: `Tests/BotRunner.Tests/Combat/ThreatTrackerTests.cs` | Open |
-| 1.2 | **RaidCooldownCoordinator tests** — RecordUsage logs entry, IsSafeToUse respects gap, GetNextAvailableOwner returns least-recent. File: `Tests/BotRunner.Tests/Combat/RaidCooldownCoordinatorTests.cs` | Open |
-| 1.3 | **EncounterPositioning tests** — GetMeleePosition behind boss, GetTankPosition in front, IsInFrontCleaveZone cone math, IsInTailSwipeZone. File: `Tests/BotRunner.Tests/Combat/EncounterPositioningTests.cs` | Open |
-| 1.4 | **BgTargetSelector tests** — Prioritizes low-HP targets, deprioritizes full-HP, handles empty list. File: `Tests/BotRunner.Tests/Combat/BgTargetSelectorTests.cs` | Open |
-| 1.5 | **HostilePlayerDetector tests** — IsPvPFlagged checks UnitFlags, IsCivilian checks passive flag, AssessThreat levels correct by level diff, GetFactionSide maps correctly. File: `Tests/BotRunner.Tests/Combat/HostilePlayerDetectorTests.cs` | Open |
-| 1.6 | **RaidRoleAssignment tests** — SetMainTank/Assist, GetRole defaults DPS, AutoAssignMainTank picks first tank, GetPlayersWithRole filters. File: `Tests/BotRunner.Tests/Combat/RaidRoleAssignmentTests.cs` | Open |
-| 1.7 | **LootCouncilSimulator tests** — RecordRoll generates 1-100, GetWinner prioritizes MainSpec>OffSpec>Greed then highest roll, AllRollsIn counts, ClearItem removes. File: `Tests/BotRunner.Tests/Combat/LootCouncilSimulatorTests.cs` | Open |
+| 1.1 | **ThreatTracker tests** — RecordDamage accumulates, RecordHealing at 0.5x, ShouldThrottle at 90%, GetHighestThreat returns tank, Reset clears. File: `Tests/BotRunner.Tests/Combat/ThreatTrackerTests.cs` | **Done** (4bed6f4c) |
+| 1.2 | **RaidCooldownCoordinator tests** — RecordUsage logs entry, IsSafeToUse respects gap, GetNextAvailableOwner returns least-recent. File: `Tests/BotRunner.Tests/Combat/RaidCooldownCoordinatorTests.cs` | **Done** (4bed6f4c) |
+| 1.3 | **EncounterPositioning tests** — GetMeleePosition behind boss, GetTankPosition in front, IsInFrontCleaveZone cone math, IsInTailSwipeZone. File: `Tests/BotRunner.Tests/Combat/EncounterPositioningTests.cs` | **Done** (4bed6f4c) |
+| 1.4 | **BgTargetSelector tests** — Prioritizes low-HP targets, deprioritizes full-HP, handles empty list. File: `Tests/BotRunner.Tests/Combat/BgTargetSelectorTests.cs` | **Done** (4bed6f4c) |
+| 1.5 | **HostilePlayerDetector tests** — IsPvPFlagged checks UnitFlags, IsCivilian checks passive flag, AssessThreat levels correct by level diff, GetFactionSide maps correctly. File: `Tests/BotRunner.Tests/Combat/HostilePlayerDetectorTests.cs` | **Done** (4bed6f4c) |
+| 1.6 | **RaidRoleAssignment tests** — SetMainTank/Assist, GetRole defaults DPS, AutoAssignMainTank picks first tank, GetPlayersWithRole filters. File: `Tests/BotRunner.Tests/Combat/RaidRoleAssignmentTests.cs` | **Done** (4bed6f4c) |
+| 1.7 | **LootCouncilSimulator tests** — RecordRoll generates 1-100, GetWinner prioritizes MainSpec>OffSpec>Greed then highest roll, AllRollsIn counts, ClearItem removes. File: `Tests/BotRunner.Tests/Combat/LootCouncilSimulatorTests.cs` | **Done** (c590bbdd) |
 
 ### T1B — Economy & Services
 
 | # | Task | Status |
 |---|------|--------|
-| 1.8 | **AuctionPostingService tests** — RecordPrice stores, GetMarketPrice returns cached, EvaluatePosting undercuts 5%, rejects below vendor price, stale price purge. File: `Tests/BotRunner.Tests/Economy/AuctionPostingServiceTests.cs` | Open |
-| 1.9 | **GoldThresholdManager tests** — Evaluate returns SellVendorTrash below min, DepositExcess above threshold, None in range. CalculateDepositAmount subtracts reserve. GetDefaultReserve scales by level. File: `Tests/BotRunner.Tests/Economy/GoldThresholdManagerTests.cs` | Open |
-| 1.10 | **WhisperTracker tests** — RecordIncoming/Outgoing stores, GetHistory returns ordered, HasUnreadWhispers detects, max messages evicts oldest. File: `Tests/BotRunner.Tests/Social/WhisperTrackerTests.cs` | Open |
+| 1.8 | **AuctionPostingService tests** — RecordPrice stores, GetMarketPrice returns cached, EvaluatePosting undercuts 5%, rejects below vendor price, stale price purge. File: `Tests/BotRunner.Tests/Economy/AuctionPostingServiceTests.cs` | **Done** (c590bbdd) |
+| 1.9 | **GoldThresholdManager tests** — Evaluate returns SellVendorTrash below min, DepositExcess above threshold, None in range. CalculateDepositAmount subtracts reserve. GetDefaultReserve scales by level. File: `Tests/BotRunner.Tests/Economy/GoldThresholdManagerTests.cs` | **Done** (c590bbdd) |
+| 1.10 | **WhisperTracker tests** — RecordIncoming/Outgoing stores, GetHistory returns ordered, HasUnreadWhispers detects, max messages evicts oldest. File: `Tests/BotRunner.Tests/Social/WhisperTrackerTests.cs` | **Done** (c590bbdd) |
 
 ### T1C — Progression & Routing
 
 | # | Task | Status |
 |---|------|--------|
-| 1.11 | **TalentAutoAllocator tests** — GetNextAllocation returns correct talent for level/points, returns null when all spent, GetPendingAllocations returns burst list. File: `Tests/BotRunner.Tests/Progression/TalentAutoAllocatorTests.cs` | Open |
-| 1.12 | **ZoneLevelingRoute tests** — GetZoneForLevel returns correct zone, GetNextZone advances, Horde/Alliance routes are different, level 60 returns endgame zones. File: `Tests/BotRunner.Tests/Progression/ZoneLevelingRouteTests.cs` | Open |
-| 1.13 | **QuestChainRouter tests** — GetNextStep skips completed quests, returns null for complete chain, GetNearestQuestGiver finds closest. File: `Tests/BotRunner.Tests/Questing/QuestChainRouterTests.cs` | Open |
-| 1.14 | **ProfessionTrainerScheduler tests** — NeedsTraining detects tier boundaries (75/150/225), GetTrainer returns correct position for faction. File: `Tests/BotRunner.Tests/Crafting/ProfessionTrainerSchedulerTests.cs` | Open |
-| 1.15 | **AmmoManager tests** — NeedsAmmo true when below 200, GetBestAmmoForLevel returns correct tier, GetNearestAmmoVendor returns closest. File: `Tests/BotRunner.Tests/Progression/AmmoManagerTests.cs` | Open |
+| 1.11 | **TalentAutoAllocator tests** — GetNextAllocation returns correct talent for level/points, returns null when all spent, GetPendingAllocations returns burst list. File: `Tests/BotRunner.Tests/Progression/TalentAutoAllocatorTests.cs` | **Done** (c590bbdd) |
+| 1.12 | **ZoneLevelingRoute tests** — GetZoneForLevel returns correct zone, GetNextZone advances, Horde/Alliance routes are different, level 60 returns endgame zones. File: `Tests/BotRunner.Tests/Progression/ZoneLevelingRouteTests.cs` | **Done** (c590bbdd) |
+| 1.13 | **QuestChainRouter tests** — GetNextStep skips completed quests, returns null for complete chain, GetNearestQuestGiver finds closest. File: `Tests/BotRunner.Tests/Questing/QuestChainRouterTests.cs` | **Done** (c590bbdd) |
+| 1.14 | **ProfessionTrainerScheduler tests** — NeedsTraining detects tier boundaries (75/150/225), GetTrainer returns correct position for faction. File: `Tests/BotRunner.Tests/Crafting/ProfessionTrainerSchedulerTests.cs` | **Done** (c590bbdd) |
+| 1.15 | **AmmoManager tests** — NeedsAmmo true when below 200, GetBestAmmoForLevel returns correct tier, GetNearestAmmoVendor returns closest. File: `Tests/BotRunner.Tests/Progression/AmmoManagerTests.cs` | **Done** (c590bbdd) |
 
 ### T1D — Scalability Infrastructure
 
 | # | Task | Status |
 |---|------|--------|
-| 1.16 | **PathResultCache tests** — Store/TryGet round-trip, grid quantization groups nearby positions, Evict removes oldest, InvalidateMap clears map entries, HitRate calculates correctly. File: `Tests/BotRunner.Tests/Clients/PathResultCacheTests.cs` | Open |
-| 1.17 | **SnapshotBatcher tests** — Enqueue buffers, FlushAsync processes batch, timer triggers flush, max batch size caps. File: `Tests/BotRunner.Tests/Clients/SnapshotBatcherTests.cs` | Open |
-| 1.18 | **ConnectionMultiplexer tests** — GetConnectionAsync routes by hash, same bot always gets same connection, InvalidateConnection forces re-create. File: `Tests/BotRunner.Tests/Clients/ConnectionMultiplexerTests.cs` | Open |
-| 1.19 | **PathfindingShardRouter tests** — GetShard consistent hash, CreateLocal generates N shards on sequential ports. File: `Tests/BotRunner.Tests/Clients/PathfindingShardRouterTests.cs` | Open |
-| 1.20 | **SnapshotDeltaComputer tests** — First call returns full snapshot, subsequent returns delta when changed, unchanged returns small delta, ApplyDelta reconstructs original. File: `Tests/BotRunner.Tests/IPC/SnapshotDeltaComputerTests.cs` | Open |
+| 1.16 | **PathResultCache tests** — Store/TryGet round-trip, grid quantization groups nearby positions, Evict removes oldest, InvalidateMap clears map entries, HitRate calculates correctly. File: `Tests/BotRunner.Tests/Clients/PathResultCacheTests.cs` | **Done** (c590bbdd) |
+| 1.17 | **SnapshotBatcher tests** — Enqueue buffers, FlushAsync processes batch, timer triggers flush, max batch size caps. File: `Tests/BotRunner.Tests/Clients/SnapshotBatcherTests.cs` | **Done** (c590bbdd) |
+| 1.18 | **ConnectionMultiplexer tests** — GetConnectionAsync routes by hash, same bot always gets same connection, InvalidateConnection forces re-create. File: `Tests/BotRunner.Tests/Clients/ConnectionMultiplexerTests.cs` | **Done** (c590bbdd) |
+| 1.19 | **PathfindingShardRouter tests** — GetShard consistent hash, CreateLocal generates N shards on sequential ports. File: `Tests/BotRunner.Tests/Clients/PathfindingShardRouterTests.cs` | **Done** (c590bbdd) |
+| 1.20 | **SnapshotDeltaComputer tests** — First call returns full snapshot, subsequent returns delta when changed, unchanged returns small delta, ApplyDelta reconstructs original. File: `Tests/BotRunner.Tests/IPC/SnapshotDeltaComputerTests.cs` | **Done** (c590bbdd) |
 
 ### T1E — Travel & Transport Data
 
 | # | Task | Status |
 |---|------|--------|
-| 1.21 | **TransportScheduleService tests** — FindRoute matches by mapId, GetBoardingDock returns correct side, GetRoutesFromMap lists departures. 7 routes defined. File: `Tests/BotRunner.Tests/Travel/TransportScheduleServiceTests.cs` | Open |
-| 1.22 | **InnkeeperData tests** — FindNearest returns closest innkeeper, GetByFaction filters, all 26 entries have valid positions. File: `Tests/BotRunner.Tests/Travel/InnkeeperDataTests.cs` | Open |
-| 1.23 | **GraveyardData tests** — FindNearest, GetForZone, data loading. File: `Tests/BotRunner.Tests/Travel/GraveyardDataTests.cs` | Open |
-| 1.24 | **SummoningStoneData tests** — GetByInstanceMapId, GetNearby, AllStones count. File: `Tests/BotRunner.Tests/Travel/SummoningStoneDataTests.cs` | Open |
+| 1.21 | **TransportScheduleService tests** — FindRoute matches by mapId, GetBoardingDock returns correct side, GetRoutesFromMap lists departures. 7 routes defined. File: `Tests/BotRunner.Tests/Travel/TransportScheduleServiceTests.cs` | **Done** (c590bbdd) |
+| 1.22 | **InnkeeperData tests** — FindNearest returns closest innkeeper, GetByFaction filters, all 26 entries have valid positions. File: `Tests/BotRunner.Tests/Travel/InnkeeperDataTests.cs` | **Done** (c590bbdd) |
+| 1.23 | **GraveyardData tests** — FindNearest, GetForZone, data loading. File: `Tests/BotRunner.Tests/Travel/GraveyardDataTests.cs` | **Done** (c590bbdd) |
+| 1.24 | **SummoningStoneData tests** — GetByInstanceMapId, GetNearby, AllStones count. File: `Tests/BotRunner.Tests/Travel/SummoningStoneDataTests.cs` | **Done** (c590bbdd) |
 
 ---
 
