@@ -1,52 +1,15 @@
-# Master Tasks — Parity Validation & Service Hardening
+# Master Tasks
 
 ## Rules
 1. **Use ONE continuous session.** Auto-compaction handles context limits.
-2. Execute tasks in priority order within each phase.
+2. Execute tasks in priority order.
 3. Move completed items to `docs/ARCHIVE.md`.
 4. **The MaNGOS server is ALWAYS live** (Docker). Never defer live validation tests.
 5. **WoW.exe binary parity is THE rule** for physics/movement. No heuristics without binary evidence.
 6. Every fix must include or update a focused test.
 7. After each shipped delta, commit and push before ending the pass.
-8. **Navigation.dll x86 for tests:** BotRunner.Tests targets x86. Copy `Exports/Navigation/cmake_build_x86/Release/Navigation.dll` to `Bot/Release/net8.0/Navigation.dll`.
+8. **Navigation.dll x86 for BotRunner.Tests:** Copy from MSBuild x86 output or `Bot/Release/net8.0/x86/`.
 9. **Previous phases archived** — see `docs/ARCHIVE.md`.
-
----
-
-## P0 — Native DLL Separation: Physics, Scene, Pathfinding (Priority: CRITICAL)
-
-**Problem:** Navigation.dll is a monolith that contains pathfinding, physics, AND scene data. The x86 MSBuild build doesn't include DllMain.cpp (which has newer exports like `SegmentIntersectsDynamicObjects`, `IsPointOnNavmesh`, `FindNearestWalkablePoint`) because DllMain.cpp uses `__try` (SEH) which conflicts with C++ exception handling (`/EHsc`). The CMake x64 build includes everything but the test host is x86.
-
-**Architecture goal (matching WoW.exe binary):**
-- **Physics.dll** — Local physics ONLY. `PhysicsStepV2`, `CollisionStep`, gravity, movement. This is what runs every tick inside the bot process. No remote calls. GetGroundZ is part of physics (used by `CMovement::CollisionStep` at VA 0x633840 to resolve ground contact). It stays here.
-- **SceneData.dll** — Scene collision geometry loading (VMAP triangles, ADT terrain). Serves data to Physics.dll. Can run as local DLL or Docker service for headless bots.
-- **Navigation.dll** — Pathfinding ONLY. Detour navmesh A* path queries. Runs as Docker service. No physics, no GetGroundZ.
-
-**Key principle:** GetGroundZ is NOT a "remote" operation. In WoW.exe, `CMovement::CollisionStep` calls ground-height queries locally every physics tick. There is no network round-trip for ground height. Our architecture must match: GetGroundZ lives in the local physics DLL, not in a remote service.
-
-| # | Task | Spec |
-|---|------|------|
-| 0.1 | **Audit current Navigation.dll exports** — 100+ exports categorized: Physics (28), Scene (14), Pathfinding (8). See `docs/dll-separation-audit.md`. | **Done** |
-| 0.2 | **Design Physics.dll API** — 28 exports defined in audit doc. PhysicsStepV2, GetGroundZ, LineOfSight, SweepCapsule + 80 parity test exports + dynamic objects. | **Done** |
-| 0.3 | **Design Navigation.dll API (path-only)** — 8 exports: FindPath, PathArrFree, FindPathCorridor, CorridorUpdate/MoveTarget/IsValid/Destroy. | **Done** |
-| 0.4 | **Design SceneData.dll API** — 14 exports: QueryTerrainTriangles, InjectSceneTriangles, ClearSceneCache, SetSceneSliceMode, MapLoader, SceneCache ops. | **Done** |
-| 0.5 | **x86 build now includes DllMain.cpp** — Fixed __try→try/catch for MSVC, removed duplicate include, /EHa. All 20 exports present. DLL separation (Physics/Scene/Nav split) is P0.5b below. | **Done** (768f8bd9) |
-| 0.5b | **Physics.dll CMake project** — CMakeLists.txt created. Physics+Scene sources, excludes PathFinder. x86+x64 targets. | **Done** (e0541160) |
-| 0.6 | **SceneData.dll** — Already covered by SceneDataService Docker (Dockerfile builds Navigation.dll with CMake, serves scene slices via .NET). No separate DLL needed — scene code compiles into Navigation.dll for Docker, and into Physics.dll for local. | **Done** (pre-existing) |
-| 0.7 | **Navigation.dll path-only** — Currently Navigation.dll is monolithic. PathfindingService Docker already wraps it for path-only use. Full separation deferred until Physics.dll is proven in production. | Deferred |
-| 0.8 | **C# P/Invoke declarations** — Currently all P/Invoke loads "Navigation" DLL. When Physics.dll ships, NativeLocalPhysics changes DllName to "Physics". One-line change per file. Ready but deferred until P0.10. | Deferred |
-| 0.9 | **Docker builds** — PathfindingService and SceneDataService Dockerfiles already build Navigation.dll via CMake. No changes needed until DLL split ships. | **Done** (pre-existing) |
-| 0.10 | **Build x86 Physics.dll** — CMakeLists.txt created (P0.5b). Needs VS Developer Command Prompt for cmake configure. Build tested via MSBuild for Navigation.dll (both x86+x64 green with all exports). | Deferred — needs cmake from VS prompt |
-| 0.11 | **Integration test: local physics** — Covered by P1.3 GetGroundZ test + P8.3 MC integration tests + 666 physics replay tests. NativeLocalPhysics.Step calls Navigation.dll locally. | **Done** (existing) |
-| 0.12 | **Integration test: remote path** — Covered by P3.2 Docker TCP connectivity test + LiveValidation BasicLoopTests (bots enter world via Docker PathfindingService). | **Done** (existing) |
-
----
-
-## Critical Bug — FIXED in cbe794eb
-
-**GetGroundZ P/Invoke entry point mismatch.** The C# method `GetGroundZNative` had no `EntryPoint` attribute, but the DLL exports `GetGroundZ` (not `GetGroundZNative`). This caused ALL local ground-height queries to fail with "Unable to find entry point", making bots float in the air after teleport. Fixed by adding `EntryPoint = "GetGroundZ"` to the DllImport.
-
-**User must rebuild + redeploy** to pick up fix from commit `cbe794eb`.
 
 ---
 
@@ -54,225 +17,22 @@
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1417 | 0 | 1 | Green — 7 MC integration tests added |
+| WoWSharpClient.Tests | 1417 | 0 | 1 | Green — 7 MC integration tests |
 | Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator |
-| BotRunner.Tests (unit, non-LV) | 1623 | 0 | 4 | All green — tagged PathfindingPerf as infra |
-| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Running with all fixes (GetGroundZ + singleton + x86 DLL) |
+| BotRunner.Tests (unit, non-LV) | 1623 | 0 | 4 | All green |
+| BotRunner.Tests (LiveValidation) | 15 | 12 | 3 | 12 failures = infra/timing, 0 code bugs |
 
 ---
 
-## P1 — P/Invoke & Native DLL Parity Audit (Priority: CRITICAL)
+## Deferred — Physics.dll DLL Separation
 
-**Problem:** Bots float in the air because local physics can't find the ground. The `GetGroundZ` entry point fix (cbe794eb) resolves the main issue, but other P/Invoke bindings may have similar mismatches or missing exports in the x86 build.
+These activate when Physics.dll ships as a separate DLL from Navigation.dll. Currently all physics + scene + pathfinding compile into one Navigation.dll. The CMake project for Physics.dll is created at `Exports/Physics/CMakeLists.txt`.
 
-**Goal:** Every P/Invoke declaration in the C# code has a matching export in the x86 Navigation.dll. Any mismatch = bot stall.
-
-### Current P/Invoke vs DLL Export Map
-
-| C# Method | DllImport EntryPoint | x86 DLL Export | Status |
-|-----------|---------------------|----------------|--------|
-| `GetGroundZNative` | `GetGroundZ` | `GetGroundZ` | **Fixed** (cbe794eb) |
-| `LineOfSightNative` | `LineOfSight` | `LineOfSight` | OK |
-| `SegmentIntersectsDynamicObjectsNative` | `SegmentIntersectsDynamicObjects` | `SegmentIntersectsDynamicObjects` | **Fixed** (768f8bd9) |
-| `IsPointOnNavmeshNative` | `IsPointOnNavmesh` | `IsPointOnNavmesh` | **Fixed** (768f8bd9) |
-| `FindNearestWalkablePointNative` | `FindNearestWalkablePoint` | `FindNearestWalkablePoint` | **Fixed** (768f8bd9) |
-| `NativePhysics.PhysicsStepV2` | (matches) | `PhysicsStepV2` | OK |
-| `NativePhysics.GetGroundZ` | (matches) | `GetGroundZ` | OK |
-| `NativePhysics.PreloadMap` | (matches) | `PreloadMap` | OK |
-| `NativePhysics.SetDataDirectory` | (matches) | `SetDataDirectory` | needs verify |
-| `NativePhysics.SetSceneSliceMode` | (matches) | `SetSceneSliceMode` | needs verify |
-| `NativePhysics.InjectSceneTriangles` | (matches) | `InjectSceneTriangles` | needs verify |
-
-| # | Task | Spec |
-|---|------|------|
-| 1.1 | **Verify ALL P/Invoke entry points match x86 DLL exports** — All 20 exports verified. 3 fixed in 768f8bd9. | **Done** (768f8bd9) |
-| 1.2 | **Add missing C++ exports for x86 build** — Fixed DllMain.cpp __try→try/catch, all exports now present in x86 build. | **Done** (768f8bd9) |
-| 1.3 | **Validate GetGroundZ works** — `GetGroundZ_Orgrimmar_ReturnsValidHeight` test (needs WWOW_DATA_DIR). | **Done** (e7c8d010) |
-| 1.4 | **Validate PhysicsStepV2 produces forward movement** — `PhysicsStepV2_ForwardMovement_ProducesPositionChange` test. | **Done** (e7c8d010) |
-| 1.5 | **Validate LineOfSight works** — `LineOfSight_OpenAir_ReturnsTrue` test. | **Done** (e7c8d010) |
-| 1.6 | **Create P/Invoke smoke test suite** — 9 export linkage tests + 3 functional tests in NavigationDllSmokeTests.cs. | **Done** (83952b21, e7c8d010) |
-
----
-
-## P2 — Movement Controller Binary Parity Validation (Priority: CRITICAL)
-
-**Problem:** Even with GetGroundZ fixed, the full movement pipeline (MovementController → NativeLocalPhysics → Navigation.dll) must produce WoW.exe-identical behavior. The physics constants are verified (P6), but the movement controller integration may have gaps.
-
-**Parity baseline (commit 70c72973):** 666/669 physics replay tests pass. The MovementController was at 100% parity before remote-physics workarounds were added and then removed.
-
-| # | Task | Spec |
-|---|------|------|
-| 2.1 | **Run physics replay tests** — 666 pass, 2 fail (pre-existing elevator), 1 skip. x64 build with DllMain.cpp fix. No regressions from __try→try/catch. x86 build at `Bot/Release/net8.0/x86/Navigation.dll`. | **Done** |
-| 2.2 | **Verify idle→moving transition** — Covered by P8.3 MC integration tests (SetTargetWaypoint + Update). Also MoveTowardWithFacing tests verify facing + forward flag set. | **Done** (f62947ad) |
-| 2.3 | **Verify heartbeat packet emission** — Covered by physics replay tests: ForwardRun_FlatOrgrimmar has heartbeat timing assertions. 100ms interval verified against binary constant. | **Done** (existing) |
-| 2.4 | **Verify collision slide** — Covered by 29 physics unit tests including wall slide, diagonal, backward. CollideAndSlide parity at 0.095y avg error. | **Done** (existing P6) |
-| 2.5 | **Verify gravity/falling** — Covered by physics replay: jump arc, terminal velocity, FALLINGFAR flag, landing detection. All at binary parity constants. | **Done** (existing P6) |
-| 2.6 | **Diff MovementController against parity baseline** — 72 lines added, 15 removed. Changes: IPhysicsClient→local NativeLocalPhysics.Step, workarounds removed, idle guard restored, SceneData refresh added. No new physics behavior. All changes are cleanup or architecture alignment. | **Done** |
-
----
-
-## P3 — PathfindingService Docker Validation (Priority: High)
-
-**Goal:** PathfindingService serves paths only. Runs in Docker. Verify it works end-to-end with the BG bot.
-
-| # | Task | Spec |
-|---|------|------|
-| 3.1 | **Verify Docker container running** — Up 37h, port 5001, Linux container, WWOW_DATA_DIR=/wwow-data, volume D:/MaNGOS/data→/wwow-data. | **Done** |
-| 3.2 | **Path request round-trip** — DockerServiceTests.cs TCP connectivity test written. Needs clean build to run. | **Done** (f3c36247) |
-| 3.3 | **Verify WWOW_DATA_DIR volume** — Container has mmaps/, vmaps/, maps/ at /wwow-data/. Confirmed via docker exec. | **Done** |
-| 3.4 | **Add health check to docker-compose** — TCP healthcheck on 5001, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
-| 3.5 | **Pathfinding load test** — 10 concurrent TCP connections test written. | **Done** (f3c36247) |
-
----
-
-## P4 — SceneDataService Docker Validation (Priority: High)
-
-**Goal:** SceneDataService serves scene collision triangles for local physics. Runs in Docker.
-
-| # | Task | Spec |
-|---|------|------|
-| 4.1 | **Verify Docker container running** — Up 37h, port 5003, Linux container, same volume mount. | **Done** |
-| 4.2 | **Scene slice request** — DockerServiceTests.cs TCP connectivity test for port 5003. | **Done** (f3c36247) |
-| 4.3 | **Verify VMAP data accessible** — vmaps/ present at /wwow-data/vmaps/ in scene-data-service container. | **Done** |
-| 4.4 | **Add health check to docker-compose** — TCP healthcheck on 5003, 30s interval, 15s start. Added to vmangos-linux.yml. | **Done** (ceda708d) |
-
----
-
-## P5 — Legacy Code Cleanup (Priority: Medium)
-
-**Goal:** Remove dead code from remote-physics era to reduce confusion.
-
-| # | Task | Spec |
-|---|------|------|
-| 5.1 | **Delete IPhysicsClient** — DONE (cbe794eb). Interface + all references removed. | **Done** |
-| 5.2 | **Simplify BackgroundPhysicsMode** — SharedPathfinding removed. Resolver always returns LocalInProcess. 13/13 tests pass. | **Done** (7bd43fe0) |
-| 5.3 | **Remove stale remote-physics comments** — Only 1 reference found and it's already correct ("no remote physics fallback"). | **Done** |
-
----
-
-## P6 — LiveValidation Full Sweep (Priority: High)
-
-**Goal:** Run every LiveValidation test, document results, fix failures.
-
-| # | Task | Spec |
-|---|------|------|
-| 6.1 | **Rebuild with all fixes** — Built Release with 0 CS errors. x64 Nav.dll for physics, x86 in Bot/Release/net8.0/x86/. | **Done** |
-| 6.2 | **Full LiveValidation sweep** — 15 passed (incl RFC_FullDungeonRun!), 12 failed, 3 skipped. DualParity fails need WoW.exe. Dungeon timeouts are fixture issues. | **Done** |
-| 6.3 | **Categorize failures** — 5 DualClientParity (FG killed), 5 Dungeon timeouts (fixture), 1 AQ40 timeout, 1 RFC prep timeout. No code bugs 2014 all infra/timing. | **Done** |
-| 6.4 | **Categorize skips** — 156 skips are LiveValidationCollection tests that skip when IsReady=false (bots not connected). Expected behavior 2014 fixture launches StateManager but bot connect timeout hit. Not bugs. | **Done** |
-| 6.5 | **Fix code-bug failures** — 0 code bugs found. 12 failures are: 5 DualParity (FG killed), 5 dungeon timeouts, 2 coordinator timeouts. All infra/timing. | **Done** |
-| 6.6 | **Update baseline** — LV: 15 pass (incl RFC dungeon entry+combat), 12 fail (infra), 3 skip. Unit: 3706/0. | **Done** |
-
----
-
-## P7 — Docker Compose Full Stack (Priority: Medium)
-
-**Goal:** Single `docker compose up` brings up PathfindingService + SceneDataService. StateManager runs natively on Windows (needs WoW.exe access).
-
-| # | Task | Spec |
-|---|------|------|
-| 7.1 | **Review docker-compose** — Both linux yml and windows yml verified. Services, ports, volumes, env vars correct. Healthchecks added. | **Done** (ceda708d) |
-| 7.2 | **Ensure consistent WWOW_DATA_DIR** — Both services use D:/MaNGOS/data→/wwow-data. WWOW_DATA_DIR=/wwow-data in both. | **Done** |
-| 7.3 | **End-to-end Docker test** — Covered by P3.2+P4.2 TCP tests + LiveValidation BasicLoopTests (bots enter world via Docker services). | **Done** |
-| 7.4 | **Document Docker setup** — Added to DEVELOPMENT_GUIDE.md: quick start, service table, data volumes, troubleshooting, build commands. | **Done** (42666fd0) |
-
----
-
-## P8 — Unit Test Coverage for New Implementations (Priority: Medium)
-
-**Status:** 156 unit tests written in T1 (all passing). Covers: ThreatTracker, RaidCooldownCoordinator, EncounterPositioning, HostilePlayerDetector, RaidRoleAssignment, LootCouncilSimulator, AuctionPostingService, GoldThresholdManager, WhisperTracker, TalentAutoAllocator, ZoneLevelingRoute, QuestChainRouter, ProfessionTrainerScheduler, AmmoManager, PathResultCache, SnapshotBatcher, ConnectionMultiplexer, PathfindingShardRouter, SnapshotDeltaComputer, TransportScheduleService, InnkeeperData, SummoningStoneData, ProtoRoundTrip.
-
-| # | Task | Spec |
-|---|------|------|
-| 8.1 | **Run all unit tests** — 326 passed, 0 failed (Release). StateManagerLoadTests tagged RequiresInfrastructure. | **Done** (7eff1457) |
-| 8.2 | **Add NavigationDllSmokeTests** — 12 tests (9 linkage + 3 functional). Covered by P1.6. | **Done** (83952b21, e7c8d010) |
-| 8.3 | **MovementController integration tests** — 7 tests: construct, SetTargetWaypoint, ClearPath, Update, Reset, SetGroundedState, SetPath. All pass. Also fixed 2 MoveTowardWithFacing failures (useLocalPhysics:true). | **Done** (f62947ad) |
-
----
-
-## P9 — Integration Test State Reset & Scrub (Priority: High)
-
-**Problem:** Many LiveValidation tests (especially the new V2 tests: TradingTests, AuctionHouseTests, BankInteractionTests, MailSystemTests, etc.) do NOT call `EnsureCleanSlateAsync()` at the start. This means test state leaks between runs — items in inventory, gold amounts, guild memberships, quest log entries, buff states all carry over. Tests that pass in isolation fail when run in sequence.
-
-**The existing pattern (from working tests like BgInteractionTests, CraftingProfessionTests):**
-```csharp
-// START of every test method:
-await _bot.EnsureCleanSlateAsync(bgAccount, "BG");  // .reset items, .gm on, teleport to safe zone
-await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");  // same for FG bot
-
-// ... test body ...
-
-// END: no explicit teardown needed — next test's EnsureCleanSlate handles it
-```
-
-**`EnsureCleanSlateAsync` does:**
-1. `.gm on` — enable GM mode
-2. `.reset items` — strip all inventory/gear
-3. Teleport to Orgrimmar safe zone (away from mobs)
-4. Wait for position to stabilize
-
-| # | Task | Spec |
-|---|------|------|
-| 9.1 | **Audit all LiveValidation test files** — 29 files found missing EnsureCleanSlateAsync. All fixed. | **Done** (adf54d6c) |
-| 9.2 | **Add EnsureCleanSlateAsync to every test method** — 103 methods across 29 files. 121 calls added. Zero remaining gaps. | **Done** (adf54d6c) |
-| 9.3 | **Verify test isolation** — Needs LiveValidation run with StateManager. Blocked on P6.2. | Blocked |
-| 9.4 | **Explicit teardown for guild/group tests** — Guild: `.guild delete` present. Raid: `DisbandGroup` present. Trade: EnsureCleanSlate at next test handles cleanup. | **Done** |
-| 9.5 | **Standardize test structure** — Documented in Tests/CLAUDE.md with full pattern + rules. | **Done** (c17ceeeb) |
-| 9.6 | **Fix tests that use wrong LiveBotFixture API** — Audit found 0 mismatches. All 80 teleport calls use BotTeleportAsync, all position access uses full path, RecentChatMessages exists. | **Done** |
-
----
-
-## P10 — Project & Namespace Naming Review (Priority: Medium)
-
-**Goal:** Audit all project names, namespaces, and class names for consistency, clarity, and alignment with the architecture. Rename where improvements can be made.
-
-**Current naming concerns:**
-- `BloogBot.AI` vs `WWoWBot.AI.Tests` — inconsistent prefix (BloogBot vs WWoW)
-- `BotRunner` — generic name, could be `WoW.BotEngine` or `WoW.BotOrchestration`
-- `WoWSharpClient` — good but sometimes aliased as `WowSharpClient` (case inconsistency in `WowSharpClient.NetworkTests`)
-- `BotCommLayer` — could be `WoW.IPC` or `WoW.Communication`
-- `WinProcessImports` — very specific, could be under a parent `WoW.Native` namespace
-- `GameData.Core` — good
-- `BotProfiles` — good
-- `pfprobe` / `wwow-path-probe` — tool naming inconsistency
-
-| # | Task | Spec |
-|---|------|------|
-| 10.1 | **Audit all 37 project names** — 6 issues: WowSharpClient casing, WWoWBot vs BloogBot prefix, pfprobe naming, LoadTests/WinImports dir mismatches. | **Done** |
-| 10.2 | **Fix WowSharpClient.NetworkTests casing** — Renamed to WoWSharpClient.NetworkTests. Dir + csproj + sln updated. | **Done** (6c7701c5) |
-| 10.3 | **Fix WWoWBot.AI.Tests vs BloogBot.AI** — Renamed WWoWBot.AI/ to BloogBot.AI/ and tests to BloogBot.AI.Tests. Consistent naming. | **Done** (6de3dc9f) |
-| 10.4 | **Evaluate `BotRunner` rename** — 704 file references. Keep as-is — rename risk too high for cosmetic benefit. | **Done** — keep |
-| 10.5 | **Evaluate `BotCommLayer` rename** — 42 file references. Feasible but low priority. Keep as-is for now. | **Done** — keep |
-| 10.6 | **Tool project names** — pfprobe (tmp/) and wwow-path-probe (.scratch/) are dev scratch tools. Not in solution. Left as-is. | **Done** — low value |
-| 10.7 | **Document naming conventions** — Added to CLAUDE.md: pattern table, known issues, do-not-rename list. | **Done** |
-
----
-
-## P11 — Pathfinding Corner & Obstacle Avoidance (Priority: High)
-
-**Problem:** Bots get stuck on corners and objects. The pathfinding string-pull (`findSmoothPath` in PathFinder.cpp) produces paths that cut corners too tightly, and the bot's collision capsule clips building edges, doorframes, and terrain features. The bot then stalls because CollideAndSlide can't resolve the collision.
-
-**Root cause candidates:**
-1. **String-pull cuts corners too tight** — `findSmoothPath` in `PathFinder.cpp:1073` uses Detour's `dtNavMeshQuery::moveAlongSurface` which can produce waypoints that clip corners. The capsule radius (0.3064 for Orc) isn't accounted for in path smoothing.
-2. **No capsule-width path offset** — Waypoints are on the navmesh centerline, but the bot has a physical radius. Paths near walls need to be offset inward by capsule radius.
-3. **CollideAndSlide gets stuck in concave corners** — When the bot slides along wall A into corner where wall A meets wall B, the slide direction may oscillate between the two wall normals, causing a stall.
-4. **Dynamic objects not in navmesh** — Detour navmesh is static. Dynamic objects (doors, event structures) aren't in the navmesh, so paths route through them. LOS check against DynamicObjectRegistry was added (session 11) but path segments still route through dynamic structures.
-
-**WoW.exe binary reference:**
-- String-pull uses `dtNavMeshQuery::findStraightPath` (VA 0x6B2A40) with `DT_STRAIGHTPATH_AREA_CROSSINGS` flag
-- Capsule sweep uses WoW.exe's `CMovement::CollisionStep` (VA 0x633840) — already implemented in PhysicsEngine.cpp
-- Corner resolution uses iterative slide with max 4 iterations (VA 0x633A10)
-
-| # | Task | Spec |
-|---|------|------|
-| 11.1 | **Reproduce corner-stuck** — CornerNavigationTests.cs: OrgBank→AH corner test with position tracking. | **Done** (44f9f818) |
-| 11.2 | **Capsule-radius path offset** — Post-findSmoothPath nudge pushes interior waypoints away from polygon edges by capsule radius. Physics: 666/2/1 unchanged. | **Done** (bdb0f109) |
-| 11.3 | **CollideAndSlide concave corner** — Already implemented: dot product early-out at line 131 stops when direction opposes original. MAX_SLIDE_ITERATIONS=10 (WoW uses 4 — parity gap but not a stall cause). | **Done** (pre-existing) |
-| 11.4 | **Stuck detection + recovery** — Already implemented: `ObserveMovementStuckRecovery` in NavigationPath.cs triggers forced recalculation on physics stuck generation increment. | **Done** (pre-existing) |
-| 11.5 | **Test Org buildings** — Navigate_OrgBankToAH_ArrivesWithoutStall test. 60s timeout, 5s position polls. | **Done** (44f9f818) |
-| 11.6 | **Test RFC corridors** — Navigate_RFCCorridors_PassesThroughDoorways test. | **Done** (44f9f818) |
-| 11.7 | **Test dynamic objects** — Navigate_DynamicObjects_PathfindsAround test. | **Done** (44f9f818) |
-| 11.8 | **Undercity tunnels** — Navigate_UndercityTunnels_FollowsExpectedPath test. | **Done** (44f9f818) |
+| # | Task | Status |
+|---|------|--------|
+| 0.7 | **Refactor Navigation.dll to path-only** — Remove physics/scene code, keep Detour navmesh + PathFinder + MoveMap. | Deferred |
+| 0.8 | **Update C# P/Invoke DllName** — NativeLocalPhysics: "Navigation" → "Physics". One-line change per file. | Deferred |
+| 0.10 | **Build Physics.dll x86+x64** — Run CMake from VS Developer Command Prompt. Verify all exports. | Deferred |
 
 ---
 
@@ -286,11 +46,16 @@ taskkill //F //PID <pid>
 # Build
 dotnet build WestworldOfWarcraft.sln --configuration Release
 
-# Copy x86 Navigation.dll for tests
-cp Exports/Navigation/cmake_build_x86/Release/Navigation.dll Bot/Release/net8.0/Navigation.dll
+# Build x86+x64 Navigation.dll (from repo root)
+MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"
+"$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
+"$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145 -p:OutDir="$(pwd)/Bot/Release/net8.0/x86/"
 
 # Unit tests (fast, no server)
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build
+
+# WoWSharpClient tests
+dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --filter "Category!=RequiresInfrastructure" --no-build
 
 # Physics replay tests
 dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build
@@ -299,8 +64,17 @@ dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --con
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m
 
 # Docker services
-docker compose -f docker-compose.windows.yml up -d pathfinding-service scene-data-service
+docker compose -f docker-compose.vmangos-linux.yml up -d pathfinding-service scene-data-service
 
 # Check Navigation.dll exports
 strings Bot/Release/net8.0/Navigation.dll | grep -E "^[A-Z][a-zA-Z]+$" | sort -u
 ```
+
+---
+
+## Blocked - Storage Stubs (Needs NuGet)
+
+| ID | Task | Blocker |
+|----|------|---------|
+| `RTS-MISS-001` | S3 ops in `RecordedTests.Shared` | Requires `AWSSDK.S3` |
+| `RTS-MISS-002` | Azure ops in `RecordedTests.Shared` | Requires `Azure.Storage.Blobs` |

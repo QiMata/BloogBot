@@ -2800,3 +2800,19 @@ Each test: 1 FG + 9 BG. Form group → 3 bots at summoning stone, 7 in Orgrimmar
 ## P6/P7/Physics Checklist (Archived 2026-04-04 — reference data)
 
 Moved to ARCHIVE.md during validation phase reset. P6 (AABB collision) and P7 (transport transforms) are WoW.exe binary parity reference — constants and decompilation data preserved here for reference.
+
+## Service Hardening & Validation (Archived 2026-04-05)
+
+67 items completed across P0-P11. 3 deferred (P0.7/P0.8/P0.10 — Physics.dll DLL split).
+
+Key results:
+- 3,706 unit tests passing (1417 WoWSharpClient + 1623 BotRunner + 666 Physics)
+- 15 LiveValidation tests passing (RFC dungeon entry+combat)
+- x86 Navigation.dll: all 20 P/Invoke exports present
+- GetGroundZ P/Invoke fix (cbe794eb) + DllMain.cpp __try→try/catch (768f8bd9)
+- Singleton bridge fix (f0d1f2dc) — BG bots enter world
+- 103 LiveValidation tests have EnsureCleanSlateAsync state reset
+- Capsule-radius path offset for corner clipping (bdb0f109)
+- Docker healthchecks, data volumes verified
+- Project naming: WoWSharpClient casing, BloogBot.AI alignment
+- Physics.dll CMake project created (Exports/Physics/CMakeLists.txt)
