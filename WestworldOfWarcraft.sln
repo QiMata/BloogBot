@@ -70,7 +70,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Navigation.Physics.Tests", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests.Infrastructure", "Tests\Tests.Infrastructure\Tests.Infrastructure.csproj", "{63F6F123-91D4-402E-BFE6-7D60948DB1A4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WowSharpClient.NetworkTests", "Tests\WowSharpClient.NetworkTests\WowSharpClient.NetworkTests.csproj", "{AEF55C78-23A0-4465-907D-4D4789E354A8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WoWSharpClient.NetworkTests", "Tests\WoWSharpClient.NetworkTests\WoWSharpClient.NetworkTests.csproj", "{AEF55C78-23A0-4465-907D-4D4789E354A8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WoWSimulation", "WoWSimulation", "{3A548E8B-02BB-1087-D77D-B7B7C098C7E1}"
 EndProject
