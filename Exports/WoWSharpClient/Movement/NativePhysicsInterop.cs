@@ -9,7 +9,7 @@ namespace WoWSharpClient.Movement;
 /// </summary>
 internal static class NativePhysics
 {
-    private const string DllName = "Physics";
+    private const string DllName = "Navigation";
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetDataDirectory(string dataDir);
