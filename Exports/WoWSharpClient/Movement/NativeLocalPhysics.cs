@@ -14,8 +14,6 @@ internal static class NativeLocalPhysics
 {
     private static bool _initialized;
     private static bool _mapsPreloaded;
-    private static bool _sceneSliceModeConfigured;
-    private static bool _sceneSliceModeEnabled;
     private static readonly object _preloadLock = new();
     private static List<uint> _preloadedMapIds = [];
     private static HashSet<uint> _preloadedMapIdSet = [];
@@ -213,6 +211,19 @@ internal static class NativeLocalPhysics
     {
         if (_preloadedMapIdSet.Contains(mapId))
             return;
+
+        // When scene slice mode is enabled, SceneDataService provides geometry
+        // on demand via InjectSceneTriangles. Skip the expensive full-map preload
+        // that loads entire VMAP datasets (~1GB per map) into memory.
+        // This is critical for BG bots — 9 processes × 1GB = OOM.
+        if (_sceneSliceModeEnabled)
+        {
+            Console.WriteLine($"[NativeLocalPhysics] Scene slice mode active — skipping full preload for map {mapId}");
+            Console.Out.Flush();
+            _preloadedMapIdSet.Add(mapId);
+            _preloadedMapIds.Add(mapId);
+            return;
+        }
 
         Console.WriteLine($"[NativeLocalPhysics] Preloading map {mapId}...");
         Console.Out.Flush();

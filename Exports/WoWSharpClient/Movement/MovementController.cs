@@ -167,12 +167,7 @@ namespace WoWSharpClient.Movement
 
         private static bool ConfigureNativeSceneMode(SceneDataClient? sceneDataClient)
         {
-            // Do NOT enable scene slice mode eagerly — it prevents local VMAP loading
-            // which is needed for ground detection until the SceneDataService actually
-            // delivers scene data for the current map. Let the BG bot load local terrain
-            // data as a fallback; scene slices will be injected on top when they arrive.
-            NativeLocalPhysics.SetSceneSliceMode(false);
-
+            // Scene data comes from SceneDataService. No local VMAP/map loading.
             return true;
         }
 

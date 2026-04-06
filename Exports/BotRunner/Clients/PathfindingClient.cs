@@ -99,16 +99,15 @@ namespace BotRunner.Clients
         // ═══════════════════════════════════════��════════════════════════
 
         private const string NavigationDll = "Navigation";
-        private const string PhysicsDll = "Physics"; // Local physics — GetGroundZ, LOS, collision
 
-        [DllImport(PhysicsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
         private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
 
-        [DllImport(PhysicsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool LineOfSightNative(uint mapId, NativeXYZ from, NativeXYZ to);
 
-        [DllImport(PhysicsDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
+        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool SegmentIntersectsDynamicObjectsNative(
             uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
