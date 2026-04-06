@@ -16,7 +16,7 @@
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1425 | 0 | 1 | +8 SceneDataClient integration tests |
+| WoWSharpClient.Tests | 1437 | 0 | 1 | +20 SceneData pipeline tests |
 | Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
 | BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Pending rerun with SceneData fix |
@@ -37,8 +37,10 @@
 | 4.2 | **Defer native call** — SetSceneSliceMode sets managed flag immediately, defers DLL call to avoid BadImageFormatException during x86 construction. | **Done** (b2e5c53d) |
 | 4.3 | **x86/x64 DLL resolution** — Default path has x86, x64/ subdirectory has x64. NavigationInterop updated. | **Done** (b2e5c53d) |
 | 4.4 | **SceneDataClient integration tests** — 12 tests: grid quantization, retry/dedup, response packing, live connectivity. | **Done** (50812ea7) |
-| 4.5 | **LiveValidation rerun** — Verify bots fall properly after teleport with SceneData fix. | Open |
-| 4.6 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open |
+| 4.5 | **MovementController→SceneData→physics pipeline tests** — 12 tests: scene slice mode, EnsureLocalSceneDataFresh, triangle unpacking, end-to-end update, dedup, graceful degradation. | **Done** (e551ea59) |
+| 4.6 | **Fix TravelTo InvalidCastException** — Missing mapId param + boxed float→int cast. Fixed ActionDispatch + 7 test calls. | **Done** (fd37fe7c) |
+| 4.7 | **LiveValidation rerun** — Verify bots fall and navigate with SceneData + TravelTo fixes. | Open |
+| 4.8 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open |
 
 ---
 
