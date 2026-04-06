@@ -2816,3 +2816,10 @@ Key results:
 - Docker healthchecks, data volumes verified
 - Project naming: WoWSharpClient casing, BloogBot.AI alignment
 - Physics.dll CMake project created (Exports/Physics/CMakeLists.txt)
+
+## Integration & DLL Separation (Archived 2026-04-06)
+
+L1: 57 LiveValidation tests passing (group disband + .gm off + partial readiness)
+L2: IsReady fix, 180s timeout, partial readiness
+D1: Physics.dll split, x86/x64 resolver, post-build copy, NavigationDllResolver
+9 Known dungeon/raid fixtures need multi-bot settings (not code bugs)

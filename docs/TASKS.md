@@ -1,99 +1,91 @@
-# Master Tasks — Integration & DLL Separation
+# Master Tasks — Test & Validate Everything
 
 ## Rules
 1. **Use ONE continuous session.** Auto-compaction handles context limits.
 2. Execute tasks in priority order.
 3. Move completed items to `docs/ARCHIVE.md`.
-4. **The MaNGOS server is ALWAYS live** (Docker). Never defer live validation tests.
+4. **The MaNGOS server is ALWAYS live** (Docker).
 5. **WoW.exe binary parity is THE rule** for physics/movement.
-6. Every fix must include or update a focused test.
-7. After each shipped delta, commit and push before ending the pass.
-8. **Navigation.dll x86 for BotRunner.Tests:** Copy from MSBuild x86 output or `Bot/Release/net8.0/x86/`.
-9. **Previous phases archived** — see `docs/ARCHIVE.md`.
+6. **GM Mode OFF after setup** — `.gm on` corrupts UnitReaction bits. Always `.gm off` before test actions.
+7. **Kill WoW.exe before building.** DLL injection locks output files.
+8. **Previous phases archived** — see `docs/ARCHIVE.md`.
 
 ---
 
-## Test Baseline (2026-04-05)
+## Test Baseline (2026-04-06 — needs refresh)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1417 | 0 | 1 | Green |
-| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing Undercity elevator |
-| BotRunner.Tests (unit, non-LV) | 1623 | 0 | 4 | Green |
-| BotRunner.Tests (LiveValidation) | 15 | 12 | 3 | 12 infra/timing failures, 0 code bugs |
+| WoWSharpClient.Tests | 1417 | 0 | 1 | Needs rerun to confirm |
+| Navigation.Physics.Tests | 666 | 2 | 1 | Needs rerun with Physics.dll split |
+| BotRunner.Tests (unit) | 1626 | 0 | 4 | Needs rerun |
+| BotRunner.Tests (LiveValidation) | 57 | 14 | 163 | Needs rerun with all fixes |
 
 ---
 
-## L1 — Fix LiveValidation Failures (Priority: CRITICAL)
+## R1 — Full Test Suite Rerun (Priority: CRITICAL)
 
-**12 failures, 0 code bugs — all infra/timing. Fix them.**
-
-Last run categorization:
-- 5 DualClientParityTests — failed because WoW.exe was killed for build. Need WoW.exe running.
-- 5 Dungeon entry tests (ZF, Mara, Strat×2, Gnomer) — coordinator fixture timeouts
-- 1 AQ40 raid test — timeout
-- 1 RFC_PrepareAndOrganizeRaid — timeout
+**Goal:** Run every test suite with the latest code (Physics.dll split, group disband, .gm off, NavigationDllResolver). Establish fresh baseline.
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Run LiveValidation with fixes** — 57 passed, 14 failed, 163 skipped. Group disband + .gm off + resolver all active. | **Done** |
-| 1.2 | **Fix DualClientParityTests** — Now passing (57 total). Needed WoW.exe running + group disband + .gm off. | **Done** |
-| 1.3 | **Dungeon entry timeouts** — 9 failures: UBRS, Mara, Ony, AQ40, RFD, SFK, Naxx, DME, Gnomer. All are coordinator fixtures needing 10+ bot accounts. Not configured in default settings. Not code bugs. | **Known** — needs multi-bot settings |
-| 1.4 | **AQ40 timeout** — Covered by L1.3. Needs 40-bot settings. | **Known** |
-| 1.5 | **RFC_PrepareAndOrganizeRaid** — Covered by L1.3. Coordinator timeout. | **Known** |
-| 1.6 | **LiveValidation >30 passing** — **57 passing.** Target exceeded. Remaining 9 failures need multi-bot settings. | **Done** |
+| 1.1 | **Kill all bot processes** — WoW.exe, BackgroundBotRunner, WoWStateManager, testhost. Clean slate. | Open |
+| 1.2 | **Rebuild everything** — `dotnet build --configuration Release`. MSBuild Navigation.dll x64 + Physics.dll x64+x86. Verify 0 errors. | Open |
+| 1.3 | **Run WoWSharpClient.Tests** — `--filter "Category!=RequiresInfrastructure" --no-build`. Record pass/fail/skip. Target: 1417/0/1. | Open |
+| 1.4 | **Run Navigation.Physics.Tests** — `--no-build`. Record pass/fail/skip. Target: 666/2/1. | Open |
+| 1.5 | **Run BotRunner.Tests (unit)** — `--filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build`. Target: 1626/0/4. | Open |
+| 1.6 | **Run LiveValidation** — `--filter "FullyQualifiedName~LiveValidation" --no-build --blame-hang --blame-hang-timeout 10m`. Record per-test pass/fail. Target: >57 passing. | Open |
+| 1.7 | **Update baseline table** — Record actual results from R1.3-R1.6. Compare to previous baseline. Flag any regressions. | Open |
 
 ---
 
-## L2 — Fix 156 Skipped LiveValidation Tests (Priority: High)
-
-**156 tests skip because LiveBotFixture.IsReady=false. The bots connect but the fixture times out waiting for world entry. Fix the fixture or the bot startup pipeline.**
+## R2 — Fix Any Regressions Found (Priority: CRITICAL)
 
 | # | Task | Spec |
 |---|------|------|
-| 2.1 | **Fix IsReady=false** — Changed to partial readiness (at least 1 bot). Timeout 120s→180s. | **Done** (2c104918) |
-| 2.2 | **Fix world entry timeout** — 180s timeout + partial readiness. 57 tests now pass vs 12-15 before. | **Done** (2c104918) |
-| 2.3 | **Run LV collection tests** — 57 passed with partial readiness. Tests needing FG skip individually. | **Done** |
-| 2.4 | **Fix individual failures** — 9 remaining are all coordinator multi-bot fixtures (not code bugs). | **Done** — categorized |
+| 2.1 | **Fix any new unit test failures** — If R1.3-R1.5 show new failures, investigate and fix each one. | Open |
+| 2.2 | **Fix any new LiveValidation failures** — If R1.6 shows failures beyond the 9 known multi-bot timeouts, investigate. | Open |
+| 2.3 | **Verify Physics.dll loads correctly** — BG bots must load Physics.dll (not Navigation.dll) for local physics. Check logs for `[NavigationDllResolver]` messages. No 0x8007000B errors. | Open |
+| 2.4 | **Verify .gm off in EnsureCleanSlateAsync** — Run a combat test, verify mobs aggro the bot. GM mode must be off during combat. | Open |
+| 2.5 | **Verify group disband in EnsureCleanSlateAsync** — Run 3 sequential tests, verify no "party is full" spam in logs. | Open |
 
 ---
 
-## D1 — Navigation.dll Architecture Fix (Priority: High)
+## R3 — LiveValidation Deep Dive (Priority: High)
 
-**Problem:** StateManager targets x86 → launches BackgroundBotRunner as x86 → needs x86 Navigation.dll. But physics tests target x64 → need x64 Navigation.dll. Both output to `Bot/Release/net8.0/Navigation.dll`. Whoever builds last wins, breaking the other.
-
-**Current workaround:** x86 build at `Bot/Release/net8.0/x86/Navigation.dll`. Must manually copy to main dir before running bots. Gets overwritten by x64 MSBuild.
+**Goal:** For each LiveValidation test category, verify it exercises real game behavior, not just snapshot != null.
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Auto-select Navigation.dll by platform** — NavigationDllResolver loads from x86/ or x64/ subdir based on process arch. Registered in BG bot Program.cs. | **Done** (90aab82e) |
-| 1.2 | **Post-build x86 to subdir** — vcxproj Win32 OutDir→x86/. x64 stays in main dir. No manual copy needed. | **Done** (31abef42) |
-| 1.3 | **Both architectures coexist** — Physics x64 (666/2/1) + BotRunner x86 (1626/0/4) both pass. No manual DLL swap. | **Done** (167fa9d9) |
-| 1.4 | **Physics.dll DLL split** — Physics.vcxproj built (x86+x64). 11 physics exports, 0 pathfinding. NativePhysicsInterop loads Physics.dll. NavigationDllResolver handles both. Physics tests 666/2/1. | **Done** (8da28cc6) |
+| 3.1 | **BasicLoopTests** — Bots login, enter world, position stabilizes. Verify position Z is reasonable (not floating). | Open |
+| 3.2 | **VendorBuySellTests** — Bot buys/sells at vendor. Verify inventory changes in snapshot. | Open |
+| 3.3 | **CombatTests** — Bot engages mob, deals damage. Verify mob HP decreases. GM mode must be OFF. | Open |
+| 3.4 | **NavigationTests** — Bot navigates between two points. Verify position changes over time, arrival within timeout. | Open |
+| 3.5 | **EconomyTests** — Bank deposit, AH interaction. Verify NPC found and interacted with. | Open |
+| 3.6 | **GroupFormationTests** — Party invite + accept. Verify PartyLeaderGuid set in snapshot. | Open |
+| 3.7 | **RFC DungeonRun** — Bots form group, enter RFC, combat occurs. Verify mapId=389 and combat flags. | Open |
 
 ---
 
 ## Canonical Commands
 
 ```bash
-# Kill WoW.exe before building (MANDATORY)
-tasklist //FI "IMAGENAME eq WoW.exe" //FO LIST
-taskkill //F //PID <pid>
+# Kill everything before building
+taskkill //F //IM WoW.exe 2>/dev/null
+taskkill //F //IM BackgroundBotRunner.exe 2>/dev/null
+taskkill //F //IM WoWStateManager.exe 2>/dev/null
+taskkill //F //IM testhost.x86.exe 2>/dev/null
 
-# Build .NET
+# Build .NET + C++ (both architectures)
 dotnet build WestworldOfWarcraft.sln --configuration Release
-
-# Build Navigation.dll (both architectures)
 MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"
 "$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
-"$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145 -p:OutDir="$(pwd)/Bot/Release/net8.0/x86/"
+"$MSBUILD" Exports/Physics/Physics.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
+"$MSBUILD" Exports/Physics/Physics.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145
 
-# Unit tests
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build
-
-# LiveValidation (don't kill WoW.exe first!)
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --no-build --blame-hang --blame-hang-timeout 10m
-
-# Docker
-docker compose -f docker-compose.vmangos-linux.yml up -d pathfinding-service scene-data-service
+# Tests
+dotnet test Tests/WoWSharpClient.Tests/ --configuration Release --filter "Category!=RequiresInfrastructure" --no-build
+dotnet test Tests/Navigation.Physics.Tests/ --configuration Release --no-build
+dotnet test Tests/BotRunner.Tests/ --configuration Release --filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build
+dotnet test Tests/BotRunner.Tests/ --configuration Release --filter "FullyQualifiedName~LiveValidation" --no-build --blame-hang --blame-hang-timeout 10m
 ```
