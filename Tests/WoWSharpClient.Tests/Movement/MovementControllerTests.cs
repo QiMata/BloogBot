@@ -1014,7 +1014,7 @@ namespace WoWSharpClient.Tests.Movement
 
                 controller.Update(0.05f, 1000);
 
-                // ConfigureNativeSceneMode always sets scene slice mode to false
+                // ConfigureNativeSceneMode no longer toggles scene slice mode
                 Assert.False(sceneSliceModeEnabled);
                 Assert.Equal(1, stepCallCount);
                 Assert.Equal(51.5f, _player.Position.Z);
@@ -1032,10 +1032,10 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void Update_LocalNativePhysics_WithSceneDataClient_DoesNotEnableSceneSliceModeEagerly()
+        public void Update_LocalNativePhysics_WithSceneDataClient_DoesNotCallSetSceneSliceMode()
         {
-            // ConfigureNativeSceneMode always sets scene slice mode to false
-            // to allow local VMAP loading as a fallback.
+            // Scene data always comes from SceneDataService — ConfigureNativeSceneMode
+            // no longer toggles scene slice mode at all.
             bool? enabled = null;
 
             try
@@ -1047,7 +1047,7 @@ namespace WoWSharpClient.Tests.Movement
                     _player,
                     new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
 
-                Assert.False(enabled);
+                Assert.Null(enabled);
             }
             finally
             {
@@ -1056,8 +1056,10 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void Update_LocalNativePhysics_WithoutSceneDataClient_DisablesSceneSliceMode()
+        public void Update_LocalNativePhysics_WithoutSceneDataClient_DoesNotCallSetSceneSliceMode()
         {
+            // Scene data always comes from SceneDataService — ConfigureNativeSceneMode
+            // no longer toggles scene slice mode at all.
             bool? enabled = null;
 
             try
@@ -1068,7 +1070,7 @@ namespace WoWSharpClient.Tests.Movement
                     _mockClient.Object,
                     _player);
 
-                Assert.False(enabled);
+                Assert.Null(enabled);
             }
             finally
             {

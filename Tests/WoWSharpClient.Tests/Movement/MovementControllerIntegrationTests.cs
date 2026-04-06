@@ -44,10 +44,29 @@ public class MovementControllerIntegrationTests
     [Fact]
     public void Reset_ClearsState()
     {
-        var mc = Create(out _);
-        mc.SetTargetWaypoint(new Position(1639f, -4373f, 34f));
-        mc.Reset(34f);
-        mc.Update(0.033f, 200);
+        // Reset sets _needsGroundSnap which bypasses idle guard, causing
+        // Update to run physics. Provide a step override to avoid native DLL load.
+        NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+        {
+            X = input.X, Y = input.Y, Z = input.Z,
+            Orientation = input.Orientation,
+            MoveFlags = input.MoveFlags,
+            GroundZ = input.Z,
+            GroundNx = 0f, GroundNy = 0f, GroundNz = 1f,
+        };
+        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
+        try
+        {
+            var mc = Create(out _);
+            mc.SetTargetWaypoint(new Position(1639f, -4373f, 34f));
+            mc.Reset(34f);
+            mc.Update(0.033f, 200);
+        }
+        finally
+        {
+            NativeLocalPhysics.TestStepOverride = null;
+            NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
+        }
     }
 
     [Fact]
