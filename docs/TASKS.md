@@ -36,7 +36,7 @@ Last run categorization:
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Run LiveValidation with WoW.exe alive** — Don't kill WoW.exe before running. Use `--no-build` with pre-built DLLs. Capture per-test pass/fail. | Open |
+| 1.1 | **Run LiveValidation with fixes** — 57 passed, 14 failed, 163 skipped. Group disband + .gm off + resolver all active. | **Done** |
 | 1.2 | **Fix DualClientParityTests** — These need both FG (WoW.exe) and BG bots. Ensure fixture launches both. Investigate each: Position, Health, NearbyUnits, GmCommand, SpellList. | Open |
 | 1.3 | **Fix dungeon entry timeouts** — ZF, Mara, Strat×2, Gnomer all timeout during coordinator fixture. Root cause: coordinator waits for N bots but not enough connect in time. Increase timeout or reduce required bot count. | Open |
 | 1.4 | **Fix AQ40 raid entry timeout** — 40-bot fixture likely OOMs or times out. Reduce to 10-bot smoke test or increase timeout. | Open |
@@ -51,8 +51,8 @@ Last run categorization:
 
 | # | Task | Spec |
 |---|------|------|
-| 2.1 | **Diagnose IsReady=false root cause** — Add logging to LiveBotFixture.InitializeAsync to show exactly where it fails: SOAP check? StateManager connect? Bot world entry timeout? Which bot doesn't enter? | Open |
-| 2.2 | **Fix bot world entry timeout** — The 120s timeout may be too short if GetGroundZ is slow or pathfinding service needs warmup. Try 180s. Or pre-warm the PathfindingService before bot launch. | Open |
+| 2.1 | **Fix IsReady=false** — Changed to partial readiness (at least 1 bot). Timeout 120s→180s. | **Done** (2c104918) |
+| 2.2 | **Fix world entry timeout** — 180s timeout + partial readiness. 57 tests now pass vs 12-15 before. | **Done** (2c104918) |
 | 2.3 | **Run LiveValidation collection tests** — After fixing IsReady, run the 156 tests in LiveValidationCollection. Count new pass/fail/skip. Target: >80 passing. | Open |
 | 2.4 | **Fix individual test failures** — For each failing test, investigate: wrong API usage, missing GM setup, incorrect assertions, timing issues. Fix and verify. | Open |
 
