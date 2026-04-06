@@ -28,11 +28,19 @@ public static partial class NavigationInterop
             return IntPtr.Zero;
         }
 
-        string preferredPath = Path.Combine(AppContext.BaseDirectory, NavigationDll);
-        if (File.Exists(preferredPath))
-        {
-            return NativeLibrary.Load(preferredPath);
-        }
+        var baseDir = AppContext.BaseDirectory;
+        var arch = RuntimeInformation.ProcessArchitecture;
+
+        // Try platform-specific subdirectory first (x86/ or x64/)
+        var subdir = arch == Architecture.X86 ? "x86" : "x64";
+        var platformPath = Path.Combine(baseDir, subdir, NavigationDll);
+        if (File.Exists(platformPath) && NativeLibrary.TryLoad(platformPath, out var handle))
+            return handle;
+
+        // Fall back to default location
+        string preferredPath = Path.Combine(baseDir, NavigationDll);
+        if (File.Exists(preferredPath) && NativeLibrary.TryLoad(preferredPath, out handle))
+            return handle;
 
         return IntPtr.Zero;
     }

@@ -170,14 +170,19 @@ internal static class NativeLocalPhysics
         if (_sceneSliceModeConfigured && _sceneSliceModeEnabled == enabled)
             return;
 
-        if (TestSetSceneSliceModeOverride == null)
-        {
-            EnsureInitialized();
-            NativePhysics.SetSceneSliceMode(enabled);
-        }
-
+        // Set managed flag immediately — the native DLL call is deferred to
+        // EnsureInitialized() time. This avoids triggering DLL load during
+        // MovementController construction (before NavigationDllResolver can
+        // register for the WoWSharpClient assembly).
         _sceneSliceModeConfigured = true;
         _sceneSliceModeEnabled = enabled;
+
+        // Only call native if already initialized — otherwise the flag will
+        // be applied when EnsureInitialized() runs on the first physics step.
+        if (TestSetSceneSliceModeOverride == null && _initialized)
+        {
+            NativePhysics.SetSceneSliceMode(enabled);
+        }
     }
 
     public static IReadOnlyList<uint> PreloadAvailableMaps()
@@ -283,6 +288,15 @@ internal static class NativeLocalPhysics
         }
 
         _initialized = true;
+
+        // Apply deferred scene slice mode — SetSceneSliceMode() may have been
+        // called before initialization (during MovementController construction).
+        if (_sceneSliceModeConfigured)
+        {
+            NativePhysics.SetSceneSliceMode(_sceneSliceModeEnabled);
+            Console.WriteLine($"[NativeLocalPhysics] Applied deferred SetSceneSliceMode({_sceneSliceModeEnabled})");
+            Console.Out.Flush();
+        }
     }
 
     private static string? ResolveDataDirectory()
