@@ -69,7 +69,7 @@ Last run categorization:
 | 1.1 | **Auto-select Navigation.dll by platform** — NavigationDllResolver loads from x86/ or x64/ subdir based on process arch. Registered in BG bot Program.cs. | **Done** (90aab82e) |
 | 1.2 | **Post-build x86 to subdir** — vcxproj Win32 OutDir→x86/. x64 stays in main dir. No manual copy needed. | **Done** (31abef42) |
 | 1.3 | **Both architectures coexist** — Physics x64 (666/2/1) + BotRunner x86 (1626/0/4) both pass. No manual DLL swap. | **Done** (167fa9d9) |
-| 1.4 | **Physics.dll DLL split** — CMake project at `Exports/Physics/CMakeLists.txt`. Separate physics+scene from pathfinding. Deferred until architecture issue resolved. | Open |
+| 1.4 | **Physics.dll DLL split** — Physics.vcxproj built (x86+x64). 11 physics exports, 0 pathfinding. NativePhysicsInterop loads Physics.dll. NavigationDllResolver handles both. Physics tests 666/2/1. | **Done** (8da28cc6) |
 
 ---
 
