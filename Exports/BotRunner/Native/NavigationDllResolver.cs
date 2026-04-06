@@ -24,6 +24,14 @@ public static class NavigationDllResolver
 {
     private static bool _registered;
 
+    /// <summary>
+    /// Auto-register when BotRunner assembly loads via module initializer.
+    /// This ensures the resolver is active for ALL consumers (BackgroundBotRunner,
+    /// tests, StateManager) without requiring explicit Register() calls.
+    /// </summary>
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void AutoRegister() => Register();
+
     public static void Register()
     {
         if (_registered) return;
