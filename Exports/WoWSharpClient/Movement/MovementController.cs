@@ -167,8 +167,15 @@ namespace WoWSharpClient.Movement
 
         private static bool ConfigureNativeSceneMode(SceneDataClient? sceneDataClient)
         {
-            // Scene data comes from SceneDataService. No local VMAP/map loading.
-            return true;
+            // When SceneDataClient is present, enable scene slice mode so
+            // Navigation.dll uses injected triangles instead of loading full
+            // VMAP data (~1GB per map). Without this call, the physics engine
+            // has no collision geometry after teleport and bots float in air.
+            if (sceneDataClient != null)
+            {
+                NativeLocalPhysics.SetSceneSliceMode(true);
+            }
+            return sceneDataClient != null;
         }
 
         // ======== MAIN UPDATE - Called every frame ========

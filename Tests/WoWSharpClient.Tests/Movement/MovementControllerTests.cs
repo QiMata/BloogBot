@@ -1014,8 +1014,8 @@ namespace WoWSharpClient.Tests.Movement
 
                 controller.Update(0.05f, 1000);
 
-                // ConfigureNativeSceneMode no longer toggles scene slice mode
-                Assert.False(sceneSliceModeEnabled);
+                // SceneDataClient present → SetSceneSliceMode(true) called
+                Assert.True(sceneSliceModeEnabled);
                 Assert.Equal(1, stepCallCount);
                 Assert.Equal(51.5f, _player.Position.Z);
                 Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
@@ -1032,10 +1032,12 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void Update_LocalNativePhysics_WithSceneDataClient_DoesNotCallSetSceneSliceMode()
+        public void Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode()
         {
-            // Scene data always comes from SceneDataService — ConfigureNativeSceneMode
-            // no longer toggles scene slice mode at all.
+            // When SceneDataClient is present, ConfigureNativeSceneMode must call
+            // SetSceneSliceMode(true) so Navigation.dll uses injected triangles
+            // instead of loading full VMAP data. Without this, bots have no
+            // collision geometry after teleport and float in air.
             bool? enabled = null;
 
             try
@@ -1047,7 +1049,7 @@ namespace WoWSharpClient.Tests.Movement
                     _player,
                     new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
 
-                Assert.Null(enabled);
+                Assert.True(enabled);
             }
             finally
             {
@@ -1058,8 +1060,8 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void Update_LocalNativePhysics_WithoutSceneDataClient_DoesNotCallSetSceneSliceMode()
         {
-            // Scene data always comes from SceneDataService — ConfigureNativeSceneMode
-            // no longer toggles scene slice mode at all.
+            // Without SceneDataClient, scene slice mode is NOT enabled.
+            // Physics will use local preloaded maps instead.
             bool? enabled = null;
 
             try
