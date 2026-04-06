@@ -43,9 +43,9 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 2.1 | **Fix any new unit test failures** — If R1.3-R1.5 show new failures, investigate and fix each one. | Open |
+| 2.1 | **Unit test regressions** — 0 failures after Physics.dll split + auto-register. 967/0/2 confirmed. | **Done** |
 | 2.2 | **Fix any new LiveValidation failures** — If R1.6 shows failures beyond the 9 known multi-bot timeouts, investigate. | Open |
-| 2.3 | **Verify Physics.dll loads correctly** — BG bots must load Physics.dll (not Navigation.dll) for local physics. Check logs for `[NavigationDllResolver]` messages. No 0x8007000B errors. | Open |
+| 2.3 | **Physics.dll loads correctly** — ModuleInitializer auto-registers resolver. BasicLoopTests 2/2 pass. No 0x8007000B. | **Done** (8b565eac) |
 | 2.4 | **Verify .gm off in EnsureCleanSlateAsync** — Run a combat test, verify mobs aggro the bot. GM mode must be off during combat. | Open |
 | 2.5 | **Verify group disband in EnsureCleanSlateAsync** — Run 3 sequential tests, verify no "party is full" spam in logs. | Open |
 
