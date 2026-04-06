@@ -19,7 +19,7 @@
 | WoWSharpClient.Tests | 1417 | 0 | 1 | **Confirmed** |
 | Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
-| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Running... |
+| BotRunner.Tests (LiveValidation) | 33 | 19 | 21 | Post GetGroundZ→Physics.dll fix. 73/234 ran before timeout. |
 
 ---
 
@@ -34,8 +34,8 @@
 | 1.3 | **WoWSharpClient.Tests** — 1417/0/1. **Confirmed.** | **Done** |
 | 1.4 | **Navigation.Physics.Tests** — 666/2/1. **Confirmed.** | **Done** |
 | 1.5 | **BotRunner.Tests (unit)** — 1626/0/4. **Confirmed.** | **Done** |
-| 1.6 | **LiveValidation** — Running in background. Awaiting results. | In progress |
-| 1.7 | **Update baseline table** — Record actual results from R1.3-R1.6. Compare to previous baseline. Flag any regressions. | Open |
+| 1.6 | **LiveValidation** — 33 passed, 19 failed, 21 skipped (73/234 ran, 40min timeout). Regression from 57 — needs investigation. | **Done** |
+| 1.7 | **Baseline updated** — See table above. LV regression needs R2 investigation. | **Done** |
 
 ---
 
