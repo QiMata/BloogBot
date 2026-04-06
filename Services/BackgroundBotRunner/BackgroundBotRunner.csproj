@@ -19,4 +19,16 @@
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\BotProfiles\BotProfiles.csproj" />
   </ItemGroup>
+
+  <!-- Copy x86 Navigation.dll to output directory.
+       BackgroundBotRunner runs as x86 (launched by x86 StateManager).
+       The x86 build outputs to Bot/{Config}/net8.0/x86/Navigation.dll.
+       This target copies it to the main output dir so P/Invoke finds it. -->
+  <Target Name="CopyX86NavigationDll" AfterTargets="Build">
+    <PropertyGroup>
+      <X86NavDll>$(OutputPath)x86\Navigation.dll</X86NavDll>
+    </PropertyGroup>
+    <Copy SourceFiles="$(X86NavDll)" DestinationFolder="$(OutputPath)"
+          Condition="Exists('$(X86NavDll)')" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
