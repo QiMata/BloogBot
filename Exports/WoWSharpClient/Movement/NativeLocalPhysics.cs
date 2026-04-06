@@ -14,6 +14,8 @@ internal static class NativeLocalPhysics
 {
     private static bool _initialized;
     private static bool _mapsPreloaded;
+    private static bool _sceneSliceModeConfigured;
+    private static bool _sceneSliceModeEnabled;
     private static readonly object _preloadLock = new();
     private static List<uint> _preloadedMapIds = [];
     private static HashSet<uint> _preloadedMapIdSet = [];
