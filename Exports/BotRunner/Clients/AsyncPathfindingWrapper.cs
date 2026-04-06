@@ -78,7 +78,8 @@ public class AsyncPathfindingWrapper : IDisposable
     {
         _cts.Cancel();
         _requestChannel.Writer.Complete();
-        Task.WaitAll(_workerTasks, TimeSpan.FromSeconds(5));
+        try { Task.WaitAll(_workerTasks, TimeSpan.FromSeconds(5)); }
+        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is TaskCanceledException or OperationCanceledException)) { }
         _cts.Dispose();
     }
 

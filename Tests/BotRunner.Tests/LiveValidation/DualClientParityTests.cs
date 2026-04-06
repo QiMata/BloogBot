@@ -22,7 +22,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~DualClientParityTests" -v n
 /// </summary>
-[Collection(InfrastructureTestCollection.Name)]
+[Collection(LiveValidationCollection.Name)]
 public class DualClientParityTests
 {
     private readonly LiveBotFixture _bot;
