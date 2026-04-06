@@ -12,18 +12,33 @@
 
 ---
 
-## Test Baseline (2026-04-06 — R2 post-fix)
+## Test Baseline (2026-04-06 — R4 SceneData fix)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1417 | 0 | 1 | **Confirmed** (1418 total, +1 new integration test) |
+| WoWSharpClient.Tests | 1425 | 0 | 1 | +8 SceneDataClient integration tests |
 | Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
-| BotRunner.Tests (LiveValidation) | 35 | 12 | 5 | 58 ran. 12 failures = dungeon/raid fixture concurrency locks. |
+| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Pending rerun with SceneData fix |
 
 ---
 
-## R1/R2 — Archived (see docs/ARCHIVE.md)
+## R1/R2/R3 — Archived (see docs/ARCHIVE.md)
+
+---
+
+## R4 — SceneDataService Physics Fix (Priority: CRITICAL)
+
+**Root cause:** Bots float in air after teleport because `ConfigureNativeSceneMode()` was a no-op — it never called `SetSceneSliceMode(true)`. Without this, Navigation.dll doesn't use injected scene triangles and has no collision geometry.
+
+| # | Task | Spec |
+|---|------|------|
+| 4.1 | **Enable SetSceneSliceMode(true)** when SceneDataClient present. | **Done** (8de77f7c) |
+| 4.2 | **Defer native call** — SetSceneSliceMode sets managed flag immediately, defers DLL call to avoid BadImageFormatException during x86 construction. | **Done** (b2e5c53d) |
+| 4.3 | **x86/x64 DLL resolution** — Default path has x86, x64/ subdirectory has x64. NavigationInterop updated. | **Done** (b2e5c53d) |
+| 4.4 | **SceneDataClient integration tests** — 12 tests: grid quantization, retry/dedup, response packing, live connectivity. | **Done** (50812ea7) |
+| 4.5 | **LiveValidation rerun** — Verify bots fall properly after teleport with SceneData fix. | Open |
+| 4.6 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open |
 
 ---
 
