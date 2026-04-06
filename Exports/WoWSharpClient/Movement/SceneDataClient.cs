@@ -24,6 +24,8 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
     internal static Func<uint, float, float, bool>? TestEnsureSceneDataAroundOverride { get; set; }
     internal static Func<SceneGridRequest, SceneGridResponse>? TestSendRequestOverride { get; set; }
     internal static Func<DateTime>? TestUtcNowOverride { get; set; }
+    /// <summary>Test override: captures injected triangles instead of P/Invoking InjectSceneTriangles.</summary>
+    internal static Func<uint, float, float, float, float, NativePhysics.InjectedTriangle[], bool>? TestInjectOverride { get; set; }
     private DateTime _nextRetryUtc = DateTime.MinValue;
 
     public SceneDataClient(string ipAddress, int port, ILogger logger)
@@ -167,6 +169,12 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
                 NY = response.NormalData[nBase + 1],
                 NZ = response.NormalData[nBase + 2],
             };
+        }
+
+        if (TestInjectOverride != null)
+        {
+            TestInjectOverride(mapId, minX, minY, maxX, maxY, triangles);
+            return;
         }
 
         var handle = GCHandle.Alloc(triangles, GCHandleType.Pinned);
