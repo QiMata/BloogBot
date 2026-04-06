@@ -58,15 +58,18 @@ public static class NavigationDllResolver
 
     private static IntPtr ResolveNavigationDll(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
-        if (!libraryName.Equals("Navigation", StringComparison.OrdinalIgnoreCase))
+        // Handle both Navigation.dll (pathfinding) and Physics.dll (local physics)
+        if (!libraryName.Equals("Navigation", StringComparison.OrdinalIgnoreCase)
+            && !libraryName.Equals("Physics", StringComparison.OrdinalIgnoreCase))
             return IntPtr.Zero;
 
+        var dllFileName = libraryName + ".dll";
         var baseDir = AppContext.BaseDirectory;
         var arch = RuntimeInformation.ProcessArchitecture;
 
         // Try platform-specific subdirectory first (x86/ or x64/)
         var subdir = arch == Architecture.X86 ? "x86" : "x64";
-        var platformPath = Path.Combine(baseDir, subdir, "Navigation.dll");
+        var platformPath = Path.Combine(baseDir, subdir, dllFileName);
 
         if (File.Exists(platformPath) && NativeLibrary.TryLoad(platformPath, out var handle))
         {
@@ -75,7 +78,7 @@ public static class NavigationDllResolver
         }
 
         // Fall back to default location
-        var defaultPath = Path.Combine(baseDir, "Navigation.dll");
+        var defaultPath = Path.Combine(baseDir, dllFileName);
         if (File.Exists(defaultPath) && NativeLibrary.TryLoad(defaultPath, out handle))
         {
             Log.Information("[NavigationDllResolver] Loaded from default {Path}", defaultPath);

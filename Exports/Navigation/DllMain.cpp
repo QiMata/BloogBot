@@ -10,7 +10,9 @@
 #include "SceneQuery.h"
 #include "SceneCache.h"
 #include "DynamicObjectRegistry.h"
+#ifndef PHYSICS_DLL_ONLY
 #include "DetourPathCorridor.h"
+#endif
 #include "VMapLog.h"
 
 #include <algorithm>
@@ -178,12 +180,14 @@ void InitializeAllSystems()
     }
     catch (...) {}
 
-    // --- Navigation ---
+#ifndef PHYSICS_DLL_ONLY
+    // --- Navigation (pathfinding — not needed in Physics.dll) ---
     try
     {
         Navigation::GetInstance()->Initialize();
     }
     catch (...) {}
+#endif
 
     // --- Physics Engine ---
     try
@@ -206,13 +210,14 @@ static void PreloadMapInner(uint32_t mapId)
 
     try
     {
+#ifndef PHYSICS_DLL_ONLY
         auto* navigation = Navigation::GetInstance();
         if (navigation)
         {
             MMAP::MMapFactory::createOrGetMMapManager();
             navigation->GetQueryForMap(mapId);
         }
-
+#endif
         SceneQuery::EnsureMapLoaded(mapId);
     }
     catch (...) {}
@@ -383,6 +388,7 @@ extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
     }
 }
 
+#ifndef PHYSICS_DLL_ONLY
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
     try
@@ -416,6 +422,7 @@ extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)
 {
     delete[] pathArr;
 }
+#endif // PHYSICS_DLL_ONLY
 
 // Removed legacy PhysicsStep export. Use PhysicsStepV2 only.
 
@@ -1076,6 +1083,7 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
 // SPATIAL QUERIES
 // ===============================
 
+#ifndef PHYSICS_DLL_ONLY
 // Check if a point is on the navmesh (within searchRadius XZ, 200y vertical).
 // Returns true if a walkable polygon is found near the given position.
 // nearestX/Y/Z receive the closest point on the navmesh surface.
@@ -1176,8 +1184,10 @@ extern "C" __declspec(dllexport) uint32_t FindNearestWalkablePoint(
 
     return static_cast<uint32_t>(area);
 }
+#endif // PHYSICS_DLL_ONLY (IsPointOnNavmesh + FindNearestWalkablePoint)
 
 // ===============================
+#ifndef PHYSICS_DLL_ONLY
 // PATH CORRIDOR API
 // ===============================
 // Incremental, collision-aware path following using Detour's dtPathCorridor.
@@ -1511,6 +1521,7 @@ extern "C" __declspec(dllexport) void CorridorDestroy(uint32_t handle)
         g_corridors.erase(it);
     }
 }
+#endif // PHYSICS_DLL_ONLY
 
 #if defined(_WIN32)
 // DLL Entry Point

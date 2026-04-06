@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{8E623BB1-1B7B-4F8E-A051-72F53A9AB620}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Physics</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\x86\</OutDir>
+    <TargetExt>.dll</TargetExt>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)</TargetName>
+    <IncludePath>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\include;..\Navigation\Storm\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetName>$(ProjectName)</TargetName>
+    <IncludePath>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\include;..\Navigation\Storm\include;$(IncludePath)</IncludePath>
+    <TargetExt>.dll</TargetExt>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\x86\</OutDir>
+    <TargetExt>.dll</TargetExt>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>$(ProjectName)</TargetName>
+    <IncludePath>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\include;..\Navigation\Storm\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>$(ProjectName)</TargetName>
+    <IncludePath>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\include;..\Navigation\Storm\include;$(IncludePath)</IncludePath>
+    <TargetExt>.dll</TargetExt>
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;_LIB;USE_STANDARD_MALLOC;PREPARED_SLN;_WINDOWS;_WIN32;_CRT_SECURE_NO_WARNINGS;CMAKE_INTDIR="Release";DT_POLYREF64;PHYSICS_DLL_ONLY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\Include;..\Navigation\Utilities;</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <RuntimeTypeInfo>
+      </RuntimeTypeInfo>
+      <PrecompiledHeaderFile />
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <ConformanceMode>
+      </ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>No</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;_LIB;USE_STANDARD_MALLOC;PREPARED_SLN;_WINDOWS;_WIN32;_CRT_SECURE_NO_WARNINGS;CMAKE_INTDIR="Release";DT_POLYREF64;PHYSICS_DLL_ONLY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\Include;..\Navigation\Utilities;</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <RuntimeTypeInfo>
+      </RuntimeTypeInfo>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <ConformanceMode>
+      </ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>No</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>Disabled</Optimization>
+      <FunctionLevelLinking>
+      </FunctionLevelLinking>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;USE_STANDARD_MALLOC;PREPARED_SLN;_WINDOWS;_WIN32;_CRT_SECURE_NO_WARNINGS;CMAKE_INTDIR="Release";DT_POLYREF64;PHYSICS_DLL_ONLY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\Include;..\Navigation\Utilities;</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AssemblyDebug>true</AssemblyDebug>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>true</MapExports>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>Disabled</Optimization>
+      <FunctionLevelLinking>
+      </FunctionLevelLinking>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;USE_STANDARD_MALLOC;PREPARED_SLN;_WINDOWS;_WIN32;_CRT_SECURE_NO_WARNINGS;CMAKE_INTDIR="Release";DT_POLYREF64;PHYSICS_DLL_ONLY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\Navigation;..\Navigation\Detour\Include;..\Navigation\g3dlite\Include;..\Navigation\Utilities;</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AssemblyDebug>true</AssemblyDebug>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapExports>true</MapExports>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Navigation\MoveMap.h" />
+    <ClInclude Include="..\Navigation\MoveMapSharedDefines.h" />
+    <ClInclude Include="..\Navigation\Navigation.h" />
+    <ClInclude Include="..\Navigation\PathFinder.h" />
+    <ClInclude Include="..\Navigation\AABox.h" />
+    <ClInclude Include="..\Navigation\BIH.h" />
+    <ClInclude Include="..\Navigation\CoordinateTransforms.h" />
+    <ClInclude Include="..\Navigation\DynamicObjectRegistry.h" />
+    <ClInclude Include="..\Navigation\IVMapManager.h" />
+    <ClInclude Include="..\Navigation\MapLoader.h" />
+    <ClInclude Include="..\Navigation\Matrix3.h" />
+    <ClInclude Include="..\Navigation\ModelInstance.h" />
+    <ClInclude Include="..\Navigation\PhysicsBridge.h" />
+    <ClInclude Include="..\Navigation\PhysicsCollideSlide.h" />
+    <ClInclude Include="..\Navigation\PhysicsDiagnosticsHelpers.h" />
+    <ClInclude Include="..\Navigation\PhysicsEngine.h" />
+    <ClInclude Include="..\Navigation\PhysicsGroundSnap.h" />
+    <ClInclude Include="..\Navigation\PhysicsHelpers.h" />
+    <ClInclude Include="..\Navigation\PhysicsLiquidHelpers.h" />
+    <ClInclude Include="..\Navigation\PhysicsMath.h" />
+    <ClInclude Include="..\Navigation\PhysicsMovement.h" />
+    <ClInclude Include="..\Navigation\PhysicsSelectHelpers.h" />
+    <ClInclude Include="..\Navigation\PhysicsShapeHelpers.h" />
+    <ClInclude Include="..\Navigation\PhysicsTolerances.h" />
+    <ClInclude Include="..\Navigation\QueryHit.h" />
+    <ClInclude Include="..\Navigation\Ray.h" />
+    <ClInclude Include="..\Navigation\SceneCache.h" />
+    <ClInclude Include="..\Navigation\SceneQuery.h" />
+    <ClInclude Include="..\Navigation\SelectorObjectConsumers.h" />
+    <ClInclude Include="..\Navigation\SelectorObjectRasterConsumer.h" />
+    <ClInclude Include="..\Navigation\SelectorObjectTraversal.h" />
+    <ClInclude Include="..\Navigation\SelectorChosenContact.h" />
+    <ClInclude Include="..\Navigation\StaticMapTree.h" />
+    <ClInclude Include="..\Navigation\Vector3.h" />
+    <ClInclude Include="..\Navigation\VMapDefinitions.h" />
+    <ClInclude Include="..\Navigation\VMapFactory.h" />
+    <ClInclude Include="..\Navigation\VMapLog.h" />
+    <ClInclude Include="..\Navigation\VMapManager2.h" />
+    <ClInclude Include="..\Navigation\WmoDoodadFormat.h" />
+    <ClInclude Include="..\Navigation\WorldModel.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Navigation\Detour\Source\DetourAlloc.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourCommon.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourNavMesh.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourNavMeshBuilder.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourNavMeshQuery.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourNode.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourPathCorridor.cpp" />
+    <ClCompile Include="..\Navigation\DllMain.cpp">
+      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </CompileAsManaged>
+      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      </CompileAsManaged>
+      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </CompileAsManaged>
+      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </CompileAsManaged>
+      <ExceptionHandling Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Async</ExceptionHandling>
+      <ExceptionHandling Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Async</ExceptionHandling>
+      <ExceptionHandling Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Async</ExceptionHandling>
+      <ExceptionHandling Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Async</ExceptionHandling>
+    </ClCompile>
+    <ClCompile Include="..\Navigation\MoveMap.cpp" />
+    <ClCompile Include="..\Navigation\AABox.cpp" />
+    <ClCompile Include="..\Navigation\BIH.cpp" />
+    <ClCompile Include="..\Navigation\DynamicObjectRegistry.cpp" />
+    <ClCompile Include="..\Navigation\MapLoader.cpp" />
+    <ClCompile Include="..\Navigation\Matrix3.cpp" />
+    <ClCompile Include="..\Navigation\ModelInstance.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsCollideSlide.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsDiagnosticsHelpers.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsEngine.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsGroundSnap.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsHelpers.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsLiquidHelpers.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsMovement.cpp" />
+    <ClCompile Include="..\Navigation\PhysicsTestExports.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectConsumers.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectConsumersTestExports.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectRasterConsumer.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectRasterConsumerTestExports.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectTraversal.cpp" />
+    <ClCompile Include="..\Navigation\SelectorObjectTraversalTestExports.cpp" />
+    <ClCompile Include="..\Navigation\SelectorChosenContact.cpp" />
+    <ClCompile Include="..\Navigation\SelectorChosenContactTestExports.cpp" />
+    <ClCompile Include="..\Navigation\GroundedDriverParity.cpp" />
+    <ClCompile Include="..\Navigation\GroundedDriverParityTestExports.cpp" />
+    <ClCompile Include="..\Navigation\Ray.cpp" />
+    <ClCompile Include="..\Navigation\SceneCache.cpp" />
+    <ClCompile Include="..\Navigation\SceneQuery.cpp" />
+    <ClCompile Include="..\Navigation\StaticMapTree.cpp" />
+    <ClCompile Include="..\Navigation\Vector3.cpp" />
+    <ClCompile Include="..\Navigation\VMapFactory.cpp" />
+    <ClCompile Include="..\Navigation\VMapLog.cpp" />
+    <ClCompile Include="..\Navigation\VMapManager2.cpp" />
+    <ClCompile Include="..\Navigation\WorldModel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Navigation\BIH.inl" />
+    <None Include="README.md" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
