@@ -152,10 +152,10 @@ public class SummoningStoneTests
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = KalimdorMapId },
                 new RequestParameter { FloatParam = WcMeetingStoneX },
                 new RequestParameter { FloatParam = WcMeetingStoneY },
-                new RequestParameter { FloatParam = WcMeetingStoneZ },
-                new RequestParameter { FloatParam = KalimdorMapId }
+                new RequestParameter { FloatParam = WcMeetingStoneZ }
             }
         });
         _output.WriteLine($"[TEST] TRAVEL_TO WC result: {travelResult}");

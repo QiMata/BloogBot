@@ -39,11 +39,13 @@ public class CornerNavigationTests
         await Task.Delay(3000);
 
         // Send TRAVEL_TO action targeting Org AH
+        // Params: [0]=mapId (int), [1]=x, [2]=y, [3]=z
         var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = 1 },        // mapId (Kalimdor)
                 new RequestParameter { FloatParam = 1687f },  // dest X
                 new RequestParameter { FloatParam = -4465f }, // dest Y
                 new RequestParameter { FloatParam = 23f },    // dest Z
@@ -92,11 +94,13 @@ public class CornerNavigationTests
         await Task.Delay(3000);
 
         // Navigate deeper into RFC
+        // Params: [0]=mapId (int), [1]=x, [2]=y, [3]=z
         var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = 389 },      // mapId (RFC)
                 new RequestParameter { FloatParam = -300f },
                 new RequestParameter { FloatParam = -40f },
                 new RequestParameter { FloatParam = -25f },

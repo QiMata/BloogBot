@@ -58,10 +58,10 @@ public class TravelPlannerTests
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = MapId },
                 new RequestParameter { FloatParam = CrossroadsX },
                 new RequestParameter { FloatParam = CrossroadsY },
-                new RequestParameter { FloatParam = CrossroadsZ },
-                new RequestParameter { FloatParam = MapId }
+                new RequestParameter { FloatParam = CrossroadsZ }
             }
         });
         _output.WriteLine($"[TEST] TRAVEL_TO dispatch result: {result}");
@@ -97,10 +97,10 @@ public class TravelPlannerTests
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = MapId },
                 new RequestParameter { FloatParam = CrossroadsX },
                 new RequestParameter { FloatParam = CrossroadsY },
-                new RequestParameter { FloatParam = CrossroadsZ },
-                new RequestParameter { FloatParam = MapId }
+                new RequestParameter { FloatParam = CrossroadsZ }
             }
         });
         Assert.Equal(ResponseResult.Success, result);
@@ -141,10 +141,10 @@ public class TravelPlannerTests
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = MapId },
                 new RequestParameter { FloatParam = destX },
                 new RequestParameter { FloatParam = destY },
-                new RequestParameter { FloatParam = destZ },
-                new RequestParameter { FloatParam = MapId }
+                new RequestParameter { FloatParam = destZ }
             }
         });
         Assert.Equal(ResponseResult.Success, result);
@@ -172,10 +172,10 @@ public class TravelPlannerTests
             ActionType = ActionType.TravelTo,
             Parameters =
             {
+                new RequestParameter { IntParam = MapId },
                 new RequestParameter { FloatParam = CrossroadsX },
                 new RequestParameter { FloatParam = CrossroadsY },
-                new RequestParameter { FloatParam = CrossroadsZ },
-                new RequestParameter { FloatParam = MapId }
+                new RequestParameter { FloatParam = CrossroadsZ }
             }
         });
         Assert.Equal(ResponseResult.Success, result);
