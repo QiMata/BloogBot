@@ -339,3 +339,5 @@ docker/linux/vmangos/storage/mangosd/honor/
 
 # Bot runtime logs (build output, not source)
 Bot/Release/net8.0/WWoWLogs/
+Exports/Physics/build_x64/
+Exports/Physics/build_x86/
