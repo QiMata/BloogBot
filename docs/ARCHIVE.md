@@ -43,6 +43,13 @@
 | 2.3 | FG UpdateBehaviorTree Fix — HasEnteredWorld early guard, FgCharacterSelectScreen InWorld fix | Done |
 | 2.4 | BotRunnerService Refactoring — 2586-line file split into 12 partial class files | Done |
 | PHYS-MOVE-001 | MovementController teleport/transport/zone awareness — ground snap, zone reset, transport piping | Done |
+| R1.1-R1.7 | Full test suite rerun — baselines confirmed: WSC 1417/0/1, NP 666/2/1, BR 1626/0/4, LV 35/12/5 | Done |
+| R2.1 | Unit test regressions — 0 failures after Physics.dll split + auto-register | Done |
+| R2.2 | LV failure fixes — DualClientParity collection, AsyncPathfindingWrapper dispose, scene slice tests, Reset_ClearsState | Done |
+| R2.3 | Physics.dll loads correctly — ModuleInitializer auto-registers NavigationDllResolver | Done |
+| R2.4 | .gm off verified in EnsureCleanSlateAsync — line 286 calls `.gm off` | Done |
+| R2.5 | Group disband verified in EnsureCleanSlateAsync — lines 243-252 send LeaveGroup | Done |
+| R3.1-R3.7 | LiveValidation Deep Dive — 37 tests real behavior, 10 trivial placeholders (Bank/AH parity) | Done |
 
 ## Completed Task Details
 

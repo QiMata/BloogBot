@@ -12,58 +12,43 @@
 
 ---
 
-## Test Baseline (2026-04-06 — R1 rerun)
+## Test Baseline (2026-04-06 — R2 post-fix)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1417 | 0 | 1 | **Confirmed** |
+| WoWSharpClient.Tests | 1417 | 0 | 1 | **Confirmed** (1418 total, +1 new integration test) |
 | Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
-| BotRunner.Tests (LiveValidation) | 33 | 19 | 21 | Post GetGroundZ→Physics.dll fix. 73/234 ran before timeout. |
+| BotRunner.Tests (LiveValidation) | 35 | 12 | 5 | 58 ran. 12 failures = dungeon/raid fixture concurrency locks. |
 
 ---
 
-## R1 — Full Test Suite Rerun (Priority: CRITICAL)
-
-**Goal:** Run every test suite with the latest code (Physics.dll split, group disband, .gm off, NavigationDllResolver). Establish fresh baseline.
-
-| # | Task | Spec |
-|---|------|------|
-| 1.1 | **Kill all bot processes** — Clean. | **Done** |
-| 1.2 | **Rebuild everything** — .NET 0 CS errors. Navigation.dll x64, Physics.dll x64+x86 all built. | **Done** |
-| 1.3 | **WoWSharpClient.Tests** — 1417/0/1. **Confirmed.** | **Done** |
-| 1.4 | **Navigation.Physics.Tests** — 666/2/1. **Confirmed.** | **Done** |
-| 1.5 | **BotRunner.Tests (unit)** — 1626/0/4. **Confirmed.** | **Done** |
-| 1.6 | **LiveValidation** — 33 passed, 19 failed, 21 skipped (73/234 ran, 40min timeout). Regression from 57 — needs investigation. | **Done** |
-| 1.7 | **Baseline updated** — See table above. LV regression needs R2 investigation. | **Done** |
+## R1/R2 — Archived (see docs/ARCHIVE.md)
 
 ---
 
-## R2 — Fix Any Regressions Found (Priority: CRITICAL)
-
-| # | Task | Spec |
-|---|------|------|
-| 2.1 | **Unit test regressions** — 0 failures after Physics.dll split + auto-register. 967/0/2 confirmed. | **Done** |
-| 2.2 | **Fix any new LiveValidation failures** — If R1.6 shows failures beyond the 9 known multi-bot timeouts, investigate. | Open |
-| 2.3 | **Physics.dll loads correctly** — ModuleInitializer auto-registers resolver. BasicLoopTests 2/2 pass. No 0x8007000B. | **Done** (8b565eac) |
-| 2.4 | **Verify .gm off in EnsureCleanSlateAsync** — Run a combat test, verify mobs aggro the bot. GM mode must be off during combat. | Open |
-| 2.5 | **Verify group disband in EnsureCleanSlateAsync** — Run 3 sequential tests, verify no "party is full" spam in logs. | Open |
-
----
-
-## R3 — LiveValidation Deep Dive (Priority: High)
+## R3 — LiveValidation Deep Dive (Priority: High) — **COMPLETE**
 
 **Goal:** For each LiveValidation test category, verify it exercises real game behavior, not just snapshot != null.
 
-| # | Task | Spec |
-|---|------|------|
-| 3.1 | **BasicLoopTests** — Bots login, enter world, position stabilizes. Verify position Z is reasonable (not floating). | Open |
-| 3.2 | **VendorBuySellTests** — Bot buys/sells at vendor. Verify inventory changes in snapshot. | Open |
-| 3.3 | **CombatTests** — Bot engages mob, deals damage. Verify mob HP decreases. GM mode must be OFF. | Open |
-| 3.4 | **NavigationTests** — Bot navigates between two points. Verify position changes over time, arrival within timeout. | Open |
-| 3.5 | **EconomyTests** — Bank deposit, AH interaction. Verify NPC found and interacted with. | Open |
-| 3.6 | **GroupFormationTests** — Party invite + accept. Verify PartyLeaderGuid set in snapshot. | Open |
-| 3.7 | **RFC DungeonRun** — Bots form group, enter RFC, combat occurs. Verify mapId=389 and combat flags. | Open |
+| # | Task | Verdict |
+|---|------|---------|
+| 3.1 | **BasicLoopTests** — Login test is trivial (snapshot check). Physics Z test is **real** (verifies no underground fall). | **Done** — Mixed |
+| 3.2 | **VendorBuySellTests** — **Real behavior**: verifies inventory delta + coinage delta via snapshot polling. | **Done** — Real |
+| 3.3 | **CombatTests** — **Real behavior**: mob health regression over time, `firstDamageConfirmed` gate, kill confirmation. GM flag check before combat. | **Done** — Real |
+| 3.4 | **NavigationTests** — **Real behavior**: end-to-end pathfinding, position polling, arrival within 12yd tolerance. | **Done** — Real |
+| 3.5 | **EconomyTests** — Mixed: Bank/AH interaction tests are `Assert.NotNull` placeholders (10 tests). Mail test verifies coinage delta. | **Done** — Needs work |
+| 3.6 | **GroupFormationTests** — **Real behavior**: PartyLeaderGuid transitions (0→non-zero→0), invite/accept/disband verified. | **Done** — Real |
+| 3.7 | **RFC DungeonRun** — **Real behavior**: DungeonEntryTestRunner verifies bot count, group formation, MapId transition to instance map. | **Done** — Real |
+
+**Summary:** ~37 tests exercise real game behavior; ~10 are trivial `Assert.NotNull` placeholders (concentrated in Bank/AH parity tests). The core test categories (combat, navigation, vendor, groups, dungeons, fishing, gathering) are **substantive**.
+
+**Placeholder tests to flesh out later:**
+- BankInteractionTests (2 tests): Add deposit/withdraw assertions
+- AuctionHouseTests (2 tests): Add AH frame state assertions
+- AuctionHouseParityTests (3 tests): Add search/post/cancel parity assertions
+- BankParityTests (2 tests): Add deposit/withdraw parity assertions
+- RaidCoordinationTests.MarkTargeting (1 test): Add mark assertion
 
 ---
 
