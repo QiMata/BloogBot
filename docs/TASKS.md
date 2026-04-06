@@ -12,14 +12,14 @@
 
 ---
 
-## Test Baseline (2026-04-06 — needs refresh)
+## Test Baseline (2026-04-06 — R1 rerun)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1417 | 0 | 1 | Needs rerun to confirm |
-| Navigation.Physics.Tests | 666 | 2 | 1 | Needs rerun with Physics.dll split |
-| BotRunner.Tests (unit) | 1626 | 0 | 4 | Needs rerun |
-| BotRunner.Tests (LiveValidation) | 57 | 14 | 163 | Needs rerun with all fixes |
+| WoWSharpClient.Tests | 1417 | 0 | 1 | **Confirmed** |
+| Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
+| BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
+| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Running... |
 
 ---
 
@@ -29,12 +29,12 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 1.1 | **Kill all bot processes** — WoW.exe, BackgroundBotRunner, WoWStateManager, testhost. Clean slate. | Open |
-| 1.2 | **Rebuild everything** — `dotnet build --configuration Release`. MSBuild Navigation.dll x64 + Physics.dll x64+x86. Verify 0 errors. | Open |
-| 1.3 | **Run WoWSharpClient.Tests** — `--filter "Category!=RequiresInfrastructure" --no-build`. Record pass/fail/skip. Target: 1417/0/1. | Open |
-| 1.4 | **Run Navigation.Physics.Tests** — `--no-build`. Record pass/fail/skip. Target: 666/2/1. | Open |
-| 1.5 | **Run BotRunner.Tests (unit)** — `--filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build`. Target: 1626/0/4. | Open |
-| 1.6 | **Run LiveValidation** — `--filter "FullyQualifiedName~LiveValidation" --no-build --blame-hang --blame-hang-timeout 10m`. Record per-test pass/fail. Target: >57 passing. | Open |
+| 1.1 | **Kill all bot processes** — Clean. | **Done** |
+| 1.2 | **Rebuild everything** — .NET 0 CS errors. Navigation.dll x64, Physics.dll x64+x86 all built. | **Done** |
+| 1.3 | **WoWSharpClient.Tests** — 1417/0/1. **Confirmed.** | **Done** |
+| 1.4 | **Navigation.Physics.Tests** — 666/2/1. **Confirmed.** | **Done** |
+| 1.5 | **BotRunner.Tests (unit)** — 1626/0/4. **Confirmed.** | **Done** |
+| 1.6 | **LiveValidation** — Running in background. Awaiting results. | In progress |
 | 1.7 | **Update baseline table** — Record actual results from R1.3-R1.6. Compare to previous baseline. Flag any regressions. | Open |
 
 ---
