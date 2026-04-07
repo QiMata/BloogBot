@@ -31,26 +31,26 @@
 
 ## R8 — Movement & Communication Fixes (Priority: CRITICAL)
 
-### P1: Scene Data Triangle Quality in Dense Areas
+### P1: Tile-Based Scene Architecture (IN PROGRESS)
 Bot at Org bank (1627,-4376,Z=37) ends up at Z=57 — **on a building roof**. The 50K triangle cap means SceneDataService returns mixed ground+roof+wall triangles for the 600x600y region. Physics capsule sweep finds the roof as "ground" because it's the first surface above teleport Z. `[PHYS][ERR][MOVE] wallHit=1` — bot stuck on roof surrounded by walls.
 
 **Root cause:** SceneDataService sends ALL triangles in AABB (Z=-500 to 2000), capped at 50K. Dense cities like Orgrimmar have 499K+ triangles per region. The 50K sample may include roofs but miss ground.
 
-**Potential fixes:**
-- Filter server-side: prioritize ground-level triangles (walkable=true, low Z) over roofs
-- Increase triangle cap for dense regions
-- Split requests into vertical slices (ground: Z=-10 to Z+10, not -500 to 2000)
-- Or: reduce the grid region size for cities (200y → 100y)
+**Architecture decided:** 533y tiles matching WoW ADT grid. SceneDataService pre-loads .scenetile files, serves by (mapId, tileX, tileY). Bot loads 3×3 neighborhood (~2.3MB/bot). Scales to 3000+ bots.
 
-### P2: Server Position Resets (ACTIVE)
-Server corrects bot position every ~7 seconds (280-295 unit jumps). MovementController detects these as "teleports" and calls Reset(), clearing movement. Bot moves steadily between resets (128y→78y in 45s) but never arrives.
+**Done:**
+- Proto: SceneTileRequest/SceneTileResponse defined
+- Splitter: SceneTileSplitterTests extracts 142 tiles from 5 maps (35s)
+- Server: SceneTileSocketServer pre-loads all tiles, serves by key
+- Coordinate tests: 5 tests for tile mapping
 
-**Root cause:** Server rejects client heartbeat position. The bot's physics-computed position diverges from what the server calculates. Likely: heartbeat Z doesn't match server ground Z, or movement speed exceeds server's expected rate, triggering anti-cheat/position validation.
-
-**Investigation needed:** Compare bot heartbeat packets (position, flags, speed) vs what VMaNGOS expects. Check `MoveHandler.cpp` in VMaNGOS for position validation thresholds.
-
-### P3: SceneDataService Performance & Timing
-Measure: request latency, injection time, frames without geometry after teleport. Verify 16ms physics tick stability under load. First scene data request after teleport takes ~30s (map loading on demand in container).
+**Remaining:**
+- [ ] SceneDataClient: request tiles by (mapId, tileX, tileY) instead of AABB
+- [ ] C++ InjectSceneTriangles: ADD tiles to cache (not replace). Or per-tile SceneCache management.
+- [ ] Bot: track loaded tiles, load new 3×3 on movement, unload distant tiles
+- [ ] Remove SetSceneSliceMode entirely
+- [ ] Docker: copy tiles into container, rebuild + deploy
+- [ ] Tests: tile boundary crossing, tile merge, no regression on physics tests
 
 ---
 
