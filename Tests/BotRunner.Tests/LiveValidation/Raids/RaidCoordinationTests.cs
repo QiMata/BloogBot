@@ -122,14 +122,15 @@ public class RaidCoordinationTests
         var unitCount = snap!.NearbyUnits?.Count ?? 0;
         _output.WriteLine($"[RAID] Nearby units: {unitCount}");
 
-        // Mark targeting via GM command (set skull mark on target)
-        if (unitCount > 0)
-        {
-            var firstUnit = snap.NearbyUnits![0];
-            _output.WriteLine($"[RAID] First nearby unit: {firstUnit.GameObject?.Name}, guid=0x{firstUnit.GameObject?.Base?.Guid:X}");
-        }
+        // Assert nearby units exist — required to test mark targeting
+        Assert.True(unitCount > 0, "Should have nearby units in Orgrimmar for mark targeting");
+        var firstUnit = snap.NearbyUnits![0];
+        _output.WriteLine($"[RAID] First nearby unit: {firstUnit.GameObject?.Name}, guid=0x{firstUnit.GameObject?.Base?.Guid:X}");
 
-        _output.WriteLine("[RAID] Mark targeting test -- raid formed and units visible");
+        // Verify raid is formed (prerequisite for mark targeting)
+        Assert.True(snap.PartyLeaderGuid != 0, "Should be in raid to set marks");
+        _output.WriteLine("[RAID] Raid formed, nearby units visible — mark targeting prerequisites met");
+
         await CleanupRaidAsync(fgAccount!);
     }
 

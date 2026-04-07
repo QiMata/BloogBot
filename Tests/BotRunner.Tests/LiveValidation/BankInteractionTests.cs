@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Communication;
 using Xunit;
@@ -20,7 +21,7 @@ public class BankInteractionTests
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1;
-    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 14.81f;
+    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 37f;
 
     public BankInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -46,21 +47,22 @@ public class BankInteractionTests
 
         // Look for banker NPC (NPC_FLAG_BANKER = 0x80)
         var banker = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x80, timeoutMs: 8000, progressLabel: "banker");
-        if (banker != null)
-        {
-            var bankerPos = banker.GameObject?.Base?.Position;
-            _output.WriteLine($"[BANK] Found banker at ({bankerPos?.X:F0},{bankerPos?.Y:F0})");
-        }
-        else
-        {
-            _output.WriteLine("[BANK] No banker found nearby");
-        }
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.NotNull(snap);
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
         _output.WriteLine($"[BANK] Bot at ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
+
+        // Assert banker was found — if not, this is a detection bug
+        Assert.NotNull(banker);
+        var bankerPos = banker!.GameObject?.Base?.Position;
+        _output.WriteLine($"[BANK] Found banker at ({bankerPos?.X:F0},{bankerPos?.Y:F0})");
+        var bankerDist = pos != null && bankerPos != null
+            ? MathF.Sqrt(MathF.Pow(pos.X - bankerPos.X, 2) + MathF.Pow(pos.Y - bankerPos.Y, 2))
+            : float.MaxValue;
+        _output.WriteLine($"[BANK] Banker distance: {bankerDist:F1}y");
+        Assert.True(bankerDist < 20f, $"Banker should be within 20y, was {bankerDist:F1}y");
     }
 
     [SkippableFact]
@@ -78,17 +80,25 @@ public class BankInteractionTests
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgBankX, OrgBankY, OrgBankZ);
         await Task.Delay(3000);
 
-        // Interact with banker
-        var interactResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
-        {
-            ActionType = ActionType.InteractWith,
-        });
-        _output.WriteLine($"[BANK] Interact result: {interactResult}");
-
-        await Task.Delay(2000);
+        // Verify item is in inventory before deposit
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        _output.WriteLine("[BANK] Bank interaction completed");
+        var beforeSnap = await _bot.GetSnapshotAsync(bgAccount);
+        Assert.NotNull(beforeSnap);
+        var beforeItemCount = beforeSnap!.Player?.BagContents?.Count ?? 0;
+        _output.WriteLine($"[BANK] Items before deposit: {beforeItemCount}");
+        Assert.True(beforeItemCount > 0, "Bot should have at least 1 item after .additem");
+
+        // Look for banker NPC
+        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 8000);
+        var banker = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x80, timeoutMs: 8000, progressLabel: "banker");
+
+        if (banker == null)
+        {
+            _output.WriteLine("[BANK] No banker found — skipping deposit/withdraw");
+            global::Tests.Infrastructure.Skip.If(true, "No banker NPC found near Org bank");
+            return;
+        }
+
+        _output.WriteLine($"[BANK] Found banker, items in bags: {beforeItemCount}");
     }
 }

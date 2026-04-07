@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -55,15 +56,16 @@ public class AuctionHouseTests
 
         // Look for auctioneer NPC (NPC_FLAG_AUCTIONEER = 0x200000)
         var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 8000, progressLabel: "auctioneer");
-        if (auctioneer != null)
-        {
-            var auctPos = auctioneer.GameObject?.Base?.Position;
-            _output.WriteLine($"[AH] Found auctioneer at ({auctPos?.X:F0},{auctPos?.Y:F0})");
-        }
-        else
-        {
-            _output.WriteLine("[AH] No auctioneer found nearby — may need to walk closer");
-        }
+
+        // Assert auctioneer was found — if not, detection or teleport position is wrong
+        Assert.NotNull(auctioneer);
+        var auctPos = auctioneer!.GameObject?.Base?.Position;
+        _output.WriteLine($"[AH] Found auctioneer at ({auctPos?.X:F0},{auctPos?.Y:F0})");
+
+        var auctDist = pos != null && auctPos != null
+            ? MathF.Sqrt(MathF.Pow(pos.X - auctPos.X, 2) + MathF.Pow(pos.Y - auctPos.Y, 2))
+            : float.MaxValue;
+        Assert.True(auctDist < 30f, $"Auctioneer should be within 30y, was {auctDist:F1}y");
     }
 
     [SkippableFact]
@@ -84,10 +86,17 @@ public class AuctionHouseTests
         });
         _output.WriteLine($"[AH] Interact result: {interactResult}");
 
+        // Verify action was accepted
+        Assert.Equal(ResponseResult.Success, interactResult);
+
         await Task.Delay(2000);
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.NotNull(snap);
-        _output.WriteLine("[AH] AH interaction completed");
+        _output.WriteLine("[AH] AH interaction completed, verifying NPC nearby");
+
+        // Verify an auctioneer is nearby (interaction implies proximity)
+        var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 5000, progressLabel: "auctioneer-verify");
+        Assert.NotNull(auctioneer);
     }
 }
