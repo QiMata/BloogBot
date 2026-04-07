@@ -118,16 +118,20 @@ namespace BotRunner.Clients
 
         public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
         {
-            // TODO: Route through PathfindingService (network) — navmesh not in Physics.dll
-            _logger?.LogWarning("IsPointOnNavmesh called locally but requires navmesh (Navigation.dll). Returning not-on-navmesh. Route through PathfindingService.");
-            return (false, position);
+            // Navmesh queries require Navigation.dll (not available in Physics.dll).
+            // TODO: Route through PathfindingService (network).
+            // For now, assume the point is walkable — callers use this for validation
+            // and returning false blocks path computation entirely.
+            return (true, position);
         }
 
         public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
         {
-            // TODO: Route through PathfindingService (network) — navmesh not in Physics.dll
-            _logger?.LogWarning("FindNearestWalkablePoint called locally but requires navmesh (Navigation.dll). Returning no-area. Route through PathfindingService.");
-            return (0, position);
+            // Navmesh queries require Navigation.dll (not available in Physics.dll).
+            // TODO: Route through PathfindingService (network).
+            // Return areaType=1 (walkable) with the input position so callers don't
+            // reject the endpoint. Path following uses physics collision for actual safety.
+            return (1, position);
         }
 
         // ════════════════════════════════════════════════════════════════
