@@ -65,6 +65,14 @@
 | R7.1 | WSG (20 bots) — 12/20 entered MapId 489. Fixed .levelup (bot chat vs SOAP). First BG entry. | Done |
 | R7.2 | AB (30 bots) — 30 entered world, leveled to 20, grouped, queued. Queue didn't pop (server-side). | Done |
 | R7.3 | AV (80 bots) — 37/40 Horde entered world. Alliance not launched (faction support gap). | Done |
+| R8-P1a | GetGroundZ fix — downward ray instead of closest-to-Z. No more roof landing (65→34 Z). | Done |
+| R8-P1b | Scene file extraction — all 34 maps extracted to .scene files (SceneCacheExtractorTests) | Done |
+| R8-P1c | Tile splitter — 142 .scenetile files from 5 maps (533y ADT tiles, 35s extraction) | Done |
+| R8-P1d | SceneTileSocketServer — pre-loads tiles into memory, serves by (mapId, tileX, tileY) key | Done |
+| R8-P1e | SceneTileRequest/Response proto + C# generation | Done |
+| R8-P1f | Tile coordinate tests — 5 tests for WorldToTile/TileBounds mapping | Done |
+| R8-P1g | Docker containers redeployed fresh (pathfinding, scene-data, mangosd) | Done |
+| R8-P1h | SceneDataService: removed mmap loading, .scene/.vmtree discovery only | Done |
 
 ## Completed Task Details
 

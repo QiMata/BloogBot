@@ -12,45 +12,48 @@
 
 ---
 
-## Test Baseline (2026-04-07 — All phases complete)
+## Test Baseline (2026-04-07)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
 | WoWSharpClient.Tests | 1437 | 0 | 1 | +20 SceneData pipeline tests |
-| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing elevator |
+| Navigation.Physics.Tests | 667 | 2 | 1 | +1 extractor test, 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | Confirmed |
 | BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass |
 | WSG (20 bots) | 12/20 entered | — | — | First successful BG entry |
-| AV (80 bots) | 37/40 Horde | — | — | Alliance not launched |
+| Tile coordinate tests | 5 | 0 | 0 | WorldToTile mapping verified |
 
 ---
 
-## R1-R7 — All Complete (see docs/ARCHIVE.md)
+## R1-R7 + R8 partial — Archived (see docs/ARCHIVE.md)
 
 ---
 
-## R8 — Movement & Communication Fixes (Priority: CRITICAL)
+## R8 — Tile-Based Scene Architecture (Priority: CRITICAL — IN PROGRESS)
 
-### P1: Tile-Based Scene Architecture (IN PROGRESS)
-Bot at Org bank (1627,-4376,Z=37) ends up at Z=57 — **on a building roof**. The 50K triangle cap means SceneDataService returns mixed ground+roof+wall triangles for the 600x600y region. Physics capsule sweep finds the roof as "ground" because it's the first surface above teleport Z. `[PHYS][ERR][MOVE] wallHit=1` — bot stuck on roof surrounded by walls.
+**Goal:** Replace AABB-based scene data (50K triangle cap, cache replacement on boundary crossing) with tile-based loading (533y ADT tiles, 3×3 neighborhood, additive merge). Scales to 3000+ bots at ~2.3MB/bot.
 
-**Root cause:** SceneDataService sends ALL triangles in AABB (Z=-500 to 2000), capped at 50K. Dense cities like Orgrimmar have 499K+ triangles per region. The 50K sample may include roofs but miss ground.
+### Completed
+- Proto: `SceneTileRequest/SceneTileResponse` defined + generated
+- Splitter: 142 `.scenetile` files extracted from 5 maps (35s)
+- Server: `SceneTileSocketServer` pre-loads all tiles, serves by key
+- `GetGroundZ` fixed: downward ray (no more roof landing)
+- Tile coordinate tests: 5 tests pass
+- Docker containers redeployed fresh
 
-**Architecture decided:** 533y tiles matching WoW ADT grid. SceneDataService pre-loads .scenetile files, serves by (mapId, tileX, tileY). Bot loads 3×3 neighborhood (~2.3MB/bot). Scales to 3000+ bots.
+### Outstanding
 
-**Done:**
-- Proto: SceneTileRequest/SceneTileResponse defined
-- Splitter: SceneTileSplitterTests extracts 142 tiles from 5 maps (35s)
-- Server: SceneTileSocketServer pre-loads all tiles, serves by key
-- Coordinate tests: 5 tests for tile mapping
-
-**Remaining:**
-- [ ] SceneDataClient: request tiles by (mapId, tileX, tileY) instead of AABB
-- [ ] C++ InjectSceneTriangles: ADD tiles to cache (not replace). Or per-tile SceneCache management.
-- [ ] Bot: track loaded tiles, load new 3×3 on movement, unload distant tiles
-- [ ] Remove SetSceneSliceMode entirely
-- [ ] Docker: copy tiles into container, rebuild + deploy
-- [ ] Tests: tile boundary crossing, tile merge, no regression on physics tests
+| # | Task | Details |
+|---|------|---------|
+| 1 | **SceneDataClient tile requests** | Change from AABB `SceneGridRequest` to tile-based `SceneTileRequest`. Compute 3×3 tile neighborhood from bot position. Request only tiles not already loaded. |
+| 2 | **C++ InjectSceneTriangles: ADD mode** | Currently `SetSceneCache` REPLACES the entire cache. Need additive merge — inject new tile triangles INTO the existing SceneCache without destroying previous tiles. Or: manage per-tile SceneCaches in C++ and query all of them. |
+| 3 | **Bot tile tracking** | Track which tiles are loaded (HashSet of tile keys). On position update, compute needed 3×3, load missing tiles, unload tiles outside 5×5 eviction radius. |
+| 4 | **Remove SetSceneSliceMode** | Delete `SetSceneSliceMode` from NativeLocalPhysics, NativePhysicsInterop, MovementController, SceneQuery. Bot loads tiles directly — no slice mode toggle needed. |
+| 5 | **Docker: tile deployment** | Copy `Data/scenes/tiles/` into SceneDataService container. Rebuild + deploy. Verify tile server starts in tile mode. |
+| 6 | **Tile boundary crossing test** | Bot navigates across a tile boundary (e.g., Orgrimmar → Valley of Trials). Assert: no position teleports, no collision geometry loss, smooth movement. |
+| 7 | **Tile merge correctness test** | Load 3×3 tiles, verify GetGroundZ returns valid Z at all 9 tile centers. Verify no gaps at tile boundaries. |
+| 8 | **Physics regression test** | Run Navigation.Physics.Tests with tile-based loading. All 667 must pass. |
+| 9 | **LiveValidation with tiles** | BasicLoopTests + CornerNav + DualClientParity must pass with tile-based scene data. |
 
 ---
 
@@ -60,8 +63,8 @@ Bot at Org bank (1627,-4376,Z=37) ends up at Z=57 — **on a building roof**. Th
 |---|-------|---------|
 | D1 | **Alliance faction bots** | StateManager doesn't launch AVBOTA* accounts — needs settings support |
 | D2 | **BG queue pop** | AB/AV queued but never popped — server-side BG matching config |
-| D3 | **WSG transfer stalls** | 8/20 bots didn't complete map transfer — timeout or protocol issue |
-| D4 | **Elevator physics** | 2 pre-existing Navigation.Physics.Tests failures — low priority |
+| D3 | **WSG transfer stalls** | 8/20 bots didn't complete map transfer |
+| D4 | **Elevator physics** | 2 pre-existing Navigation.Physics.Tests failures |
 
 ---
 
@@ -85,4 +88,11 @@ dotnet test Tests/WoWSharpClient.Tests/ --configuration Release --filter "Catego
 dotnet test Tests/Navigation.Physics.Tests/ --configuration Release --no-build
 dotnet test Tests/BotRunner.Tests/ --configuration Release --filter "Category!=RequiresInfrastructure&FullyQualifiedName!~LiveValidation" --no-build
 dotnet test Tests/BotRunner.Tests/ --configuration Release --filter "FullyQualifiedName~LiveValidation" --no-build --blame-hang --blame-hang-timeout 10m
+
+# Scene tile splitting
+dotnet test Tests/Navigation.Physics.Tests/ --configuration Release --filter "FullyQualifiedName~SplitSceneFilesIntoTiles" --no-build -v n
+
+# Docker rebuild + deploy
+docker compose -f docker-compose.vmangos-linux.yml build scene-data-service
+docker compose -f docker-compose.vmangos-linux.yml up -d scene-data-service
 ```
