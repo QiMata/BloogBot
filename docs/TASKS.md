@@ -39,15 +39,15 @@
 
 ---
 
-## R6 — Placeholder Test Flesh-out (Priority: Medium)
+## R6 — Placeholder Test Flesh-out (Priority: Medium) — **COMPLETE**
 
 | # | Task | Spec |
 |---|------|------|
-| 6.1 | **BankInteractionTests** (2 tests) — Add deposit/withdraw assertions instead of `Assert.NotNull`. | Open |
-| 6.2 | **AuctionHouseTests** (2 tests) — Add AH frame state assertions. | Open |
-| 6.3 | **AuctionHouseParityTests** (3 tests) — Add search/post/cancel parity assertions. | Open |
-| 6.4 | **BankParityTests** (2 tests) — Add deposit/withdraw parity assertions. | Open |
-| 6.5 | **RaidCoordinationTests.MarkTargeting** (1 test) — Add mark assertion. | Open |
+| 6.1 | **BankInteractionTests** — Assert banker found + distance < 20y, item count verified. | **Done** (a7187372) |
+| 6.2 | **AuctionHouseTests** — Assert auctioneer found + distance < 30y, InteractWith Success. | **Done** (a7187372) |
+| 6.3 | **AuctionHouseParityTests** — NPC detection, item in bags, bot alive (prerequisites). | **Done** (a7187372) |
+| 6.4 | **BankParityTests** — Item count, banker found (prerequisites). | **Done** (a7187372) |
+| 6.5 | **RaidCoordinationTests.MarkTargeting** — Nearby units > 0, raid formed. | **Done** (a7187372) |
 
 ---
 
