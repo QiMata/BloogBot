@@ -53,12 +53,18 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
 
     protected override SceneGridResponse HandleRequest(SceneGridRequest request)
     {
+        _logger.LogInformation("[SceneDataService] HandleRequest: map={Map} bounds=({MinX:F0},{MinY:F0})-({MaxX:F0},{MaxY:F0})",
+            request.MapId, request.MinX, request.MinY, request.MaxX, request.MaxY);
+
         if (!_initialized)
             InitializeNavigation();
 
         var cacheKey = BuildRegionCacheKey(request);
         if (_regionCache.TryGetValue(cacheKey, out var cachedResponse))
+        {
+            _logger.LogInformation("[SceneDataService] Cache hit for {Key}: {Count} triangles", cacheKey, cachedResponse.TriangleCount);
             return CloneResponse(cachedResponse);
+        }
 
         var regionLock = _regionLocks.GetOrAdd(cacheKey, static _ => new object());
         lock (regionLock)

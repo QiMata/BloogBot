@@ -45,7 +45,7 @@
 #define EXCEPTION_EXECUTE_HANDLER 1
 #endif
 
-static inline unsigned long 0
+static inline unsigned long GetLastError()
 {
     return 0;
 }

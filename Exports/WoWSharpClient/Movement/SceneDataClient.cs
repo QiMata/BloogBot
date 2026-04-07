@@ -104,9 +104,14 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
                 MaxY = maxY,
             };
 
+            _logger.LogInformation("[SceneData] Requesting region {Key} from SceneDataService...", regionKey);
+
             var response = TestSendRequestOverride != null
                 ? TestSendRequestOverride(request)
                 : SendMessage(request, SceneDataReadTimeoutMs, SceneDataWriteTimeoutMs, SceneDataConnectTimeoutMs);
+
+            _logger.LogInformation("[SceneData] Response for {Key}: success={Success}, triangles={Count}, error={Error}",
+                regionKey, response.Success, response.TriangleCount, response.ErrorMessage ?? "none");
 
             if (!response.Success || response.TriangleCount == 0)
             {
@@ -123,14 +128,14 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
             _loadedRegionKeys[mapId] = regionKey;
             _nextRetryUtc = DateTime.MinValue;
 
-            _logger.LogInformation("[SceneData] Loaded region {Key}: {Count} triangles",
-                regionKey, response.TriangleCount);
+            _logger.LogInformation("[SceneData] Injected {Count} triangles for region {Key}",
+                response.TriangleCount, regionKey);
             return true;
         }
         catch (Exception ex)
         {
             MarkRetryAfterFailure(now);
-            _logger.LogError(ex, "[SceneData] Failed to request region {Key}", regionKey);
+            _logger.LogError(ex, "[SceneData] FAILED to request region {Key}", regionKey);
             return false;
         }
     }
