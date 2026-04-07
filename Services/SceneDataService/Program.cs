@@ -40,11 +40,33 @@ internal static class Program
             using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
             var logger = loggerFactory.CreateLogger("SceneDataService");
 
+            // Check for tile-based scene data (preferred)
+            var tilesDir = Path.Combine(resolvedDataDir, "scenes", "tiles");
+            var hasTiles = Directory.Exists(tilesDir) && Directory.GetFiles(tilesDir, "*.scenetile").Length > 0;
+
+            if (hasTiles)
+            {
+                WriteStartupInfo($"[SceneDataService] Tile mode: loading .scenetile files from {tilesDir}");
+                using var tileServer = new SceneTileSocketServer(ipAddress, port, logger);
+                WriteStartupInfo($"[SceneDataService] Socket listener bound on {ipAddress}:{port}");
+
+                tileServer.LoadTiles(tilesDir);
+                WriteStartupInfo($"[SceneDataService] Ready and listening on {ipAddress}:{port} (tile mode)");
+
+                using var tileShutdown = new ManualResetEventSlim(false);
+                Console.CancelKeyPress += (_, e) => { e.Cancel = true; tileShutdown.Set(); };
+                AppDomain.CurrentDomain.ProcessExit += (_, _) => tileShutdown.Set();
+                tileShutdown.Wait();
+                return 0;
+            }
+
+            // Fallback: legacy AABB-based server (loads full .scene files)
+            WriteStartupInfo($"[SceneDataService] Legacy mode: no .scenetile files found, using AABB extraction");
             using var server = new SceneDataSocketServer(ipAddress, port, logger);
             WriteStartupInfo($"[SceneDataService] Socket listener bound on {ipAddress}:{port}");
 
             server.InitializeNavigation();
-            WriteStartupInfo($"[SceneDataService] Ready and listening on {ipAddress}:{port}");
+            WriteStartupInfo($"[SceneDataService] Ready and listening on {ipAddress}:{port} (legacy mode)");
 
             using var shutdown = new ManualResetEventSlim(false);
             Console.CancelKeyPress += (_, e) =>
