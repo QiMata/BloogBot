@@ -19,7 +19,7 @@
 | WoWSharpClient.Tests | 1437 | 0 | 1 | +20 SceneData pipeline tests |
 | Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
-| BotRunner.Tests (LiveValidation) | TBD | TBD | TBD | Pending rerun with SceneData fix |
+| BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass. Scene data working. |
 
 ---
 
