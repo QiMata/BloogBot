@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using BotCommLayer;
 using Microsoft.Extensions.Logging;
@@ -7,22 +8,33 @@ using SceneData;
 namespace WoWSharpClient.Movement;
 
 /// <summary>
-/// Client that requests scene collision data from SceneDataService and injects it
-/// into the local Navigation.dll SceneCache. Bots call RequestSceneGrid() when
-/// moving to a new area — the service extracts triangles from VMAP + ADT and
-/// sends them back for local physics use.
+/// Client that requests tile-based scene collision data from SceneDataService and injects
+/// it into the local Navigation.dll SceneCache. Uses 533y ADT tiles with a 3x3
+/// neighborhood around the bot's position. Tiles are cached locally and only
+/// requested when missing. Tiles outside a 5x5 eviction radius are unloaded.
 /// </summary>
-public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, SceneGridResponse>, IDisposable
+public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, SceneTileResponse>, IDisposable
 {
     private const int SceneDataConnectTimeoutMs = 1500;
     private const int SceneDataReadTimeoutMs = 30000;
     private const int SceneDataWriteTimeoutMs = 10000;
     private static readonly TimeSpan SceneDataRetryDelay = TimeSpan.FromSeconds(2);
     private readonly ILogger _logger;
-    private const float GridSize = 200f; // yards per grid tile
-    private readonly Dictionary<uint, string> _loadedRegionKeys = new();
+
+    /// <summary>WoW ADT tile size in yards (64 × 533.33 = 34133.33 total map size).</summary>
+    internal const float TileSize = 533.33333f;
+
+    /// <summary>ADT grid center offset (0-based tile coords centered at 32).</summary>
+    internal const int CenterGrid = 32;
+
+    /// <summary>Per-tile cached triangle data keyed by "mapId_tileX_tileY".</summary>
+    private readonly Dictionary<string, CachedTile> _tileCache = new();
+
+    /// <summary>The tile key of the last injected center tile (for dedup).</summary>
+    private string? _lastCenterTileKey;
+
     internal static Func<uint, float, float, bool>? TestEnsureSceneDataAroundOverride { get; set; }
-    internal static Func<SceneGridRequest, SceneGridResponse>? TestSendRequestOverride { get; set; }
+    internal static Func<SceneTileRequest, SceneTileResponse>? TestSendTileRequestOverride { get; set; }
     internal static Func<DateTime>? TestUtcNowOverride { get; set; }
     /// <summary>Test override: captures injected triangles instead of P/Invoking InjectSceneTriangles.</summary>
     internal static Func<uint, float, float, float, float, NativePhysics.InjectedTriangle[], bool>? TestInjectOverride { get; set; }
@@ -41,118 +53,230 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
     }
 
     /// <summary>
-    /// Request scene data for the grid tile containing the given position.
-    /// If the grid is already loaded, returns immediately.
+    /// Convert world XY position to ADT tile coordinates.
+    /// Formula: tileCoord = CenterGrid - floor(worldCoord / TileSize)
     /// </summary>
-    public bool EnsureSceneDataAt(uint mapId, float x, float y)
+    internal static (uint TileX, uint TileY) WorldToTile(float x, float y)
     {
-        // Quantize position to grid tile
-        float gridMinX = MathF.Floor(x / GridSize) * GridSize;
-        float gridMinY = MathF.Floor(y / GridSize) * GridSize;
-        float gridMaxX = gridMinX + GridSize;
-        float gridMaxY = gridMinY + GridSize;
-
-        string gridKey = $"{mapId}_{gridMinX:F0}_{gridMinY:F0}_{gridMaxX:F0}_{gridMaxY:F0}";
-        return EnsureSceneDataBounds(mapId, gridMinX, gridMinY, gridMaxX, gridMaxY, gridKey);
+        uint tileX = (uint)(CenterGrid - (int)MathF.Floor(x / TileSize));
+        uint tileY = (uint)(CenterGrid - (int)MathF.Floor(y / TileSize));
+        return (tileX, tileY);
     }
 
     /// <summary>
-    /// Request scene data for the area around a position in one bounded swap.
-    /// The local Navigation scene cache is replaced with a 3x3 neighborhood so the
-    /// bot keeps only nearby collision data resident.
+    /// Convert tile coordinates back to world-space bounds.
+    /// </summary>
+    internal static (float MinX, float MinY, float MaxX, float MaxY) TileBounds(uint tileX, uint tileY)
+    {
+        float minX = (CenterGrid - (int)tileX) * TileSize;
+        float minY = (CenterGrid - (int)tileY) * TileSize;
+        return (minX, minY, minX + TileSize, minY + TileSize);
+    }
+
+    /// <summary>
+    /// Ensure scene data is loaded for the 3x3 tile neighborhood around the position.
+    /// Missing tiles are requested from the service. Tiles outside 5x5 are evicted.
+    /// All loaded tiles are merged and injected into Navigation.dll.
     /// </summary>
     public bool EnsureSceneDataAround(uint mapId, float x, float y)
     {
         if (TestEnsureSceneDataAroundOverride != null)
             return TestEnsureSceneDataAroundOverride(mapId, x, y);
 
-        float gridMinX = MathF.Floor(x / GridSize) * GridSize;
-        float gridMinY = MathF.Floor(y / GridSize) * GridSize;
-        float minX = gridMinX - GridSize;
-        float minY = gridMinY - GridSize;
-        float maxX = gridMinX + (2 * GridSize);
-        float maxY = gridMinY + (2 * GridSize);
-        string regionKey = $"{mapId}_{minX:F0}_{minY:F0}_{maxX:F0}_{maxY:F0}";
+        var (centerTileX, centerTileY) = WorldToTile(x, y);
+        string centerKey = $"{mapId}_{centerTileX}_{centerTileY}";
 
-        return EnsureSceneDataBounds(mapId, minX, minY, maxX, maxY, regionKey);
-    }
-
-    private bool EnsureSceneDataBounds(uint mapId, float minX, float minY, float maxX, float maxY, string regionKey)
-    {
-        if (_loadedRegionKeys.TryGetValue(mapId, out var loadedRegionKey)
-            && string.Equals(loadedRegionKey, regionKey, StringComparison.Ordinal))
-        {
+        // If center tile hasn't changed, no work needed
+        if (string.Equals(_lastCenterTileKey, centerKey, StringComparison.Ordinal))
             return true;
-        }
 
         var now = GetUtcNow();
         if (now < _nextRetryUtc)
         {
-            _logger.LogDebug("[SceneData] Skipping region {Key} until retry window opens at {RetryUtc:O}",
-                regionKey, _nextRetryUtc);
+            _logger.LogDebug("[SceneData] Skipping tile request until retry window opens at {RetryUtc:O}",
+                _nextRetryUtc);
             return false;
         }
 
+        // Compute 3x3 neighborhood
+        var neededTiles = new List<(uint TX, uint TY, string Key)>();
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                uint tx = (uint)((int)centerTileX + dx);
+                uint ty = (uint)((int)centerTileY + dy);
+                string key = $"{mapId}_{tx}_{ty}";
+                neededTiles.Add((tx, ty, key));
+            }
+        }
+
+        // Request missing tiles
+        bool anyNewTile = false;
+        bool anyFailure = false;
+        foreach (var (tx, ty, key) in neededTiles)
+        {
+            if (_tileCache.ContainsKey(key))
+                continue;
+
+            try
+            {
+                var request = new SceneTileRequest
+                {
+                    MapId = mapId,
+                    TileX = tx,
+                    TileY = ty,
+                };
+
+                _logger.LogInformation("[SceneData] Requesting tile ({TileX},{TileY}) for map {MapId}...",
+                    tx, ty, mapId);
+
+                var response = TestSendTileRequestOverride != null
+                    ? TestSendTileRequestOverride(request)
+                    : SendMessage(request, SceneDataReadTimeoutMs, SceneDataWriteTimeoutMs, SceneDataConnectTimeoutMs);
+
+                if (!response.Success || response.TriangleCount == 0)
+                {
+                    _logger.LogWarning("[SceneData] Tile ({TileX},{TileY}) empty or failed: {Error}",
+                        tx, ty, response.ErrorMessage ?? "empty");
+                    // Cache empty tile to avoid re-requesting
+                    _tileCache[key] = new CachedTile(mapId, tx, ty, [], 0, 0, 0, 0);
+                    continue;
+                }
+
+                var (minX, minY, maxX, maxY) = TileBounds(tx, ty);
+                // Use bounds from response if available, otherwise compute
+                if (response.MinX != 0 || response.MinY != 0 || response.MaxX != 0 || response.MaxY != 0)
+                {
+                    minX = response.MinX;
+                    minY = response.MinY;
+                    maxX = response.MaxX;
+                    maxY = response.MaxY;
+                }
+
+                _tileCache[key] = new CachedTile(mapId, tx, ty,
+                    UnpackTriangles(response), minX, minY, maxX, maxY);
+                anyNewTile = true;
+
+                _logger.LogInformation("[SceneData] Cached tile ({TileX},{TileY}): {Count} triangles",
+                    tx, ty, response.TriangleCount);
+            }
+            catch (Exception ex)
+            {
+                anyFailure = true;
+                MarkRetryAfterFailure(now);
+                _logger.LogError(ex, "[SceneData] FAILED to request tile ({TileX},{TileY})", tx, ty);
+                break; // Stop requesting on network failure
+            }
+        }
+
+        if (anyFailure && !anyNewTile)
+            return false;
+
+        // Evict tiles outside 5x5 radius
+        EvictDistantTiles(mapId, centerTileX, centerTileY);
+
+        // If we got new tiles, merge and inject all loaded tiles
+        if (anyNewTile || !string.Equals(_lastCenterTileKey, centerKey, StringComparison.Ordinal))
+        {
+            InjectMergedTiles(mapId);
+        }
+
+        _lastCenterTileKey = centerKey;
+        _nextRetryUtc = DateTime.MinValue;
+        return true;
+    }
+
+    /// <summary>
+    /// Request scene data for the grid tile containing the given position (legacy compat).
+    /// </summary>
+    public bool EnsureSceneDataAt(uint mapId, float x, float y)
+        => EnsureSceneDataAround(mapId, x, y);
+
+    private void EvictDistantTiles(uint mapId, uint centerTileX, uint centerTileY)
+    {
+        var toRemove = new List<string>();
+        foreach (var (key, tile) in _tileCache)
+        {
+            if (tile.MapId != mapId)
+                continue;
+
+            int dx = Math.Abs((int)tile.TileX - (int)centerTileX);
+            int dy = Math.Abs((int)tile.TileY - (int)centerTileY);
+            if (dx > 2 || dy > 2) // Outside 5x5 (center +-2)
+                toRemove.Add(key);
+        }
+
+        foreach (var key in toRemove)
+        {
+            _tileCache.Remove(key);
+            _logger.LogDebug("[SceneData] Evicted tile {Key}", key);
+        }
+    }
+
+    private void InjectMergedTiles(uint mapId)
+    {
+        // Compute merged bounds and total triangle count
+        float mergedMinX = float.MaxValue, mergedMinY = float.MaxValue;
+        float mergedMaxX = float.MinValue, mergedMaxY = float.MinValue;
+        int totalCount = 0;
+
+        foreach (var tile in _tileCache.Values)
+        {
+            if (tile.MapId != mapId || tile.Triangles.Length == 0)
+                continue;
+
+            totalCount += tile.Triangles.Length;
+            if (tile.MinX < mergedMinX) mergedMinX = tile.MinX;
+            if (tile.MinY < mergedMinY) mergedMinY = tile.MinY;
+            if (tile.MaxX > mergedMaxX) mergedMaxX = tile.MaxX;
+            if (tile.MaxY > mergedMaxY) mergedMaxY = tile.MaxY;
+        }
+
+        if (totalCount == 0)
+        {
+            _logger.LogWarning("[SceneData] No triangles to inject for map {MapId}", mapId);
+            return;
+        }
+
+        // Merge all tile triangles into one array
+        var merged = new NativePhysics.InjectedTriangle[totalCount];
+        int offset = 0;
+        foreach (var tile in _tileCache.Values)
+        {
+            if (tile.MapId != mapId || tile.Triangles.Length == 0)
+                continue;
+
+            Array.Copy(tile.Triangles, 0, merged, offset, tile.Triangles.Length);
+            offset += tile.Triangles.Length;
+        }
+
+        // Inject into Navigation.dll
+        if (TestInjectOverride != null)
+        {
+            TestInjectOverride(mapId, mergedMinX, mergedMinY, mergedMaxX, mergedMaxY, merged);
+            return;
+        }
+
+        var handle = GCHandle.Alloc(merged, GCHandleType.Pinned);
         try
         {
-            var request = new SceneGridRequest
-            {
-                MapId = mapId,
-                MinX = minX,
-                MinY = minY,
-                MaxX = maxX,
-                MaxY = maxY,
-            };
-
-            _logger.LogInformation("[SceneData] Requesting region {Key} from SceneDataService...", regionKey);
-
-            var response = TestSendRequestOverride != null
-                ? TestSendRequestOverride(request)
-                : SendMessage(request, SceneDataReadTimeoutMs, SceneDataWriteTimeoutMs, SceneDataConnectTimeoutMs);
-
-            _logger.LogInformation("[SceneData] Response for {Key}: success={Success}, triangles={Count}, error={Error}",
-                regionKey, response.Success, response.TriangleCount, response.ErrorMessage ?? "none");
-
-            if (!response.Success || response.TriangleCount == 0)
-            {
-                if (!response.Success)
-                    MarkRetryAfterFailure(now);
-
-                _logger.LogWarning("[SceneData] No triangles for region {Key}: {Error}",
-                    regionKey, response.ErrorMessage ?? "empty");
-                return false;
-            }
-
-            // Inject triangles into local Navigation.dll SceneCache
-            InjectTrianglesIntoLocalCache(mapId, minX, minY, maxX, maxY, response);
-            _loadedRegionKeys[mapId] = regionKey;
-            _nextRetryUtc = DateTime.MinValue;
-
-            _logger.LogInformation("[SceneData] Injected {Count} triangles for region {Key}",
-                response.TriangleCount, regionKey);
-            return true;
+            NativePhysics.InjectSceneTriangles(mapId, mergedMinX, mergedMinY, mergedMaxX, mergedMaxY,
+                handle.AddrOfPinnedObject(), totalCount);
         }
-        catch (Exception ex)
+        finally
         {
-            MarkRetryAfterFailure(now);
-            _logger.LogError(ex, "[SceneData] FAILED to request region {Key}", regionKey);
-            return false;
+            handle.Free();
         }
+
+        _logger.LogInformation("[SceneData] Injected {Count} merged triangles for map {MapId} ({Tiles} tiles)",
+            totalCount, mapId, _tileCache.Count);
     }
 
-    private void MarkRetryAfterFailure(DateTime now)
-    {
-        _nextRetryUtc = now + SceneDataRetryDelay;
-    }
-
-    private static DateTime GetUtcNow()
-        => TestUtcNowOverride?.Invoke() ?? DateTime.UtcNow;
-
-    private void InjectTrianglesIntoLocalCache(uint mapId, float minX, float minY, float maxX, float maxY,
-        SceneGridResponse response)
+    private static NativePhysics.InjectedTriangle[] UnpackTriangles(SceneTileResponse response)
     {
         int count = (int)response.TriangleCount;
-        if (count == 0) return;
+        if (count == 0) return [];
 
         var triangles = new NativePhysics.InjectedTriangle[count];
         for (int i = 0; i < count; i++)
@@ -176,21 +300,20 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneGridRequest, Sce
             };
         }
 
-        if (TestInjectOverride != null)
-        {
-            TestInjectOverride(mapId, minX, minY, maxX, maxY, triangles);
-            return;
-        }
-
-        var handle = GCHandle.Alloc(triangles, GCHandleType.Pinned);
-        try
-        {
-            NativePhysics.InjectSceneTriangles(mapId, minX, minY, maxX, maxY,
-                handle.AddrOfPinnedObject(), count);
-        }
-        finally
-        {
-            handle.Free();
-        }
+        return triangles;
     }
+
+    private void MarkRetryAfterFailure(DateTime now)
+    {
+        _nextRetryUtc = now + SceneDataRetryDelay;
+    }
+
+    private static DateTime GetUtcNow()
+        => TestUtcNowOverride?.Invoke() ?? DateTime.UtcNow;
+
+    /// <summary>Cached tile data for a single 533y ADT tile.</summary>
+    private sealed record CachedTile(
+        uint MapId, uint TileX, uint TileY,
+        NativePhysics.InjectedTriangle[] Triangles,
+        float MinX, float MinY, float MaxX, float MaxY);
 }

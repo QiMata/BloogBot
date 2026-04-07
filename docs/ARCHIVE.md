@@ -2853,3 +2853,28 @@ L1: 57 LiveValidation tests passing (group disband + .gm off + partial readiness
 L2: IsReady fix, 180s timeout, partial readiness
 D1: Physics.dll split, x86/x64 resolver, post-build copy, NavigationDllResolver
 9 Known dungeon/raid fixtures need multi-bot settings (not code bugs)
+
+## R8 — Tile-Based Scene Architecture (Archived 2026-04-07)
+
+### Completed
+- Proto: `SceneTileRequest/SceneTileResponse` defined + generated
+- Splitter: 142 `.scenetile` files extracted from 5 maps (35s)
+- Server: `SceneTileSocketServer` pre-loads all tiles, serves by key
+- `GetGroundZ` fixed: downward ray (no more roof landing)
+- Tile coordinate tests: 5 tests pass
+- Docker containers redeployed fresh
+- **SceneDataClient tile requests** — changed from AABB `SceneGridRequest` to tile-based `SceneTileRequest`. Computes 3x3 tile neighborhood from bot position. Requests only missing tiles.
+- **Bot tile tracking** — per-tile cache with HashSet tracking. On position update, loads missing 3x3 tiles, evicts tiles outside 5x5 radius.
+- **C# tile merge** — merges all cached tile triangles into a single `InjectSceneTriangles` call (no C++ changes needed).
+- **SetSceneSliceMode retained** — still needed to prevent full VMAP preloads (~1GB/map) for headless bots.
+- **Docker tile deployment** — 142 `.scenetile` files copied to `D:/MaNGOS/data/scenes/tiles/`, scene-data-service rebuilt and running in tile mode.
+- **Tile merge correctness tests** — 6 tests: single tile load, full scene ground Z at 3x3 centers, tile boundary continuity, all 142 tile files load.
+- **Physics regression** — 679/682 pass (2 pre-existing elevator failures, 1 skip). No regressions.
+- **WoWSharpClient tests** — 1445 pass, 1 skip. No regressions.
+
+### Test Baseline Updated (2026-04-07)
+| Suite | Passed | Failed | Skipped |
+|-------|--------|--------|---------|
+| WoWSharpClient.Tests | 1445 | 0 | 1 |
+| Navigation.Physics.Tests | 679 | 2 | 1 |
+| BotRunner.Tests (unit) | 430 | 0 | 3 |

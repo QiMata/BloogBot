@@ -16,44 +16,22 @@
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
-| WoWSharpClient.Tests | 1437 | 0 | 1 | +20 SceneData pipeline tests |
-| Navigation.Physics.Tests | 667 | 2 | 1 | +1 extractor test, 2 pre-existing elevator |
-| BotRunner.Tests (unit) | 1626 | 0 | 4 | Confirmed |
-| BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass |
-| WSG (20 bots) | 12/20 entered | — | — | First successful BG entry |
-| Tile coordinate tests | 5 | 0 | 0 | WorldToTile mapping verified |
+| WoWSharpClient.Tests | 1445 | 0 | 1 | +8 tile SceneData tests |
+| Navigation.Physics.Tests | 679 | 2 | 1 | +6 tile merge tests, 2 pre-existing elevator |
+| BotRunner.Tests (unit) | 430 | 0 | 3 | Confirmed |
 
 ---
 
-## R1-R7 + R8 partial — Archived (see docs/ARCHIVE.md)
+## R1-R8 — Archived (see docs/ARCHIVE.md)
 
 ---
 
-## R8 — Tile-Based Scene Architecture (Priority: CRITICAL — IN PROGRESS)
-
-**Goal:** Replace AABB-based scene data (50K triangle cap, cache replacement on boundary crossing) with tile-based loading (533y ADT tiles, 3×3 neighborhood, additive merge). Scales to 3000+ bots at ~2.3MB/bot.
-
-### Completed
-- Proto: `SceneTileRequest/SceneTileResponse` defined + generated
-- Splitter: 142 `.scenetile` files extracted from 5 maps (35s)
-- Server: `SceneTileSocketServer` pre-loads all tiles, serves by key
-- `GetGroundZ` fixed: downward ray (no more roof landing)
-- Tile coordinate tests: 5 tests pass
-- Docker containers redeployed fresh
-
-### Outstanding
+## R9 — Remaining Tile Architecture Work
 
 | # | Task | Details |
 |---|------|---------|
-| 1 | **SceneDataClient tile requests** | Change from AABB `SceneGridRequest` to tile-based `SceneTileRequest`. Compute 3×3 tile neighborhood from bot position. Request only tiles not already loaded. |
-| 2 | **C++ InjectSceneTriangles: ADD mode** | Currently `SetSceneCache` REPLACES the entire cache. Need additive merge — inject new tile triangles INTO the existing SceneCache without destroying previous tiles. Or: manage per-tile SceneCaches in C++ and query all of them. |
-| 3 | **Bot tile tracking** | Track which tiles are loaded (HashSet of tile keys). On position update, compute needed 3×3, load missing tiles, unload tiles outside 5×5 eviction radius. |
-| 4 | **Remove SetSceneSliceMode** | Delete `SetSceneSliceMode` from NativeLocalPhysics, NativePhysicsInterop, MovementController, SceneQuery. Bot loads tiles directly — no slice mode toggle needed. |
-| 5 | **Docker: tile deployment** | Copy `Data/scenes/tiles/` into SceneDataService container. Rebuild + deploy. Verify tile server starts in tile mode. |
-| 6 | **Tile boundary crossing test** | Bot navigates across a tile boundary (e.g., Orgrimmar → Valley of Trials). Assert: no position teleports, no collision geometry loss, smooth movement. |
-| 7 | **Tile merge correctness test** | Load 3×3 tiles, verify GetGroundZ returns valid Z at all 9 tile centers. Verify no gaps at tile boundaries. |
-| 8 | **Physics regression test** | Run Navigation.Physics.Tests with tile-based loading. All 667 must pass. |
-| 9 | **LiveValidation with tiles** | BasicLoopTests + CornerNav + DualClientParity must pass with tile-based scene data. |
+| 1 | **Tile boundary crossing test (live)** | Bot navigates across a tile boundary (e.g., Orgrimmar → Valley of Trials). Assert: no position teleports, no collision geometry loss, smooth movement. Requires LiveValidation infrastructure. |
+| 2 | **LiveValidation with tiles** | BasicLoopTests + CornerNav + DualClientParity must pass with tile-based scene data. |
 
 ---
 

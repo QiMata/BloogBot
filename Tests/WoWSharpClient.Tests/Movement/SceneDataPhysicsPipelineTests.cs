@@ -12,8 +12,8 @@ using WoWSharpClient.Movement;
 namespace WoWSharpClient.Tests.Movement;
 
 /// <summary>
-/// Integration tests for the MovementController → SceneDataClient → NativeLocalPhysics pipeline.
-/// Verifies that scene triangles flow from SceneDataService response through protobuf
+/// Integration tests for the MovementController -> SceneDataClient -> NativeLocalPhysics pipeline.
+/// Verifies that scene triangles flow from SceneDataService tile responses through protobuf
 /// deserialization into InjectedTriangle structs, and that the physics step receives
 /// correct scene-backed input when scene slice mode is enabled.
 ///
@@ -56,10 +56,47 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         NativeLocalPhysics.TestPreloadMapOverride = null;
         NativeLocalPhysics.TestSetDataDirectoryOverride = null;
         NativeLocalPhysics.TestResolveDataDirectoryOverride = null;
-        SceneDataClient.TestSendRequestOverride = null;
+        SceneDataClient.TestSendTileRequestOverride = null;
         SceneDataClient.TestEnsureSceneDataAroundOverride = null;
         SceneDataClient.TestInjectOverride = null;
         SceneDataClient.TestUtcNowOverride = null;
+    }
+
+    /// <summary>Build a tile response with the given triangles for any tile request.</summary>
+    private static SceneTileResponse BuildTileResponse(SceneTileRequest req, params (float[] verts, float[] normal, bool walkable)[] triangles)
+    {
+        var response = new SceneTileResponse
+        {
+            MapId = req.MapId,
+            TileX = req.TileX,
+            TileY = req.TileY,
+            Success = true,
+            TriangleCount = (uint)triangles.Length,
+        };
+
+        var (minX, minY, maxX, maxY) = SceneDataClient.TileBounds(req.TileX, req.TileY);
+        response.MinX = minX;
+        response.MinY = minY;
+        response.MaxX = maxX;
+        response.MaxY = maxY;
+
+        foreach (var (verts, normal, walkable) in triangles)
+        {
+            response.TriangleData.AddRange(verts);
+            response.NormalData.AddRange(normal);
+            response.Walkable.Add(walkable);
+        }
+
+        return response;
+    }
+
+    /// <summary>Build a tile response with a single flat ground triangle.</summary>
+    private static SceneTileResponse BuildGroundTileResponse(SceneTileRequest req)
+    {
+        return BuildTileResponse(req,
+            (new float[] { 1620, -4380, 34, 1640, -4380, 34, 1630, -4360, 34 },
+             new float[] { 0, 0, 1 },
+             true));
     }
 
     // =========================================================================
@@ -153,55 +190,40 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     }
 
     // =========================================================================
-    // 3. Full pipeline: SceneDataService response → triangle unpacking → inject
+    // 3. Full pipeline: SceneDataService tile response -> triangle unpacking -> inject
     // =========================================================================
 
     [Fact]
-    public void Pipeline_ResponseTriangles_UnpackedCorrectlyToInjectedTriangleStructs()
+    public void Pipeline_TileResponseTriangles_UnpackedCorrectlyToInjectedTriangleStructs()
     {
         NativePhysics.InjectedTriangle[]? capturedTriangles = null;
         uint capturedMapId = 0;
 
-        // Build a realistic scene response with 3 triangles
-        SceneDataClient.TestSendRequestOverride = request =>
+        // Build tile responses with 3 triangles (on the center tile)
+        SceneDataClient.TestSendTileRequestOverride = request =>
         {
-            var response = new SceneGridResponse
+            // Only center tile (29,41) gets triangles; others empty
+            var (cx, cy) = SceneDataClient.WorldToTile(1629f, -4373f);
+            if (request.TileX == cx && request.TileY == cy)
             {
-                MapId = request.MapId,
-                MinX = request.MinX, MinY = request.MinY,
-                MaxX = request.MaxX, MaxY = request.MaxY,
-                Success = true,
-                TriangleCount = 3,
+                return BuildTileResponse(request,
+                    // Triangle 0: flat ground at Z=34
+                    (new float[] { 1620, -4380, 34, 1640, -4380, 34, 1630, -4360, 34 },
+                     new float[] { 0, 0, 1 }, true),
+                    // Triangle 1: sloped terrain
+                    (new float[] { 1640, -4380, 34, 1660, -4380, 38, 1650, -4360, 36 },
+                     new float[] { 0, -0.2f, 0.98f }, true),
+                    // Triangle 2: wall (non-walkable)
+                    (new float[] { 1620, -4380, 34, 1620, -4380, 40, 1620, -4360, 37 },
+                     new float[] { 1, 0, 0 }, false)
+                );
+            }
+
+            return new SceneTileResponse
+            {
+                MapId = request.MapId, TileX = request.TileX, TileY = request.TileY,
+                Success = true, TriangleCount = 0,
             };
-
-            // Triangle 0: flat ground at Z=34 centered at (1629, -4373)
-            response.TriangleData.AddRange(new float[] {
-                1620, -4380, 34,   // V0
-                1640, -4380, 34,   // V1
-                1630, -4360, 34,   // V2
-            });
-            response.NormalData.AddRange(new float[] { 0, 0, 1 }); // Up-facing
-            response.Walkable.Add(true);
-
-            // Triangle 1: sloped terrain
-            response.TriangleData.AddRange(new float[] {
-                1640, -4380, 34,   // V0
-                1660, -4380, 38,   // V1
-                1650, -4360, 36,   // V2
-            });
-            response.NormalData.AddRange(new float[] { 0, -0.2f, 0.98f });
-            response.Walkable.Add(true);
-
-            // Triangle 2: wall (non-walkable)
-            response.TriangleData.AddRange(new float[] {
-                1620, -4380, 34,   // V0
-                1620, -4380, 40,   // V1
-                1620, -4360, 37,   // V2
-            });
-            response.NormalData.AddRange(new float[] { 1, 0, 0 }); // X-facing wall
-            response.Walkable.Add(false);
-
-            return response;
         };
 
         // Capture injected triangles
@@ -258,22 +280,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
 
         NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
 
-        // Mock scene data service response
-        SceneDataClient.TestSendRequestOverride = request =>
+        // Mock scene data service tile response
+        SceneDataClient.TestSendTileRequestOverride = request =>
         {
             sceneDataRequested = true;
-            var r = new SceneGridResponse
-            {
-                MapId = request.MapId,
-                MinX = request.MinX, MinY = request.MinY,
-                MaxX = request.MaxX, MaxY = request.MaxY,
-                Success = true,
-                TriangleCount = 1,
-            };
-            r.TriangleData.AddRange(new float[] { 1620, -4380, 34, 1640, -4380, 34, 1630, -4360, 34 });
-            r.NormalData.AddRange(new float[] { 0, 0, 1 });
-            r.Walkable.Add(true);
-            return r;
+            return BuildGroundTileResponse(request);
         };
 
         // Capture inject call (prevents P/Invoke)
@@ -285,7 +296,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             capturedPhysicsInput = input;
             return new NativePhysics.PhysicsOutput
             {
-                X = input.X, Y = input.Y, Z = 34f, // Snap to ground
+                X = input.X, Y = input.Y, Z = 34f,
                 GroundZ = 34f, GroundNz = 1f,
                 MoveFlags = input.MoveFlags & ~(uint)MovementFlags.MOVEFLAG_FALLINGFAR,
             };
@@ -294,16 +305,12 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         var sceneClient = new SceneDataClient(Mock.Of<ILogger>());
         var controller = new MovementController(_mockClient.Object, _player, sceneClient);
 
-        // Player at Z=50, ground at Z=34 → should be falling
         _player.Position = new Position(1629f, -4373f, 50f);
         _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
         controller.Update(0.016f, 1000);
 
-        // Scene data was requested
         Assert.True(sceneDataRequested);
-
-        // Physics received the player's position
         Assert.NotNull(capturedPhysicsInput);
         Assert.Equal(1629f, capturedPhysicsInput!.Value.X);
         Assert.Equal(-4373f, capturedPhysicsInput.Value.Y);
@@ -311,7 +318,6 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         Assert.Equal(1u, capturedPhysicsInput.Value.MapId);
         Assert.Equal(0.016f, capturedPhysicsInput.Value.DeltaTime, precision: 3);
 
-        // Player position updated by physics output
         Assert.Equal(34f, _player.Position.Z);
     }
 
@@ -323,21 +329,10 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
 
         NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
 
-        SceneDataClient.TestSendRequestOverride = request =>
+        SceneDataClient.TestSendTileRequestOverride = request =>
         {
             sceneRequestCount++;
-            var r = new SceneGridResponse
-            {
-                MapId = request.MapId,
-                MinX = request.MinX, MinY = request.MinY,
-                MaxX = request.MaxX, MaxY = request.MaxY,
-                Success = true,
-                TriangleCount = 1,
-            };
-            r.TriangleData.AddRange(new float[] { 1620, -4380, 34, 1640, -4380, 34, 1630, -4360, 34 });
-            r.NormalData.AddRange(new float[] { 0, 0, 1 });
-            r.Walkable.Add(true);
-            return r;
+            return BuildGroundTileResponse(request);
         };
 
         SceneDataClient.TestInjectOverride = (_, _, _, _, _, _) => true;
@@ -362,9 +357,8 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         for (int i = 0; i < 10; i++)
             controller.Update(0.016f, (uint)(1000 + i * 16));
 
-        // Scene data requested only once (position hasn't moved 100+ yards)
-        Assert.Equal(1, sceneRequestCount);
-        // But physics ran every frame
+        // Scene data requested once for 9 tiles (3x3 neighborhood), not per frame
+        Assert.Equal(9, sceneRequestCount);
         Assert.Equal(10, physicsStepCount);
     }
 
@@ -379,7 +373,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     [InlineData(1000)]
     public void ProtobufResponse_TriangleDataSizing_MatchesCount(int triangleCount)
     {
-        var response = new SceneGridResponse
+        var response = new SceneTileResponse
         {
             MapId = 1,
             Success = true,
@@ -399,7 +393,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     }
 
     // =========================================================================
-    // 6. SceneData failure → physics still runs (graceful degradation)
+    // 6. SceneData failure -> physics still runs (graceful degradation)
     // =========================================================================
 
     [Fact]
@@ -410,15 +404,15 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
 
         // Scene data fails
-        SceneDataClient.TestSendRequestOverride = _ =>
-            new SceneGridResponse { Success = false, ErrorMessage = "service down" };
+        SceneDataClient.TestSendTileRequestOverride = _ =>
+            new SceneTileResponse { Success = false, ErrorMessage = "service down" };
 
         NativeLocalPhysics.TestStepOverride = input =>
         {
             physicsStepCount++;
             return new NativePhysics.PhysicsOutput
             {
-                X = input.X, Y = input.Y, Z = input.Z - 1f, // Fall
+                X = input.X, Y = input.Y, Z = input.Z - 1f,
                 GroundZ = -200000f, GroundNz = 1f,
                 MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
                 FallTime = 50,
@@ -431,7 +425,6 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
         controller.Update(0.016f, 1000);
 
-        // Physics still ran despite scene data failure
         Assert.Equal(1, physicsStepCount);
     }
 }
