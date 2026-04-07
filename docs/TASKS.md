@@ -29,25 +29,27 @@
 
 ---
 
-## Outstanding — Open Issues
+## R8 — Movement & Communication Fixes (Priority: CRITICAL)
 
-### P1: Alliance Faction Bot Support
-StateManager does not launch Alliance accounts (AVBOTA1-40). AV and AB tests cannot form both factions. Needs: StateManager settings to support Alliance race character creation and launch.
+### P1: GoTo Z Alignment
+`BuildGoToSequence` pathfinding returns navmesh waypoints at navmesh Z (~34y) but bot physics ground is at a different Z (~37y). `MoveToward` sets waypoint below bot → stuck detection fires immediately. **Fix:** snap navmesh waypoint Z to physics ground Z before passing to MovementController.
 
-### P2: BG Queue Pop
-AB (15v15) and AV (40v40) queued but never popped. VMaNGOS BG queue may need server-side config: minimum player count override, or `.bg start` GM command to force-start.
+### P2: Server Position Resets
+During TravelTo navigation, bot occasionally snaps back to teleport origin (seen as 74y→106y jump at 45s). Likely server-side position correction rejecting client movement. **Fix:** investigate whether movement packets are being rejected by VMaNGOS anti-cheat or position validation. May need to match WoW.exe heartbeat timing/format.
 
-### P3: WSG Transfer Stalls
-8/20 bots stalled during WSG map transfer (stale timeout). May need longer `WaitForBgEntryAsync` timeout, or investigation into why some bots don't complete `SMSG_TRANSFER_PENDING` → `SMSG_NEW_WORLD` sequence.
+### P3: SceneDataService Performance & Timing
+Scene data fetch + inject takes unknown time. If physics runs frames before scene data arrives, bot falls through world. Measure: request latency, triangle injection time, frames without geometry after teleport. Verify 16ms physics tick is stable under load.
 
-### P4: GoTo Z Alignment
-`BuildGoToSequence` pathfinding returns navmesh waypoints at navmesh Z (~34y) but bot physics ground is at a different Z (~37y). `MoveToward` sets waypoint below bot → stuck detection fires immediately. Needs: snap navmesh waypoint Z to physics ground Z before passing to MovementController.
+---
 
-### P5: Server Position Resets
-During TravelTo navigation, bot occasionally snaps back to teleport origin (seen as 74y→106y jump at 45s). Likely server-side position correction rejecting client movement. Needs: investigate whether movement packets are being rejected by VMaNGOS anti-cheat or position validation.
+## Deferred Issues
 
-### P6: Navigation.Physics.Tests Elevator Failures (2)
-Two pre-existing elevator test failures in Navigation.Physics.Tests. Low priority — elevator physics edge case, not regression.
+| # | Issue | Details |
+|---|-------|---------|
+| D1 | **Alliance faction bots** | StateManager doesn't launch AVBOTA* accounts — needs settings support |
+| D2 | **BG queue pop** | AB/AV queued but never popped — server-side BG matching config |
+| D3 | **WSG transfer stalls** | 8/20 bots didn't complete map transfer — timeout or protocol issue |
+| D4 | **Elevator physics** | 2 pre-existing Navigation.Physics.Tests failures — low priority |
 
 ---
 
