@@ -52,7 +52,6 @@ internal static class NativePhysics
         public float V0X, V0Y, V0Z;
         public float V1X, V1Y, V1Z;
         public float V2X, V2Y, V2Z;
-        public float NX, NY, NZ;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -222,20 +222,10 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         Assert.Equal(1630f, capturedTriangles[0].V2X);
         Assert.Equal(-4360f, capturedTriangles[0].V2Y);
         Assert.Equal(34f, capturedTriangles[0].V2Z);
-        Assert.Equal(0f, capturedTriangles[0].NX);
-        Assert.Equal(0f, capturedTriangles[0].NY);
-        Assert.Equal(1f, capturedTriangles[0].NZ);
 
-        // Triangle 1: sloped
+        // Triangle 1: sloped vertices
         Assert.Equal(1660f, capturedTriangles[1].V1X);
         Assert.Equal(38f, capturedTriangles[1].V1Z);
-        Assert.Equal(-0.2f, capturedTriangles[1].NY, precision: 2);
-        Assert.Equal(0.98f, capturedTriangles[1].NZ, precision: 2);
-
-        // Triangle 2: wall normal
-        Assert.Equal(1f, capturedTriangles[2].NX);
-        Assert.Equal(0f, capturedTriangles[2].NY);
-        Assert.Equal(0f, capturedTriangles[2].NZ);
     }
 
     // =========================================================================

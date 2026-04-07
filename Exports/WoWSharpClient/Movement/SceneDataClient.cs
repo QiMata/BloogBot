@@ -282,7 +282,6 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         for (int i = 0; i < count; i++)
         {
             int tBase = i * 9;
-            int nBase = i * 3;
             triangles[i] = new NativePhysics.InjectedTriangle
             {
                 V0X = response.TriangleData[tBase + 0],
@@ -294,9 +293,6 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
                 V2X = response.TriangleData[tBase + 6],
                 V2Y = response.TriangleData[tBase + 7],
                 V2Z = response.TriangleData[tBase + 8],
-                NX = response.NormalData[nBase + 0],
-                NY = response.NormalData[nBase + 1],
-                NZ = response.NormalData[nBase + 2],
             };
         }
 

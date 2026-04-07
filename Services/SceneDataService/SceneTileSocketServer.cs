@@ -171,24 +171,10 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
             uint sourceType = reader.ReadUInt32();
             uint instanceId = reader.ReadUInt32();
 
-            // Pack as 9 floats (V0=a, V1=b, V2=c)
+            // Vertices only — normals not needed (C++ recomputes from vertices)
             response.TriangleData.Add(ax); response.TriangleData.Add(ay); response.TriangleData.Add(az);
             response.TriangleData.Add(bx); response.TriangleData.Add(by); response.TriangleData.Add(bz);
             response.TriangleData.Add(cx); response.TriangleData.Add(cy); response.TriangleData.Add(cz);
-
-            // Compute normal from triangle vertices
-            float e1x = bx - ax, e1y = by - ay, e1z = bz - az;
-            float e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
-            float nx = e1y * e2z - e1z * e2y;
-            float ny = e1z * e2x - e1x * e2z;
-            float nz = e1x * e2y - e1y * e2x;
-            float len = MathF.Sqrt(nx * nx + ny * ny + nz * nz);
-            if (len > 1e-8f) { nx /= len; ny /= len; nz /= len; }
-            else { nx = 0; ny = 0; nz = 1; }
-            response.NormalData.Add(nx); response.NormalData.Add(ny); response.NormalData.Add(nz);
-
-            // Walkable if normal Z >= 0.5 (walkable slope threshold)
-            response.Walkable.Add(nz >= 0.5f);
         }
 
         return response;

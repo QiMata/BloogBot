@@ -106,7 +106,6 @@ public:
         float v0x, v0y, v0z;
         float v1x, v1y, v1z;
         float v2x, v2y, v2z;
-        float nx, ny, nz;
     };
     void InjectTriangles(float minX, float minY, float maxX, float maxY,
                          const InjectedTriangle* triangles, int count);
