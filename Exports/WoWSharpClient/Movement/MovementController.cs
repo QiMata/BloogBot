@@ -473,6 +473,11 @@ namespace WoWSharpClient.Movement
                 return true;
             }
 
+            var refreshDist = float.IsNaN(_lastSceneRefreshX) ? float.NaN
+                : MathF.Sqrt((dx * dx) + (dy * dy));
+            Log.Information("[MovementController] SceneData refresh triggered: pos=({X:F1},{Y:F1}), lastRefresh=({LX:F1},{LY:F1}), dist={Dist:F1}",
+                _player.Position.X, _player.Position.Y, _lastSceneRefreshX, _lastSceneRefreshY, refreshDist);
+
             if (!_sceneDataClient.EnsureSceneDataAround(_player.MapId, _player.Position.X, _player.Position.Y))
             {
                 Log.Warning("[MovementController] SceneData refresh failed for map {MapId} at ({X:F1},{Y:F1})",
