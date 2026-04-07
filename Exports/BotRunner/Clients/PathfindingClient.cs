@@ -98,7 +98,7 @@ namespace BotRunner.Clients
         //  LOCAL: Physics, GroundZ, LOS, Navmesh queries (Navigation.dll)
         // ═══════════════════════════════════════��════════════════════════
 
-        private const string NavigationDll = "Navigation";
+        private const string NavigationDll = "Physics";
 
         [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
         private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
