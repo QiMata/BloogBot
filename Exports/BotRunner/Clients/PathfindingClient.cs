@@ -23,6 +23,12 @@ namespace BotRunner.Clients
         private readonly int _pathRequestTimeoutMs;
         private int _consecutiveFailures;
 
+        /// <summary>
+        /// True when Physics.dll is available for local spatial queries (BG bots).
+        /// False in FG bots (running inside WoW.exe — game handles physics natively).
+        /// </summary>
+        private readonly bool _hasLocalPhysics;
+
         public PathfindingClient() : this(DefaultPathRequestTimeoutMs) { }
 
         protected PathfindingClient(int pathRequestTimeoutMs) : base()
@@ -32,11 +38,13 @@ namespace BotRunner.Clients
 
         public PathfindingClient(
             string ipAddress, int port, ILogger logger,
-            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs)
+            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs,
+            bool hasLocalPhysics = false)
             : base(ipAddress, port, logger)
         {
             _logger = logger;
             _pathRequestTimeoutMs = pathRequestTimeoutMs;
+            _hasLocalPhysics = hasLocalPhysics;
         }
 
         public bool IsAvailable => _consecutiveFailures == 0;
@@ -97,8 +105,11 @@ namespace BotRunner.Clients
         // ═══════════════════════════════════════════════════════════════
 
         public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
-            => WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
+        {
+            if (!_hasLocalPhysics) return (0f, false);
+            return WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
                 mapId, position.X, position.Y, position.Z, maxSearchDist);
+        }
 
         public virtual (float groundZ, bool found)[] BatchGetGroundZ(uint mapId, Position[] positions, float maxSearchDist = 10.0f)
         {
@@ -109,28 +120,30 @@ namespace BotRunner.Clients
         }
 
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
-            => WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
+        {
+            if (!_hasLocalPhysics) return true; // No local collision data — assume clear LOS
+            return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
                 mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
+        }
 
         public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
-            => WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
+        {
+            if (!_hasLocalPhysics) return false;
+            return WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
                 mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
+        }
 
         public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
         {
-            // Navmesh queries require Navigation.dll (not available in Physics.dll).
+            // Navmesh not available locally (Physics.dll has no mmaps).
             // TODO: Route through PathfindingService (network).
-            // For now, assume the point is walkable — callers use this for validation
-            // and returning false blocks path computation entirely.
             return (true, position);
         }
 
         public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
         {
-            // Navmesh queries require Navigation.dll (not available in Physics.dll).
+            // Navmesh not available locally (Physics.dll has no mmaps).
             // TODO: Route through PathfindingService (network).
-            // Return areaType=1 (walkable) with the input position so callers don't
-            // reject the endpoint. Path following uses physics collision for actual safety.
             return (1, position);
         }
 
