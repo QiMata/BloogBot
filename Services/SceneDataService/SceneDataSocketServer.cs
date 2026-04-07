@@ -27,28 +27,37 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         _logger = logger;
     }
 
+    private readonly object _initLock = new();
+
     public void InitializeNavigation()
     {
-        if (_initialized) return;
-
-        // Set data directory from environment before loading maps
-        var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
-        if (!string.IsNullOrEmpty(dataDir))
+        lock (_initLock)
         {
-            _logger.LogInformation("[SceneDataService] Setting data directory: {DataDir}", dataDir);
-            NativeScene.SetDataDirectory(dataDir);
-        }
+            if (_initialized) return;
 
-        _preloadedMapIds = DiscoverMapIds(dataDir);
-        foreach (var mapId in _preloadedMapIds)
-        {
-            NativeScene.PreloadMap(mapId);
-        }
+            // Set data directory from environment before loading maps
+            var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+            if (!string.IsNullOrEmpty(dataDir))
+            {
+                _logger.LogInformation("[SceneDataService] Setting data directory: {DataDir}", dataDir);
+                NativeScene.SetDataDirectory(dataDir);
+            }
 
-        _initialized = true;
-        _logger.LogInformation("[SceneDataService] Navigation initialized for {Count} maps: {Maps}",
-            _preloadedMapIds.Count,
-            string.Join(", ", _preloadedMapIds));
+            _preloadedMapIds = DiscoverMapIds(dataDir);
+            _logger.LogInformation("[SceneDataService] Discovered {Count} maps to preload: {Maps}",
+                _preloadedMapIds.Count, string.Join(", ", _preloadedMapIds));
+
+            foreach (var mapId in _preloadedMapIds)
+            {
+                _logger.LogInformation("[SceneDataService] Preloading map {MapId}...", mapId);
+                NativeScene.PreloadMap(mapId);
+                _logger.LogInformation("[SceneDataService] Map {MapId} preloaded.", mapId);
+            }
+
+            _initialized = true;
+            _logger.LogInformation("[SceneDataService] Navigation initialized for {Count} maps.",
+                _preloadedMapIds.Count);
+        }
     }
 
     protected override SceneGridResponse HandleRequest(SceneGridRequest request)
