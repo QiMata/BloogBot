@@ -8,7 +8,7 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 internal static class AlteracValleyLoadoutPlan
 {
     internal const int TargetLevel = 60;
-    internal const int PvPRankForLoadout = 18;
+    internal const int PvPRankForLoadout = 14; // Grand Marshal / High Warlord (Vanilla max)
     internal const uint RidingSkillId = 762;
     internal const uint ApprenticeRidingSpellId = 33389;
     internal const int EpicRidingSkill = 150;
