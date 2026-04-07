@@ -63,12 +63,13 @@ public class BattlegroundCoordinator
         _stagingTargets = stagingTargets
             ?? new Dictionary<string, StagingTarget>(StringComparer.OrdinalIgnoreCase);
 
-        _logger.LogInformation(
-            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}",
+        _logger.LogWarning(
+            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}, StagingTargets={Staging}",
             leaderAccount,
             _memberAccounts.Count,
             bgTypeId,
-            bgMapId);
+            bgMapId,
+            _stagingTargets.Count);
     }
 
     public ActionMessage? GetAction(
@@ -134,19 +135,19 @@ public class BattlegroundCoordinator
         {
             if (_tickCount % 20 == 1)
             {
-                _logger.LogInformation(
+                _logger.LogWarning(
                     "BG_COORD: Waiting for bots (ready={Ready}/{Total}, staged={Staged}/{Total}). Pending: {Pending}",
                     ready,
                     total,
                     staged,
                     total,
-                    string.Join(", ", pendingAccounts));
+                    string.Join(", ", pendingAccounts.Take(10)));
             }
 
             return null;
         }
 
-        _logger.LogInformation(
+        _logger.LogWarning(
             "BG_COORD: {Ready}/{Total} bots staged at battlemaster areas. Starting BG queue.",
             ready,
             total);

@@ -66,36 +66,27 @@ public class AlteracValleyTests
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
+    /// <summary>
+    /// Single AV integration test: enter world → prep loadout → queue individually → enter BG →
+    /// mount → reach first objective positions. Covers the full 80-bot (40v40) pipeline.
+    /// </summary>
     [SkippableFact]
-    public async Task AV_AllBotsEnterWorld()
+    public async Task AV_FullMatch_EnterPrepQueueMountAndReachObjective()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
         if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
             await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
-        await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
-    }
 
-    [SkippableFact]
-    public async Task AV_QueueAndEnterBattleground()
-    {
-        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
-        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
-            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
-        await _bot.EnsurePreparedAsync();
+        // Phase 1: All 80 bots enter world
         await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
-        await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, AlteracValleyFixture.TotalBotCount, "AV");
-    }
 
-    [SkippableFact]
-    public async Task AV_FullyPreparedRaids_MountAndReachFirstObjective()
-    {
-        Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
-        if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
-            await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
+        // Phase 2: Loadout prep (level, gear, elixirs, mount item)
         await _bot.EnsureObjectivePreparedAsync();
-        await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
+
+        // Phase 3: Queue and enter AV instance (individual queue — no group queue to avoid anticheat)
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, AlteracValleyFixture.TotalBotCount, "AV");
 
+        // Phase 4: Disable coordinator push, mount up
         Assert.Equal(ResponseResult.Success, await _bot.SetCoordinatorEnabledForObjectivePushAsync(false));
         await Task.Delay(TimeSpan.FromSeconds(2));
 
@@ -107,6 +98,7 @@ public class AlteracValleyTests
             expectedMounted: AlteracValleyFixture.TotalBotCount,
             phaseName: "AV:Mount");
 
+        // Phase 5: Move to first objective positions
         var assignments = _bot.BuildFirstObjectiveAssignments();
         foreach (var account in AlteracValleyFixture.HordeAccountsOrdered.Concat(AlteracValleyFixture.AllianceAccountsOrdered))
         {

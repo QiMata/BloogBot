@@ -656,7 +656,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         }
     }
 
-    private async Task ResetBattlegroundStateAsync(
+    protected async Task ResetBattlegroundStateAsync(
         IReadOnlyCollection<string> accounts,
         string label)
     {
@@ -703,7 +703,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         }
     }
 
-    private async Task EnsureAccountsStagedAtLocationAsync(
+    protected async Task EnsureAccountsStagedAtLocationAsync(
         IReadOnlyCollection<string> accounts,
         TeleportTarget target,
         string label)
@@ -821,14 +821,40 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         // SOAP .character level only updates DB; for online characters the
         // in-memory level stays at 1. Bot chat .levelup applies immediately
         // because it executes in the game client context.
+        // IMPORTANT: .levelup adds N levels to CURRENT level — must compute delta.
+        var overLeveledCount = 0;
         foreach (var snapshot in AllBots)
         {
-            var levelsToAdd = targetLevel - 1; // .levelup adds N levels to current
-            if (levelsToAdd > 0)
+            var currentLevel = (int)(snapshot.Player?.Unit?.GameObject?.Level ?? 1);
+            var account = snapshot.AccountName ?? snapshot.CharacterName;
+
+            if (currentLevel > targetLevel)
             {
-                var account = snapshot.AccountName ?? snapshot.CharacterName;
-                await SendGmChatCommandAsync(account, $".levelup {levelsToAdd}");
+                // Over-leveled from a previous run. Use .reset level (resets to 1) then re-level.
+                Console.WriteLine($"[PREP] {account} is level {currentLevel} > target {targetLevel}. Resetting to 1.");
+                await SendGmChatCommandAsync(account, ".reset level");
+                overLeveledCount++;
             }
+        }
+
+        if (overLeveledCount > 0)
+        {
+            // Wait for reset level to take effect on server + refresh snapshots
+            await Task.Delay(2000);
+            await RefreshSnapshotsAsync();
+        }
+
+        foreach (var snapshot in AllBots)
+        {
+            var currentLevel = (int)(snapshot.Player?.Unit?.GameObject?.Level ?? 1);
+            var account = snapshot.AccountName ?? snapshot.CharacterName;
+
+            if (currentLevel >= targetLevel)
+                continue;
+
+            var levelsToAdd = targetLevel - currentLevel;
+            Console.WriteLine($"[PREP] .levelup {levelsToAdd} for {account} (current={currentLevel}, target={targetLevel})");
+            await SendGmChatCommandAsync(account, $".levelup {levelsToAdd}");
         }
         await Task.Delay(2000);
     }

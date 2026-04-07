@@ -153,7 +153,17 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
     protected override async Task PrepareBotsAsync()
     {
         await ReviveAndLevelBotsAsync(TargetLevel);
-        await StageBattlegroundRaidAsync(HordeAccounts, HordeQueueLocation, AllianceAccounts, AllianceQueueLocation);
+
+        // AV uses individual queue — VMaNGOS anticheat rejects BG queue from grouped players.
+        // Stage bots at battlemasters WITHOUT forming raids. Raids form automatically inside AV.
+        await ResetBattlegroundStateAsync(AccountNames.ToList(), "BgResetPreStage");
+        await EnsureAccountsStagedAtLocationAsync(HordeAccounts, HordeQueueLocation, "HordeStage");
+        await EnsureAccountsStagedAtLocationAsync(AllianceAccounts, AllianceQueueLocation, "AllianceStage");
+        await ResetBattlegroundStateAsync(AccountNames.ToList(), "BgResetPostStage");
+
+        foreach (var account in AccountNames)
+            await SendGmChatCommandAsync(account, ".gm off");
+        await Task.Delay(1000);
     }
 
     internal async Task EnsureObjectivePreparedAsync()

@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using WoWStateManager.Clients;
 using WoWStateManager.Coordination;
 using WoWStateManager.Progression;
@@ -285,8 +286,23 @@ namespace WoWStateManager.Listeners
             public DateTime EnqueuedAt { get; } = DateTime.UtcNow;
         }
 
+        private int _coordDiagTick;
+
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
         {
+            // Periodic diagnostic — log coordinator state roughly every 5 minutes (1000 calls * 80 bots * 350ms)
+            if (_coordinatorEnabled && Interlocked.Increment(ref _coordDiagTick) % 1000 == 1)
+            {
+                var diagMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE") ?? "(null)";
+                var diagBgType = Environment.GetEnvironmentVariable("WWOW_BG_TYPE") ?? "(null)";
+                var diagBgMap = Environment.GetEnvironmentVariable("WWOW_BG_MAP") ?? "(null)";
+                var suppressedCount = _coordinatorSuppressedUntil.Count(kv => DateTime.UtcNow < kv.Value);
+                _logger.LogWarning(
+                    "COORD_DIAG: enabled={Enabled}, mode={Mode}, bgType={BgType}, bgMap={BgMap}, members={Members}, suppressed={Suppressed}, bgCoord={BgCoord}",
+                    _coordinatorEnabled, diagMode, diagBgType, diagBgMap, CurrentActivityMemberList.Count, suppressedCount,
+                    _battlegroundCoordinator != null ? _battlegroundCoordinator.State.ToString() : "(null)");
+            }
+
             if (!_coordinatorEnabled)
                 return;
 
