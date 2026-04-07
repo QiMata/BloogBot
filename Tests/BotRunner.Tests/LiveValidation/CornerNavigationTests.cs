@@ -34,8 +34,8 @@ public class CornerNavigationTests
         var bgAccount = _bot.BgAccountName!;
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
-        // Teleport to Org bank
-        await _bot.BotTeleportAsync(bgAccount, 1, 1627f, -4376f, 18f);
+        // Teleport to Org bank (Z=37 = bank ground level, +3 for teleport safety)
+        await _bot.BotTeleportAsync(bgAccount, 1, 1627f, -4376f, 37f);
         await Task.Delay(3000);
 
         // Send TRAVEL_TO action targeting Org AH
