@@ -12,7 +12,7 @@
 
 ---
 
-## Test Baseline (2026-04-07 — R7 BG tests complete)
+## Test Baseline (2026-04-07 — All phases complete)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
@@ -25,26 +25,29 @@
 
 ---
 
-## R1-R7 — All Archived (see docs/ARCHIVE.md)
-
-**Session Summary:**
-- **R1-R3:** Test baselines confirmed, LiveValidation deep dive (37 real behavior tests)
-- **R4:** SceneDataService pipeline operational (42 maps, 50K triangles/region, bots walk on ground)
-- **R5:** TravelTo pathfinding via PathfindingClient.GetPath
-- **R6:** 10 placeholder tests fleshed out with real assertions
-- **R7:** First successful BG entry (12/20 WSG), `.levelup` fix, 37/40 AV Horde bots
+## R1-R7 — All Complete (see docs/ARCHIVE.md)
 
 ---
 
-## Known Issues (for future sessions)
+## Outstanding — Open Issues
 
-| Issue | Details |
-|-------|---------|
-| **AB/AV queue doesn't pop** | Server-side BG matching — may need minimum player count config or BG auto-start |
-| **Alliance bots not launched** | StateManager doesn't launch AVBOTA* accounts — faction support gap in settings |
-| **TravelTo stuck on buildings** | Straight-line MoveToward can't route around Orgrimmar buildings; GoTo pathfinding has Z alignment issue |
-| **8 WSG bots stalled** | Map transfer stale timeout — bots didn't finish transfer in time |
-| **Server position resets** | Bot occasionally snaps back to teleport origin during navigation |
+### P1: Alliance Faction Bot Support
+StateManager does not launch Alliance accounts (AVBOTA1-40). AV and AB tests cannot form both factions. Needs: StateManager settings to support Alliance race character creation and launch.
+
+### P2: BG Queue Pop
+AB (15v15) and AV (40v40) queued but never popped. VMaNGOS BG queue may need server-side config: minimum player count override, or `.bg start` GM command to force-start.
+
+### P3: WSG Transfer Stalls
+8/20 bots stalled during WSG map transfer (stale timeout). May need longer `WaitForBgEntryAsync` timeout, or investigation into why some bots don't complete `SMSG_TRANSFER_PENDING` → `SMSG_NEW_WORLD` sequence.
+
+### P4: GoTo Z Alignment
+`BuildGoToSequence` pathfinding returns navmesh waypoints at navmesh Z (~34y) but bot physics ground is at a different Z (~37y). `MoveToward` sets waypoint below bot → stuck detection fires immediately. Needs: snap navmesh waypoint Z to physics ground Z before passing to MovementController.
+
+### P5: Server Position Resets
+During TravelTo navigation, bot occasionally snaps back to teleport origin (seen as 74y→106y jump at 45s). Likely server-side position correction rejecting client movement. Needs: investigate whether movement packets are being rejected by VMaNGOS anti-cheat or position validation.
+
+### P6: Navigation.Physics.Tests Elevator Failures (2)
+Two pre-existing elevator test failures in Navigation.Physics.Tests. Low priority — elevator physics edge case, not regression.
 
 ---
 
