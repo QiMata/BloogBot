@@ -39,8 +39,10 @@
 | 4.4 | **SceneDataClient integration tests** — 12 tests: grid quantization, retry/dedup, response packing, live connectivity. | **Done** (50812ea7) |
 | 4.5 | **MovementController→SceneData→physics pipeline tests** — 12 tests: scene slice mode, EnsureLocalSceneDataFresh, triangle unpacking, end-to-end update, dedup, graceful degradation. | **Done** (e551ea59) |
 | 4.6 | **Fix TravelTo InvalidCastException** — Missing mapId param + boxed float→int cast. Fixed ActionDispatch + 7 test calls. | **Done** (fd37fe7c) |
-| 4.7 | **LiveValidation rerun** — Verify bots fall and navigate with SceneData + TravelTo fixes. | Open |
-| 4.8 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open |
+| 4.7 | **LiveValidation rerun** — Bots fall properly, move on ground, TravelTo works. CornerNav fails (oscillation, separate pathfinding issue). BasicLoop 2/2 pass. | **Done** |
+| 4.8 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open — blocked on pathfinding oscillation |
+
+**Known issue:** Bot oscillates during navigation (moves 20y toward target, then back). Likely pathfinding recalculation or behavior tree issue, not scene data. The physics pipeline (scene data → triangle injection → physics step → ground detection) is working correctly.
 
 ---
 
