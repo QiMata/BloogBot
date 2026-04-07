@@ -198,8 +198,12 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         var toRemove = new List<string>();
         foreach (var (key, tile) in _tileCache)
         {
+            // Evict all tiles from other maps (continent crossing)
             if (tile.MapId != mapId)
+            {
+                toRemove.Add(key);
                 continue;
+            }
 
             int dx = Math.Abs((int)tile.TileX - (int)centerTileX);
             int dy = Math.Abs((int)tile.TileY - (int)centerTileY);
