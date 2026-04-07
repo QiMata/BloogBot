@@ -97,18 +97,8 @@ namespace BotRunner.Clients
         // ═══════════════════════════════════════════════════════════════
 
         public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
-        {
-            try
-            {
-                return WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
-                    mapId, position.X, position.Y, position.Z, maxSearchDist);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning("Local GetGroundZ failed: {Error}", ex.Message);
-                return (0f, false);
-            }
-        }
+            => WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
+                mapId, position.X, position.Y, position.Z, maxSearchDist);
 
         public virtual (float groundZ, bool found)[] BatchGetGroundZ(uint mapId, Position[] positions, float maxSearchDist = 10.0f)
         {
@@ -119,46 +109,20 @@ namespace BotRunner.Clients
         }
 
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
-        {
-            try
-            {
-                return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
-                    mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning("Local LineOfSight failed: {Error}", ex.Message);
-                return false;
-            }
-        }
+            => WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
+                mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
 
         public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
-        {
-            try
-            {
-                return WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
-                    mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
-            }
-            catch
-            {
-                return false;
-            }
-        }
+            => WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
+                mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
 
         public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
-        {
-            // IsPointOnNavmesh requires Navigation.dll (navmesh data).
-            // Physics.dll doesn't have it — always return false.
-            // PathfindingService handles navmesh queries remotely.
-            return (false, position);
-        }
+            // TODO: Route through PathfindingService (network) — navmesh not in Physics.dll
+            => throw new NotSupportedException("IsPointOnNavmesh requires navmesh data (Navigation.dll). Route through PathfindingService.");
 
         public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
-        {
-            // FindNearestWalkablePoint requires Navigation.dll (navmesh data).
-            // Physics.dll doesn't have it — return fallback.
-            return (0, position);
-        }
+            // TODO: Route through PathfindingService (network) — navmesh not in Physics.dll
+            => throw new NotSupportedException("FindNearestWalkablePoint requires navmesh data (Navigation.dll). Route through PathfindingService.");
 
         // ════════════════════════════════════════════════════════════════
         //  Helpers
