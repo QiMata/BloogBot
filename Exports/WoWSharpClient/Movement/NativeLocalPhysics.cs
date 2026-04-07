@@ -165,7 +165,7 @@ internal static class NativeLocalPhysics
     /// </summary>
     public static (float groundZ, bool found) GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10f)
     {
-        EnsureMapPreloaded(mapId);
+        EnsureInitialized();
         float gz = NativePhysics.GetGroundZ(mapId, x, y, z, maxSearchDist);
         return (gz, gz > -50000f);
     }
@@ -176,7 +176,7 @@ internal static class NativeLocalPhysics
     public static bool LineOfSight(uint mapId, float fromX, float fromY, float fromZ,
         float toX, float toY, float toZ)
     {
-        EnsureMapPreloaded(mapId);
+        EnsureInitialized();
         return NativePhysics.LineOfSight(mapId,
             new NativePhysics.XYZ(fromX, fromY, fromZ),
             new NativePhysics.XYZ(toX, toY, toZ));
@@ -188,7 +188,7 @@ internal static class NativeLocalPhysics
     public static bool SegmentIntersectsDynamicObjects(uint mapId,
         float x0, float y0, float z0, float x1, float y1, float z1)
     {
-        EnsureMapPreloaded(mapId);
+        EnsureInitialized();
         return NativePhysics.SegmentIntersectsDynamicObjects(mapId, x0, y0, z0, x1, y1, z1);
     }
 
@@ -293,7 +293,7 @@ internal static class NativeLocalPhysics
             return TestResolveDataDirectoryOverride();
 
         var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
-        if (!string.IsNullOrEmpty(dataDir) && Directory.Exists(dataDir))
+        if (!string.IsNullOrWhiteSpace(dataDir) && Directory.Exists(dataDir))
             return Path.GetFullPath(dataDir);
 
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
