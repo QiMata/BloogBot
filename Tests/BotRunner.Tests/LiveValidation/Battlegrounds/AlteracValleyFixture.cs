@@ -78,11 +78,13 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
         BattlemasterData.OrgrimmarAv.Position.Y,
         BattlemasterData.OrgrimmarAv.Position.Z + 3f);
 
+    // Alliance battlemaster is INDOORS (Champion's Hall). Z+3 lands on upper floor (Z≈127).
+    // Use Z+0 — the server handles ground placement for indoor teleports.
     protected override TeleportTarget AllianceQueueLocation => new(
         (int)BattlemasterData.StormwindAv.MapId,
         BattlemasterData.StormwindAv.Position.X,
         BattlemasterData.StormwindAv.Position.Y,
-        BattlemasterData.StormwindAv.Position.Z + 3f);
+        BattlemasterData.StormwindAv.Position.Z);
 
     protected override IReadOnlyList<CharacterSettings> BuildCharacterSettings()
     {
@@ -237,12 +239,12 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
             $".setskill {AlteracValleyLoadoutPlan.RidingSkillId} {AlteracValleyLoadoutPlan.EpicRidingSkill} {AlteracValleyLoadoutPlan.EpicRidingSkill}");
         await Task.Delay(150);
         await SendSilentGmChatCommandAsync(accountName, $".additemset {loadout.ArmorSetId}");
-        await Task.Delay(75);
+        await Task.Delay(500); // Wait for server to process full item set addition
 
         foreach (var itemId in supplementalItemIds)
         {
             await SendSilentGmChatCommandAsync(accountName, $".additem {itemId}");
-            await Task.Delay(50);
+            await Task.Delay(75);
         }
 
         var stagedItemIds = loadout.EquipItemIds.Concat(supplementalItemIds).ToArray();
@@ -253,8 +255,8 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 var bagContents = snapshot.Player?.BagContents?.Values;
                 return bagContents != null && stagedItemIds.All(bagContents.Contains);
             },
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 250);
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 300);
 
         foreach (var itemId in loadout.EquipItemIds)
         {
@@ -266,9 +268,9 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                     ActionType = ActionType.EquipItem,
                     Parameters = { new RequestParameter { IntParam = (int)itemId } }
                 },
-                timeout: TimeSpan.FromSeconds(4),
-                retryDelayMs: 350,
-                maxAttempts: 2,
+                timeout: TimeSpan.FromSeconds(6),
+                retryDelayMs: 500,
+                maxAttempts: 3,
                 failureDescription: "equip");
         }
 
