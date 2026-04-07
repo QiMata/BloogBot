@@ -38,7 +38,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 7.1 | **WSG test (20 bots)** — Smallest BG. 10 Horde + 10 Alliance. Fixture auto-creates accounts. Run: `dotnet test --filter "Collection~WarsongGulchValidation"`. | Open |
+| 7.1 | **WSG test (20 bots)** — 20 bots entered world, coordinator queued for BG, but BG never popped. Root cause: `.character level` SOAP command never executed — `ReviveAndLevelBotsAsync` ran but `ExecuteGMCommandAsync` output not in logs (may be running but SOAP failing silently). Bots stayed level 1, VMaNGOS rejected BG queue. Need: debug SOAP `.character level` execution, verify level reaches 10 before BG queue. | In Progress |
 | 7.2 | **AB test (30 bots)** — 15 Horde + 15 Alliance. Run: `dotnet test --filter "Collection~ArathiBasinValidation"`. | Open |
 | 7.3 | **AV test (80 bots)** — 40 Horde + 40 Alliance. Run: `dotnet test --filter "Collection~AlteracValleyValidation"`. | Open |
 
