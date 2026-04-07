@@ -121,16 +121,21 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
             MaxY = request.MaxY,
         };
 
-        // Extract triangles via the TestTerrainAABB export
+        // Extract triangles via the TestTerrainAABB export.
+        // Use a ground-focused Z range to avoid including roofs/upper stories in
+        // dense cities like Orgrimmar. Physics needs ground-level collision, not
+        // building roofs 50y above the player.
         int maxTriangles = 50000;
         var triangles = new NativeScene.AABBContact[maxTriangles];
         var handle = GCHandle.Alloc(triangles, GCHandleType.Pinned);
         try
         {
+            // Ground-focused query: -100 to +100 from sea level covers most terrain
+            // and ground-floor structures without capturing upper stories.
             int count = NativeScene.QueryTerrainAABBTriangles(
                 request.MapId,
-                request.MinX, request.MinY, -500f,  // minZ — deep enough for any terrain
-                request.MaxX, request.MaxY, 2000f,   // maxZ — high enough for any structure
+                request.MinX, request.MinY, -100f,
+                request.MaxX, request.MaxY, 200f,
                 handle.AddrOfPinnedObject(),
                 maxTriangles);
 
@@ -190,9 +195,12 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
 
         if (!string.IsNullOrWhiteSpace(dataDir) && Directory.Exists(dataDir))
         {
+            // SceneDataService serves collision geometry. Priority:
+            // 1. .scene files — pre-extracted collision caches (fast, preferred)
+            // 2. vmaps — raw VMAP data for on-demand extraction (fallback)
+            // NO mmaps — those are navmesh for PathfindingService only.
             AddIdsFromDirectory(Path.Combine(dataDir, "scenes"), "*.scene", ParseWholeStem, ids);
-            AddIdsFromDirectory(Path.Combine(dataDir, "mmaps"), "*.mmap", ParseWholeStem, ids);
-            AddIdsFromDirectory(Path.Combine(dataDir, "maps"), "*.map", ParseFirstThreeDigits, ids);
+            AddIdsFromDirectory(Path.Combine(dataDir, "vmaps"), "*.vmtree", ParseFirstThreeDigits, ids);
         }
 
         if (ids.Count == 0)

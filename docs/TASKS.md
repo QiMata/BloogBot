@@ -31,14 +31,22 @@
 
 ## R8 — Movement & Communication Fixes (Priority: CRITICAL)
 
-### P1: GoTo Z Alignment
-`BuildGoToSequence` pathfinding returns navmesh waypoints at navmesh Z (~34y) but bot physics ground is at a different Z (~37y). `MoveToward` sets waypoint below bot → stuck detection fires immediately. **Fix:** snap navmesh waypoint Z to physics ground Z before passing to MovementController.
+### P1: Scene Data Triangle Quality in Dense Areas
+Bot at Org bank (1627,-4376,Z=37) ends up at Z=57 — **on a building roof**. The 50K triangle cap means SceneDataService returns mixed ground+roof+wall triangles for the 600x600y region. Physics capsule sweep finds the roof as "ground" because it's the first surface above teleport Z. `[PHYS][ERR][MOVE] wallHit=1` — bot stuck on roof surrounded by walls.
+
+**Root cause:** SceneDataService sends ALL triangles in AABB (Z=-500 to 2000), capped at 50K. Dense cities like Orgrimmar have 499K+ triangles per region. The 50K sample may include roofs but miss ground.
+
+**Potential fixes:**
+- Filter server-side: prioritize ground-level triangles (walkable=true, low Z) over roofs
+- Increase triangle cap for dense regions
+- Split requests into vertical slices (ground: Z=-10 to Z+10, not -500 to 2000)
+- Or: reduce the grid region size for cities (200y → 100y)
 
 ### P2: Server Position Resets
-During TravelTo navigation, bot occasionally snaps back to teleport origin (seen as 74y→106y jump at 45s). Likely server-side position correction rejecting client movement. **Fix:** investigate whether movement packets are being rejected by VMaNGOS anti-cheat or position validation. May need to match WoW.exe heartbeat timing/format.
+During TravelTo navigation, bot occasionally snaps back to teleport origin (74y→106y jump). Likely VMaNGOS position validation rejecting client movement. **Fix:** investigate heartbeat packet timing and position delta thresholds.
 
 ### P3: SceneDataService Performance & Timing
-Scene data fetch + inject takes unknown time. If physics runs frames before scene data arrives, bot falls through world. Measure: request latency, triangle injection time, frames without geometry after teleport. Verify 16ms physics tick is stable under load.
+Measure: request latency, injection time, frames without geometry after teleport. Verify 16ms physics tick stability under load. First scene data request after teleport takes ~30s (map loading on demand in container).
 
 ---
 
