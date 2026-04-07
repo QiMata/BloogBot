@@ -50,6 +50,16 @@
 | R2.4 | .gm off verified in EnsureCleanSlateAsync — line 286 calls `.gm off` | Done |
 | R2.5 | Group disband verified in EnsureCleanSlateAsync — lines 243-252 send LeaveGroup | Done |
 | R3.1-R3.7 | LiveValidation Deep Dive — 37 tests real behavior, 10 trivial placeholders (Bank/AH parity) | Done |
+| R4.1 | Enable SetSceneSliceMode(true) when SceneDataClient present | Done |
+| R4.2 | Defer native DLL call — managed flag + deferred init avoids BadImageFormatException | Done |
+| R4.3 | x86/x64 Navigation.dll resolution — default=x86, x64/ subdirectory | Done |
+| R4.4 | SceneDataClient integration tests — 12 tests: grid quantization, retry/dedup, live connectivity | Done |
+| R4.5 | MovementController→SceneData→physics pipeline tests — 12 tests: end-to-end data flow | Done |
+| R4.6 | Fix TravelTo InvalidCastException — missing mapId param + boxed float→int cast | Done |
+| R4.7 | LiveValidation rerun — bots fall properly, walk on ground, BasicLoop+DualClientParity 7/7 pass | Done |
+| R4.9 | Fix TravelTo oscillation — arrival check (15y) + StopAllMovement | Done |
+| R4-SDS | SceneDataService thread-safe init + per-map preload logging. 42 maps, 50K triangles/region | Done |
+| R4-DLL | Fix Linux DllMain.cpp GetLastError stub (missing function name) | Done |
 
 ## Completed Task Details
 

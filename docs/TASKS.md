@@ -17,61 +17,37 @@
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
 | WoWSharpClient.Tests | 1437 | 0 | 1 | +20 SceneData pipeline tests |
-| Navigation.Physics.Tests | 666 | 2 | 1 | **Confirmed** — 2 pre-existing elevator |
-| BotRunner.Tests (unit) | 1626 | 0 | 4 | **Confirmed** |
-| BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass. Scene data working. |
+| Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing elevator |
+| BotRunner.Tests (unit) | 1626 | 0 | 4 | Confirmed |
+| BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass |
 
 ---
 
-## R1/R2/R3 — Archived (see docs/ARCHIVE.md)
+## R1/R2/R3/R4 — Archived (see docs/ARCHIVE.md)
+
+**R4 Summary:** SceneDataService pipeline fully operational. 42 maps preloaded, 50K triangles/region served. Bots walk on ground, no floating. TravelTo fixed (arrival check + no oscillation). DualClientParity tests fixed (collection). 24 new pipeline tests added.
 
 ---
 
-## R4 — SceneDataService Physics Fix (Priority: CRITICAL)
-
-**Root cause:** Bots float in air after teleport because `ConfigureNativeSceneMode()` was a no-op — it never called `SetSceneSliceMode(true)`. Without this, Navigation.dll doesn't use injected scene triangles and has no collision geometry.
+## R5 — Navigation & AV (Priority: High)
 
 | # | Task | Spec |
 |---|------|------|
-| 4.1 | **Enable SetSceneSliceMode(true)** when SceneDataClient present. | **Done** (8de77f7c) |
-| 4.2 | **Defer native call** — SetSceneSliceMode sets managed flag immediately, defers DLL call to avoid BadImageFormatException during x86 construction. | **Done** (b2e5c53d) |
-| 4.3 | **x86/x64 DLL resolution** — Default path has x86, x64/ subdirectory has x64. NavigationInterop updated. | **Done** (b2e5c53d) |
-| 4.4 | **SceneDataClient integration tests** — 12 tests: grid quantization, retry/dedup, response packing, live connectivity. | **Done** (50812ea7) |
-| 4.5 | **MovementController→SceneData→physics pipeline tests** — 12 tests: scene slice mode, EnsureLocalSceneDataFresh, triangle unpacking, end-to-end update, dedup, graceful degradation. | **Done** (e551ea59) |
-| 4.6 | **Fix TravelTo InvalidCastException** — Missing mapId param + boxed float→int cast. Fixed ActionDispatch + 7 test calls. | **Done** (fd37fe7c) |
-| 4.7 | **LiveValidation rerun** — Bots fall properly, move on ground, TravelTo works. CornerNav fails (oscillation, separate pathfinding issue). BasicLoop 2/2 pass. | **Done** |
-| 4.8 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open — blocked on pathfinding oscillation |
-
-| 4.9 | **Fix TravelTo oscillation** — Added arrival check (15y) + StopAllMovement. Bot navigates steadily without retreat. Stuck on buildings in tight Orgrimmar streets (straight-line can't route around). Open terrain works. | **Done** (b32ff5b3) |
-
-**Scene data pipeline fully operational:** SceneDataService preloads 42 maps, serves 50,000 triangles/region. Bot walks on ground, no floating. CornerNav through Orgrimmar buildings requires A* pathfinding (GoTo uses it, TravelTo doesn't yet for cross-map prep).
-
-**AV readiness:** Open terrain navigation works. AV test needs group formation + BG queue + entry — pathfinding through AV's open valleys should work with straight-line MoveToward.
+| 5.1 | **TravelTo pathfinding** — Use GoTo's `NavigationPath.GetNextWaypoint()` for TravelTo so bots navigate around obstacles in cities. Currently stuck on buildings at 60y in Orgrimmar. | Open |
+| 5.2 | **AV test infrastructure** — Set up AlteracValleyFixture with multi-bot accounts. Requires 80-bot configuration (40 Horde + 40 Alliance). | Open |
+| 5.3 | **AV entry test** — Bots form raid, queue at BG master, enter AV (MapId=30). Verify all bots on AV map. | Open — depends on 5.2 |
 
 ---
 
-## R3 — LiveValidation Deep Dive (Priority: High) — **COMPLETE**
+## R6 — Placeholder Test Flesh-out (Priority: Medium)
 
-**Goal:** For each LiveValidation test category, verify it exercises real game behavior, not just snapshot != null.
-
-| # | Task | Verdict |
-|---|------|---------|
-| 3.1 | **BasicLoopTests** — Login test is trivial (snapshot check). Physics Z test is **real** (verifies no underground fall). | **Done** — Mixed |
-| 3.2 | **VendorBuySellTests** — **Real behavior**: verifies inventory delta + coinage delta via snapshot polling. | **Done** — Real |
-| 3.3 | **CombatTests** — **Real behavior**: mob health regression over time, `firstDamageConfirmed` gate, kill confirmation. GM flag check before combat. | **Done** — Real |
-| 3.4 | **NavigationTests** — **Real behavior**: end-to-end pathfinding, position polling, arrival within 12yd tolerance. | **Done** — Real |
-| 3.5 | **EconomyTests** — Mixed: Bank/AH interaction tests are `Assert.NotNull` placeholders (10 tests). Mail test verifies coinage delta. | **Done** — Needs work |
-| 3.6 | **GroupFormationTests** — **Real behavior**: PartyLeaderGuid transitions (0→non-zero→0), invite/accept/disband verified. | **Done** — Real |
-| 3.7 | **RFC DungeonRun** — **Real behavior**: DungeonEntryTestRunner verifies bot count, group formation, MapId transition to instance map. | **Done** — Real |
-
-**Summary:** ~37 tests exercise real game behavior; ~10 are trivial `Assert.NotNull` placeholders (concentrated in Bank/AH parity tests). The core test categories (combat, navigation, vendor, groups, dungeons, fishing, gathering) are **substantive**.
-
-**Placeholder tests to flesh out later:**
-- BankInteractionTests (2 tests): Add deposit/withdraw assertions
-- AuctionHouseTests (2 tests): Add AH frame state assertions
-- AuctionHouseParityTests (3 tests): Add search/post/cancel parity assertions
-- BankParityTests (2 tests): Add deposit/withdraw parity assertions
-- RaidCoordinationTests.MarkTargeting (1 test): Add mark assertion
+| # | Task | Spec |
+|---|------|------|
+| 6.1 | **BankInteractionTests** (2 tests) — Add deposit/withdraw assertions instead of `Assert.NotNull`. | Open |
+| 6.2 | **AuctionHouseTests** (2 tests) — Add AH frame state assertions. | Open |
+| 6.3 | **AuctionHouseParityTests** (3 tests) — Add search/post/cancel parity assertions. | Open |
+| 6.4 | **BankParityTests** (2 tests) — Add deposit/withdraw parity assertions. | Open |
+| 6.5 | **RaidCoordinationTests.MarkTargeting** (1 test) — Add mark assertion. | Open |
 
 ---
 
@@ -88,8 +64,7 @@ taskkill //F //IM testhost.x86.exe 2>/dev/null
 dotnet build WestworldOfWarcraft.sln --configuration Release
 MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"
 "$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
-"$MSBUILD" Exports/Physics/Physics.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145
-"$MSBUILD" Exports/Physics/Physics.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145
+"$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145
 
 # Tests
 dotnet test Tests/WoWSharpClient.Tests/ --configuration Release --filter "Category!=RequiresInfrastructure" --no-build

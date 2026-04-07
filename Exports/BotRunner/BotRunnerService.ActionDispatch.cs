@@ -982,7 +982,6 @@ namespace BotRunner
                     case CharacterAction.TravelTo:
                     {
                         // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
-                        // mapId may arrive as float from protobuf repeated float params
                         var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
                         var targetX = Convert.ToSingle(actionEntry.Item2[1]);
                         var targetY = Convert.ToSingle(actionEntry.Item2[2]);
@@ -993,7 +992,7 @@ namespace BotRunner
                             {
                                 var target = new Position(targetX, targetY, targetZ);
                                 var dist = _objectManager.Player.Position.DistanceTo2D(target);
-                                if (dist <= 15f) // Arrived within 15 yards
+                                if (dist <= 15f)
                                 {
                                     _objectManager.StopAllMovement();
                                     return BehaviourTreeStatus.Success;
