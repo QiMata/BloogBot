@@ -42,7 +42,11 @@
 | 4.7 | **LiveValidation rerun** — Bots fall properly, move on ground, TravelTo works. CornerNav fails (oscillation, separate pathfinding issue). BasicLoop 2/2 pass. | **Done** |
 | 4.8 | **AV test** — Bots fall, form group, enter Alterac Valley. | Open — blocked on pathfinding oscillation |
 
-**Known issue:** Bot oscillates during navigation (moves 20y toward target, then back). Likely pathfinding recalculation or behavior tree issue, not scene data. The physics pipeline (scene data → triangle injection → physics step → ground detection) is working correctly.
+| 4.9 | **Fix TravelTo oscillation** — Added arrival check (15y) + StopAllMovement. Bot navigates steadily without retreat. Stuck on buildings in tight Orgrimmar streets (straight-line can't route around). Open terrain works. | **Done** (b32ff5b3) |
+
+**Scene data pipeline fully operational:** SceneDataService preloads 42 maps, serves 50,000 triangles/region. Bot walks on ground, no floating. CornerNav through Orgrimmar buildings requires A* pathfinding (GoTo uses it, TravelTo doesn't yet for cross-map prep).
+
+**AV readiness:** Open terrain navigation works. AV test needs group formation + BG queue + entry — pathfinding through AV's open valleys should work with straight-line MoveToward.
 
 ---
 
