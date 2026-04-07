@@ -42,8 +42,12 @@ Bot at Org bank (1627,-4376,Z=37) ends up at Z=57 — **on a building roof**. Th
 - Split requests into vertical slices (ground: Z=-10 to Z+10, not -500 to 2000)
 - Or: reduce the grid region size for cities (200y → 100y)
 
-### P2: Server Position Resets
-During TravelTo navigation, bot occasionally snaps back to teleport origin (74y→106y jump). Likely VMaNGOS position validation rejecting client movement. **Fix:** investigate heartbeat packet timing and position delta thresholds.
+### P2: Server Position Resets (ACTIVE)
+Server corrects bot position every ~7 seconds (280-295 unit jumps). MovementController detects these as "teleports" and calls Reset(), clearing movement. Bot moves steadily between resets (128y→78y in 45s) but never arrives.
+
+**Root cause:** Server rejects client heartbeat position. The bot's physics-computed position diverges from what the server calculates. Likely: heartbeat Z doesn't match server ground Z, or movement speed exceeds server's expected rate, triggering anti-cheat/position validation.
+
+**Investigation needed:** Compare bot heartbeat packets (position, flags, speed) vs what VMaNGOS expects. Check `MoveHandler.cpp` in VMaNGOS for position validation thresholds.
 
 ### P3: SceneDataService Performance & Timing
 Measure: request latency, injection time, frames without geometry after teleport. Verify 16ms physics tick stability under load. First scene data request after teleport takes ~30s (map loading on demand in container).
