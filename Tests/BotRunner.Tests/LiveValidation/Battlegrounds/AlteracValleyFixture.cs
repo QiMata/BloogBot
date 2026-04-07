@@ -96,7 +96,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: BotRunnerType.Background));
+                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
@@ -107,7 +107,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: BotRunnerType.Background));
+                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         return bots;
