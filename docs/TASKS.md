@@ -12,7 +12,7 @@
 
 ---
 
-## Test Baseline (2026-04-06 — R5/R6 complete)
+## Test Baseline (2026-04-07 — R7 BG tests complete)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
@@ -20,33 +20,31 @@
 | Navigation.Physics.Tests | 666 | 2 | 1 | 2 pre-existing elevator |
 | BotRunner.Tests (unit) | 1626 | 0 | 4 | Confirmed |
 | BotRunner.Tests (LiveValidation) | 7+ | 0 | 0 | BasicLoop + DualClientParity pass |
+| WSG (20 bots) | 12/20 entered | — | — | First successful BG entry |
+| AV (80 bots) | 37/40 Horde | — | — | Alliance not launched |
 
 ---
 
-## R1-R6 — Archived (see docs/ARCHIVE.md)
+## R1-R7 — All Archived (see docs/ARCHIVE.md)
 
-**Summary:**
-- **R4:** SceneDataService pipeline operational (42 maps, 50K triangles/region)
-- **R5.1:** TravelTo pathfinding via PathfindingClient.GetPath
-- **R6:** All 10 placeholder tests fleshed out with real assertions
+**Session Summary:**
+- **R1-R3:** Test baselines confirmed, LiveValidation deep dive (37 real behavior tests)
+- **R4:** SceneDataService pipeline operational (42 maps, 50K triangles/region, bots walk on ground)
+- **R5:** TravelTo pathfinding via PathfindingClient.GetPath
+- **R6:** 10 placeholder tests fleshed out with real assertions
+- **R7:** First successful BG entry (12/20 WSG), `.levelup` fix, 37/40 AV Horde bots
 
 ---
 
-## R7 — Battleground Tests (Priority: High — Infrastructure-gated)
+## Known Issues (for future sessions)
 
-**Prerequisite:** Machine with 32+ GB RAM to run multiple bot processes (~1.8GB each).
-
-| # | Task | Spec |
-|---|------|------|
-| 7.1 | **WSG test (20 bots)** — **12/20 bots entered WSG (MapId 489)!** Fixed: `.levelup` via bot chat instead of SOAP `.character level` (SOAP only updates DB, not in-memory level). BG queue popped, 12 bots transferred. 8 stalled during map transfer (stale timeout). First successful BG entry. | **Done** (cfc30c5c) |
-| 7.2 | **AB test (30 bots)** — 30 bots entered world, leveled to 20, groups formed, BG queued. Queue never popped (server-side BG matching issue). `.levelup` fix confirmed working. | **Done** — queue didn't pop |
-| 7.3 | **AV test (80 bots)** — 37/40 Horde bots entered world. ALL 40 Alliance bots failed (no snapshots — likely not launched by StateManager). Alliance faction support needs investigation. 7/10 AV unit tests pass. | **Done** — partial (Horde only) |
-
-**Notes:**
-- All fixtures auto-generate settings files and create accounts via SOAP
-- Each BackgroundBotRunner uses ~1.8GB RAM (scene data loaded per-process)
-- Fixtures use `CoordinatorFixtureBase` with `WaitForExactBotCountAsync`
-- Server position resets may need investigation (seen in R5.1 navigation tests)
+| Issue | Details |
+|-------|---------|
+| **AB/AV queue doesn't pop** | Server-side BG matching — may need minimum player count config or BG auto-start |
+| **Alliance bots not launched** | StateManager doesn't launch AVBOTA* accounts — faction support gap in settings |
+| **TravelTo stuck on buildings** | Straight-line MoveToward can't route around Orgrimmar buildings; GoTo pathfinding has Z alignment issue |
+| **8 WSG bots stalled** | Map transfer stale timeout — bots didn't finish transfer in time |
+| **Server position resets** | Bot occasionally snaps back to teleport origin during navigation |
 
 ---
 

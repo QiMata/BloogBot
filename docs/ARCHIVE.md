@@ -62,6 +62,9 @@
 | R4-DLL | Fix Linux DllMain.cpp GetLastError stub (missing function name) | Done |
 | R5.1 | TravelTo pathfinding via PathfindingClient.GetPath — bot follows navmesh waypoints | Done |
 | R6.1-R6.5 | Placeholder tests fleshed out — bank/AH/parity/raid tests with real assertions | Done |
+| R7.1 | WSG (20 bots) — 12/20 entered MapId 489. Fixed .levelup (bot chat vs SOAP). First BG entry. | Done |
+| R7.2 | AB (30 bots) — 30 entered world, leveled to 20, grouped, queued. Queue didn't pop (server-side). | Done |
+| R7.3 | AV (80 bots) — 37/40 Horde entered world. Alliance not launched (faction support gap). | Done |
 
 ## Completed Task Details
 
