@@ -986,22 +986,69 @@ namespace BotRunner
                         var targetX = Convert.ToSingle(actionEntry.Item2[1]);
                         var targetY = Convert.ToSingle(actionEntry.Item2[2]);
                         var targetZ = Convert.ToSingle(actionEntry.Item2[3]);
+                        Position[]? travelPath = null;
+                        int travelWaypointIdx = 0;
                         builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                         {
-                            if (_objectManager.Player.MapId == targetMapId)
+                            if (_objectManager.Player.MapId != targetMapId)
                             {
-                                var target = new Position(targetX, targetY, targetZ);
-                                var dist = _objectManager.Player.Position.DistanceTo2D(target);
-                                if (dist <= 15f)
-                                {
-                                    _objectManager.StopAllMovement();
-                                    return BehaviourTreeStatus.Success;
-                                }
-                                _objectManager.MoveToward(target);
-                                return BehaviourTreeStatus.Running;
+                                Log.Warning("[BOT RUNNER] TravelTo cross-map not yet implemented (target map {Map})", targetMapId);
+                                return BehaviourTreeStatus.Failure;
                             }
-                            Log.Warning("[BOT RUNNER] TravelTo cross-map not yet implemented (target map {Map})", targetMapId);
-                            return BehaviourTreeStatus.Failure;
+
+                            var target = new Position(targetX, targetY, targetZ);
+                            var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
+                            if (finalDist <= 15f)
+                            {
+                                _objectManager.StopAllMovement();
+                                return BehaviourTreeStatus.Success;
+                            }
+
+                            // Compute path on first tick
+                            if (travelPath == null)
+                            {
+                                try
+                                {
+                                    var pfClient = _container.PathfindingClient;
+                                    travelPath = pfClient.GetPath(targetMapId,
+                                        _objectManager.Player.Position, target,
+                                        nearbyObjects: null,
+                                        smoothPath: true,
+                                        race: _objectManager.Player.Race,
+                                        gender: _objectManager.Player.Gender);
+                                    travelWaypointIdx = 0;
+                                    Log.Information("[TRAVEL] Path computed: {Count} waypoints to ({X:F0},{Y:F0},{Z:F0})",
+                                        travelPath.Length, targetX, targetY, targetZ);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Warning(ex, "[TRAVEL] Pathfinding failed, using direct line");
+                                    travelPath = [];
+                                }
+                            }
+
+                            // Use pathfinding waypoints if available, else direct line
+                            if (travelPath.Length > 0 && travelWaypointIdx < travelPath.Length)
+                            {
+                                var wp = travelPath[travelWaypointIdx];
+                                var wpDist = _objectManager.Player.Position.DistanceTo2D(wp);
+                                if (wpDist <= 3f)
+                                {
+                                    travelWaypointIdx++;
+                                    if (travelWaypointIdx >= travelPath.Length)
+                                    {
+                                        _objectManager.MoveToward(target);
+                                        return BehaviourTreeStatus.Running;
+                                    }
+                                    wp = travelPath[travelWaypointIdx];
+                                }
+                                _objectManager.MoveToward(wp);
+                            }
+                            else
+                            {
+                                _objectManager.MoveToward(target);
+                            }
+                            return BehaviourTreeStatus.Running;
                         });
                         break;
                     }
