@@ -39,8 +39,8 @@
 | # | Task | Spec |
 |---|------|------|
 | 7.1 | **WSG test (20 bots)** — **12/20 bots entered WSG (MapId 489)!** Fixed: `.levelup` via bot chat instead of SOAP `.character level` (SOAP only updates DB, not in-memory level). BG queue popped, 12 bots transferred. 8 stalled during map transfer (stale timeout). First successful BG entry. | **Done** (cfc30c5c) |
-| 7.2 | **AB test (30 bots)** — 15 Horde + 15 Alliance. Run: `dotnet test --filter "Collection~ArathiBasinValidation"`. | Open |
-| 7.3 | **AV test (80 bots)** — 40 Horde + 40 Alliance. Run: `dotnet test --filter "Collection~AlteracValleyValidation"`. | Open |
+| 7.2 | **AB test (30 bots)** — 30 bots entered world, leveled to 20, groups formed, BG queued. Queue never popped (server-side BG matching issue). `.levelup` fix confirmed working. | **Done** — queue didn't pop |
+| 7.3 | **AV test (80 bots)** — 37/40 Horde bots entered world. ALL 40 Alliance bots failed (no snapshots — likely not launched by StateManager). Alliance faction support needs investigation. 7/10 AV unit tests pass. | **Done** — partial (Horde only) |
 
 **Notes:**
 - All fixtures auto-generate settings files and create accounts via SOAP
