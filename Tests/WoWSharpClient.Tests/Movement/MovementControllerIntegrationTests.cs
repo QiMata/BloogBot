@@ -54,8 +54,7 @@ public class MovementControllerIntegrationTests
             GroundZ = input.Z,
             GroundNx = 0f, GroundNy = 0f, GroundNz = 1f,
         };
-        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
-        try
+                try
         {
             var mc = Create(out _);
             mc.SetTargetWaypoint(new Position(1639f, -4373f, 34f));
@@ -65,8 +64,7 @@ public class MovementControllerIntegrationTests
         finally
         {
             NativeLocalPhysics.TestStepOverride = null;
-            NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
-        }
+                    }
     }
 
     [Fact]

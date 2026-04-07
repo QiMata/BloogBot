@@ -52,7 +52,6 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     {
         NativeLocalPhysics.TestStepOverride = null;
         NativeLocalPhysics.TestClearSceneCacheOverride = null;
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
         NativeLocalPhysics.TestPreloadMapOverride = null;
         NativeLocalPhysics.TestSetDataDirectoryOverride = null;
         NativeLocalPhysics.TestResolveDataDirectoryOverride = null;
@@ -100,34 +99,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     }
 
     // =========================================================================
-    // 1. SceneSliceMode enabled when SceneDataClient present
-    // =========================================================================
-
-    [Fact]
-    public void Constructor_WithSceneDataClient_EnablesSceneSliceMode()
-    {
-        bool? sliceModeEnabled = null;
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = v => sliceModeEnabled = v;
-
-        _ = new MovementController(_mockClient.Object, _player,
-            new SceneDataClient(Mock.Of<ILogger>()));
-
-        Assert.True(sliceModeEnabled);
-    }
-
-    [Fact]
-    public void Constructor_WithoutSceneDataClient_DoesNotEnableSceneSliceMode()
-    {
-        bool? sliceModeEnabled = null;
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = v => sliceModeEnabled = v;
-
-        _ = new MovementController(_mockClient.Object, _player);
-
-        Assert.Null(sliceModeEnabled);
-    }
-
-    // =========================================================================
-    // 2. EnsureLocalSceneDataFresh called during physics step
+    // 1. EnsureLocalSceneDataFresh called during physics step
     // =========================================================================
 
     [Fact]
@@ -144,7 +116,6 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             return true;
         };
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
         NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
         {
             X = input.X, Y = input.Y, Z = input.Z,
@@ -173,7 +144,6 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             return true;
         };
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
         NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
         {
             X = input.X, Y = input.Y, Z = input.Z,
@@ -278,7 +248,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         bool sceneDataRequested = false;
         NativePhysics.PhysicsInput? capturedPhysicsInput = null;
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
+
 
         // Mock scene data service tile response
         SceneDataClient.TestSendTileRequestOverride = request =>
@@ -327,7 +297,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         int sceneRequestCount = 0;
         int physicsStepCount = 0;
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
+
 
         SceneDataClient.TestSendTileRequestOverride = request =>
         {
@@ -401,7 +371,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
     {
         int physicsStepCount = 0;
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride = _ => { };
+
 
         // Scene data fails
         SceneDataClient.TestSendTileRequestOverride = _ =>

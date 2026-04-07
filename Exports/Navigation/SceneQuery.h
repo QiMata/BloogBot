@@ -301,10 +301,11 @@ class SceneQuery
         static SceneCache* GetSceneCache(uint32_t mapId);
         static void ClearSceneCaches();
         static void ClearSceneCache(uint32_t mapId);
-        // Thin scene-slice mode keeps SceneQuery on explicitly injected nearby
-        // geometry and prevents implicit full-map scene/VMAP loads on misses.
-        static void SetSceneSliceMode(bool enabled) { m_sceneSliceMode = enabled; }
-        static bool IsSceneSliceMode() { return m_sceneSliceMode; }
+        // Scene slice mode removed — Physics.dll (PHYSICS_DLL_ONLY) has no VMAP/mmap
+        // data, so EnsureMapLoaded naturally returns early when SceneCache exists.
+        // Kept as no-op for backward compat with any lingering callers.
+        static void SetSceneSliceMode(bool) {}
+        static bool IsSceneSliceMode() { return false; }
         static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
         static const std::string& GetScenesDir() { return m_scenesDir; }
 
@@ -316,7 +317,7 @@ class SceneQuery
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
         inline static bool m_initialized = false;
-        inline static bool m_sceneSliceMode = false;
+        // m_sceneSliceMode removed — Physics.dll naturally has no VMAP/mmap data
         inline static std::string m_scenesDir;
 
         // Per-map scene caches (pre-processed collision geometry)

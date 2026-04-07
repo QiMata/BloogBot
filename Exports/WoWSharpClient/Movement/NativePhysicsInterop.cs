@@ -9,13 +9,10 @@ namespace WoWSharpClient.Movement;
 /// </summary>
 internal static class NativePhysics
 {
-    private const string DllName = "Navigation";
+    private const string DllName = "Physics";
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetDataDirectory(string dataDir);
-
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern void SetSceneSliceMode([MarshalAs(UnmanagedType.I1)] bool enabled);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void PreloadMap(uint mapId);

@@ -70,8 +70,7 @@ public class MovementControllerRecordedFrameTests
         };
 
         // Prevent native DLL initialization in test environment
-        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
-        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
 
         var controller = new MovementController(mockClient.Object, player);
         return (controller, player);
@@ -822,8 +821,7 @@ public class MovementControllerRecordedFrameTests
             MaxHealth = 100,
         };
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
-        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
 
         // Set target 50y north
@@ -925,8 +923,7 @@ public class MovementControllerRecordedFrameTests
             MaxHealth = 100,
         };
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
-        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
         // No SetTargetWaypoint / SetPath call
 
@@ -996,8 +993,7 @@ public class MovementControllerRecordedFrameTests
             Health = 100, MaxHealth = 100,
         };
 
-        NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
-        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
         controller.SetTargetWaypoint(new Position(285f, -4690f, 12f));
 

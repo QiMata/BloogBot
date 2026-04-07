@@ -337,14 +337,9 @@ extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
     catch (...) {}
 }
 
-extern "C" __declspec(dllexport) void SetSceneSliceMode(bool enabled)
-{
-    try
-    {
-        SceneQuery::SetSceneSliceMode(enabled);
-    }
-    catch (...) {}
-}
+// No-op: kept as exported symbol for backward compat with test P/Invoke declarations.
+// BG bots now load Physics.dll (PHYSICS_DLL_ONLY) which strips mmaps/VMAPs.
+extern "C" __declspec(dllexport) void SetSceneSliceMode(bool) {}
 
 // Set the data directory for all subsystems (MapLoader, VMapManager, SceneQuery).
 // Must be called before PreloadMap. Used by SceneDataService and in-process bot

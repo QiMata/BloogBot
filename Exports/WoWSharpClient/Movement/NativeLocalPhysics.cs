@@ -14,14 +14,11 @@ internal static class NativeLocalPhysics
 {
     private static bool _initialized;
     private static bool _mapsPreloaded;
-    private static bool _sceneSliceModeConfigured;
-    private static bool _sceneSliceModeEnabled;
     private static readonly object _preloadLock = new();
     private static List<uint> _preloadedMapIds = [];
     private static HashSet<uint> _preloadedMapIdSet = [];
     internal static Func<NativePhysics.PhysicsInput, NativePhysics.PhysicsOutput>? TestStepOverride { get; set; }
     internal static Action<uint>? TestClearSceneCacheOverride { get; set; }
-    internal static Action<bool>? TestSetSceneSliceModeOverride { get; set; }
     internal static Action<uint>? TestPreloadMapOverride { get; set; }
     internal static Action<string>? TestSetDataDirectoryOverride { get; set; }
     internal static Func<string?>? TestResolveDataDirectoryOverride { get; set; }
@@ -162,29 +159,6 @@ internal static class NativeLocalPhysics
         NativePhysics.ClearSceneCache(mapId);
     }
 
-    public static void SetSceneSliceMode(bool enabled)
-    {
-        if (TestSetSceneSliceModeOverride != null)
-            TestSetSceneSliceModeOverride(enabled);
-
-        if (_sceneSliceModeConfigured && _sceneSliceModeEnabled == enabled)
-            return;
-
-        // Set managed flag immediately — the native DLL call is deferred to
-        // EnsureInitialized() time. This avoids triggering DLL load during
-        // MovementController construction (before NavigationDllResolver can
-        // register for the WoWSharpClient assembly).
-        _sceneSliceModeConfigured = true;
-        _sceneSliceModeEnabled = enabled;
-
-        // Only call native if already initialized — otherwise the flag will
-        // be applied when EnsureInitialized() runs on the first physics step.
-        if (TestSetSceneSliceModeOverride == null && _initialized)
-        {
-            NativePhysics.SetSceneSliceMode(enabled);
-        }
-    }
-
     public static IReadOnlyList<uint> PreloadAvailableMaps()
     {
         EnsureInitialized();
@@ -219,19 +193,9 @@ internal static class NativeLocalPhysics
         if (_preloadedMapIdSet.Contains(mapId))
             return;
 
-        // When scene slice mode is enabled, SceneDataService provides geometry
-        // on demand via InjectSceneTriangles. Skip the expensive full-map preload
-        // that loads entire VMAP datasets (~1GB per map) into memory.
-        // This is critical for BG bots — 9 processes × 1GB = OOM.
-        if (_sceneSliceModeEnabled)
-        {
-            Console.WriteLine($"[NativeLocalPhysics] Scene slice mode active — skipping full preload for map {mapId}");
-            Console.Out.Flush();
-            _preloadedMapIdSet.Add(mapId);
-            _preloadedMapIds.Add(mapId);
-            return;
-        }
-
+        // Physics.dll (BG bots) has PHYSICS_DLL_ONLY defined — PreloadMap
+        // skips mmap loading and only initializes physics + scene cache.
+        // Navigation.dll (FG bots, PathfindingService) loads full mmaps.
         Console.WriteLine($"[NativeLocalPhysics] Preloading map {mapId}...");
         Console.Out.Flush();
 
@@ -288,15 +252,6 @@ internal static class NativeLocalPhysics
         }
 
         _initialized = true;
-
-        // Apply deferred scene slice mode — SetSceneSliceMode() may have been
-        // called before initialization (during MovementController construction).
-        if (_sceneSliceModeConfigured)
-        {
-            NativePhysics.SetSceneSliceMode(_sceneSliceModeEnabled);
-            Console.WriteLine($"[NativeLocalPhysics] Applied deferred SetSceneSliceMode({_sceneSliceModeEnabled})");
-            Console.Out.Flush();
-        }
     }
 
     private static string? ResolveDataDirectory()
@@ -411,8 +366,6 @@ internal static class NativeLocalPhysics
     {
         _initialized = false;
         _mapsPreloaded = false;
-        _sceneSliceModeConfigured = false;
-        _sceneSliceModeEnabled = false;
         _preloadedMapIds = [];
         _preloadedMapIdSet = [];
     }

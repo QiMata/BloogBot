@@ -51,7 +51,6 @@ namespace WoWSharpClient.Tests.Movement
                 .Returns(Task.CompletedTask);
 
             // Prevent native DLL initialization in test environment
-            NativeLocalPhysics.TestSetSceneSliceModeOverride ??= _ => { };
             NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
 
             // Default physics: echo back the input position unchanged (grounded)
@@ -81,7 +80,6 @@ namespace WoWSharpClient.Tests.Movement
         {
             NativeLocalPhysics.TestStepOverride = null;
             NativeLocalPhysics.TestClearSceneCacheOverride = null;
-            NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
         }
 
         // ======== OPCODE SELECTION ========
@@ -976,11 +974,8 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure()
         {
-            var sceneSliceModeEnabled = false;
-
             try
             {
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = enabled => sceneSliceModeEnabled = enabled;
                 var sceneDataClient = new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>());
                 var controller = new MovementController(_mockClient.Object, _player, sceneDataClient);
                 var stepCallCount = 0;
@@ -1014,8 +1009,6 @@ namespace WoWSharpClient.Tests.Movement
 
                 controller.Update(0.05f, 1000);
 
-                // SceneDataClient present → SetSceneSliceMode(true) called
-                Assert.True(sceneSliceModeEnabled);
                 Assert.Equal(1, stepCallCount);
                 Assert.Equal(51.5f, _player.Position.Z);
                 Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
@@ -1027,56 +1020,6 @@ namespace WoWSharpClient.Tests.Movement
                 SceneDataClient.TestEnsureSceneDataAroundOverride = null;
                 NativeLocalPhysics.TestStepOverride = null;
                 NativeLocalPhysics.TestClearSceneCacheOverride = null;
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
-            }
-        }
-
-        [Fact]
-        public void Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode()
-        {
-            // When SceneDataClient is present, ConfigureNativeSceneMode must call
-            // SetSceneSliceMode(true) so Navigation.dll uses injected triangles
-            // instead of loading full VMAP data. Without this, bots have no
-            // collision geometry after teleport and float in air.
-            bool? enabled = null;
-
-            try
-            {
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = value => enabled = value;
-
-                _ = new MovementController(
-                    _mockClient.Object,
-                    _player,
-                    new SceneDataClient(Mock.Of<Microsoft.Extensions.Logging.ILogger>()));
-
-                Assert.True(enabled);
-            }
-            finally
-            {
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
-            }
-        }
-
-        [Fact]
-        public void Update_LocalNativePhysics_WithoutSceneDataClient_DoesNotCallSetSceneSliceMode()
-        {
-            // Without SceneDataClient, scene slice mode is NOT enabled.
-            // Physics will use local preloaded maps instead.
-            bool? enabled = null;
-
-            try
-            {
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = value => enabled = value;
-
-                _ = new MovementController(
-                    _mockClient.Object,
-                    _player);
-
-                Assert.Null(enabled);
-            }
-            finally
-            {
-                NativeLocalPhysics.TestSetSceneSliceModeOverride = null;
             }
         }
 

@@ -441,10 +441,9 @@ void SceneQuery::Initialize()
 void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 {
     // 1. Already have a scene cache? Done.
+    // In Physics.dll (BG bots), tiles are injected via InjectSceneTriangles
+    // so the cache is always populated — this returns early without loading VMAPs.
     if (GetSceneCache(mapId))
-        return;
-
-    if (m_sceneSliceMode)
         return;
 
     // 2. Check for .scene file on disk (fast path)
@@ -622,12 +621,7 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
             return sceneZ;
         }
 
-        if (m_sceneSliceMode)
-            return PhysicsConstants::INVALID_HEIGHT;
     }
-
-    if (m_sceneSliceMode)
-        return GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
@@ -1695,9 +1689,6 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
 
         if (!cacheCoversQuery)
         {
-            if (m_sceneSliceMode)
-                return 0;
-
             SceneCache::ExtractBounds extractBounds;
             extractBounds.minX = boxMin.x;
             extractBounds.minY = boxMin.y;
@@ -1722,7 +1713,7 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
             }
         }
     }
-    else if (!m_sceneSliceMode)
+    else
     {
         SceneCache::ExtractBounds extractBounds;
         extractBounds.minX = boxMin.x;
@@ -2108,12 +2099,6 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
         return static_cast<int>(outHits.size());
     }
     // ---- End Scene Cache fast path ----
-
-    if (m_sceneSliceMode)
-    {
-        outHits.clear();
-        return 0;
-    }
 
     // Acquire map tree from injected manager
     const VMAP::StaticMapTree* map = nullptr;

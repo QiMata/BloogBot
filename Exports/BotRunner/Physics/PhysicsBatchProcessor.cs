@@ -62,7 +62,7 @@ public static class PhysicsBatchProcessor
     }
 
     // Batch API — processes N inputs in one call
-    [DllImport("Navigation", CallingConvention = CallingConvention.Cdecl, EntryPoint = "StepPhysicsV2Batch")]
+    [DllImport("Physics", CallingConvention = CallingConvention.Cdecl, EntryPoint = "StepPhysicsV2Batch")]
     private static extern void StepPhysicsV2Batch(
         [In] PhysicsInputInterop[] inputs,
         int count,
@@ -70,7 +70,7 @@ public static class PhysicsBatchProcessor
         [Out] PhysicsOutputInterop[] outputs);
 
     // Single API — fallback
-    [DllImport("Navigation", CallingConvention = CallingConvention.Cdecl, EntryPoint = "StepPhysicsV2")]
+    [DllImport("Physics", CallingConvention = CallingConvention.Cdecl, EntryPoint = "StepPhysicsV2")]
     private static extern PhysicsOutputInterop StepPhysicsV2Single(
         in PhysicsInputInterop input,
         float dt);

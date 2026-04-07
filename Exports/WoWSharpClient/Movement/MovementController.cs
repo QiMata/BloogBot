@@ -17,7 +17,7 @@ namespace WoWSharpClient.Movement
         private readonly WoWClient _client = client;
         private readonly WoWLocalPlayer _player = player;
         private readonly SceneDataClient? _sceneDataClient = sceneDataClient;
-        private readonly bool _nativeSceneModeConfigured = ConfigureNativeSceneMode(sceneDataClient);
+        // Physics.dll (BG) has no mmaps/VMAPs — scene data comes via tile injection.
         // Physics state
         private Vector3 _velocity = Vector3.Zero;
         // Keep fall time in milliseconds to match WoW movement packet expectations.
@@ -164,19 +164,6 @@ namespace WoWSharpClient.Movement
 
         public List<PhysicsFrameRecord> GetRecordedFrames() => new(_recordedFrames);
         public void ClearRecordedFrames() => _recordedFrames.Clear();
-
-        private static bool ConfigureNativeSceneMode(SceneDataClient? sceneDataClient)
-        {
-            // When SceneDataClient is present, enable scene slice mode so
-            // Navigation.dll uses injected triangles instead of loading full
-            // VMAP data (~1GB per map). Without this call, the physics engine
-            // has no collision geometry after teleport and bots float in air.
-            if (sceneDataClient != null)
-            {
-                NativeLocalPhysics.SetSceneSliceMode(true);
-            }
-            return sceneDataClient != null;
-        }
 
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaSec, uint gameTimeMs)

@@ -2886,3 +2886,22 @@ D1: Physics.dll split, x86/x64 resolver, post-build copy, NavigationDllResolver
 - **DualClientParityTests** — 5/5 pass. FG/BG parity confirmed with tiles.
 - **CornerNavigationTests** — 3/4 pass. OrgBankToAH timeout is pre-existing pathfinding issue, not tile-related.
 - **TileBoundaryCrossingTests** — 2/2 pass. Single boundary + open terrain navigation validated.
+
+## R10 — DLL Separation: Physics.dll for BG Bots (Archived 2026-04-07)
+
+**Problem:** Single Navigation.dll contained both pathfinding (mmaps, Detour) and physics (collision, ground Z). BG bots loaded Navigation.dll which unconditionally loaded mmaps (~hundreds MB) + VMAPs (~1GB per map) on first P/Invoke call. With 9 BG bots = OOM. `SetSceneSliceMode` was a runtime hack that couldn't prevent the initial mmap loading (chicken-and-egg timing: first DLL call triggers `InitializeAllSystems()` before the flag is set).
+
+**Fix:** Physics.dll already existed with `PHYSICS_DLL_ONLY` defined (strips all pathfinding + mmap loading). Wired it up:
+- Changed `NativePhysicsInterop.cs` DllName from `"Navigation"` to `"Physics"`
+- Changed `PhysicsBatchProcessor.cs` DllName from `"Navigation"` to `"Physics"`
+- `NavigationDllResolver` already resolved both DLL names — no changes needed
+- `PathfindingClient.cs` keeps `"Navigation"` (needs navmesh functions for FG/service)
+
+**Removed SetSceneSliceMode entirely:**
+- C++: `SetSceneSliceMode` export is now a no-op (kept for backward compat with test P/Invoke)
+- C++: All `m_sceneSliceMode` guards removed from `SceneQuery.cpp` (EnsureMapLoaded, GetGroundZ, TestTerrainAABB, SweepCapsule)
+- C++: `m_sceneSliceMode` field removed from `SceneQuery.h`
+- C#: `SetSceneSliceMode` removed from `NativePhysicsInterop`, `NativeLocalPhysics`, `MovementController`
+- Tests: `SceneSliceModeTests.cs` deleted, SetSceneSliceMode test overrides removed from 6 test files
+
+**Result:** BG bots load Physics.dll (~774KB, no mmaps/VMAPs). Navigation.dll (~5MB+, full pathfinding) only loaded by FG bots and PathfindingService. No more OOM from duplicate VMAP loading.
