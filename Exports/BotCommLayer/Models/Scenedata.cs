@@ -31,18 +31,27 @@ namespace SceneData {
             "BW1pbl95GAMgASgCEg0KBW1heF94GAQgASgCEg0KBW1heF95GAUgASgCEhUK",
             "DXRyaWFuZ2xlX2RhdGEYBiADKAISEAoId2Fsa2FibGUYByADKAgSEwoLbm9y",
             "bWFsX2RhdGEYCCADKAISFgoOdHJpYW5nbGVfY291bnQYCSABKA0SDwoHc3Vj",
-            "Y2VzcxgKIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAsgASgJIl8KEUxpcXVpZEdy",
-            "aWRSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEoDRINCgVtaW5feBgCIAEoAhINCgVt",
-            "aW5feRgDIAEoAhINCgVtYXhfeBgEIAEoAhINCgVtYXhfeRgFIAEoAiKXAQoS",
-            "TGlxdWlkR3JpZFJlc3BvbnNlEg4KBm1hcF9pZBgBIAEoDRIVCg1saXF1aWRf",
-            "bGV2ZWxzGAIgAygCEhQKDGxpcXVpZF90eXBlcxgDIAMoDRIRCgljZWxsX3Np",
-            "emUYBCABKAISDwoHY2VsbHNfeBgFIAEoDRIPCgdjZWxsc195GAYgASgNEg8K",
-            "B3N1Y2Nlc3MYByABKAhCDKoCCVNjZW5lRGF0YWIGcHJvdG8z"));
+            "Y2VzcxgKIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAsgASgJIkIKEFNjZW5lVGls",
+            "ZVJlcXVlc3QSDgoGbWFwX2lkGAEgASgNEg4KBnRpbGVfeBgCIAEoDRIOCgZ0",
+            "aWxlX3kYAyABKA0i/QEKEVNjZW5lVGlsZVJlc3BvbnNlEg4KBm1hcF9pZBgB",
+            "IAEoDRIOCgZ0aWxlX3gYAiABKA0SDgoGdGlsZV95GAMgASgNEhUKDXRyaWFu",
+            "Z2xlX2RhdGEYBCADKAISEwoLbm9ybWFsX2RhdGEYBSADKAISEAoId2Fsa2Fi",
+            "bGUYBiADKAgSFgoOdHJpYW5nbGVfY291bnQYByABKA0SDwoHc3VjY2VzcxgI",
+            "IAEoCBIVCg1lcnJvcl9tZXNzYWdlGAkgASgJEg0KBW1pbl94GAogASgCEg0K",
+            "BW1pbl95GAsgASgCEg0KBW1heF94GAwgASgCEg0KBW1heF95GA0gASgCIl8K",
+            "EUxpcXVpZEdyaWRSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEoDRINCgVtaW5feBgC",
+            "IAEoAhINCgVtaW5feRgDIAEoAhINCgVtYXhfeBgEIAEoAhINCgVtYXhfeRgF",
+            "IAEoAiKXAQoSTGlxdWlkR3JpZFJlc3BvbnNlEg4KBm1hcF9pZBgBIAEoDRIV",
+            "Cg1saXF1aWRfbGV2ZWxzGAIgAygCEhQKDGxpcXVpZF90eXBlcxgDIAMoDRIR",
+            "CgljZWxsX3NpemUYBCABKAISDwoHY2VsbHNfeBgFIAEoDRIPCgdjZWxsc195",
+            "GAYgASgNEg8KB3N1Y2Nlc3MYByABKAhCDKoCCVNjZW5lRGF0YWIGcHJvdG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridRequest), global::SceneData.SceneGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridResponse), global::SceneData.SceneGridResponse.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY", "TriangleData", "Walkable", "NormalData", "TriangleCount", "Success", "ErrorMessage" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileRequest), global::SceneData.SceneTileRequest.Parser, new[]{ "MapId", "TileX", "TileY" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileResponse), global::SceneData.SceneTileResponse.Parser, new[]{ "MapId", "TileX", "TileY", "TriangleData", "NormalData", "Walkable", "TriangleCount", "Success", "ErrorMessage", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridRequest), global::SceneData.LiquidGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridResponse), global::SceneData.LiquidGridResponse.Parser, new[]{ "MapId", "LiquidLevels", "LiquidTypes", "CellSize", "CellsX", "CellsY", "Success" }, null, null, null, null)
           }));
@@ -958,6 +967,911 @@ namespace SceneData {
   }
 
   /// <summary>
+  /// Tile-based scene data request (preferred over SceneGridRequest).
+  /// Each tile is 533.33y × 533.33y, matching WoW's ADT grid.
+  /// Bot requests tiles by (mapId, tileX, tileY). Service returns
+  /// pre-split triangle data from .scenetile files.
+  /// </summary>
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class SceneTileRequest : pb::IMessage<SceneTileRequest>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<SceneTileRequest> _parser = new pb::MessageParser<SceneTileRequest>(() => new SceneTileRequest());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<SceneTileRequest> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[2]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileRequest() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileRequest(SceneTileRequest other) : this() {
+      mapId_ = other.mapId_;
+      tileX_ = other.tileX_;
+      tileY_ = other.tileY_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileRequest Clone() {
+      return new SceneTileRequest(this);
+    }
+
+    /// <summary>Field number for the "map_id" field.</summary>
+    public const int MapIdFieldNumber = 1;
+    private uint mapId_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint MapId {
+      get { return mapId_; }
+      set {
+        mapId_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "tile_x" field.</summary>
+    public const int TileXFieldNumber = 2;
+    private uint tileX_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint TileX {
+      get { return tileX_; }
+      set {
+        tileX_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "tile_y" field.</summary>
+    public const int TileYFieldNumber = 3;
+    private uint tileY_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint TileY {
+      get { return tileY_; }
+      set {
+        tileY_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as SceneTileRequest);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(SceneTileRequest other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (MapId != other.MapId) return false;
+      if (TileX != other.TileX) return false;
+      if (TileY != other.TileY) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (MapId != 0) hash ^= MapId.GetHashCode();
+      if (TileX != 0) hash ^= TileX.GetHashCode();
+      if (TileY != 0) hash ^= TileY.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (MapId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(MapId);
+      }
+      if (TileX != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(TileX);
+      }
+      if (TileY != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(TileY);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (MapId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(MapId);
+      }
+      if (TileX != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(TileX);
+      }
+      if (TileY != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(TileY);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (MapId != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(MapId);
+      }
+      if (TileX != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(TileX);
+      }
+      if (TileY != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(TileY);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(SceneTileRequest other) {
+      if (other == null) {
+        return;
+      }
+      if (other.MapId != 0) {
+        MapId = other.MapId;
+      }
+      if (other.TileX != 0) {
+        TileX = other.TileX;
+      }
+      if (other.TileY != 0) {
+        TileY = other.TileY;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            MapId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            TileX = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            TileY = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            MapId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            TileX = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            TileY = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class SceneTileResponse : pb::IMessage<SceneTileResponse>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<SceneTileResponse> _parser = new pb::MessageParser<SceneTileResponse>(() => new SceneTileResponse());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<SceneTileResponse> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[3]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileResponse() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileResponse(SceneTileResponse other) : this() {
+      mapId_ = other.mapId_;
+      tileX_ = other.tileX_;
+      tileY_ = other.tileY_;
+      triangleData_ = other.triangleData_.Clone();
+      normalData_ = other.normalData_.Clone();
+      walkable_ = other.walkable_.Clone();
+      triangleCount_ = other.triangleCount_;
+      success_ = other.success_;
+      errorMessage_ = other.errorMessage_;
+      minX_ = other.minX_;
+      minY_ = other.minY_;
+      maxX_ = other.maxX_;
+      maxY_ = other.maxY_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public SceneTileResponse Clone() {
+      return new SceneTileResponse(this);
+    }
+
+    /// <summary>Field number for the "map_id" field.</summary>
+    public const int MapIdFieldNumber = 1;
+    private uint mapId_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint MapId {
+      get { return mapId_; }
+      set {
+        mapId_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "tile_x" field.</summary>
+    public const int TileXFieldNumber = 2;
+    private uint tileX_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint TileX {
+      get { return tileX_; }
+      set {
+        tileX_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "tile_y" field.</summary>
+    public const int TileYFieldNumber = 3;
+    private uint tileY_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint TileY {
+      get { return tileY_; }
+      set {
+        tileY_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "triangle_data" field.</summary>
+    public const int TriangleDataFieldNumber = 4;
+    private static readonly pb::FieldCodec<float> _repeated_triangleData_codec
+        = pb::FieldCodec.ForFloat(34);
+    private readonly pbc::RepeatedField<float> triangleData_ = new pbc::RepeatedField<float>();
+    /// <summary>
+    /// Packed triangle data: 9 floats per triangle (3 vertices × 3 components)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<float> TriangleData {
+      get { return triangleData_; }
+    }
+
+    /// <summary>Field number for the "normal_data" field.</summary>
+    public const int NormalDataFieldNumber = 5;
+    private static readonly pb::FieldCodec<float> _repeated_normalData_codec
+        = pb::FieldCodec.ForFloat(42);
+    private readonly pbc::RepeatedField<float> normalData_ = new pbc::RepeatedField<float>();
+    /// <summary>
+    /// Per-triangle normal (3 floats per triangle: nx, ny, nz)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<float> NormalData {
+      get { return normalData_; }
+    }
+
+    /// <summary>Field number for the "walkable" field.</summary>
+    public const int WalkableFieldNumber = 6;
+    private static readonly pb::FieldCodec<bool> _repeated_walkable_codec
+        = pb::FieldCodec.ForBool(50);
+    private readonly pbc::RepeatedField<bool> walkable_ = new pbc::RepeatedField<bool>();
+    /// <summary>
+    /// Per-triangle walkability flag
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<bool> Walkable {
+      get { return walkable_; }
+    }
+
+    /// <summary>Field number for the "triangle_count" field.</summary>
+    public const int TriangleCountFieldNumber = 7;
+    private uint triangleCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint TriangleCount {
+      get { return triangleCount_; }
+      set {
+        triangleCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "success" field.</summary>
+    public const int SuccessFieldNumber = 8;
+    private bool success_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Success {
+      get { return success_; }
+      set {
+        success_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "error_message" field.</summary>
+    public const int ErrorMessageFieldNumber = 9;
+    private string errorMessage_ = "";
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string ErrorMessage {
+      get { return errorMessage_; }
+      set {
+        errorMessage_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "min_x" field.</summary>
+    public const int MinXFieldNumber = 10;
+    private float minX_;
+    /// <summary>
+    /// Tile world-space bounds (for client-side spatial index rebuild)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MinX {
+      get { return minX_; }
+      set {
+        minX_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "min_y" field.</summary>
+    public const int MinYFieldNumber = 11;
+    private float minY_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MinY {
+      get { return minY_; }
+      set {
+        minY_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_x" field.</summary>
+    public const int MaxXFieldNumber = 12;
+    private float maxX_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxX {
+      get { return maxX_; }
+      set {
+        maxX_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_y" field.</summary>
+    public const int MaxYFieldNumber = 13;
+    private float maxY_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxY {
+      get { return maxY_; }
+      set {
+        maxY_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as SceneTileResponse);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(SceneTileResponse other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (MapId != other.MapId) return false;
+      if (TileX != other.TileX) return false;
+      if (TileY != other.TileY) return false;
+      if(!triangleData_.Equals(other.triangleData_)) return false;
+      if(!normalData_.Equals(other.normalData_)) return false;
+      if(!walkable_.Equals(other.walkable_)) return false;
+      if (TriangleCount != other.TriangleCount) return false;
+      if (Success != other.Success) return false;
+      if (ErrorMessage != other.ErrorMessage) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MinX, other.MinX)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MinY, other.MinY)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxX, other.MaxX)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxY, other.MaxY)) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (MapId != 0) hash ^= MapId.GetHashCode();
+      if (TileX != 0) hash ^= TileX.GetHashCode();
+      if (TileY != 0) hash ^= TileY.GetHashCode();
+      hash ^= triangleData_.GetHashCode();
+      hash ^= normalData_.GetHashCode();
+      hash ^= walkable_.GetHashCode();
+      if (TriangleCount != 0) hash ^= TriangleCount.GetHashCode();
+      if (Success != false) hash ^= Success.GetHashCode();
+      if (ErrorMessage.Length != 0) hash ^= ErrorMessage.GetHashCode();
+      if (MinX != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MinX);
+      if (MinY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MinY);
+      if (MaxX != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxX);
+      if (MaxY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxY);
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (MapId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(MapId);
+      }
+      if (TileX != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(TileX);
+      }
+      if (TileY != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(TileY);
+      }
+      triangleData_.WriteTo(output, _repeated_triangleData_codec);
+      normalData_.WriteTo(output, _repeated_normalData_codec);
+      walkable_.WriteTo(output, _repeated_walkable_codec);
+      if (TriangleCount != 0) {
+        output.WriteRawTag(56);
+        output.WriteUInt32(TriangleCount);
+      }
+      if (Success != false) {
+        output.WriteRawTag(64);
+        output.WriteBool(Success);
+      }
+      if (ErrorMessage.Length != 0) {
+        output.WriteRawTag(74);
+        output.WriteString(ErrorMessage);
+      }
+      if (MinX != 0F) {
+        output.WriteRawTag(85);
+        output.WriteFloat(MinX);
+      }
+      if (MinY != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(MinY);
+      }
+      if (MaxX != 0F) {
+        output.WriteRawTag(101);
+        output.WriteFloat(MaxX);
+      }
+      if (MaxY != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(MaxY);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (MapId != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(MapId);
+      }
+      if (TileX != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(TileX);
+      }
+      if (TileY != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(TileY);
+      }
+      triangleData_.WriteTo(ref output, _repeated_triangleData_codec);
+      normalData_.WriteTo(ref output, _repeated_normalData_codec);
+      walkable_.WriteTo(ref output, _repeated_walkable_codec);
+      if (TriangleCount != 0) {
+        output.WriteRawTag(56);
+        output.WriteUInt32(TriangleCount);
+      }
+      if (Success != false) {
+        output.WriteRawTag(64);
+        output.WriteBool(Success);
+      }
+      if (ErrorMessage.Length != 0) {
+        output.WriteRawTag(74);
+        output.WriteString(ErrorMessage);
+      }
+      if (MinX != 0F) {
+        output.WriteRawTag(85);
+        output.WriteFloat(MinX);
+      }
+      if (MinY != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(MinY);
+      }
+      if (MaxX != 0F) {
+        output.WriteRawTag(101);
+        output.WriteFloat(MaxX);
+      }
+      if (MaxY != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(MaxY);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (MapId != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(MapId);
+      }
+      if (TileX != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(TileX);
+      }
+      if (TileY != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(TileY);
+      }
+      size += triangleData_.CalculateSize(_repeated_triangleData_codec);
+      size += normalData_.CalculateSize(_repeated_normalData_codec);
+      size += walkable_.CalculateSize(_repeated_walkable_codec);
+      if (TriangleCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(TriangleCount);
+      }
+      if (Success != false) {
+        size += 1 + 1;
+      }
+      if (ErrorMessage.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(ErrorMessage);
+      }
+      if (MinX != 0F) {
+        size += 1 + 4;
+      }
+      if (MinY != 0F) {
+        size += 1 + 4;
+      }
+      if (MaxX != 0F) {
+        size += 1 + 4;
+      }
+      if (MaxY != 0F) {
+        size += 1 + 4;
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(SceneTileResponse other) {
+      if (other == null) {
+        return;
+      }
+      if (other.MapId != 0) {
+        MapId = other.MapId;
+      }
+      if (other.TileX != 0) {
+        TileX = other.TileX;
+      }
+      if (other.TileY != 0) {
+        TileY = other.TileY;
+      }
+      triangleData_.Add(other.triangleData_);
+      normalData_.Add(other.normalData_);
+      walkable_.Add(other.walkable_);
+      if (other.TriangleCount != 0) {
+        TriangleCount = other.TriangleCount;
+      }
+      if (other.Success != false) {
+        Success = other.Success;
+      }
+      if (other.ErrorMessage.Length != 0) {
+        ErrorMessage = other.ErrorMessage;
+      }
+      if (other.MinX != 0F) {
+        MinX = other.MinX;
+      }
+      if (other.MinY != 0F) {
+        MinY = other.MinY;
+      }
+      if (other.MaxX != 0F) {
+        MaxX = other.MaxX;
+      }
+      if (other.MaxY != 0F) {
+        MaxY = other.MaxY;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            MapId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            TileX = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            TileY = input.ReadUInt32();
+            break;
+          }
+          case 34:
+          case 37: {
+            triangleData_.AddEntriesFrom(input, _repeated_triangleData_codec);
+            break;
+          }
+          case 42:
+          case 45: {
+            normalData_.AddEntriesFrom(input, _repeated_normalData_codec);
+            break;
+          }
+          case 50:
+          case 48: {
+            walkable_.AddEntriesFrom(input, _repeated_walkable_codec);
+            break;
+          }
+          case 56: {
+            TriangleCount = input.ReadUInt32();
+            break;
+          }
+          case 64: {
+            Success = input.ReadBool();
+            break;
+          }
+          case 74: {
+            ErrorMessage = input.ReadString();
+            break;
+          }
+          case 85: {
+            MinX = input.ReadFloat();
+            break;
+          }
+          case 93: {
+            MinY = input.ReadFloat();
+            break;
+          }
+          case 101: {
+            MaxX = input.ReadFloat();
+            break;
+          }
+          case 109: {
+            MaxY = input.ReadFloat();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            MapId = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            TileX = input.ReadUInt32();
+            break;
+          }
+          case 24: {
+            TileY = input.ReadUInt32();
+            break;
+          }
+          case 34:
+          case 37: {
+            triangleData_.AddEntriesFrom(ref input, _repeated_triangleData_codec);
+            break;
+          }
+          case 42:
+          case 45: {
+            normalData_.AddEntriesFrom(ref input, _repeated_normalData_codec);
+            break;
+          }
+          case 50:
+          case 48: {
+            walkable_.AddEntriesFrom(ref input, _repeated_walkable_codec);
+            break;
+          }
+          case 56: {
+            TriangleCount = input.ReadUInt32();
+            break;
+          }
+          case 64: {
+            Success = input.ReadBool();
+            break;
+          }
+          case 74: {
+            ErrorMessage = input.ReadString();
+            break;
+          }
+          case 85: {
+            MinX = input.ReadFloat();
+            break;
+          }
+          case 93: {
+            MinY = input.ReadFloat();
+            break;
+          }
+          case 101: {
+            MaxX = input.ReadFloat();
+            break;
+          }
+          case 109: {
+            MaxY = input.ReadFloat();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
   /// Liquid data for a region
   /// </summary>
   [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
@@ -975,7 +1889,7 @@ namespace SceneData {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[2]; }
+      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[4]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -1321,7 +2235,7 @@ namespace SceneData {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[3]; }
+      get { return global::SceneData.ScenedataReflection.Descriptor.MessageTypes[5]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

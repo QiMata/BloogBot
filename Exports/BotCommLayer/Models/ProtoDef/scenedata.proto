@@ -37,6 +37,41 @@ message SceneGridResponse {
     string error_message = 11;
 }
 
+// Tile-based scene data request (preferred over SceneGridRequest).
+// Each tile is 533.33y × 533.33y, matching WoW's ADT grid.
+// Bot requests tiles by (mapId, tileX, tileY). Service returns
+// pre-split triangle data from .scenetile files.
+message SceneTileRequest {
+    uint32 map_id = 1;
+    uint32 tile_x = 2;
+    uint32 tile_y = 3;
+}
+
+message SceneTileResponse {
+    uint32 map_id = 1;
+    uint32 tile_x = 2;
+    uint32 tile_y = 3;
+
+    // Packed triangle data: 9 floats per triangle (3 vertices × 3 components)
+    repeated float triangle_data = 4;
+
+    // Per-triangle normal (3 floats per triangle: nx, ny, nz)
+    repeated float normal_data = 5;
+
+    // Per-triangle walkability flag
+    repeated bool walkable = 6;
+
+    uint32 triangle_count = 7;
+    bool success = 8;
+    string error_message = 9;
+
+    // Tile world-space bounds (for client-side spatial index rebuild)
+    float min_x = 10;
+    float min_y = 11;
+    float max_x = 12;
+    float max_y = 13;
+}
+
 // Liquid data for a region
 message LiquidGridRequest {
     uint32 map_id = 1;
