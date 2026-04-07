@@ -33,7 +33,7 @@
 
 | # | Task | Spec |
 |---|------|------|
-| 5.1 | **TravelTo pathfinding** — Use GoTo's `NavigationPath.GetNextWaypoint()` for TravelTo so bots navigate around obstacles in cities. Currently stuck on buildings at 60y in Orgrimmar. | Open |
+| 5.1 | **TravelTo pathfinding** — Uses PathfindingClient.GetPath for waypoint navigation. Bot follows navmesh path (97y→71y). Occasional server position reset at boundary. | **Done** (abb6bf9b) |
 | 5.2 | **AV test infrastructure** — Set up AlteracValleyFixture with multi-bot accounts. Requires 80-bot configuration (40 Horde + 40 Alliance). | Open |
 | 5.3 | **AV entry test** — Bots form raid, queue at BG master, enter AV (MapId=30). Verify all bots on AV map. | Open — depends on 5.2 |
 
