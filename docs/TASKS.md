@@ -12,7 +12,7 @@
 
 ---
 
-## Test Baseline (2026-04-06 — R4 SceneData fix)
+## Test Baseline (2026-04-06 — R5/R6 complete)
 
 | Suite | Passed | Failed | Skipped | Notes |
 |-------|--------|--------|---------|-------|
@@ -23,31 +23,30 @@
 
 ---
 
-## R1/R2/R3/R4 — Archived (see docs/ARCHIVE.md)
+## R1-R6 — Archived (see docs/ARCHIVE.md)
 
-**R4 Summary:** SceneDataService pipeline fully operational. 42 maps preloaded, 50K triangles/region served. Bots walk on ground, no floating. TravelTo fixed (arrival check + no oscillation). DualClientParity tests fixed (collection). 24 new pipeline tests added.
-
----
-
-## R5 — Navigation & AV (Priority: High)
-
-| # | Task | Spec |
-|---|------|------|
-| 5.1 | **TravelTo pathfinding** — Uses PathfindingClient.GetPath for waypoint navigation. Bot follows navmesh path (97y→71y). Occasional server position reset at boundary. | **Done** (abb6bf9b) |
-| 5.2 | **AV test infrastructure** — Set up AlteracValleyFixture with multi-bot accounts. Requires 80-bot configuration (40 Horde + 40 Alliance). | Open |
-| 5.3 | **AV entry test** — Bots form raid, queue at BG master, enter AV (MapId=30). Verify all bots on AV map. | Open — depends on 5.2 |
+**Summary:**
+- **R4:** SceneDataService pipeline operational (42 maps, 50K triangles/region)
+- **R5.1:** TravelTo pathfinding via PathfindingClient.GetPath
+- **R6:** All 10 placeholder tests fleshed out with real assertions
 
 ---
 
-## R6 — Placeholder Test Flesh-out (Priority: Medium) — **COMPLETE**
+## R7 — Battleground Tests (Priority: High — Infrastructure-gated)
+
+**Prerequisite:** Machine with 32+ GB RAM to run multiple bot processes (~1.8GB each).
 
 | # | Task | Spec |
 |---|------|------|
-| 6.1 | **BankInteractionTests** — Assert banker found + distance < 20y, item count verified. | **Done** (a7187372) |
-| 6.2 | **AuctionHouseTests** — Assert auctioneer found + distance < 30y, InteractWith Success. | **Done** (a7187372) |
-| 6.3 | **AuctionHouseParityTests** — NPC detection, item in bags, bot alive (prerequisites). | **Done** (a7187372) |
-| 6.4 | **BankParityTests** — Item count, banker found (prerequisites). | **Done** (a7187372) |
-| 6.5 | **RaidCoordinationTests.MarkTargeting** — Nearby units > 0, raid formed. | **Done** (a7187372) |
+| 7.1 | **WSG test (20 bots)** — Smallest BG. 10 Horde + 10 Alliance. Fixture auto-creates accounts. Run: `dotnet test --filter "Collection~WarsongGulchValidation"`. | Open |
+| 7.2 | **AB test (30 bots)** — 15 Horde + 15 Alliance. Run: `dotnet test --filter "Collection~ArathiBasinValidation"`. | Open |
+| 7.3 | **AV test (80 bots)** — 40 Horde + 40 Alliance. Run: `dotnet test --filter "Collection~AlteracValleyValidation"`. | Open |
+
+**Notes:**
+- All fixtures auto-generate settings files and create accounts via SOAP
+- Each BackgroundBotRunner uses ~1.8GB RAM (scene data loaded per-process)
+- Fixtures use `CoordinatorFixtureBase` with `WaitForExactBotCountAsync`
+- Server position resets may need investigation (seen in R5.1 navigation tests)
 
 ---
 

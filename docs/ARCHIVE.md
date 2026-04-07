@@ -60,6 +60,8 @@
 | R4.9 | Fix TravelTo oscillation — arrival check (15y) + StopAllMovement | Done |
 | R4-SDS | SceneDataService thread-safe init + per-map preload logging. 42 maps, 50K triangles/region | Done |
 | R4-DLL | Fix Linux DllMain.cpp GetLastError stub (missing function name) | Done |
+| R5.1 | TravelTo pathfinding via PathfindingClient.GetPath — bot follows navmesh waypoints | Done |
+| R6.1-R6.5 | Placeholder tests fleshed out — bank/AH/parity/raid tests with real assertions | Done |
 
 ## Completed Task Details
 
