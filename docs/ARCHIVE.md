@@ -2878,3 +2878,11 @@ D1: Physics.dll split, x86/x64 resolver, post-build copy, NavigationDllResolver
 | WoWSharpClient.Tests | 1445 | 0 | 1 |
 | Navigation.Physics.Tests | 679 | 2 | 1 |
 | BotRunner.Tests (unit) | 430 | 0 | 3 |
+
+## R9 — LiveValidation with Tiles (Archived 2026-04-07)
+
+- **Tile boundary crossing test** — Bot navigates across tile (30,41)→(29,41) boundary near Orgrimmar. Crosses boundary, arrives at destination, no fall-through-world.
+- **BasicLoopTests** — 2/2 pass with tile-based scene data. Login + physics stability validated.
+- **DualClientParityTests** — 5/5 pass. FG/BG parity confirmed with tiles.
+- **CornerNavigationTests** — 3/4 pass. OrgBankToAH timeout is pre-existing pathfinding issue, not tile-related.
+- **TileBoundaryCrossingTests** — 2/2 pass. Single boundary + open terrain navigation validated.
