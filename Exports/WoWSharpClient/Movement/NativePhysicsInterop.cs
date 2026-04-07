@@ -24,8 +24,24 @@ internal static class NativePhysics
     public static extern float GetGroundZ(uint mapId, float x, float y, float queryZ, float maxSearchDist);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool LineOfSight(uint mapId, XYZ from, XYZ to);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SegmentIntersectsDynamicObjects(
+        uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern bool InjectSceneTriangles(uint mapId, float minX, float minY, float maxX, float maxY,
         IntPtr triangles, int triangleCount);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct XYZ
+    {
+        public float X, Y, Z;
+        public XYZ(float x, float y, float z) { X = x; Y = y; Z = z; }
+    }
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void ClearSceneCache(uint mapId);

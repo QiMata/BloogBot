@@ -159,6 +159,39 @@ internal static class NativeLocalPhysics
         NativePhysics.ClearSceneCache(mapId);
     }
 
+    /// <summary>
+    /// Query ground height at an arbitrary (x,y) position using Physics.dll SceneCache.
+    /// Used by NavigationPath for waypoint Z-snapping, probe checks, etc.
+    /// </summary>
+    public static (float groundZ, bool found) GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10f)
+    {
+        EnsureMapPreloaded(mapId);
+        float gz = NativePhysics.GetGroundZ(mapId, x, y, z, maxSearchDist);
+        return (gz, gz > -50000f);
+    }
+
+    /// <summary>
+    /// Line-of-sight check between two world positions via Physics.dll ray cast.
+    /// </summary>
+    public static bool LineOfSight(uint mapId, float fromX, float fromY, float fromZ,
+        float toX, float toY, float toZ)
+    {
+        EnsureMapPreloaded(mapId);
+        return NativePhysics.LineOfSight(mapId,
+            new NativePhysics.XYZ(fromX, fromY, fromZ),
+            new NativePhysics.XYZ(toX, toY, toZ));
+    }
+
+    /// <summary>
+    /// Check if a line segment intersects any registered dynamic objects.
+    /// </summary>
+    public static bool SegmentIntersectsDynamicObjects(uint mapId,
+        float x0, float y0, float z0, float x1, float y1, float z1)
+    {
+        EnsureMapPreloaded(mapId);
+        return NativePhysics.SegmentIntersectsDynamicObjects(mapId, x0, y0, z0, x1, y1, z1);
+    }
+
     public static IReadOnlyList<uint> PreloadAvailableMaps()
     {
         EnsureInitialized();

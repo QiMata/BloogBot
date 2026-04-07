@@ -6,8 +6,6 @@ using Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
-
 namespace BotRunner.Clients
 {
     /// <summary>
@@ -94,49 +92,16 @@ namespace BotRunner.Clients
             return distance;
         }
 
-        // ════���═══════════════════════════════════════════════════════════
-        //  LOCAL: Physics, GroundZ, LOS, Navmesh queries (Navigation.dll)
-        // ═══════════════════════════════════════��════════════════════════
-
-        private const string NavigationDll = "Physics";
-
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
-        private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
-
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool LineOfSightNative(uint mapId, NativeXYZ from, NativeXYZ to);
-
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool SegmentIntersectsDynamicObjectsNative(
-            uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
-
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsPointOnNavmesh")]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool IsPointOnNavmeshNative(
-            uint mapId, float x, float y, float z, float searchRadius,
-            out float nearestX, out float nearestY, out float nearestZ);
-
-        [DllImport(NavigationDll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "FindNearestWalkablePoint")]
-        private static extern uint FindNearestWalkablePointNative(
-            uint mapId, float x, float y, float z, float searchRadius,
-            out float nearestX, out float nearestY, out float nearestZ);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NativeXYZ
-        {
-            public float X, Y, Z;
-            public NativeXYZ(float x, float y, float z) { X = x; Y = y; Z = z; }
-        }
+        // ═══════════════════════════════════════════════════════════════
+        //  LOCAL: Spatial queries via NativeLocalPhysics (Physics.dll)
+        // ═══════════════════════════════════════════════════════════════
 
         public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
         {
             try
             {
-                float gz = GetGroundZNative(mapId, position.X, position.Y, position.Z, maxSearchDist);
-                bool found = gz > -50000f;
-                return (gz, found);
+                return WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
+                    mapId, position.X, position.Y, position.Z, maxSearchDist);
             }
             catch (Exception ex)
             {
@@ -157,9 +122,8 @@ namespace BotRunner.Clients
         {
             try
             {
-                return LineOfSightNative(mapId,
-                    new NativeXYZ(from.X, from.Y, from.Z),
-                    new NativeXYZ(to.X, to.Y, to.Z));
+                return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
+                    mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
             }
             catch (Exception ex)
             {
@@ -172,7 +136,7 @@ namespace BotRunner.Clients
         {
             try
             {
-                return SegmentIntersectsDynamicObjectsNative(
+                return WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
                     mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
             }
             catch
@@ -183,30 +147,17 @@ namespace BotRunner.Clients
 
         public virtual (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
         {
-            try
-            {
-                bool on = IsPointOnNavmeshNative(mapId, position.X, position.Y, position.Z, searchRadius,
-                    out float nx, out float ny, out float nz);
-                return (on, new Position(nx, ny, nz));
-            }
-            catch
-            {
-                return (false, position);
-            }
+            // IsPointOnNavmesh requires Navigation.dll (navmesh data).
+            // Physics.dll doesn't have it — always return false.
+            // PathfindingService handles navmesh queries remotely.
+            return (false, position);
         }
 
         public virtual (uint areaType, Position nearestPoint) FindNearestWalkablePoint(uint mapId, Position position, float searchRadius = 8.0f)
         {
-            try
-            {
-                uint areaType = FindNearestWalkablePointNative(mapId, position.X, position.Y, position.Z, searchRadius,
-                    out float nx, out float ny, out float nz);
-                return (areaType, new Position(nx, ny, nz));
-            }
-            catch
-            {
-                return (0, position);
-            }
+            // FindNearestWalkablePoint requires Navigation.dll (navmesh data).
+            // Physics.dll doesn't have it — return fallback.
+            return (0, position);
         }
 
         // ════════════════════════════════════════════════════════════════
