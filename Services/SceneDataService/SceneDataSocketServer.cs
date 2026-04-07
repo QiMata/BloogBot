@@ -130,12 +130,13 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         var handle = GCHandle.Alloc(triangles, GCHandleType.Pinned);
         try
         {
-            // Ground-focused query: -100 to +100 from sea level covers most terrain
-            // and ground-floor structures without capturing upper stories.
+            // Full Z range query — .scene files include all geometry.
+            // Client-side physics handles ground detection; we send everything
+            // and let the physics capsule sweep find the correct ground surface.
             int count = NativeScene.QueryTerrainAABBTriangles(
                 request.MapId,
-                request.MinX, request.MinY, -100f,
-                request.MaxX, request.MaxY, 200f,
+                request.MinX, request.MinY, -500f,
+                request.MaxX, request.MaxY, 2000f,
                 handle.AddrOfPinnedObject(),
                 maxTriangles);
 

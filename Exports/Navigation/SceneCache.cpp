@@ -953,11 +953,20 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
         // Interpolate Z
         float triZ = st.az + u * (st.cz - st.az) + v * (st.bz - st.az);
 
-        // Pick the surface closest to query Z (consistent with non-cached
-        // SceneQuery::GetGroundZ which uses "closest to z" for multi-level).
-        if (triZ >= zMin && triZ <= zMax) {
-            float err = std::fabs(triZ - z);
-            if (bestZ <= -200000.0f + 1.0f || err < bestErr) {
+        // Pick the highest surface AT OR BELOW the query Z (downward ray).
+        // WoW.exe ground detection casts downward — surfaces above the query
+        // point are ceilings/roofs, not ground. Only accept triZ <= z.
+        // Fall back to closest-above if nothing is below (standing on top of geometry).
+        if (triZ >= zMin && triZ <= z) {
+            // Below or at query Z — prefer the highest (closest below)
+            if (triZ > bestZ) {
+                bestZ = triZ;
+                bestErr = z - triZ;
+            }
+        } else if (triZ > z && triZ <= zMax && bestZ <= -200000.0f + 1.0f) {
+            // Above query Z — only use if nothing below was found
+            float err = triZ - z;
+            if (err < bestErr) {
                 bestZ = triZ;
                 bestErr = err;
             }
