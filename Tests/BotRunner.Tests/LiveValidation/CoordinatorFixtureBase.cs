@@ -77,6 +77,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     public async Task EnsurePreparedAsync()
     {
+        Console.WriteLine($"[PREP] EnsurePreparedAsync called. _prepareTask is {(_prepareTask == null ? "NULL" : "SET")}. IsReady={IsReady}");
         Task prepareTask;
         lock (_prepareLock)
         {
@@ -85,6 +86,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         }
 
         await prepareTask;
+        Console.WriteLine("[PREP] EnsurePreparedAsync completed");
     }
 
     public new async Task InitializeAsync()
@@ -109,9 +111,12 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     private async Task PrepareBotsOnceAsync()
     {
+        Console.WriteLine($"[PREP] PrepareBotsOnceAsync starting ({GetType().Name})");
         await PrepareBotsAsync();
+        Console.WriteLine("[PREP] PrepareBotsAsync complete, refreshing snapshots");
         await RefreshSnapshotsAsync();
         await AfterPrepareAsync();
+        Console.WriteLine("[PREP] PrepareBotsOnceAsync complete");
     }
 
     internal static bool CanReuseExistingCharacters(
@@ -215,7 +220,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             {
                 lastCount = currentCount;
                 lastChange = stopwatch.Elapsed;
-                Console.Error.WriteLine($"[{phaseName}] botCount={currentCount}/{expectedCount} at {stopwatch.Elapsed.TotalSeconds:F0}s");
+                Console.WriteLine($"[{phaseName}] botCount={currentCount}/{expectedCount} at {stopwatch.Elapsed.TotalSeconds:F0}s");
             }
 
             if (stopwatch.Elapsed - lastChange > staleTimeout)
@@ -237,7 +242,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         {
             if (!await AccountExistsAsync(settings.AccountName))
             {
-                Console.Error.WriteLine($"[{FixtureLabel}:LaunchPrep] creating missing account '{settings.AccountName}' via SOAP");
+                Console.WriteLine($"[{FixtureLabel}:LaunchPrep] creating missing account '{settings.AccountName}' via SOAP");
                 _ = await ExecuteGMCommandWithRetryAsync($".account create {settings.AccountName} PASSWORD");
 
                 var accountCreated = await WaitForConditionAsync(
@@ -259,7 +264,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
             var summary = string.Join(", ", existingCharacters.Select(existingCharacter =>
                 $"{existingCharacter.Name}[race={existingCharacter.RaceId}, class={existingCharacter.ClassId}, gender={existingCharacter.GenderId}]"));
-            Console.Error.WriteLine($"[{FixtureLabel}:LaunchPrep] resetting account '{settings.AccountName}' before launch: {summary}");
+            Console.WriteLine($"[{FixtureLabel}:LaunchPrep] resetting account '{settings.AccountName}' before launch: {summary}");
 
             foreach (var existingCharacter in existingCharacters)
             {
@@ -478,7 +483,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                     ? Communication.ActionType.DisbandGroup
                     : Communication.ActionType.LeaveGroup;
 
-                Console.Error.WriteLine(
+                Console.WriteLine(
                     $"[{FixtureLabel}:{label}] clearing stale group for {account} via {actionType} (attempt {attempt}/5)");
                 var result = await SendActionAsync(account, new Communication.ActionMessage { ActionType = actionType });
                 if (result != Communication.ResponseResult.Success)
@@ -543,7 +548,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 continue;
             }
 
-            Console.Error.WriteLine(
+            Console.WriteLine(
                 $"[{FixtureLabel}:{label}] {leaderAccount} inviting {memberAccount} ({memberName}) (attempt {attempt}/{MaxGroupFormationAttempts})");
             var inviteResult = await SendActionAsync(
                 leaderAccount,
@@ -591,7 +596,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     {
         for (var attempt = 1; attempt <= MaxGroupFormationAttempts; attempt++)
         {
-            Console.Error.WriteLine(
+            Console.WriteLine(
                 $"[{FixtureLabel}:{label}] converting {leaderAccount} party to raid (attempt {attempt}/{MaxGroupFormationAttempts})");
             var result = await SendActionAsync(
                 leaderAccount,
@@ -621,7 +626,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             return;
 
         var leaderAccount = orderedAccounts[0];
-        Console.Error.WriteLine(
+        Console.WriteLine(
             $"[{FixtureLabel}:{label}] forming faction raid with leader {leaderAccount} and {orderedAccounts.Count - 1} members");
 
         await EnsureAccountsNotGroupedAsync(orderedAccounts, label);
@@ -663,13 +668,13 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         var accountsOnBgMaps = DescribeAccountsOnBattlegroundMaps(orderedAccounts, AllBots);
         if (accountsOnBgMaps.Count > 0)
         {
-            Console.Error.WriteLine(
+            Console.WriteLine(
                 $"[{FixtureLabel}:{label}] accounts still on battleground maps before reset: {string.Join(", ", accountsOnBgMaps)}");
         }
 
         for (var pass = 1; pass <= 2; pass++)
         {
-            Console.Error.WriteLine(
+            Console.WriteLine(
                 $"[{FixtureLabel}:{label}] sending LeaveBattleground to {orderedAccounts.Count} accounts (pass {pass}/2)");
 
             foreach (var account in orderedAccounts)
@@ -693,7 +698,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         var remainingOnBgMaps = DescribeAccountsOnBattlegroundMaps(orderedAccounts, AllBots);
         if (remainingOnBgMaps.Count > 0)
         {
-            Console.Error.WriteLine(
+            Console.WriteLine(
                 $"[{FixtureLabel}:{label}] accounts still on battleground maps after reset: {string.Join(", ", remainingOnBgMaps)}");
         }
     }
@@ -801,15 +806,30 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     protected async Task ReviveAndLevelBotsAsync(int targetLevel)
     {
         await RefreshSnapshotsAsync();
+        Console.WriteLine($"[PREP] ReviveAndLevel: AllBots.Count={AllBots.Count}, Expected={ExpectedBotCount}, targetLevel={targetLevel}");
         if (AllBots.Count != ExpectedBotCount)
             throw new XunitException($"[{FixtureLabel}:Prep] Expected {ExpectedBotCount} bots before prep, got {AllBots.Count}");
 
         foreach (var snapshot in AllBots)
+        {
+            Console.WriteLine($"[PREP] .revive {snapshot.CharacterName}");
             await ExecuteGMCommandAsync($".revive {snapshot.CharacterName}");
+        }
         await Task.Delay(1000);
 
+        // Use bot chat .levelup instead of SOAP .character level.
+        // SOAP .character level only updates DB; for online characters the
+        // in-memory level stays at 1. Bot chat .levelup applies immediately
+        // because it executes in the game client context.
         foreach (var snapshot in AllBots)
-            await ExecuteGMCommandAsync($".character level {snapshot.CharacterName} {targetLevel}");
+        {
+            var levelsToAdd = targetLevel - 1; // .levelup adds N levels to current
+            if (levelsToAdd > 0)
+            {
+                var account = snapshot.AccountName ?? snapshot.CharacterName;
+                await SendGmChatCommandAsync(account, $".levelup {levelsToAdd}");
+            }
+        }
         await Task.Delay(2000);
     }
 
