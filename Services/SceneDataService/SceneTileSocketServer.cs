@@ -1,9 +1,12 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using BotCommLayer;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using SceneData;
 
@@ -163,19 +166,33 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
             MaxY = maxY,
         };
 
+        // Read all vertex floats into a raw byte buffer, then gzip compress.
+        // 9 floats per triangle × 4 bytes = 36 bytes per triangle.
+        int floatCount = (int)triCount * 9;
+        var rawBytes = new byte[floatCount * 4];
+        int byteOffset = 0;
+
         for (uint i = 0; i < triCount; i++)
         {
-            float ax = reader.ReadSingle(), ay = reader.ReadSingle(), az = reader.ReadSingle();
-            float bx = reader.ReadSingle(), by = reader.ReadSingle(), bz = reader.ReadSingle();
-            float cx = reader.ReadSingle(), cy = reader.ReadSingle(), cz = reader.ReadSingle();
-            uint sourceType = reader.ReadUInt32();
-            uint instanceId = reader.ReadUInt32();
-
-            // Vertices only — normals not needed (C++ recomputes from vertices)
-            response.TriangleData.Add(ax); response.TriangleData.Add(ay); response.TriangleData.Add(az);
-            response.TriangleData.Add(bx); response.TriangleData.Add(by); response.TriangleData.Add(bz);
-            response.TriangleData.Add(cx); response.TriangleData.Add(cy); response.TriangleData.Add(cz);
+            // Read 9 vertex floats + skip sourceType(4) + instanceId(4)
+            for (int f = 0; f < 9; f++)
+            {
+                float val = reader.ReadSingle();
+                BitConverter.TryWriteBytes(rawBytes.AsSpan(byteOffset), val);
+                byteOffset += 4;
+            }
+            reader.ReadUInt32(); // sourceType (skip)
+            reader.ReadUInt32(); // instanceId (skip)
         }
+
+        // GZip compress
+        using var compressedStream = new MemoryStream();
+        using (var gzip = new GZipStream(compressedStream, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            gzip.Write(rawBytes, 0, rawBytes.Length);
+        }
+
+        response.TriangleDataCompressed = ByteString.CopyFrom(compressedStream.GetBuffer(), 0, (int)compressedStream.Length);
 
         return response;
     }

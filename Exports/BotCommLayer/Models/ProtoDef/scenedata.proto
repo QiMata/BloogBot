@@ -53,12 +53,13 @@ message SceneTileResponse {
     uint32 tile_y = 3;
 
     // Packed triangle data: 9 floats per triangle (3 vertices × 3 components)
+    // Used when triangle_data_compressed is empty (uncompressed fallback).
     repeated float triangle_data = 4;
 
-    // Per-triangle normal (3 floats per triangle: nx, ny, nz)
+    // Per-triangle normal — no longer populated (C++ recomputes from vertices)
     repeated float normal_data = 5;
 
-    // Per-triangle walkability flag
+    // Per-triangle walkability — no longer populated
     repeated bool walkable = 6;
 
     uint32 triangle_count = 7;
@@ -70,6 +71,10 @@ message SceneTileResponse {
     float min_y = 11;
     float max_x = 12;
     float max_y = 13;
+
+    // GZip-compressed triangle vertex data (9 floats × 4 bytes per triangle).
+    // When present, triangle_data is empty — client decompresses this instead.
+    bytes triangle_data_compressed = 14;
 }
 
 // Liquid data for a region

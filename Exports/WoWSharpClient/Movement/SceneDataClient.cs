@@ -278,6 +278,11 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         int count = (int)response.TriangleCount;
         if (count == 0) return [];
 
+        // Prefer compressed data (gzip'd raw float bytes)
+        if (response.TriangleDataCompressed != null && response.TriangleDataCompressed.Length > 0)
+            return UnpackCompressedTriangles(response.TriangleDataCompressed, count);
+
+        // Fallback: uncompressed repeated float
         var triangles = new NativePhysics.InjectedTriangle[count];
         for (int i = 0; i < count; i++)
         {
@@ -295,7 +300,44 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
                 V2Z = response.TriangleData[tBase + 8],
             };
         }
+        return triangles;
+    }
 
+    private static NativePhysics.InjectedTriangle[] UnpackCompressedTriangles(
+        Google.Protobuf.ByteString compressed, int triangleCount)
+    {
+        int floatCount = triangleCount * 9;
+        var rawBytes = new byte[floatCount * 4];
+
+        using var compressedStream = new System.IO.MemoryStream(compressed.ToByteArray());
+        using var gzip = new System.IO.Compression.GZipStream(
+            compressedStream, System.IO.Compression.CompressionMode.Decompress);
+
+        int totalRead = 0;
+        while (totalRead < rawBytes.Length)
+        {
+            int read = gzip.Read(rawBytes, totalRead, rawBytes.Length - totalRead);
+            if (read == 0) break;
+            totalRead += read;
+        }
+
+        var triangles = new NativePhysics.InjectedTriangle[triangleCount];
+        for (int i = 0; i < triangleCount; i++)
+        {
+            int bBase = i * 9 * 4;
+            triangles[i] = new NativePhysics.InjectedTriangle
+            {
+                V0X = BitConverter.ToSingle(rawBytes, bBase + 0),
+                V0Y = BitConverter.ToSingle(rawBytes, bBase + 4),
+                V0Z = BitConverter.ToSingle(rawBytes, bBase + 8),
+                V1X = BitConverter.ToSingle(rawBytes, bBase + 12),
+                V1Y = BitConverter.ToSingle(rawBytes, bBase + 16),
+                V1Z = BitConverter.ToSingle(rawBytes, bBase + 20),
+                V2X = BitConverter.ToSingle(rawBytes, bBase + 24),
+                V2Y = BitConverter.ToSingle(rawBytes, bBase + 28),
+                V2Z = BitConverter.ToSingle(rawBytes, bBase + 32),
+            };
+        }
         return triangles;
     }
 

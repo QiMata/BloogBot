@@ -33,25 +33,26 @@ namespace SceneData {
             "bWFsX2RhdGEYCCADKAISFgoOdHJpYW5nbGVfY291bnQYCSABKA0SDwoHc3Vj",
             "Y2VzcxgKIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAsgASgJIkIKEFNjZW5lVGls",
             "ZVJlcXVlc3QSDgoGbWFwX2lkGAEgASgNEg4KBnRpbGVfeBgCIAEoDRIOCgZ0",
-            "aWxlX3kYAyABKA0i/QEKEVNjZW5lVGlsZVJlc3BvbnNlEg4KBm1hcF9pZBgB",
+            "aWxlX3kYAyABKA0inwIKEVNjZW5lVGlsZVJlc3BvbnNlEg4KBm1hcF9pZBgB",
             "IAEoDRIOCgZ0aWxlX3gYAiABKA0SDgoGdGlsZV95GAMgASgNEhUKDXRyaWFu",
             "Z2xlX2RhdGEYBCADKAISEwoLbm9ybWFsX2RhdGEYBSADKAISEAoId2Fsa2Fi",
             "bGUYBiADKAgSFgoOdHJpYW5nbGVfY291bnQYByABKA0SDwoHc3VjY2VzcxgI",
             "IAEoCBIVCg1lcnJvcl9tZXNzYWdlGAkgASgJEg0KBW1pbl94GAogASgCEg0K",
-            "BW1pbl95GAsgASgCEg0KBW1heF94GAwgASgCEg0KBW1heF95GA0gASgCIl8K",
-            "EUxpcXVpZEdyaWRSZXF1ZXN0Eg4KBm1hcF9pZBgBIAEoDRINCgVtaW5feBgC",
-            "IAEoAhINCgVtaW5feRgDIAEoAhINCgVtYXhfeBgEIAEoAhINCgVtYXhfeRgF",
-            "IAEoAiKXAQoSTGlxdWlkR3JpZFJlc3BvbnNlEg4KBm1hcF9pZBgBIAEoDRIV",
-            "Cg1saXF1aWRfbGV2ZWxzGAIgAygCEhQKDGxpcXVpZF90eXBlcxgDIAMoDRIR",
-            "CgljZWxsX3NpemUYBCABKAISDwoHY2VsbHNfeBgFIAEoDRIPCgdjZWxsc195",
-            "GAYgASgNEg8KB3N1Y2Nlc3MYByABKAhCDKoCCVNjZW5lRGF0YWIGcHJvdG8z"));
+            "BW1pbl95GAsgASgCEg0KBW1heF94GAwgASgCEg0KBW1heF95GA0gASgCEiAK",
+            "GHRyaWFuZ2xlX2RhdGFfY29tcHJlc3NlZBgOIAEoDCJfChFMaXF1aWRHcmlk",
+            "UmVxdWVzdBIOCgZtYXBfaWQYASABKA0SDQoFbWluX3gYAiABKAISDQoFbWlu",
+            "X3kYAyABKAISDQoFbWF4X3gYBCABKAISDQoFbWF4X3kYBSABKAIilwEKEkxp",
+            "cXVpZEdyaWRSZXNwb25zZRIOCgZtYXBfaWQYASABKA0SFQoNbGlxdWlkX2xl",
+            "dmVscxgCIAMoAhIUCgxsaXF1aWRfdHlwZXMYAyADKA0SEQoJY2VsbF9zaXpl",
+            "GAQgASgCEg8KB2NlbGxzX3gYBSABKA0SDwoHY2VsbHNfeRgGIAEoDRIPCgdz",
+            "dWNjZXNzGAcgASgIQgyqAglTY2VuZURhdGFiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridRequest), global::SceneData.SceneGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridResponse), global::SceneData.SceneGridResponse.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY", "TriangleData", "Walkable", "NormalData", "TriangleCount", "Success", "ErrorMessage" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileRequest), global::SceneData.SceneTileRequest.Parser, new[]{ "MapId", "TileX", "TileY" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileResponse), global::SceneData.SceneTileResponse.Parser, new[]{ "MapId", "TileX", "TileY", "TriangleData", "NormalData", "Walkable", "TriangleCount", "Success", "ErrorMessage", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileResponse), global::SceneData.SceneTileResponse.Parser, new[]{ "MapId", "TileX", "TileY", "TriangleData", "NormalData", "Walkable", "TriangleCount", "Success", "ErrorMessage", "MinX", "MinY", "MaxX", "MaxY", "TriangleDataCompressed" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridRequest), global::SceneData.LiquidGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridResponse), global::SceneData.LiquidGridResponse.Parser, new[]{ "MapId", "LiquidLevels", "LiquidTypes", "CellSize", "CellsX", "CellsY", "Success" }, null, null, null, null)
           }));
@@ -1292,6 +1293,7 @@ namespace SceneData {
       minY_ = other.minY_;
       maxX_ = other.maxX_;
       maxY_ = other.maxY_;
+      triangleDataCompressed_ = other.triangleDataCompressed_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1344,6 +1346,7 @@ namespace SceneData {
     private readonly pbc::RepeatedField<float> triangleData_ = new pbc::RepeatedField<float>();
     /// <summary>
     /// Packed triangle data: 9 floats per triangle (3 vertices × 3 components)
+    /// Used when triangle_data_compressed is empty (uncompressed fallback).
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1357,7 +1360,7 @@ namespace SceneData {
         = pb::FieldCodec.ForFloat(42);
     private readonly pbc::RepeatedField<float> normalData_ = new pbc::RepeatedField<float>();
     /// <summary>
-    /// Per-triangle normal (3 floats per triangle: nx, ny, nz)
+    /// Per-triangle normal — no longer populated (C++ recomputes from vertices)
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1371,7 +1374,7 @@ namespace SceneData {
         = pb::FieldCodec.ForBool(50);
     private readonly pbc::RepeatedField<bool> walkable_ = new pbc::RepeatedField<bool>();
     /// <summary>
-    /// Per-triangle walkability flag
+    /// Per-triangle walkability — no longer populated
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1466,6 +1469,22 @@ namespace SceneData {
       }
     }
 
+    /// <summary>Field number for the "triangle_data_compressed" field.</summary>
+    public const int TriangleDataCompressedFieldNumber = 14;
+    private pb::ByteString triangleDataCompressed_ = pb::ByteString.Empty;
+    /// <summary>
+    /// GZip-compressed triangle vertex data (9 floats × 4 bytes per triangle).
+    /// When present, triangle_data is empty — client decompresses this instead.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pb::ByteString TriangleDataCompressed {
+      get { return triangleDataCompressed_; }
+      set {
+        triangleDataCompressed_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1494,6 +1513,7 @@ namespace SceneData {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MinY, other.MinY)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxX, other.MaxX)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxY, other.MaxY)) return false;
+      if (TriangleDataCompressed != other.TriangleDataCompressed) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1514,6 +1534,7 @@ namespace SceneData {
       if (MinY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MinY);
       if (MaxX != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxX);
       if (MaxY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxY);
+      if (TriangleDataCompressed.Length != 0) hash ^= TriangleDataCompressed.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1575,6 +1596,10 @@ namespace SceneData {
         output.WriteRawTag(109);
         output.WriteFloat(MaxY);
       }
+      if (TriangleDataCompressed.Length != 0) {
+        output.WriteRawTag(114);
+        output.WriteBytes(TriangleDataCompressed);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1628,6 +1653,10 @@ namespace SceneData {
         output.WriteRawTag(109);
         output.WriteFloat(MaxY);
       }
+      if (TriangleDataCompressed.Length != 0) {
+        output.WriteRawTag(114);
+        output.WriteBytes(TriangleDataCompressed);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1670,6 +1699,9 @@ namespace SceneData {
       }
       if (MaxY != 0F) {
         size += 1 + 4;
+      }
+      if (TriangleDataCompressed.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeBytesSize(TriangleDataCompressed);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1715,6 +1747,9 @@ namespace SceneData {
       }
       if (other.MaxY != 0F) {
         MaxY = other.MaxY;
+      }
+      if (other.TriangleDataCompressed.Length != 0) {
+        TriangleDataCompressed = other.TriangleDataCompressed;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1790,6 +1825,10 @@ namespace SceneData {
             MaxY = input.ReadFloat();
             break;
           }
+          case 114: {
+            TriangleDataCompressed = input.ReadBytes();
+            break;
+          }
         }
       }
     #endif
@@ -1862,6 +1901,10 @@ namespace SceneData {
           }
           case 109: {
             MaxY = input.ReadFloat();
+            break;
+          }
+          case 114: {
+            TriangleDataCompressed = input.ReadBytes();
             break;
           }
         }
