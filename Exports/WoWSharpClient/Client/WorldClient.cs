@@ -28,7 +28,17 @@ namespace WoWSharpClient.Client
         private IEncryptor _encryptor;
         private bool _disposed;
         private long _pendingIntroCinematicAttemptId;
-        
+        private Handlers.HandlerContext? _handlerContext;
+
+        /// <summary>
+        /// Sets the handler context providing instance-scoped ObjectManager and EventEmitter
+        /// to legacy opcode handlers. Must be called before packet handling begins.
+        /// </summary>
+        public void SetHandlerContext(WoWSharpObjectManager objectManager, WoWSharpEventEmitter eventEmitter)
+        {
+            _handlerContext = new Handlers.HandlerContext(objectManager, eventEmitter);
+        }
+
         // Authentication state
         private string _username = string.Empty;
         private byte[] _sessionKey = [];
@@ -241,7 +251,7 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_COMPRESSED_UPDATE_OBJECT, Handlers.ObjectUpdateHandler.HandleUpdateObject);
 
             // Client control
-            BridgeToLegacy(Opcode.SMSG_CLIENT_CONTROL_UPDATE, OpCodeDispatcher.HandleSMSGClientControlUpdate);
+            BridgeToLegacy(Opcode.SMSG_CLIENT_CONTROL_UPDATE, Handlers.ClientControlHandler.HandleClientControlUpdate);
 
             // Chat
             BridgeToLegacy(Opcode.SMSG_MESSAGECHAT, Handlers.ChatHandler.HandleServerChatMessage);
@@ -361,15 +371,15 @@ namespace WoWSharpClient.Client
         }
 
         /// <summary>
-        /// Bridges an opcode to a legacy handler (Action&lt;Opcode, byte[]&gt;) from OpCodeDispatcher.
+        /// Bridges an opcode to a context-aware handler that receives the per-bot ObjectManager/EventEmitter.
         /// </summary>
-        private void BridgeToLegacy(Opcode opcode, Action<Opcode, byte[]> legacyHandler)
+        private void BridgeToLegacy(Opcode opcode, Action<Opcode, byte[], Handlers.HandlerContext> handler)
         {
             _pipeline.RegisterHandler(opcode, payload =>
             {
                 try
                 {
-                    legacyHandler(opcode, payload.ToArray());
+                    handler(opcode, payload.ToArray(), _handlerContext!);
                 }
                 catch (Exception ex)
                 {
@@ -474,7 +484,7 @@ namespace WoWSharpClient.Client
 
                     // Route post-auth bootstrap through the object-manager/session event
                     // so character-list requests are tracked and can be retried if needed.
-                    WoWSharpEventEmitter.Instance.FireOnWorldSessionStart();
+                    _handlerContext?.EventEmitter.FireOnWorldSessionStart();
                 }
                 else
                 {
@@ -595,7 +605,7 @@ namespace WoWSharpClient.Client
         private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
         {
             ClearRejectedLocalAutoAttack("not in range");
-            WoWSharpObjectManager.Instance.NoteMeleeRangeRejected();
+            _handlerContext?.ObjectManager.NoteMeleeRangeRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTINRANGE — server says player is out of melee range");
             _attackErrors.OnNext("Attack failed: Not in range.");
             return Task.CompletedTask;
@@ -603,7 +613,7 @@ namespace WoWSharpClient.Client
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
         {
             ClearRejectedLocalAutoAttack("bad facing");
-            WoWSharpObjectManager.Instance.NoteMeleeFacingRejected();
+            _handlerContext?.ObjectManager.NoteMeleeFacingRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_BADFACING — server says player has wrong facing");
             _attackErrors.OnNext("Attack failed: Bad facing.");
             return Task.CompletedTask;
@@ -623,10 +633,10 @@ namespace WoWSharpClient.Client
             return Task.CompletedTask;
         }
 
-        private static void ClearRejectedLocalAutoAttack(string reason)
+        private void ClearRejectedLocalAutoAttack(string reason)
         {
-            WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart();
-            if (WoWSharpObjectManager.Instance.Player is Models.WoWLocalPlayer localPlayer &&
+            _handlerContext?.ObjectManager.ClearPendingMeleeAttackStart();
+            if (_handlerContext?.ObjectManager.Player is Models.WoWLocalPlayer localPlayer &&
                 localPlayer.IsAutoAttacking)
             {
                 localPlayer.IsAutoAttacking = false;

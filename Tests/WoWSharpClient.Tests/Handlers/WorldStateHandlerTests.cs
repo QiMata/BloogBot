@@ -10,6 +10,7 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class WorldStateHandlerTests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
         [Fact]
         public void HandleInitWorldStates_ValidPacket_FiresEvent()
         {
@@ -40,7 +41,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data);
+                WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data, ctx);
 
                 Assert.NotNull(receivedStates);
                 Assert.Equal(2, receivedStates.Count);
@@ -61,14 +62,14 @@ namespace WoWSharpClient.Tests.Handlers
             // Arrange: less than 18 bytes (minimum header)
             byte[] data = new byte[10];
 
-            WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data);
+            WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data, ctx);
         }
 
         [Fact]
         public void HandleInitWorldStates_EmptyData_DoesNotThrow()
         {
             byte[] data = [];
-            WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data);
+            WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data, ctx);
         }
 
         [Fact]
@@ -94,7 +95,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data);
+                WorldStateHandler.HandleInitWorldStates(Opcode.SMSG_INIT_WORLD_STATES, data, ctx);
 
                 Assert.NotNull(receivedStates);
                 Assert.Empty(receivedStates);

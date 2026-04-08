@@ -12,10 +12,11 @@ using WoWSharpClient.Parsers;
 
 namespace WoWSharpClient.Movement
 {
-    public class MovementController(WoWClient client, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null)
+    public class MovementController(WoWClient client, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null, WoWSharpObjectManager? objectManager = null)
     {
         private readonly WoWClient _client = client;
         private readonly WoWLocalPlayer _player = player;
+        private readonly WoWSharpObjectManager? _objectManager = objectManager;
         private readonly SceneDataClient? _sceneDataClient = sceneDataClient;
         // Physics.dll (BG) has no mmaps/VMAPs — scene data comes via tile injection.
         // Physics state
@@ -186,7 +187,7 @@ namespace WoWSharpClient.Movement
 
             // Consume pending knockback impulse from SMSG_MOVE_KNOCK_BACK.
             // Must happen before any early exit so knockback is never dropped.
-            if (WoWSharpObjectManager.Instance?.TryConsumePendingKnockback(out float kbVx, out float kbVy, out float kbVz) == true)
+            if (_objectManager?.TryConsumePendingKnockback(out float kbVx, out float kbVy, out float kbVz) == true)
             {
                 _velocity = new Vector3(kbVx, kbVy, kbVz);
                 _fallTimeMs = 0;
@@ -502,7 +503,7 @@ namespace WoWSharpClient.Movement
             {
                 transport = cachedTransport;
             }
-            else if (WoWSharpObjectManager.Instance.GetObjectByGuid(_player.TransportGuid) is WoWGameObject resolvedTransport)
+            else if (_objectManager?.GetObjectByGuid(_player.TransportGuid) is WoWGameObject resolvedTransport)
             {
                 transport = resolvedTransport;
             }
@@ -589,7 +590,7 @@ namespace WoWSharpClient.Movement
             if (activeTransport != null)
                 AddGameObject(activeTransport, forceInclude: true);
 
-            foreach (var gameObject in WoWSharpObjectManager.Instance.Objects.OfType<WoWGameObject>())
+            foreach (var gameObject in (_objectManager?.Objects ?? []).OfType<WoWGameObject>())
                 AddGameObject(gameObject, forceInclude: gameObject.Guid == _player.TransportGuid);
 
             return nearbyObjects

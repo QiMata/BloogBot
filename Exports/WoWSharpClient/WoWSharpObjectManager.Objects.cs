@@ -50,6 +50,9 @@ namespace WoWSharpClient
                 WoWObjectType.Corpse => new WoWCorpse(new HighGuid(guid)),
                 _ => CreateFallbackObject(objectType, guid),
             };
+            // Set back-reference so model classes can access this ObjectManager instance
+            if (obj is WoWGameObject gameObj)
+                gameObj.ObjectManager = this;
             ApplyFieldDiffs(obj, fields);
             return obj;
         }
@@ -204,7 +207,7 @@ namespace WoWSharpClient
         /// </summary>
 
 
-        private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite, bool allowMovementFlagWrite = true)
+        private void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite, bool allowMovementFlagWrite = true)
         {
             if (allowMovementFlagWrite)
                 unit.MovementFlags = data.MovementFlags;
@@ -253,7 +256,7 @@ namespace WoWSharpClient
                 unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
                 unit.TransportOrientation = data.TransportOrientation ?? unit.TransportOrientation;
                 unit.TransportLastUpdated = data.TransportLastUpdated ?? unit.TransportLastUpdated;
-                Instance.SyncTransportPassengerWorldPosition(unit);
+                this.SyncTransportPassengerWorldPosition(unit);
             }
             unit.SwimPitch = data.SwimPitch ?? 0f;
             unit.FallTime = data.FallTime;
@@ -289,7 +292,7 @@ namespace WoWSharpClient
             }
         }
 
-        private static void ApplyMovementData(WoWGameObject gameObject, MovementInfoUpdate data)
+        private void ApplyMovementData(WoWGameObject gameObject, MovementInfoUpdate data)
         {
             gameObject.LastUpdated = data.LastUpdated;
             gameObject.Position = new Position(data.X, data.Y, data.Z);
@@ -314,7 +317,7 @@ namespace WoWSharpClient
                 gameObject.MovementSplinePoints = [.. data.MovementBlockUpdate.SplinePoints];
             }
 
-            Instance.SyncTransportPassengerWorldPositions();
+            this.SyncTransportPassengerWorldPositions();
         }
 
 
@@ -449,7 +452,7 @@ namespace WoWSharpClient
                 case EUnitFields.UNIT_FIELD_FACTIONTEMPLATE:
                     unit.FactionTemplate = (uint)value;
                     // Compute UnitReaction from faction template masks
-                    var playerFt = Instance?.Player?.FactionTemplate ?? 0;
+                    var playerFt = unit.ObjectManager?.Player?.FactionTemplate ?? 0;
                     if (playerFt != 0 && unit.FactionTemplate != 0)
                         unit.UnitReaction = GameData.Core.Constants.FactionData.GetReaction(playerFt, unit.FactionTemplate);
                     break;
@@ -1501,7 +1504,7 @@ namespace WoWSharpClient
         }
 
 
-        private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data)
+        private void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data)
         {
             ApplyMovementData(unit, data, allowPositionWrite: true, allowMovementFlagWrite: true);
         }

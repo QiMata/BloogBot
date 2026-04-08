@@ -8,6 +8,13 @@ namespace WoWSharpClient.Models
 {
     public class WoWGameObject(HighGuid highGuid, WoWObjectType objectType = WoWObjectType.GameObj) : WoWObject(highGuid, objectType), IWoWGameObject
     {
+        /// <summary>
+        /// Back-reference to the owning ObjectManager instance.
+        /// Set after construction by the ObjectManager when creating/tracking objects.
+        /// Used to replace static WoWSharpObjectManager.Instance references.
+        /// </summary>
+        internal WoWSharpObjectManager ObjectManager { get; set; }
+
         public HighGuid CreatedBy { get; private set; } = new(new byte[4], new byte[4]);
         public uint DisplayId { get; set; }
         public uint Flags { get; set; }
@@ -74,7 +81,7 @@ namespace WoWSharpClient.Models
 
         public void Interact()
         {
-            WoWSharpObjectManager.Instance.InteractWithGameObject(Guid);
+            ObjectManager.InteractWithGameObject(Guid);
         }
     }
 }

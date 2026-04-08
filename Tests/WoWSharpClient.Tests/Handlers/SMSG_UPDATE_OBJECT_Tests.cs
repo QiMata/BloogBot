@@ -15,6 +15,7 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class SMSG_UPDATE_OBJECT_Tests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
         /// <summary>
         /// Verifies that SMSG_UPDATE_OBJECT packets can be decoded without error and that
         /// processing them adds objects to the ObjectManager. Covers the decompression path
@@ -40,7 +41,7 @@ namespace WoWSharpClient.Tests.Handlers
             foreach (var filePath in files)
             {
                 byte[] data = FileReader.ReadBinaryFile(filePath);
-                ObjectUpdateHandler.HandleUpdateObject(opcode, data);
+                ObjectUpdateHandler.HandleUpdateObject(opcode, data, ctx);
             }
 
             UpdateProcessingHelper.DrainPendingUpdates();
@@ -79,7 +80,7 @@ namespace WoWSharpClient.Tests.Handlers
             foreach (var filePath in files)
             {
                 byte[] data = FileReader.ReadBinaryFile(filePath);
-                ObjectUpdateHandler.HandleUpdateObject(opcode, data);
+                ObjectUpdateHandler.HandleUpdateObject(opcode, data, ctx);
             }
 
             UpdateProcessingHelper.DrainPendingUpdates();
@@ -108,6 +109,7 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class SessionTimelineReplayTests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
         private static readonly Regex TimestampPattern = new(@"^20240815_(\d{9})$", RegexOptions.Compiled);
         private static readonly Regex PreDefinedPattern = new(@"^20240815_(\d{1,4})$", RegexOptions.Compiled);
 
@@ -194,7 +196,7 @@ namespace WoWSharpClient.Tests.Handlers
             foreach (var (_, opcode, path) in timeline)
             {
                 byte[] data = FileReader.ReadBinaryFile(path);
-                ObjectUpdateHandler.HandleUpdateObject(opcode, data);
+                ObjectUpdateHandler.HandleUpdateObject(opcode, data, ctx);
             }
 
             UpdateProcessingHelper.DrainPendingUpdates();

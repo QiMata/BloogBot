@@ -196,6 +196,12 @@ namespace WoWSharpClient.Movement
         private readonly Dictionary<ulong, ActiveSpline> _active = [];
         private readonly object _gate = new();
 
+        /// <summary>
+        /// Per-instance ObjectManager reference. Set by the owning ObjectManager
+        /// so spline updates can look up objects without the static singleton.
+        /// </summary>
+        internal WoWSharpObjectManager ObjectManager { get; set; }
+
         /// <summary>Fired when a spline for the given GUID completes or is removed.</summary>
         public event Action<ulong>? OnSplineCompleted;
 
@@ -260,11 +266,11 @@ namespace WoWSharpClient.Movement
 
                 // Look up the unit — check Player first (not in Objects collection), then Objects
                 WoWUnit? woWUnit = null;
-                var player = WoWSharpObjectManager.Instance.Player;
+                var player = ObjectManager.Player;
                 if (player != null && player.Guid == guid)
                     woWUnit = (WoWUnit)player;
                 else
-                    woWUnit = WoWSharpObjectManager.Instance.Objects.OfType<WoWUnit>().FirstOrDefault(x => x.Guid == guid);
+                    woWUnit = ObjectManager.Objects.OfType<WoWUnit>().FirstOrDefault(x => x.Guid == guid);
 
                 if (woWUnit != null)
                 {
@@ -278,7 +284,7 @@ namespace WoWSharpClient.Movement
                     {
                         woWUnit.TransportOffset = nextSplinePosition;
                         woWUnit.TransportOrientation = nextFacing;
-                        WoWSharpObjectManager.Instance.SyncTransportPassengerWorldPosition(woWUnit);
+                        ObjectManager.SyncTransportPassengerWorldPosition(woWUnit);
                     }
                     else
                     {
@@ -286,7 +292,7 @@ namespace WoWSharpClient.Movement
                         woWUnit.Facing = nextFacing;
                     }
                 }
-                else if (WoWSharpObjectManager.Instance.GetObjectByGuid(guid) is WoWGameObject gameObject)
+                else if (ObjectManager.GetObjectByGuid(guid) is WoWGameObject gameObject)
                 {
                     var previousSplinePosition = new Position(
                         gameObject.Position.X,
@@ -296,7 +302,7 @@ namespace WoWSharpClient.Movement
                     var nextFacing = ResolveFacing(gameObject, previousSplinePosition, nextSplinePosition);
                     gameObject.Position = nextSplinePosition;
                     gameObject.Facing = nextFacing;
-                    WoWSharpObjectManager.Instance.SyncTransportPassengerWorldPositions();
+                    ObjectManager.SyncTransportPassengerWorldPositions();
                 }
                 else
                     TryRemoveSnapshotEntry(guid, active); // object vanished
@@ -331,7 +337,7 @@ namespace WoWSharpClient.Movement
                 case SplineType.FacingSpot:
                     return FaceTowards(nextPosition, unit.FacingSpot, unit.Facing);
                 case SplineType.FacingTarget:
-                    if (WoWSharpObjectManager.Instance.GetObjectByGuid(unit.SplineTargetGuid) is WoWObject target)
+                    if (unit.ObjectManager?.GetObjectByGuid(unit.SplineTargetGuid) is WoWObject target)
                         return FaceTowards(nextPosition, target.Position, unit.Facing);
                     return unit.Facing;
                 case SplineType.Stop:
@@ -350,7 +356,7 @@ namespace WoWSharpClient.Movement
                 case SplineType.FacingSpot:
                     return FaceTowards(nextPosition, gameObject.MovementFacingSpot, gameObject.Facing);
                 case SplineType.FacingTarget:
-                    if (WoWSharpObjectManager.Instance.GetObjectByGuid(gameObject.MovementSplineTargetGuid) is WoWObject target)
+                    if (gameObject.ObjectManager?.GetObjectByGuid(gameObject.MovementSplineTargetGuid) is WoWObject target)
                         return FaceTowards(nextPosition, target.Position, gameObject.Facing);
                     return gameObject.Facing;
                 case SplineType.Stop:

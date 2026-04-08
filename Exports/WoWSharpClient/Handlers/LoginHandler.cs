@@ -8,7 +8,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class LoginHandler
     {
-        public static void HandleLoginVerifyWorld(Opcode opcode, byte[] data)
+        public static void HandleLoginVerifyWorld(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -37,7 +37,7 @@ namespace WoWSharpClient.Handlers
                 Log.Information("[LoginHandler] SMSG_LOGIN_VERIFY_WORLD: map={MapId} pos=({X:F1},{Y:F1},{Z:F1})",
                     mapId, positionX, positionY, positionZ);
 
-                WoWSharpEventEmitter.Instance.FireOnLoginVerifyWorld(new WorldInfo
+                ctx.EventEmitter.FireOnLoginVerifyWorld(new WorldInfo
                 {
                     MapId = mapId,
                     PositionX = positionX,
@@ -60,7 +60,7 @@ namespace WoWSharpClient.Handlers
         /// Format: uint32 mapId, [optional: uint32 transportId, uint32 transportMapId]
         /// The actual worldport ACK is deferred to HandleNewWorld (SMSG_NEW_WORLD).
         /// </summary>
-        public static void HandleTransferPending(Opcode opcode, byte[] data)
+        public static void HandleTransferPending(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -79,7 +79,7 @@ namespace WoWSharpClient.Handlers
         /// Format: uint32 mapId, float x, float y, float z, float orientation
         /// We must respond with MSG_MOVE_WORLDPORT_ACK to finalize the transfer.
         /// </summary>
-        public static void HandleNewWorld(Opcode opcode, byte[] data)
+        public static void HandleNewWorld(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -95,7 +95,7 @@ namespace WoWSharpClient.Handlers
                 // Update MapId and position immediately — SMSG_LOGIN_VERIFY_WORLD may arrive
                 // later but MapId must be current for snapshot pipeline (map-based routing,
                 // DungeonWaypoints lookup, test assertions).
-                WoWSharpEventEmitter.Instance.FireOnLoginVerifyWorld(new WorldInfo
+                ctx.EventEmitter.FireOnLoginVerifyWorld(new WorldInfo
                 {
                     MapId = mapId,
                     PositionX = x,
@@ -105,7 +105,7 @@ namespace WoWSharpClient.Handlers
                 });
 
                 // NOW send the worldport ACK — this is the correct time per 1.12.1 protocol
-                WoWSharpObjectManager.Instance.SendWorldportAck();
+                ctx.ObjectManager.SendWorldportAck();
             }
             catch (Exception ex)
             {
@@ -113,7 +113,7 @@ namespace WoWSharpClient.Handlers
             }
         }
 
-        public static void HandleSetTimeSpeed(Opcode opcode, byte[] data)
+        public static void HandleSetTimeSpeed(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -131,7 +131,7 @@ namespace WoWSharpClient.Handlers
                 float timescale = reader.ReadSingle();
 
                 // Process the login verification as needed
-                WoWSharpEventEmitter.Instance.FireOnSetTimeSpeed(new OnSetTimeSpeedArgs(serverTime, timescale));
+                ctx.EventEmitter.FireOnSetTimeSpeed(new OnSetTimeSpeedArgs(serverTime, timescale));
             }
             catch (EndOfStreamException e)
             {
@@ -142,7 +142,7 @@ namespace WoWSharpClient.Handlers
                 Log.Error($"Unexpected error: {ex.Message}");
             }
         }
-        public static void HandleTimeQueryResponse(Opcode opcode, byte[] data)
+        public static void HandleTimeQueryResponse(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try

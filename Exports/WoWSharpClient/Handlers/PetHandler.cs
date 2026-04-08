@@ -17,12 +17,12 @@ namespace WoWSharpClient.Handlers
         ///   unknown (1) | enabledFlag (1) | actionBar (10 × uint32) |
         ///   spellCount (1) | spells (N × uint32) | cooldowns (variable)
         /// </summary>
-        public static void HandlePetSpells(Opcode opcode, byte[] data)
+        public static void HandlePetSpells(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             if (data.Length < 16) // Minimum: guid(8) + header(8)
             {
                 // Empty packet = pet dismissed (server sends guid=0 on dismiss)
-                var om = WoWSharpObjectManager.Instance;
+                var om = ctx.ObjectManager;
                 om?.ClearPetSpells();
                 Log.Information("[PetHandler] Pet dismissed (empty/short SMSG_PET_SPELLS)");
                 return;
@@ -36,7 +36,7 @@ namespace WoWSharpClient.Handlers
                 if (petGuid == 0)
                 {
                     // Pet dismissed
-                    WoWSharpObjectManager.Instance?.ClearPetSpells();
+                    ctx.ObjectManager?.ClearPetSpells();
                     Log.Information("[PetHandler] Pet dismissed (petGuid=0)");
                     return;
                 }
@@ -74,7 +74,7 @@ namespace WoWSharpClient.Handlers
                 }
 
                 // Store on ObjectManager
-                var om = WoWSharpObjectManager.Instance;
+                var om = ctx.ObjectManager;
                 om?.SetPetSpells(petGuid, actionBar, petSpells);
 
                 Log.Information("[PetHandler] Pet 0x{Guid:X}: {ActionBarCount} action bar entries, {SpellCount} spells, react={React}, cmd={Cmd}",

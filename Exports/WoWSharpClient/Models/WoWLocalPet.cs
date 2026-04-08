@@ -14,7 +14,7 @@ namespace WoWSharpClient.Models
     {
         public void Attack()
         {
-            var om = WoWSharpObjectManager.Instance;
+            var om = ObjectManager;
             if (om == null) return;
             var targetGuid = om.Player?.TargetGuid ?? 0;
             if (targetGuid == 0)
@@ -31,7 +31,7 @@ namespace WoWSharpClient.Models
 
         public void Cast(string spellName)
         {
-            var om = WoWSharpObjectManager.Instance;
+            var om = ObjectManager;
             if (om == null) return;
 
             // Resolve spell name → possible spell IDs via SpellData
@@ -68,7 +68,7 @@ namespace WoWSharpClient.Models
         {
             var payload = CombatSpellNetworkClientComponent.CreatePetCommandPayload(
                 Guid, PetCommand.Follow);
-            WoWSharpObjectManager.Instance?.SendPetAction(payload);
+            ObjectManager?.SendPetAction(payload);
         }
 
         public bool IsHappy() => true;

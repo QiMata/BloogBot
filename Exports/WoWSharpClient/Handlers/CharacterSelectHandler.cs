@@ -11,12 +11,12 @@ namespace WoWSharpClient.Handlers
 {
     public static class CharacterSelectHandler
     {
-        public static void HandleCharEnum(Opcode opcode, byte[] data)
+        public static void HandleCharEnum(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             byte numChars = reader.ReadByte();
 
-            WoWSharpObjectManager.Instance.CharacterSelectScreen.CharacterSelects.Clear();
+            ctx.ObjectManager.CharacterSelectScreen.CharacterSelects.Clear();
 
             for (int i = 0; i < numChars; i++)
             {
@@ -65,25 +65,25 @@ namespace WoWSharpClient.Handlers
                 character.FirstBagInventoryType = reader.ReadByte();
 
                 // Add the parsed character to the character selection list
-                WoWSharpObjectManager.Instance.CharacterSelectScreen.CharacterSelects.Add(character);
+                ctx.ObjectManager.CharacterSelectScreen.CharacterSelects.Add(character);
             }
 
             // Trigger an event once the character list is loaded
-            WoWSharpEventEmitter.Instance.FireOnCharacterListLoaded();
+            ctx.EventEmitter.FireOnCharacterListLoaded();
         }
 
-        public static void HandleSetRestStart(Opcode opcode, byte[] data)
+        public static void HandleSetRestStart(Opcode opcode, byte[] data, HandlerContext ctx)
         {
-            WoWSharpEventEmitter.Instance.FireOnSetRestStart();
+            ctx.EventEmitter.FireOnSetRestStart();
         }
 
-        public static void HandleCharCreate(Opcode opcode, byte[] data)
+        public static void HandleCharCreate(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             var result = (CreateCharacterResult)data[0];
-            WoWSharpEventEmitter.Instance.FireOnCharacterCreateResponse(new CharCreateResponse(result));
+            ctx.EventEmitter.FireOnCharacterCreateResponse(new CharCreateResponse(result));
         }
 
-        public static void HandleCharDelete(Opcode opcode, byte[] data)
+        public static void HandleCharDelete(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             var result = (DeleteCharacterResult)data[0];
 
@@ -91,16 +91,16 @@ namespace WoWSharpClient.Handlers
             {
                 // Server confirmed the delete — clear stale character list and trigger
                 // a fresh CMSG_CHAR_ENUM on the next tick.
-                var screen = WoWSharpObjectManager.Instance.CharacterSelectScreen;
+                var screen = ctx.ObjectManager.CharacterSelectScreen;
                 screen.CharacterSelects.Clear();
                 screen.HasReceivedCharacterList = false;
                 screen.HasRequestedCharacterList = false;
             }
 
-            WoWSharpEventEmitter.Instance.FireOnCharacterDeleteResponse(new CharDeleteResponse(result));
+            ctx.EventEmitter.FireOnCharacterDeleteResponse(new CharDeleteResponse(result));
         }
 
-        public static void HandleAddonInfo(Opcode opcode, byte[] data)
+        public static void HandleAddonInfo(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             int index = 0;
             while (index < data.Length)
@@ -111,7 +111,7 @@ namespace WoWSharpClient.Handlers
             }
         }
 
-        public static void HandleNameQueryResponse(Opcode opcode, byte[] data)
+        public static void HandleNameQueryResponse(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             Console.WriteLine($"[NameQuery] Received response - Opcode: {opcode}, Data size: {data?.Length ?? 0} bytes");
 
@@ -139,7 +139,7 @@ namespace WoWSharpClient.Handlers
 
                 // Try to find in active game objects
 
-                if (WoWSharpObjectManager.Instance.Objects
+                if (ctx.ObjectManager.Objects
                     .FirstOrDefault(x => x.Guid == guid) is WoWPlayer gameObject)
                 {
                     var oldName = gameObject.Name;
@@ -169,7 +169,7 @@ namespace WoWSharpClient.Handlers
                     Console.WriteLine($"[DEBUG] [NameQuery] Player 0x{guid:X16} not found in active objects, checking character select");
 
                     // Try to find in character select screen
-                    var characterSelect = WoWSharpObjectManager.Instance.CharacterSelectScreen?
+                    var characterSelect = ctx.ObjectManager.CharacterSelectScreen?
                         .CharacterSelects?.FirstOrDefault(x => x.Guid == guid);
 
                     if (characterSelect != null)

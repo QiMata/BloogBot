@@ -11,6 +11,8 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class SMSG_CHAR_ENUM_Tests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+
         [Fact]
         public void ShouldParseCharacterList()
         {
@@ -18,7 +20,7 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = FileReader.ReadBinaryFile($"{Path.Combine(Directory.GetCurrentDirectory(), "Resources", opcode.ToString())}\\20240815.bin");
 
             // Call the HandleUpdateObject method on ObjectUpdateHandler
-            CharacterSelectHandler.HandleCharEnum(opcode, data);
+            CharacterSelectHandler.HandleCharEnum(opcode, data, ctx);
 
             // Verify that 10 characters were parsed and added to the ObjectManager
             Assert.Equal(10, WoWSharpObjectManager.Instance.CharacterSelectScreen.CharacterSelects.Count);

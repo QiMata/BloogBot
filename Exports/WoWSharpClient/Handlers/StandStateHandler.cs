@@ -7,7 +7,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class StandStateHandler
     {
-        public static void HandleStandStateUpdate(Opcode opcode, byte[] data)
+        public static void HandleStandStateUpdate(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -22,7 +22,7 @@ namespace WoWSharpClient.Handlers
                 byte standState = reader.ReadByte();
 
                 // Process the stand state update as needed
-                WoWSharpEventEmitter.Instance.FireOnStandStateUpdate(standState);
+                ctx.EventEmitter.FireOnStandStateUpdate(standState);
             }
             catch (EndOfStreamException e)
             {

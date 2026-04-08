@@ -7,7 +7,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class WorldStateHandler
     {
-        public static void HandleInitWorldStates(Opcode opcode, byte[] data)
+        public static void HandleInitWorldStates(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -52,7 +52,7 @@ namespace WoWSharpClient.Handlers
                 }
 
                 // Process the world states as needed
-                WoWSharpEventEmitter.Instance.FireOnWorldStatesInit(worldStates);
+                ctx.EventEmitter.FireOnWorldStatesInit(worldStates);
             }
             catch (EndOfStreamException e)
             {

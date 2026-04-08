@@ -7,7 +7,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class ChatHandler
     {
-        public static void HandleServerChatMessage(Opcode opcode, byte[] data)
+        public static void HandleServerChatMessage(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -67,7 +67,7 @@ namespace WoWSharpClient.Handlers
                 Log.Information("[ChatHandler] type={ChatType} lang={Language} sender=0x{Sender:X} text=\"{Text}\"",
                     chatType, language, senderGuid, text);
 
-                WoWSharpEventEmitter.Instance.FireOnChatMessage(
+                ctx.EventEmitter.FireOnChatMessage(
                     chatType,
                     language,
                     senderGuid,

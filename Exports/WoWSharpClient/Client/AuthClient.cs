@@ -33,6 +33,12 @@ namespace WoWSharpClient.Client
         private readonly IEncryptor _encryptor;
         private readonly TimeSpan _loginHandshakeTimeout;
         private readonly TimeSpan _realmListTimeout;
+
+        /// <summary>
+        /// Per-instance event emitter. Set by the owning WoWClient after construction.
+        /// Falls back to the legacy singleton if not set (migration bridge).
+        /// </summary>
+        internal WoWSharpEventEmitter EventEmitter { get; set; }
         
         private string _username = string.Empty;
         private string _password = string.Empty;
@@ -158,7 +164,7 @@ namespace WoWSharpClient.Client
             }
 
             await _pipeline.ConnectAsync(host, port, cancellationToken);
-            WoWSharpEventEmitter.Instance.FireOnLoginConnect();
+            EventEmitter.FireOnLoginConnect();
         }
 
         /// <summary>
@@ -215,7 +221,7 @@ namespace WoWSharpClient.Client
             byte[] packetData = memoryStream.ToArray();
 
             Console.WriteLine($"[AuthClient] -> CMD_AUTH_LOGON_CHALLENGE [{packetData.Length}] hex={BitConverter.ToString(packetData)}");
-            WoWSharpEventEmitter.Instance.FireOnHandshakeBegin();
+            EventEmitter.FireOnHandshakeBegin();
 
             // For auth server, we send raw data directly since it doesn't use standard opcode format
             await _connection.SendAsync(packetData, cancellationToken);
@@ -452,7 +458,7 @@ namespace WoWSharpClient.Client
             else
             {
                 Console.WriteLine($"[AuthClient] AUTH_CHALLENGE FAILED: opcode {opcode:X2}, result {result} (0x{(byte)result:X2})");
-                WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                EventEmitter.FireOnLoginFailure();
                 _loginCompletionSource?.TrySetResult(false);
             }
         }
@@ -513,13 +519,13 @@ namespace WoWSharpClient.Client
                     var verificationResult = _srpClientChallenge?.VerifyServerProof(serverProof);
                     if (!verificationResult.HasValue)
                     {
-                        WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                        EventEmitter.FireOnLoginFailure();
                         _loginCompletionSource?.TrySetResult(false);
                     }
                     else
                     {
                         _srpClient = verificationResult.Value;
-                        WoWSharpEventEmitter.Instance.FireOnLoginSuccess();
+                        EventEmitter.FireOnLoginSuccess();
                         _loginCompletionSource?.TrySetResult(true);
                     }
                 }
@@ -527,7 +533,7 @@ namespace WoWSharpClient.Client
             else
             {
                 Console.WriteLine($"[AuthClient] Failed AUTH_PROOF response: opcode {opcode:X2}, result {result}");
-                WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                EventEmitter.FireOnLoginFailure();
                 _loginCompletionSource?.TrySetResult(false);
             }
 

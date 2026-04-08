@@ -112,7 +112,9 @@ namespace ForegroundBotRunner
                 services.AddSingleton<IObjectManager>(provider => 
                 {
                     TryWrite("objectmanager_init.txt", "Initializing WoWSharpObjectManager...\n");
+#pragma warning disable CS0618 // ForegroundBotRunner bootstrap — singleton needed for DI registration
                     return WoWSharpClient.WoWSharpObjectManager.Instance;
+#pragma warning restore CS0618
                 });
 
                 // Add real communication clients

@@ -7,6 +7,8 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class AccountDataHandlerTests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+
         [Fact]
         public void HandleAccountDataTimes_ValidPacket_DoesNotThrow()
         {
@@ -17,7 +19,7 @@ namespace WoWSharpClient.Tests.Handlers
                 BitConverter.GetBytes((uint)(i * 100)).CopyTo(data, 4 + i * 4);
 
             // Act & Assert — no exception
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data, ctx);
         }
 
         [Fact]
@@ -27,7 +29,7 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = new byte[20];
 
             // Act & Assert — should log error but not throw
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data, ctx);
         }
 
         [Fact]
@@ -43,7 +45,7 @@ namespace WoWSharpClient.Tests.Handlers
             Array.Copy(payload, 0, data, 16, payload.Length);
 
             // Act & Assert — no exception
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data, ctx);
         }
 
         [Fact]
@@ -53,7 +55,7 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = new byte[10];
 
             // Act & Assert — should log error but not throw
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data, ctx);
         }
 
         [Fact]
@@ -67,15 +69,15 @@ namespace WoWSharpClient.Tests.Handlers
             BitConverter.GetBytes((uint)100).CopyTo(data, 12); // claimed size >> actual
 
             // Act & Assert — should log error but not throw
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data, ctx);
         }
 
         [Fact]
         public void HandleAccountData_EmptyData_DoesNotThrow()
         {
             byte[] data = [];
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data);
-            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_ACCOUNT_DATA_TIMES, data, ctx);
+            AccountDataHandler.HandleAccountData(Opcode.SMSG_UPDATE_ACCOUNT_DATA, data, ctx);
         }
     }
 }

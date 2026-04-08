@@ -9,7 +9,7 @@ namespace WoWSharpClient.Handlers
     {
         private static readonly uint[] _accountDataTimestamps = new uint[8];
 
-        public static void HandleAccountData(Opcode opcode, byte[] data)
+        public static void HandleAccountData(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             switch (opcode)
             {

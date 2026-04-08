@@ -8,6 +8,7 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class SMSG_MESSAGECHAT_Tests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
         [Fact]
         public void ShouldProcessPatchMessage()
         {
@@ -39,7 +40,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             // Act
-            ChatHandler.HandleServerChatMessage(opcode, data);
+            ChatHandler.HandleServerChatMessage(opcode, data, ctx);
 
             // Assert
             Assert.True(eventFired, "The chat message event was not fired.");
@@ -84,7 +85,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             // Act
-            ChatHandler.HandleServerChatMessage(opcode, data);
+            ChatHandler.HandleServerChatMessage(opcode, data, ctx);
 
             // Assert
             Assert.True(eventFired, "The chat message event was not fired.");
@@ -129,7 +130,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             // Act
-            ChatHandler.HandleServerChatMessage(opcode, data);
+            ChatHandler.HandleServerChatMessage(opcode, data, ctx);
 
             // Assert
             Assert.True(eventFired, "The chat message event was not fired.");
@@ -174,7 +175,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             // Act
-            ChatHandler.HandleServerChatMessage(opcode, data);
+            ChatHandler.HandleServerChatMessage(opcode, data, ctx);
 
             // Assert
             Assert.True(eventFired, "The chat message event was not fired.");
@@ -219,7 +220,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             // Act
-            ChatHandler.HandleServerChatMessage(opcode, data);
+            ChatHandler.HandleServerChatMessage(opcode, data, ctx);
 
             // Assert
             Assert.True(eventFired, "The chat message event was not fired.");

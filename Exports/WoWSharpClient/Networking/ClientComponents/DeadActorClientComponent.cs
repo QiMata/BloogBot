@@ -25,6 +25,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
         private readonly ILogger<DeadActorClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+        /// <summary>
+        /// Per-instance ObjectManager reference. Set after construction by the owning bot context.
+        /// Used for player GUID lookup during corpse resurrection.
+        /// </summary>
+        internal WoWSharpObjectManager? ObjectManager { get; set; }
+
         private bool _isDead;
         private bool _isGhost;
         private bool _hasResurrectionRequest;
@@ -92,7 +98,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // CMSG_RECLAIM_CORPSE (1.12.1): ObjectGuid playerGuid (8)
                 // VMaNGOS validates the GUID matches the session player — zero is rejected silently.
-                var guid = WoWSharpObjectManager.Instance?.Player?.Guid ?? 0UL;
+                var guid = ObjectManager?.Player?.Guid ?? 0UL;
                 var payload = BitConverter.GetBytes(guid);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, payload, cancellationToken);

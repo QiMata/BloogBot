@@ -46,8 +46,8 @@ namespace WoWSharpClient
 
         private ILogger<WoWSharpObjectManager> _logger;
 
-        // Wrapper client for both auth and world transactions
-
+        // Per-instance event emitter (replaces WoWSharpEventEmitter.Instance singleton)
+        private WoWSharpEventEmitter _eventEmitter;
 
         // Wrapper client for both auth and world transactions
         private WoWClient _woWClient;
@@ -108,11 +108,13 @@ namespace WoWSharpClient
             WoWClient wowClient,
             PathfindingClient pathfindingClient,
             ILogger<WoWSharpObjectManager> logger,
+            WoWSharpEventEmitter? eventEmitter = null,
             SceneDataClient? sceneDataClient = null,
             bool useLocalPhysics = false
         )
         {
-            WoWSharpEventEmitter.Instance.Reset();
+            _eventEmitter = eventEmitter ?? new WoWSharpEventEmitter();
+            _eventEmitter.Reset();
             lock (_objectsLock) _objects.Clear();
             _activePet = null;
             _pendingUpdates.Clear();
@@ -126,44 +128,52 @@ namespace WoWSharpClient
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             _physicsTimeAccumulator = 0f;
 
-            WoWSharpEventEmitter.Instance.OnLoginFailure += EventEmitter_OnLoginFailure;
-            WoWSharpEventEmitter.Instance.OnLoginVerifyWorld += EventEmitter_OnLoginVerifyWorld;
-            WoWSharpEventEmitter.Instance.OnWorldSessionStart += EventEmitter_OnWorldSessionStart;
-            WoWSharpEventEmitter.Instance.OnWorldSessionEnd += EventEmitter_OnWorldSessionEnd;
-            WoWSharpEventEmitter.Instance.OnCharacterListLoaded +=
+            // Wire handler context so legacy opcode handlers use this instance.
+            // StoreHandlerContext applies immediately if WorldClient exists,
+            // and re-applies whenever a new WorldClient is created (e.g., SelectRealmAsync).
+            _woWClient.StoreHandlerContext(this, _eventEmitter);
+            // Pass event emitter to WoWClient for auth-phase events
+            _woWClient.EventEmitter = _eventEmitter;
+
+            _eventEmitter.OnLoginFailure += EventEmitter_OnLoginFailure;
+            _eventEmitter.OnLoginVerifyWorld += EventEmitter_OnLoginVerifyWorld;
+            _eventEmitter.OnWorldSessionStart += EventEmitter_OnWorldSessionStart;
+            _eventEmitter.OnWorldSessionEnd += EventEmitter_OnWorldSessionEnd;
+            _eventEmitter.OnCharacterListLoaded +=
                 EventEmitter_OnCharacterListLoaded;
-            WoWSharpEventEmitter.Instance.OnCharacterCreateResponse +=
+            _eventEmitter.OnCharacterCreateResponse +=
                 EventEmitter_OnCharacterCreateResponse;
-            WoWSharpEventEmitter.Instance.OnChatMessage += EventEmitter_OnChatMessage;
-            WoWSharpEventEmitter.Instance.OnForceMoveRoot += EventEmitter_OnForceMoveRoot;
-            WoWSharpEventEmitter.Instance.OnForceMoveUnroot += EventEmitter_OnForceMoveUnroot;
-            WoWSharpEventEmitter.Instance.OnMoveWaterWalk += EventEmitter_OnMoveWaterWalk;
-            WoWSharpEventEmitter.Instance.OnMoveLandWalk += EventEmitter_OnMoveLandWalk;
-            WoWSharpEventEmitter.Instance.OnMoveSetHover += EventEmitter_OnMoveSetHover;
-            WoWSharpEventEmitter.Instance.OnMoveUnsetHover += EventEmitter_OnMoveUnsetHover;
-            WoWSharpEventEmitter.Instance.OnMoveFeatherFall += EventEmitter_OnMoveFeatherFall;
-            WoWSharpEventEmitter.Instance.OnMoveNormalFall += EventEmitter_OnMoveNormalFall;
-            WoWSharpEventEmitter.Instance.OnForceWalkSpeedChange +=
+            _eventEmitter.OnChatMessage += EventEmitter_OnChatMessage;
+            _eventEmitter.OnForceMoveRoot += EventEmitter_OnForceMoveRoot;
+            _eventEmitter.OnForceMoveUnroot += EventEmitter_OnForceMoveUnroot;
+            _eventEmitter.OnMoveWaterWalk += EventEmitter_OnMoveWaterWalk;
+            _eventEmitter.OnMoveLandWalk += EventEmitter_OnMoveLandWalk;
+            _eventEmitter.OnMoveSetHover += EventEmitter_OnMoveSetHover;
+            _eventEmitter.OnMoveUnsetHover += EventEmitter_OnMoveUnsetHover;
+            _eventEmitter.OnMoveFeatherFall += EventEmitter_OnMoveFeatherFall;
+            _eventEmitter.OnMoveNormalFall += EventEmitter_OnMoveNormalFall;
+            _eventEmitter.OnForceWalkSpeedChange +=
                 EventEmitter_OnForceWalkSpeedChange;
-            WoWSharpEventEmitter.Instance.OnForceRunSpeedChange +=
+            _eventEmitter.OnForceRunSpeedChange +=
                 EventEmitter_OnForceRunSpeedChange;
-            WoWSharpEventEmitter.Instance.OnForceRunBackSpeedChange +=
+            _eventEmitter.OnForceRunBackSpeedChange +=
                 EventEmitter_OnForceRunBackSpeedChange;
-            WoWSharpEventEmitter.Instance.OnForceSwimSpeedChange +=
+            _eventEmitter.OnForceSwimSpeedChange +=
                 EventEmitter_OnForceSwimSpeedChange;
-            WoWSharpEventEmitter.Instance.OnForceSwimBackSpeedChange +=
+            _eventEmitter.OnForceSwimBackSpeedChange +=
                 EventEmitter_OnForceSwimBackSpeedChange;
-            WoWSharpEventEmitter.Instance.OnForceTurnRateChange +=
+            _eventEmitter.OnForceTurnRateChange +=
                 EventEmitter_OnForceTurnRateChange;
-            WoWSharpEventEmitter.Instance.OnForceMoveKnockBack += EventEmitter_OnForceMoveKnockBack;
-            WoWSharpEventEmitter.Instance.OnForceTimeSkipped += EventEmitter_OnForceTimeSkipped;
-            WoWSharpEventEmitter.Instance.OnTeleport += EventEmitter_OnTeleport;
-            WoWSharpEventEmitter.Instance.OnClientControlUpdate +=
+            _eventEmitter.OnForceMoveKnockBack += EventEmitter_OnForceMoveKnockBack;
+            _eventEmitter.OnForceTimeSkipped += EventEmitter_OnForceTimeSkipped;
+            _eventEmitter.OnTeleport += EventEmitter_OnTeleport;
+            _eventEmitter.OnClientControlUpdate +=
                 EventEmitter_OnClientControlUpdate;
-            WoWSharpEventEmitter.Instance.OnSetTimeSpeed += EventEmitter_OnSetTimeSpeed;
-            WoWSharpEventEmitter.Instance.OnSpellGo += EventEmitter_OnSpellGo;
+            _eventEmitter.OnSetTimeSpeed += EventEmitter_OnSetTimeSpeed;
+            _eventEmitter.OnSpellGo += EventEmitter_OnSpellGo;
 
             // Restore player control when server-driven spline completes
+            SplineCtrl.ObjectManager = this;
             SplineCtrl.OnSplineCompleted += OnSplineCompleted;
 
             _loginScreen = new(_woWClient);
@@ -182,7 +192,8 @@ namespace WoWSharpClient
                 _movementController = new MovementController(
                     _woWClient,
                     (WoWLocalPlayer)Player,
-                    _sceneDataClient
+                    _sceneDataClient,
+                    objectManager: this
                 );
                 _movementController.OnStuckRecoveryRequired += HandleMovementControllerStuckRecovery;
             }
@@ -419,10 +430,10 @@ namespace WoWSharpClient
                 new QuestObjectiveProgress(questId, creatureEntry, current, required, QuestObjectiveTypes.Kill),
                 (_, existing) => existing with { CurrentCount = current, RequiredCount = required });
 
-            WoWSharpEventEmitter.Instance.FireOnQuestProgress();
+            _eventEmitter.FireOnQuestProgress();
 
             if (current >= required)
-                WoWSharpEventEmitter.Instance.FireOnQuestObjectiveComplete();
+                _eventEmitter.FireOnQuestObjectiveComplete();
         }
 
         /// <summary>
@@ -437,7 +448,7 @@ namespace WoWSharpClient
                 new QuestObjectiveProgress(0, itemId, current, 0, QuestObjectiveTypes.Collect),
                 (_, existing) => existing with { CurrentCount = current });
 
-            WoWSharpEventEmitter.Instance.FireOnQuestProgress();
+            _eventEmitter.FireOnQuestProgress();
         }
 
         private HighGuid _playerGuid = new(new byte[4], new byte[4]);
@@ -448,12 +459,14 @@ namespace WoWSharpClient
             set
             {
                 _playerGuid = value;
-                Player = new WoWLocalPlayer(_playerGuid);
+                var player = new WoWLocalPlayer(_playerGuid);
+                player.ObjectManager = this;
+                Player = player;
             }
         }
 
 
-        public IWoWEventHandler EventHandler => WoWSharpEventEmitter.Instance;
+        public IWoWEventHandler EventHandler => _eventEmitter;
 
 
         public IWoWLocalPlayer Player { get; set; } =
@@ -581,7 +594,9 @@ namespace WoWSharpClient
                 _playerGuid = new HighGuid(new byte[4], new byte[4]);
             }
 
-            Player = new WoWLocalPlayer(_playerGuid);
+            var resetPlayer = new WoWLocalPlayer(_playerGuid);
+            resetPlayer.ObjectManager = this;
+            Player = resetPlayer;
 
             Log.Information("[WorldSession] Reset state from {Source}; preservePlayerGuid={Preserve}; guid=0x{Guid:X}",
                 source, preservePlayerGuid, _playerGuid.FullGuid);

@@ -394,7 +394,7 @@ namespace WoWSharpClient.Models
         {
             var buff = Buffs.FirstOrDefault(b => b.Name == buffName);
             if (buff == null) return false;
-            WoWSharpObjectManager.Instance.CancelAura(buff.Id);
+            ObjectManager.CancelAura(buff.Id);
             return true;
         }
 

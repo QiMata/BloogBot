@@ -58,17 +58,16 @@ public class BotContext : IDisposable
     }
 
     /// <summary>
-    /// Creates a BotContext using the current static singletons.
-    /// This is the migration bridge — existing code creates a context from statics,
-    /// new code creates instance-based components directly.
+    /// Creates a BotContext using the provided ObjectManager's own instances.
+    /// The ObjectManager already owns its EventEmitter, so we pull it from there.
     /// </summary>
-    public static BotContext FromCurrentSingletons(string accountName, WoWClient wowClient, SplineController splineController)
+    public static BotContext FromObjectManager(string accountName, WoWClient wowClient, WoWSharpObjectManager objectManager, SplineController splineController)
     {
         return new BotContext(
             accountName,
             wowClient,
-            WoWSharpObjectManager.Instance,
-            WoWSharpEventEmitter.Instance,
+            objectManager,
+            (WoWSharpEventEmitter)objectManager.EventHandler,
             splineController);
     }
 

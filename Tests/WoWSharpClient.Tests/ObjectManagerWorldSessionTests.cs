@@ -24,6 +24,7 @@ namespace WoWSharpClient.Tests;
 [Collection("Sequential ObjectManager tests")]
 public class ObjectManagerWorldSessionTests
 {
+    private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
     private readonly ObjectManagerFixture _fixture;
 
     public ObjectManagerWorldSessionTests(ObjectManagerFixture fixture)
@@ -260,7 +261,8 @@ public class ObjectManagerWorldSessionTests
                 new Position(0f, 0f, 0f),
                 startTime,
                 durationMs: 1000u,
-                points: [new Position(10f, 0f, 0f)]));
+                points: [new Position(10f, 0f, 0f)]),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
         WaitForCondition(() => Splines.Instance.HasActiveSpline(remoteGuid));
 
@@ -324,7 +326,8 @@ public class ObjectManagerWorldSessionTests
                 new Position(2f, -1f, 3f),
                 startTime,
                 durationMs: 1000u,
-                points: [new Position(4f, -1f, 3f)]));
+                points: [new Position(4f, -1f, 3f)]),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
         WaitForCondition(() =>
         {
@@ -410,7 +413,8 @@ public class ObjectManagerWorldSessionTests
                 new Position(100f, 200f, 50f),
                 startTime,
                 durationMs: 1000u,
-                points: [new Position(100f, 200f, 60f)]));
+                points: [new Position(100f, 200f, 60f)]),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
         WaitForCondition(() => Splines.Instance.HasActiveSpline(transportGuid));
 
@@ -511,7 +515,8 @@ public class ObjectManagerWorldSessionTests
         {
             MovementHandler.HandleUpdateMovement(
                 Opcode.SMSG_MOVE_KNOCK_BACK,
-                BuildKnockBackPayload(playerGuid, movementCounter, vSin, vCos, hSpeed, vSpeed));
+                BuildKnockBackPayload(playerGuid, movementCounter, vSin, vCos, hSpeed, vSpeed),
+                ctx);
         }
         finally
         {
@@ -594,7 +599,8 @@ public class ObjectManagerWorldSessionTests
         {
             MovementHandler.HandleUpdateMovement(
                 serverOpcode,
-                BuildGuidCounterSpeedPayload(playerGuid, movementCounter, newValue));
+                BuildGuidCounterSpeedPayload(playerGuid, movementCounter, newValue),
+                ctx);
         }
         finally
         {
@@ -680,7 +686,8 @@ public class ObjectManagerWorldSessionTests
 
         MovementHandler.HandleUpdateMovement(
             serverOpcode,
-            BuildGuidCounterPayload(playerGuid, movementCounter));
+            BuildGuidCounterPayload(playerGuid, movementCounter),
+            ctx);
 
         if (apply)
             Assert.True(player.MovementFlags.HasFlag(flag));
@@ -734,7 +741,8 @@ public class ObjectManagerWorldSessionTests
 
         MovementHandler.HandleUpdateMovement(
             serverOpcode,
-            BuildGuidSpeedPayload(remoteGuid, newValue));
+            BuildGuidSpeedPayload(remoteGuid, newValue),
+            ctx);
 
         switch (serverOpcode)
         {
@@ -792,7 +800,7 @@ public class ObjectManagerWorldSessionTests
 
         var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
 
-        MovementHandler.HandleUpdateMovement(serverOpcode, BuildPackedGuidPayload(remoteGuid));
+        MovementHandler.HandleUpdateMovement(serverOpcode, BuildPackedGuidPayload(remoteGuid), ctx);
 
         if (apply)
             Assert.True(unit.MovementFlags.HasFlag(flag));
@@ -838,7 +846,8 @@ public class ObjectManagerWorldSessionTests
 
         MovementHandler.HandleUpdateMovement(
             serverOpcode,
-            BuildMessageMovePayload(remoteGuid, movementFlags, new Position(45f, 55f, 65f), 1.75f));
+            BuildMessageMovePayload(remoteGuid, movementFlags, new Position(45f, 55f, 65f), 1.75f),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
 
         if (apply)
@@ -885,7 +894,8 @@ public class ObjectManagerWorldSessionTests
                 MovementFlags.MOVEFLAG_SWIMMING,
                 new Position(46f, 56f, 66f),
                 0.5f,
-                swimPitch));
+                swimPitch),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
 
         Assert.True(unit.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_SWIMMING));
@@ -926,7 +936,8 @@ public class ObjectManagerWorldSessionTests
 
         MovementHandler.HandleUpdateMovement(
             serverOpcode,
-            BuildMessageMoveSpeedPayload(remoteGuid, MovementFlags.MOVEFLAG_FORWARD, new Position(70f, 80f, 90f), 0.25f, newValue));
+            BuildMessageMoveSpeedPayload(remoteGuid, MovementFlags.MOVEFLAG_FORWARD, new Position(70f, 80f, 90f), 0.25f, newValue),
+            ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
 
         switch (serverOpcode)

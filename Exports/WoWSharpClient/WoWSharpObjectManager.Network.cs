@@ -280,6 +280,7 @@ namespace WoWSharpClient
                                         && PlayerGuid.FullGuid != 0)
                                     {
                                         var pet = new WoWLocalPet(addedUnit.HighGuid, addedUnit.ObjectType);
+                                        pet.ObjectManager = this;
                                         pet.CopyFrom(addedUnit);
                                         lock (_objectsLock)
                                         {
@@ -363,6 +364,7 @@ namespace WoWSharpClient
                                         && PlayerGuid.FullGuid != 0)
                                     {
                                         var pet = new WoWLocalPet(updatedUnit.HighGuid, updatedUnit.ObjectType);
+                                        pet.ObjectManager = this;
                                         pet.CopyFrom(updatedUnit);
                                         if (index >= 0) { lock (_objectsLock) _objects[index] = pet; }
                                         _activePet = pet;

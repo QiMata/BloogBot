@@ -23,6 +23,29 @@ namespace WoWSharpClient.Client
         private uint _pingCounter = 0;
         private bool _disposed;
 
+        /// <summary>
+        /// Per-instance event emitter. Set by WoWSharpObjectManager.Initialize()
+        /// so auth-phase events flow through the per-bot emitter.
+        /// </summary>
+        internal WoWSharpEventEmitter? EventEmitter { get; set; }
+
+        // Stored handler context to apply when WorldClient is (re)created
+        private WoWSharpObjectManager? _pendingHandlerContextOm;
+        private WoWSharpEventEmitter? _pendingHandlerContextEe;
+
+        /// <summary>
+        /// Stores handler context so it can be applied to the WorldClient
+        /// whenever one is created (e.g., during SelectRealmAsync).
+        /// </summary>
+        internal void StoreHandlerContext(WoWSharpObjectManager objectManager, WoWSharpEventEmitter eventEmitter)
+        {
+            _pendingHandlerContextOm = objectManager;
+            _pendingHandlerContextEe = eventEmitter;
+            // Apply immediately if WorldClient already exists
+            if (_worldClient is WorldClient wc)
+                wc.SetHandlerContext(objectManager, eventEmitter);
+        }
+
         public bool IsLoggedIn => _isLoggedIn;
 
         public IWorldClient? WorldClient => _worldClient;
@@ -56,9 +79,11 @@ namespace WoWSharpClient.Client
         {
             _authClient?.Dispose();
             _authClient = WoWClientFactory.CreateAuthClient();
-            
+            if (EventEmitter != null)
+                _authClient.EventEmitter = EventEmitter;
+
             await _authClient.ConnectAsync(_ipAddress, cancellationToken: cancellationToken);
-            WoWSharpEventEmitter.Instance.FireOnLoginConnect();
+            EventEmitter?.FireOnLoginConnect();
         }
 
         public async Task LoginAsync(string username, string password, CancellationToken cancellationToken = default)
@@ -110,6 +135,10 @@ namespace WoWSharpClient.Client
             _worldClient = WoWClientFactory.CreateWorldClient();
             _worldClient.PacketSent += (opcode, size) => PacketSent?.Invoke(opcode, size);
             _worldClient.PacketReceived += (opcode, size) => PacketReceived?.Invoke(opcode, size);
+
+            // Apply stored handler context to the new WorldClient
+            if (_pendingHandlerContextOm != null && _pendingHandlerContextEe != null && _worldClient is WorldClient newWc)
+                newWc.SetHandlerContext(_pendingHandlerContextOm, _pendingHandlerContextEe);
 
             var sessionKey = _authClient.SessionKey;
             var username = _authClient.Username;

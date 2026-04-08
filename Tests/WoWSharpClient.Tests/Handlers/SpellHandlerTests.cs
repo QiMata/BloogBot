@@ -12,6 +12,7 @@ namespace WoWSharpClient.Tests.Handlers
     [Collection("Sequential ObjectManager tests")]
     public class SpellHandlerTests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
         // --- SMSG_LOG_XPGAIN ---
 
         [Fact]
@@ -40,7 +41,7 @@ namespace WoWSharpClient.Tests.Handlers
             try
             {
                 // Act
-                SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data);
+                SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data, ctx);
 
                 // Assert
                 Assert.True(eventFired, "OnXpGain event was not fired.");
@@ -74,7 +75,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data);
+                SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data, ctx);
 
                 Assert.True(eventFired);
                 Assert.Equal(500, receivedXp);
@@ -92,7 +93,7 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = [];
 
             // Act & Assert — no exception
-            SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data);
+            SpellHandler.HandleLogXpGain(Opcode.SMSG_LOG_XPGAIN, data, ctx);
         }
 
         // --- SMSG_LEVELUP_INFO ---
@@ -113,7 +114,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                SpellHandler.HandleLevelUpInfo(Opcode.SMSG_LEVELUP_INFO, data);
+                SpellHandler.HandleLevelUpInfo(Opcode.SMSG_LEVELUP_INFO, data, ctx);
 
                 Assert.True(eventFired, "LevelUp event was not fired.");
             }
@@ -127,7 +128,7 @@ namespace WoWSharpClient.Tests.Handlers
         public void HandleLevelUpInfo_EmptyData_DoesNotThrow()
         {
             byte[] data = [];
-            SpellHandler.HandleLevelUpInfo(Opcode.SMSG_LEVELUP_INFO, data);
+            SpellHandler.HandleLevelUpInfo(Opcode.SMSG_LEVELUP_INFO, data, ctx);
         }
 
         // --- SMSG_ATTACKSTART ---
@@ -144,14 +145,14 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = ms.ToArray();
 
             // Act & Assert — no exception even with no player set
-            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, data);
+            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, data, ctx);
         }
 
         [Fact]
         public void HandleAttackStart_EmptyData_DoesNotThrow()
         {
             byte[] data = [];
-            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, data);
+            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, data, ctx);
         }
 
         [Fact]
@@ -177,7 +178,7 @@ namespace WoWSharpClient.Tests.Handlers
             writer.Write(playerGuid);
             writer.Write(targetGuid);
 
-            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, ms.ToArray());
+            SpellHandler.HandleAttackStart(Opcode.SMSG_ATTACKSTART, ms.ToArray(), ctx);
 
             Assert.True(localPlayer.IsAutoAttacking);
             Assert.Equal(targetGuid, localPlayer.TargetGuid);
@@ -191,7 +192,7 @@ namespace WoWSharpClient.Tests.Handlers
         public void HandleAttackStop_EmptyData_DoesNotThrow()
         {
             byte[] data = [];
-            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, data);
+            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, data, ctx);
         }
 
         [Fact]
@@ -211,7 +212,7 @@ namespace WoWSharpClient.Tests.Handlers
             byte[] data = ms.ToArray();
 
             // Act & Assert — no exception (player guid won't match 0x05)
-            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, data);
+            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, data, ctx);
         }
 
         [Fact]
@@ -235,7 +236,7 @@ namespace WoWSharpClient.Tests.Handlers
             ReaderUtils.WritePackedGuid(writer, playerGuid);
             ReaderUtils.WritePackedGuid(writer, targetGuid);
 
-            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, ms.ToArray());
+            SpellHandler.HandleAttackStop(Opcode.SMSG_ATTACKSTOP, ms.ToArray(), ctx);
 
             Assert.False(localPlayer.IsAutoAttacking);
             Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
@@ -269,7 +270,7 @@ namespace WoWSharpClient.Tests.Handlers
             writer.Write((uint)0);
             writer.Write((uint)0);
 
-            SpellHandler.HandleAttackerStateUpdate(Opcode.SMSG_ATTACKERSTATEUPDATE, ms.ToArray());
+            SpellHandler.HandleAttackerStateUpdate(Opcode.SMSG_ATTACKERSTATEUPDATE, ms.ToArray(), ctx);
 
             Assert.True(localPlayer.IsAutoAttacking);
             Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
@@ -300,7 +301,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                SpellHandler.HandleInitialSpells(Opcode.SMSG_INITIAL_SPELLS, data);
+                SpellHandler.HandleInitialSpells(Opcode.SMSG_INITIAL_SPELLS, data, ctx);
 
                 Assert.True(eventFired, "OnInitialSpellsLoaded event was not fired.");
                 Assert.Equal(2, WoWSharpObjectManager.Instance.Spells.Count);
@@ -327,7 +328,7 @@ namespace WoWSharpClient.Tests.Handlers
             writer.Write((ushort)7620);
             writer.Write((ushort)7731);
 
-            SpellHandler.HandleSupercededSpell(Opcode.SMSG_SUPERCEDED_SPELL, ms.ToArray());
+            SpellHandler.HandleSupercededSpell(Opcode.SMSG_SUPERCEDED_SPELL, ms.ToArray(), ctx);
 
             Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7620);
             Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7731);
@@ -347,7 +348,7 @@ namespace WoWSharpClient.Tests.Handlers
             using var writer = new BinaryWriter(ms);
             writer.Write((ushort)18248);
 
-            SpellHandler.HandleRemovedSpell(Opcode.SMSG_REMOVED_SPELL, ms.ToArray());
+            SpellHandler.HandleRemovedSpell(Opcode.SMSG_REMOVED_SPELL, ms.ToArray(), ctx);
 
             Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
             Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
@@ -368,7 +369,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray());
+                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray(), ctx);
                 Assert.Equal("Cast failed for spell 18248: MOVING", errorMessage);
             }
             finally
@@ -391,7 +392,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             try
             {
-                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray());
+                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray(), ctx);
                 Assert.Equal("Cast failed for spell 18248", errorMessage);
             }
             finally

@@ -13,6 +13,8 @@ namespace WoWSharpClient.Tests.Handlers
     public class SMSG_COMPRESSED_UPDATE_OBJECT_Transports_Tests(ObjectManagerFixture _)
         : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+
         [Fact]
         public void ShouldDecompressAndParseTransports()
         {
@@ -22,7 +24,7 @@ namespace WoWSharpClient.Tests.Handlers
             );
 
             // Call the HandleUpdateObject method on ObjectUpdateHandler
-            ObjectUpdateHandler.HandleUpdateObject(opcode, data);
+            ObjectUpdateHandler.HandleUpdateObject(opcode, data, ctx);
 
             WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
             Thread.Sleep(100); // Allow background processing to complete
@@ -126,6 +128,8 @@ namespace WoWSharpClient.Tests.Handlers
     public class SMSG_COMPRESSED_UPDATE_OBJECT_Player_Tests(ObjectManagerFixture _)
         : IClassFixture<ObjectManagerFixture>
     {
+        private static readonly HandlerContext ctx = new(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+
         [Fact]
         public void ShouldDecompressAndParsePlayerCharacter()
         {
@@ -135,7 +139,7 @@ namespace WoWSharpClient.Tests.Handlers
             );
 
             // Call the HandleUpdateObject method on ObjectUpdateHandler
-            ObjectUpdateHandler.HandleUpdateObject(opcode, data);
+            ObjectUpdateHandler.HandleUpdateObject(opcode, data, ctx);
 
             WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
             Thread.Sleep(100); // Allow background processing to complete

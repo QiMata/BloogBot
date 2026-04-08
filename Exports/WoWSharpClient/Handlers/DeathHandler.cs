@@ -8,7 +8,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class DeathHandler
     {
-        public static void HandleCorpseReclaimDelay(Opcode opcode, byte[] data)
+        public static void HandleCorpseReclaimDelay(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             if (data.Length < 4)
             {
@@ -22,7 +22,7 @@ namespace WoWSharpClient.Handlers
                 uint rawDelay = reader.ReadUInt32();
                 int normalizedSeconds = NormalizeDelayToSeconds(rawDelay);
 
-                if (WoWSharpObjectManager.Instance.Player is WoWLocalPlayer player)
+                if (ctx.ObjectManager.Player is WoWLocalPlayer player)
                     player.CorpseRecoveryDelaySeconds = normalizedSeconds;
 
                 Log.Information("[DeathHandler] {Opcode} rawDelay={RawDelay} normalizedDelay={Delay}s",

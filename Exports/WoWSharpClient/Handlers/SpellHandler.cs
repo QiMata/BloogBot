@@ -11,7 +11,7 @@ namespace WoWSharpClient.Handlers
 {
     public static class SpellHandler
     {
-        public static void HandleInitialSpells(Opcode opcode, byte[] data)
+        public static void HandleInitialSpells(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -27,8 +27,8 @@ namespace WoWSharpClient.Handlers
                     spells.Add(new GameData.Core.Models.Spell(spellID, 0, "", "", ""));
                 }
 
-                lock (WoWSharpObjectManager.Instance.SpellLock)
-                    WoWSharpObjectManager.Instance.Spells = spells;
+                lock (ctx.ObjectManager.SpellLock)
+                    ctx.ObjectManager.Spells = spells;
                 Log.Information($"[SpellHandler] Loaded {spellCount} spells from SMSG_INITIAL_SPELLS");
 
                 ushort cooldownCount = reader.ReadUInt16();
@@ -42,7 +42,7 @@ namespace WoWSharpClient.Handlers
                     uint cooldownCategoryTime = reader.ReadUInt32();
                 }
 
-                WoWSharpEventEmitter.Instance.FireOnInitialSpellsLoaded();
+                ctx.EventEmitter.FireOnInitialSpellsLoaded();
             }
             catch (EndOfStreamException)
             {
@@ -55,15 +55,15 @@ namespace WoWSharpClient.Handlers
         /// Format: uint32 spellId
         /// Adds the newly learned spell to the local spell list.
         /// </summary>
-        public static void HandleLearnedSpell(Opcode opcode, byte[] data)
+        public static void HandleLearnedSpell(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
             {
                 uint spellId = reader.ReadUInt32();
-                lock (WoWSharpObjectManager.Instance.SpellLock)
+                lock (ctx.ObjectManager.SpellLock)
                 {
-                    var existing = WoWSharpObjectManager.Instance.Spells;
+                    var existing = ctx.ObjectManager.Spells;
                     if (existing != null && !existing.Exists(s => s.Id == spellId))
                     {
                         existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
@@ -79,7 +79,7 @@ namespace WoWSharpClient.Handlers
         /// Format: uint16 oldSpellId, uint16 newSpellId
         /// Replaces the previous spell rank with the newly learned rank.
         /// </summary>
-        public static void HandleSupercededSpell(Opcode opcode, byte[] data)
+        public static void HandleSupercededSpell(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -87,9 +87,9 @@ namespace WoWSharpClient.Handlers
                 uint oldSpellId = reader.ReadUInt16();
                 uint newSpellId = reader.ReadUInt16();
 
-                lock (WoWSharpObjectManager.Instance.SpellLock)
+                lock (ctx.ObjectManager.SpellLock)
                 {
-                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var existing = ctx.ObjectManager.Spells ??= [];
                     var removed = existing.RemoveAll(s => s.Id == oldSpellId);
                     if (!existing.Exists(s => s.Id == newSpellId))
                         existing.Add(new GameData.Core.Models.Spell(newSpellId, 0, "", "", ""));
@@ -106,15 +106,15 @@ namespace WoWSharpClient.Handlers
         /// Format: uint16 spellId
         /// Removes a no-longer-known spell from the local spell list.
         /// </summary>
-        public static void HandleRemovedSpell(Opcode opcode, byte[] data)
+        public static void HandleRemovedSpell(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
             {
                 uint spellId = reader.ReadUInt16();
-                lock (WoWSharpObjectManager.Instance.SpellLock)
+                lock (ctx.ObjectManager.SpellLock)
                 {
-                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var existing = ctx.ObjectManager.Spells ??= [];
                     var removed = existing.RemoveAll(s => s.Id == spellId);
                     Log.Information("[SpellHandler] Removed spell: {SpellId} (removed={Removed}, total={Count})",
                         spellId, removed, existing.Count);
@@ -123,7 +123,7 @@ namespace WoWSharpClient.Handlers
             catch (EndOfStreamException) { }
         }
 
-        public static void HandleSpellLogMiss(Opcode opcode, byte[] data)
+        public static void HandleSpellLogMiss(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -133,7 +133,7 @@ namespace WoWSharpClient.Handlers
                 ulong targetGUID = reader.ReadUInt64();
                 uint missType = reader.ReadUInt32();
 
-                WoWSharpEventEmitter.Instance.FireOnSpellLogMiss(spellId, casterGUID, targetGUID, missType);
+                ctx.EventEmitter.FireOnSpellLogMiss(spellId, casterGUID, targetGUID, missType);
             }
             catch (EndOfStreamException)
             {
@@ -147,7 +147,7 @@ namespace WoWSharpClient.Handlers
         ///         uint8 hitCount, PackGUID[] hitTargets, uint8 missCount, [miss entries...],
         ///         SpellCastTargets, [ammo info if CAST_FLAG_AMMO]
         /// </summary>
-        public static void HandleSpellGo(Opcode opcode, byte[] data)
+        public static void HandleSpellGo(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -184,7 +184,7 @@ namespace WoWSharpClient.Handlers
                 // We've extracted the key data we need
 
                 // Clear SpellcastId when cast completes so IsCasting becomes false
-                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                if (ctx.ObjectManager.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
                     casterUnit.SpellcastId = 0;
 
                 // Detailed logging for gathering spell diagnostics
@@ -193,7 +193,7 @@ namespace WoWSharpClient.Handlers
                 Log.Information("[SpellHandler] SPELL_GO: caster=0x{Caster:X} spell={SpellId} hits=[{Hits}] misses=[{Misses}] castFlags=0x{CastFlags:X}",
                     casterGuid, spellId, hitStr, missStr, castFlags);
 
-                WoWSharpEventEmitter.Instance.FireOnSpellGo(spellId, casterGuid, firstHitTarget);
+                ctx.EventEmitter.FireOnSpellGo(spellId, casterGuid, firstHitTarget);
             }
             catch (EndOfStreamException)
             {
@@ -210,7 +210,7 @@ namespace WoWSharpClient.Handlers
         /// Format: PackGUID casterItem/caster, PackGUID caster, uint32 spellId, uint16 castFlags,
         ///         uint32 castTime, SpellCastTargets, [ammo info if CAST_FLAG_AMMO]
         /// </summary>
-        public static void HandleSpellStart(Opcode opcode, byte[] data)
+        public static void HandleSpellStart(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -235,10 +235,10 @@ namespace WoWSharpClient.Handlers
                     casterGuid, spellId, castTime, targetGuid);
 
                 // Update SpellcastId on the caster's WoWUnit model so IsCasting works
-                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                if (ctx.ObjectManager.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
                     casterUnit.SpellcastId = spellId;
 
-                WoWSharpEventEmitter.Instance.FireOnSpellStart(spellId, casterGuid, targetGuid, castTime);
+                ctx.EventEmitter.FireOnSpellStart(spellId, casterGuid, targetGuid, castTime);
             }
             catch (EndOfStreamException)
             {
@@ -256,7 +256,7 @@ namespace WoWSharpClient.Handlers
         ///         uint8 subDamageCount, [subDamage entries...], uint32 targetState,
         ///         uint32 reserved, uint32 spellId, uint32 blockedAmount
         /// </summary>
-        public static void HandleAttackerStateUpdate(Opcode opcode, byte[] data)
+        public static void HandleAttackerStateUpdate(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -282,7 +282,7 @@ namespace WoWSharpClient.Handlers
                 uint blockedAmount = reader.ReadUInt32();
 
                 // Log melee swings involving the local player for combat diagnostics
-                var localPlayer = WoWSharpObjectManager.Instance.Player;
+                var localPlayer = ctx.ObjectManager.Player;
                 bool isOurAttack = localPlayer != null && attackerGuid == localPlayer.Guid;
                 bool isAttackOnUs = localPlayer != null && targetGuid == localPlayer.Guid;
                 if (isOurAttack || isAttackOnUs)
@@ -294,9 +294,9 @@ namespace WoWSharpClient.Handlers
                 }
 
                 if (isOurAttack)
-                    WoWSharpObjectManager.Instance.ConfirmMeleeAttackStarted(targetGuid);
+                    ctx.ObjectManager.ConfirmMeleeAttackStarted(targetGuid);
 
-                WoWSharpEventEmitter.Instance.FireOnAttackerStateUpdate(
+                ctx.EventEmitter.FireOnAttackerStateUpdate(
                     hitInfo, attackerGuid, targetGuid, totalDamage, spellId, blockedAmount);
             }
             catch (EndOfStreamException)
@@ -313,14 +313,14 @@ namespace WoWSharpClient.Handlers
         /// Parses SMSG_DESTROY_OBJECT (0xAA).
         /// Format: uint64 guid (full 8-byte, NOT packed)
         /// </summary>
-        public static void HandleDestroyObject(Opcode opcode, byte[] data)
+        public static void HandleDestroyObject(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
             {
                 ulong guid = reader.ReadUInt64();
 
-                WoWSharpObjectManager.Instance.QueueUpdate(
+                ctx.ObjectManager.QueueUpdate(
                     new WoWSharpObjectManager.ObjectStateUpdate(
                         guid,
                         WoWSharpObjectManager.ObjectUpdateOperation.Remove,
@@ -341,7 +341,7 @@ namespace WoWSharpClient.Handlers
         /// Format: uint32 spellId, uint8 status(always 2), uint8 failReason, [optional extra data]
         /// The status byte is SimpleSpellCastResult (0=detailed, 2=simple failure).
         /// </summary>
-        public static void HandleCastFailed(Opcode opcode, byte[] data)
+        public static void HandleCastFailed(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -350,7 +350,7 @@ namespace WoWSharpClient.Handlers
                 byte status = reader.ReadByte(); // SimpleSpellCastResult: 0=detailed, 2=simple failure
 
                 // SMSG_CAST_FAILED is always about the local player — clear their SpellcastId
-                if (WoWSharpObjectManager.Instance.Player is Models.WoWUnit playerUnit)
+                if (ctx.ObjectManager.Player is Models.WoWUnit playerUnit)
                     playerUnit.SpellcastId = 0;
 
                 if (status == 2 && reader.BaseStream.Position >= reader.BaseStream.Length)
@@ -358,7 +358,7 @@ namespace WoWSharpClient.Handlers
                     // Simple failure with no details
                     Console.WriteLine($"[CAST_FAILED] spell={spellId} status=FAILURE (no details) raw={BitConverter.ToString(data)}");
                     Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} status=FAILURE (no details)", spellId);
-                    WoWSharpEventEmitter.Instance.FireOnErrorMessage($"Cast failed for spell {spellId}");
+                    ctx.EventEmitter.FireOnErrorMessage($"Cast failed for spell {spellId}");
                     return;
                 }
 
@@ -366,7 +366,7 @@ namespace WoWSharpClient.Handlers
                 var reasonName = GetCastFailureReasonName(reason);
                 Console.WriteLine($"[CAST_FAILED] spell={spellId} reason=0x{reason:X2} ({reasonName}) raw={BitConverter.ToString(data)}");
                 Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} reason=0x{Reason:X2} ({ReasonName})", spellId, reason, reasonName);
-                WoWSharpEventEmitter.Instance.FireOnErrorMessage($"Cast failed for spell {spellId}: {reasonName}");
+                ctx.EventEmitter.FireOnErrorMessage($"Cast failed for spell {spellId}: {reasonName}");
             }
             catch (EndOfStreamException) { }
         }
@@ -455,7 +455,7 @@ namespace WoWSharpClient.Handlers
         /// Format: PackGUID caster, uint32 spellId, byte reason
         /// Broadcast to nearby players when a spell fails after SPELL_START.
         /// </summary>
-        public static void HandleSpellFailure(Opcode opcode, byte[] data)
+        public static void HandleSpellFailure(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -465,7 +465,7 @@ namespace WoWSharpClient.Handlers
                 byte reason = reader.ReadByte();
 
                 // Clear SpellcastId on the caster
-                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                if (ctx.ObjectManager.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
                     casterUnit.SpellcastId = 0;
 
                 Log.Warning("[SpellHandler] SPELL_FAILURE: caster=0x{Caster:X} spell={SpellId} reason={Reason}",
@@ -479,7 +479,7 @@ namespace WoWSharpClient.Handlers
         /// Format: PackGUID target, PackGUID caster, uint32 spellId, uint32 healAmount, byte critical
         /// Logs heal amounts for combat coordination feedback.
         /// </summary>
-        public static void HandleSpellHealLog(Opcode opcode, byte[] data)
+        public static void HandleSpellHealLog(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -499,7 +499,7 @@ namespace WoWSharpClient.Handlers
         /// <summary>
         /// SMSG_LOG_XPGAIN (0x1D0) — fired when player gains XP from kills or quests.
         /// </summary>
-        public static void HandleLogXpGain(Opcode opcode, byte[] data)
+        public static void HandleLogXpGain(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -508,7 +508,7 @@ namespace WoWSharpClient.Handlers
                 uint xpAmount = reader.ReadUInt32();
                 byte type = reader.ReadByte(); // 0 = kill, 1 = non-kill (quest)
 
-                WoWSharpEventEmitter.Instance.FireOnXpGain((int)xpAmount);
+                ctx.EventEmitter.FireOnXpGain((int)xpAmount);
             }
             catch (EndOfStreamException) { }
         }
@@ -516,14 +516,14 @@ namespace WoWSharpClient.Handlers
         /// <summary>
         /// SMSG_LEVELUP_INFO (0x1D4) — fired when player levels up.
         /// </summary>
-        public static void HandleLevelUpInfo(Opcode opcode, byte[] data)
+        public static void HandleLevelUpInfo(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
             {
                 uint newLevel = reader.ReadUInt32();
                 // Remaining fields: health delta, mana delta, stat deltas — not needed for event
-                WoWSharpEventEmitter.Instance.FireLevelUp();
+                ctx.EventEmitter.FireLevelUp();
                 Log.Information("[SpellHandler] LEVELUP: Player reached level {Level}", newLevel);
             }
             catch (EndOfStreamException) { }
@@ -532,7 +532,7 @@ namespace WoWSharpClient.Handlers
         /// SMSG_ATTACKSTART (0x143) — server confirms melee auto-attack has started.
         /// Format: uint64 attackerGuid, uint64 targetGuid
         /// </summary>
-        public static void HandleAttackStart(Opcode opcode, byte[] data)
+        public static void HandleAttackStart(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -540,12 +540,12 @@ namespace WoWSharpClient.Handlers
                 ulong attackerGuid = reader.ReadUInt64();
                 ulong targetGuid = reader.ReadUInt64();
 
-                var player = WoWSharpObjectManager.Instance.Player;
+                var player = ctx.ObjectManager.Player;
                 if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
                 {
                     localPlayer.IsAutoAttacking = true;
                     localPlayer.TargetGuid = targetGuid;
-                    WoWSharpObjectManager.Instance.ConfirmMeleeAttackStarted(targetGuid);
+                    ctx.ObjectManager.ConfirmMeleeAttackStarted(targetGuid);
                     Log.Information("[SpellHandler] SMSG_ATTACKSTART: attacker=0x{Attacker:X} target=0x{Target:X} isLocalPlayer=True",
                         attackerGuid, targetGuid);
                 }
@@ -557,7 +557,7 @@ namespace WoWSharpClient.Handlers
         /// SMSG_ATTACKSTOP (0x144) — server confirms melee auto-attack has stopped.
         /// Format: PackGUID attacker, PackGUID target, uint32 unknown
         /// </summary>
-        public static void HandleAttackStop(Opcode opcode, byte[] data)
+        public static void HandleAttackStop(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -565,7 +565,7 @@ namespace WoWSharpClient.Handlers
                 ulong attackerGuid = ReaderUtils.ReadPackedGuid(reader);
                 ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
 
-                var player = WoWSharpObjectManager.Instance.Player;
+                var player = ctx.ObjectManager.Player;
                 if (player is Models.WoWLocalPlayer localPlayer)
                 {
                     bool isUs = attackerGuid == localPlayer.Guid;
@@ -574,7 +574,7 @@ namespace WoWSharpClient.Handlers
                     if (isUs)
                     {
                         localPlayer.IsAutoAttacking = false;
-                        WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart(targetGuid);
+                        ctx.ObjectManager.ClearPendingMeleeAttackStart(targetGuid);
                     }
                 }
             }
@@ -587,13 +587,13 @@ namespace WoWSharpClient.Handlers
         /// Empty payload — just clears IsAutoAttacking so the bot re-sends
         /// CMSG_ATTACKSWING on the next melee tick.
         /// </summary>
-        public static void HandleCancelCombat(Opcode opcode, byte[] data)
+        public static void HandleCancelCombat(Opcode opcode, byte[] data, HandlerContext ctx)
         {
-            var player = WoWSharpObjectManager.Instance.Player;
+            var player = ctx.ObjectManager.Player;
             if (player is Models.WoWLocalPlayer localPlayer)
             {
                 localPlayer.IsAutoAttacking = false;
-                WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart();
+                ctx.ObjectManager.ClearPendingMeleeAttackStart();
                 Log.Warning("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking (possible mob evade)");
             }
         }
@@ -605,7 +605,7 @@ namespace WoWSharpClient.Handlers
         /// (CMSG_GAMEOBJ_USE) so the task-owned loot window can open, but we do not
         /// auto-loot here. FishingTask is responsible for consuming the loot window.
         /// </summary>
-        public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data)
+        public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             if (data.Length < 12) return;
 
@@ -615,7 +615,7 @@ namespace WoWSharpClient.Handlers
                 ulong guid = reader.ReadUInt64();
                 uint anim = reader.ReadUInt32();
 
-                var om = WoWSharpObjectManager.Instance;
+                var om = ctx.ObjectManager;
                 var obj = om.GetObjectByGuid(guid);
 
                 Log.Information("[CustomAnim] Guid=0x{Guid:X} Anim={Anim} ObjFound={Found} ObjType={Type}",
@@ -663,7 +663,7 @@ namespace WoWSharpClient.Handlers
         /// Format: uint32 spellId, int32 duration (ms)
         /// Sets ChannelingId on the local player so IsChanneling becomes true.
         /// </summary>
-        public static void HandleChannelStart(Opcode opcode, byte[] data)
+        public static void HandleChannelStart(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
@@ -671,7 +671,7 @@ namespace WoWSharpClient.Handlers
                 uint spellId = reader.ReadUInt32();
                 int durationMs = reader.ReadInt32();
 
-                var om = WoWSharpObjectManager.Instance;
+                var om = ctx.ObjectManager;
                 if (om.Player is Models.WoWUnit player)
                 {
                     player.ChannelingId = spellId;
@@ -692,14 +692,14 @@ namespace WoWSharpClient.Handlers
         /// Parses MSG_CHANNEL_UPDATE (0x13A).
         /// Format: int32 remainingTime (ms). When 0, channel ended.
         /// </summary>
-        public static void HandleChannelUpdate(Opcode opcode, byte[] data)
+        public static void HandleChannelUpdate(Opcode opcode, byte[] data, HandlerContext ctx)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
             try
             {
                 int remainingTimeMs = reader.ReadInt32();
 
-                var om = WoWSharpObjectManager.Instance;
+                var om = ctx.ObjectManager;
                 if (om.Player is Models.WoWUnit player && remainingTimeMs <= 0)
                 {
                     Log.Information("[SpellHandler] CHANNEL_UPDATE: channel ended (remaining={Remaining}ms, was channeling spell={SpellId})",

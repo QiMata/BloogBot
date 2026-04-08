@@ -22,6 +22,12 @@ namespace WoWSharpClient.Networking.ClientComponents
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<LootingNetworkClientComponent> _logger;
+
+        /// <summary>
+        /// Per-instance event emitter. Set after construction by the owning bot context.
+        /// Falls back gracefully if not set (event simply won't fire).
+        /// </summary>
+        internal WoWSharpEventEmitter? EventEmitter { get; set; }
         private bool _isLootWindowOpen;
         private ulong? _currentLootTarget;
 
@@ -960,7 +966,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 uint amount = BitConverter.ToUInt32(payload.Span[..4]);
                 _logger.LogDebug("SMSG_LOOT_MONEY_NOTIFY: amount={Amount}", amount);
                 HandleMoneyLooted(_currentLootTarget ?? 0, amount);
-                WoWSharpEventEmitter.Instance.FireOnLootMoney((int)amount);
+                EventEmitter?.FireOnLootMoney((int)amount);
             }
             catch (Exception ex)
             {

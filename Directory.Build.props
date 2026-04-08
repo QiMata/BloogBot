@@ -5,9 +5,9 @@
     <Nullable>enable</Nullable>
     <!-- Suppress TFM/RID/Platform appendage; we set OutputPath explicitly below -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <!-- P9.6: Suppress CS0618 for WoWSharpObjectManager.Instance / WoWSharpEventEmitter.Instance
-         until full DI migration replaces 658 singleton call sites across handlers/tests -->
-    <NoWarn>$(NoWarn);CS0618</NoWarn>
+    <!-- P9.6: Suppress CS0618 in test projects — Instance singletons remain for test convenience.
+         Production code (WoWSharpClient) has zero singleton refs as of P9.6 migration. -->
+    <NoWarn Condition="$(MSBuildProjectName.EndsWith('Tests')) OR $(MSBuildProjectName.Contains('Test'))">$(NoWarn);CS0618</NoWarn>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 

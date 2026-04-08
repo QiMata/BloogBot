@@ -25,6 +25,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IWorldClient _worldClient;
         private readonly ILogger<SpellCastingNetworkClientComponent> _logger;
 
+        /// <summary>
+        /// Per-instance event emitter. Set after construction by the owning bot context.
+        /// Falls back gracefully if not set (event simply won't fire).
+        /// </summary>
+        internal WoWSharpEventEmitter? EventEmitter { get; set; }
+
         private bool _isCasting;
         private bool _isChanneling;
         private uint? _currentSpellId;
@@ -104,7 +110,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
 
                     PublishSpellError(err.SpellId, err.ErrorMessage);
-                    WoWSharpEventEmitter.Instance.FireOnErrorMessage(err.ErrorMessage);
+                    EventEmitter?.FireOnErrorMessage(err.ErrorMessage);
                 })
                 .Publish()
                 .RefCount();
