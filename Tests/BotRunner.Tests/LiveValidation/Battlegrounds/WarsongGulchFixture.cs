@@ -69,6 +69,21 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         BattlemasterData.OrgrimmarWsg.Position.Y,
         BattlemasterData.OrgrimmarWsg.Position.Z + 3f);
 
+    // WSG uses individual queue — VMaNGOS anticheat rejects grouped BG queue for large groups.
+    // Skip raid formation during prep. Bots queue individually like AV.
+    protected override async Task PrepareBotsAsync()
+    {
+        await ReviveAndLevelBotsAsync(TargetLevel);
+
+        await ResetBattlegroundStateAsync(AccountNames.ToList(), "BgResetPreStage");
+        await EnsureAccountsStagedAtLocationAsync(HordeAccounts, HordeQueueLocation, "HordeStage");
+        await EnsureAccountsStagedAtLocationAsync(AllianceAccounts, AllianceQueueLocation, "AllianceStage");
+        await ResetBattlegroundStateAsync(AccountNames.ToList(), "BgResetPostStage");
+
+        foreach (var account in AccountNames)
+            await SendGmChatCommandAsync(account, ".gm off");
+    }
+
     protected override TeleportTarget AllianceQueueLocation => new(
         (int)BattlemasterData.StormwindWsg.MapId,
         BattlemasterData.StormwindWsg.Position.X,
