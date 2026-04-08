@@ -175,7 +175,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_bmGuid", 0xA3UL);
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "InteractAndQueue"));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -203,7 +203,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_bmGuid", 0xA3UL);
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "InteractAndQueue"));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -230,7 +230,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_bmGuid", 0xA1UL);
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "InteractAndQueue"));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -292,7 +292,7 @@ public class BattlegroundQueueTaskTests
         var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.WarsongGulch, 489);
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -338,11 +338,11 @@ public class BattlegroundQueueTaskTests
         return (bool)(method.Invoke(instance, null) ?? false);
     }
 
-    private static void ResetSharedWaits()
+    private static void ResetSharedWaits(BotTask instance)
     {
-        var waitProperty = typeof(BotTask).GetProperty("Wait", BindingFlags.Static | BindingFlags.NonPublic)
+        var waitProperty = typeof(BotTask).GetProperty("Wait", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingMemberException(typeof(BotTask).FullName, "Wait");
-        var wait = waitProperty.GetValue(null) ?? throw new InvalidOperationException("BotTask.Wait was null.");
+        var wait = waitProperty.GetValue(instance) ?? throw new InvalidOperationException("BotTask.Wait was null.");
         wait.GetType().GetMethod("RemoveAll", BindingFlags.Instance | BindingFlags.Public)
             ?.Invoke(wait, null);
     }

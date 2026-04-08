@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Runtime.InteropServices;
 using BotCommLayer;
 using Microsoft.Extensions.Logging;
@@ -126,7 +127,7 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         // dense cities like Orgrimmar. Physics needs ground-level collision, not
         // building roofs 50y above the player.
         int maxTriangles = 50000;
-        var triangles = new NativeScene.AABBContact[maxTriangles];
+        var triangles = ArrayPool<NativeScene.AABBContact>.Shared.Rent(maxTriangles);
         var handle = GCHandle.Alloc(triangles, GCHandleType.Pinned);
         try
         {
@@ -139,6 +140,14 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
                 request.MaxX, request.MaxY, 2000f,
                 handle.AddrOfPinnedObject(),
                 maxTriangles);
+
+            if (count >= maxTriangles)
+            {
+                _logger.LogWarning(
+                    "[SceneDataService] Triangle count {Count} reached buffer capacity {Max} for map {Map} bounds ({MinX:F0},{MinY:F0})-({MaxX:F0},{MaxY:F0}). Results may be truncated.",
+                    count, maxTriangles, request.MapId, request.MinX, request.MinY, request.MaxX, request.MaxY);
+                count = maxTriangles; // Clamp to buffer size to avoid out-of-bounds access
+            }
 
             response.TriangleCount = (uint)count;
 
@@ -162,6 +171,7 @@ public sealed class SceneDataSocketServer : ProtobufSocketServer<SceneGridReques
         finally
         {
             handle.Free();
+            ArrayPool<NativeScene.AABBContact>.Shared.Return(triangles);
         }
 
         return response;

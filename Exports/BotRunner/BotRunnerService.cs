@@ -50,7 +50,7 @@ namespace BotRunner
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
-        private int _tickCount;
+        private long _tickCount;
 
         private IBehaviourTreeNode? _behaviorTree;
         private BehaviourTreeStatus _behaviorTreeStatus = BehaviourTreeStatus.Success;
@@ -224,7 +224,7 @@ namespace BotRunner
                     var playerWorldReady = _objectManager.HasEnteredWorld
                         && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
-                    _tickCount++;
+                    Interlocked.Increment(ref _tickCount);
                     if (_tickCount % 100 == 1) // Every 10s
                     {
                         var action = incomingActivityMemberState?.CurrentAction;

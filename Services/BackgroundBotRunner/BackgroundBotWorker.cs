@@ -36,6 +36,8 @@ namespace BackgroundBotRunner
 
         /// <summary>P9.5: Per-bot ObjectManager instance (no longer using singleton).</summary>
         private readonly WoWSharpObjectManager _objectManager = new();
+        private readonly object _agentFactoryLock = new();
+        private CancellationToken _stoppingToken;
         private IAgentFactory? _agentFactory;
         private IWorldClient? _activeWorldClient;
         private IDisposable? _worldDisconnectSubscription;
@@ -93,6 +95,7 @@ namespace BackgroundBotRunner
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _stoppingToken = stoppingToken;
             try
             {
                 _botRunner.Start();
@@ -283,151 +286,174 @@ namespace BackgroundBotRunner
 
         private void EnsureAgentFactory(IWorldClient worldClient)
         {
-            if (_agentFactory != null && ReferenceEquals(worldClient, _activeWorldClient))
+            lock (_agentFactoryLock)
             {
-                return;
-            }
+                if (_agentFactory != null && ReferenceEquals(worldClient, _activeWorldClient))
+                {
+                    return;
+                }
 
-            ResetAgentFactory();
+                ResetAgentFactory();
 
-            _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(worldClient, _loggerFactory);
-            _activeWorldClient = worldClient;
+                _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(worldClient, _loggerFactory);
+                _activeWorldClient = worldClient;
 
-            // Eagerly initialize essential agents so their opcode handlers are registered
-            // before login packets arrive (CharacterInit for ACTION_BUTTONS, Party for GROUP_INVITE)
-            if (_agentFactory is NetworkClientComponentFactory concreteFactory)
-            {
-                concreteFactory.InitializeEssentialAgents();
-            }
+                // Eagerly initialize essential agents so their opcode handlers are registered
+                // before login packets arrive (CharacterInit for ACTION_BUTTONS, Party for GROUP_INVITE)
+                if (_agentFactory is NetworkClientComponentFactory concreteFactory)
+                {
+                    concreteFactory.InitializeEssentialAgents();
+                }
 
-            // Wire spell cooldown checker so IsSpellReady uses real cooldown data
-            try
-            {
-                var spellCasting = _agentFactory.SpellCastingAgent;
-                _objectManager.SetSpellCooldownChecker(
-                    spellId => spellCasting.CanCastSpell(spellId));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to wire spell cooldown checker");
-            }
+                // Wire spell cooldown checker so IsSpellReady uses real cooldown data
+                try
+                {
+                    var spellCasting = _agentFactory.SpellCastingAgent;
+                    _objectManager.SetSpellCooldownChecker(
+                        spellId => spellCasting.CanCastSpell(spellId));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to wire spell cooldown checker");
+                }
 
-            // Wire agent factory accessor for LootTargetAsync
-            _objectManager.SetAgentFactoryAccessor(() => _agentFactory);
+                // Wire agent factory accessor for LootTargetAsync
+                _objectManager.SetAgentFactoryAccessor(() => _agentFactory);
 
-            // Wire auto-accept trading from party members
-            try
-            {
-                var tradeAgent = _agentFactory.TradeAgent;
-                var partyAgent = _agentFactory.PartyAgent;
-                _tradeAutoAcceptSubscription = tradeAgent.TradesOpened
-                    .Subscribe(_ =>
+                // Wire auto-accept trading from party members
+                try
+                {
+                    // Dispose old subscription before creating new one
+                    _tradeAutoAcceptSubscription?.Dispose();
+                    _tradeAutoAcceptSubscription = null;
+
+                    var tradeAgent = _agentFactory.TradeAgent;
+                    var partyAgent = _agentFactory.PartyAgent;
+                    _tradeAutoAcceptSubscription = tradeAgent.TradesOpened
+                        .Subscribe(_ =>
+                        {
+                            var tradingWith = tradeAgent.TradingWithGuid;
+                            if (tradingWith == null) return;
+
+                            // Auto-accept trades from party members
+                            var om = _objectManager;
+                            var guid = tradingWith.Value;
+                            bool isPartyMember = guid == om.Party1Guid || guid == om.Party2Guid
+                                || guid == om.Party3Guid || guid == om.Party4Guid;
+                            if (!isPartyMember) return;
+
+                            _logger.LogInformation("Auto-accepting trade from party member {Guid:X}", tradingWith.Value);
+                            Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await Task.Delay(2000, _stoppingToken); // Wait for trader to set up
+                                    if (tradeAgent.IsTradeOpen)
+                                        await tradeAgent.AcceptTradeAsync();
+                                }
+                                catch (OperationCanceledException) { }
+                                catch { }
+                            }, _stoppingToken);
+                        });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to wire trade auto-accept");
+                }
+
+                try
+                {
+                    // Dispose old subscription before creating new one
+                    _worldDisconnectSubscription?.Dispose();
+                    _worldDisconnectSubscription = null;
+
+                    _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
                     {
-                        var tradingWith = tradeAgent.TradingWithGuid;
-                        if (tradingWith == null) return;
+                        _logger.LogInformation("World client disconnected. Resetting object manager world state and agent factory.");
+                        _objectManager.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
+                        ResetAgentFactory();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
+                }
 
-                        // Auto-accept trades from party members
+                // Auto-re-enter world after logout. When the server confirms logout
+                // (SMSG_LOGOUT_COMPLETE), automatically re-login with the same character.
+                // This enables tests to do .gm off → logout → relog to clear all GM state.
+                try
+                {
+                    // Dispose old subscription before creating new one
+                    _logoutCompleteSubscription?.Dispose();
+                    _logoutCompleteSubscription = null;
+
+                    _logoutCompleteSubscription = worldClient.LogoutComplete?.Subscribe(_ =>
+                    {
                         var om = _objectManager;
-                        var guid = tradingWith.Value;
-                        bool isPartyMember = guid == om.Party1Guid || guid == om.Party2Guid
-                            || guid == om.Party3Guid || guid == om.Party4Guid;
-                        if (!isPartyMember) return;
-
-                        _logger.LogInformation("Auto-accepting trade from party member {Guid:X}", tradingWith.Value);
+                        var guid = om.PlayerGuid.FullGuid;
+                        if (guid == 0)
+                        {
+                            _logger.LogWarning("Logout complete but no character GUID stored — cannot auto-re-enter.");
+                            return;
+                        }
+                        _logger.LogInformation("Logout complete — auto-re-entering world with GUID 0x{Guid:X}", guid);
+                        om.ResetWorldSessionState("BackgroundBotWorker.LogoutComplete");
                         Task.Run(async () =>
                         {
                             try
                             {
-                                await Task.Delay(2000); // Wait for trader to set up
-                                if (tradeAgent.IsTradeOpen)
-                                    await tradeAgent.AcceptTradeAsync();
+                                await Task.Delay(1500, _stoppingToken); // Let server finalize logout
+                                om.EnterWorld(guid);
                             }
-                            catch { }
-                        });
+                            catch (OperationCanceledException) { }
+                        }, _stoppingToken);
                     });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to wire trade auto-accept");
-            }
-
-            try
-            {
-                _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
+                }
+                catch (Exception ex)
                 {
-                    _logger.LogInformation("World client disconnected. Resetting object manager world state and agent factory.");
-                    _objectManager.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
-                    ResetAgentFactory();
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
-            }
+                    _logger.LogWarning(ex, "Failed to subscribe to logout complete notifications.");
+                }
 
-            // Auto-re-enter world after logout. When the server confirms logout
-            // (SMSG_LOGOUT_COMPLETE), automatically re-login with the same character.
-            // This enables tests to do .gm off → logout → relog to clear all GM state.
-            try
-            {
-                _logoutCompleteSubscription = worldClient.LogoutComplete?.Subscribe(_ =>
-                {
-                    var om = _objectManager;
-                    var guid = om.PlayerGuid.FullGuid;
-                    if (guid == 0)
-                    {
-                        _logger.LogWarning("Logout complete but no character GUID stored — cannot auto-re-enter.");
-                        return;
-                    }
-                    _logger.LogInformation("Logout complete — auto-re-entering world with GUID 0x{Guid:X}", guid);
-                    om.ResetWorldSessionState("BackgroundBotWorker.LogoutComplete");
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(1500); // Let server finalize logout
-                        om.EnterWorld(guid);
-                    });
-                });
+                _logger.LogInformation("Initialized network client component factory using active world client.");
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to subscribe to logout complete notifications.");
-            }
-
-            _logger.LogInformation("Initialized network client component factory using active world client.");
         }
 
         private void ResetAgentFactory()
         {
-            if (_agentFactory == null && _worldDisconnectSubscription == null && _activeWorldClient == null)
+            lock (_agentFactoryLock)
             {
-                return;
-            }
-
-            if (_agentFactory is IDisposable disposableFactory)
-            {
-                try
+                if (_agentFactory == null && _worldDisconnectSubscription == null && _activeWorldClient == null)
                 {
-                    disposableFactory.Dispose();
+                    return;
                 }
-                catch (Exception ex)
+
+                if (_agentFactory is IDisposable disposableFactory)
                 {
-                    _logger.LogWarning(ex, "Error disposing agent factory.");
+                    try
+                    {
+                        disposableFactory.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error disposing agent factory.");
+                    }
                 }
+
+                _agentFactory = null;
+                _activeWorldClient = null;
+
+                _worldDisconnectSubscription?.Dispose();
+                _worldDisconnectSubscription = null;
+
+                _tradeAutoAcceptSubscription?.Dispose();
+                _tradeAutoAcceptSubscription = null;
+
+                _logoutCompleteSubscription?.Dispose();
+                _logoutCompleteSubscription = null;
+
+                _logger.LogInformation("Cleared network client component factory state.");
             }
-
-            _agentFactory = null;
-            _activeWorldClient = null;
-
-            _worldDisconnectSubscription?.Dispose();
-            _worldDisconnectSubscription = null;
-
-            _tradeAutoAcceptSubscription?.Dispose();
-            _tradeAutoAcceptSubscription = null;
-
-            _logoutCompleteSubscription?.Dispose();
-            _logoutCompleteSubscription = null;
-
-            _logger.LogInformation("Cleared network client component factory state.");
         }
 
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)

@@ -45,7 +45,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     /// <summary>
     /// Utility for tracking wait times.
     /// </summary>
-    protected static WaitTracker Wait { get; } = new();
+    protected WaitTracker Wait { get; } = new();
 
     private NavigationPath? _navPath;
 

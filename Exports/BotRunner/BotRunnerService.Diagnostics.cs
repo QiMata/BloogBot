@@ -276,7 +276,7 @@ namespace BotRunner
                 stackNames[index++] = task.GetType().Name;
 
             _latestRecordedTraceTaskStack = stackNames;
-            _latestRecordedTraceTick = _tickCount;
+            _latestRecordedTraceTick = (int)Interlocked.Read(ref _tickCount);
             _latestRecordedTraceAction = _activitySnapshot?.CurrentAction?.ActionType.ToString();
         }
 

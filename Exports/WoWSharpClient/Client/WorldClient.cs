@@ -27,6 +27,7 @@ namespace WoWSharpClient.Client
         private readonly IConnection _connection;
         private IEncryptor _encryptor;
         private bool _disposed;
+        private readonly object _subjectLock = new();
         private long _pendingIntroCinematicAttemptId;
         private Handlers.HandlerContext? _handlerContext;
 
@@ -81,12 +82,20 @@ namespace WoWSharpClient.Client
         // Reactive opcode registration: returns an observable stream per opcode
         public IObservable<ReadOnlyMemory<byte>> RegisterOpcodeHandler(Opcode opcode)
         {
-            var subject = (ISubject<ReadOnlyMemory<byte>>)_opcodeStreams.GetOrAdd(opcode, _ => new Subject<ReadOnlyMemory<byte>>());
-            _pipeline.RegisterHandler(opcode, payload =>
+            bool isNew = false;
+            var subject = (ISubject<ReadOnlyMemory<byte>>)_opcodeStreams.GetOrAdd(opcode, _ => { isNew = true; return new Subject<ReadOnlyMemory<byte>>(); });
+            if (isNew)
             {
-                subject.OnNext(payload);
-                return Task.CompletedTask;
-            });
+                _pipeline.RegisterHandler(opcode, payload =>
+                {
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            subject.OnNext(payload);
+                    }
+                    return Task.CompletedTask;
+                });
+            }
             return subject.AsObservable();
         }
 
@@ -480,7 +489,11 @@ namespace WoWSharpClient.Client
                     // Encryption was already enabled in HandleAuthChallenge right after
                     // sending CMSG_AUTH_SESSION (before this response was received).
                     Console.WriteLine("[NewWorldClient] World authentication successful!");
-                    _authenticationSucceeded.OnNext(Unit.Default);
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _authenticationSucceeded.OnNext(Unit.Default);
+                    }
 
                     // Route post-auth bootstrap through the object-manager/session event
                     // so character-list requests are tracked and can be retried if needed.
@@ -490,14 +503,22 @@ namespace WoWSharpClient.Client
                 {
                     _isAuthenticated = false;
                     Console.WriteLine($"[NewWorldClient] World authentication failed with code: {result:X2}");
-                    _authenticationFailed.OnNext(result);
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _authenticationFailed.OnNext(result);
+                    }
                 }
             }
             else
             {
                 _isAuthenticated = false;
                 Console.WriteLine("[NewWorldClient] Received empty SMSG_AUTH_RESPONSE");
-                _authenticationFailed.OnNext(0xFF);
+                lock (_subjectLock)
+                {
+                    if (!_disposed)
+                        _authenticationFailed.OnNext(0xFF);
+                }
             }
 
             return Task.CompletedTask;
@@ -551,16 +572,28 @@ namespace WoWSharpClient.Client
                 {
                     var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
                     var victim = BitConverter.ToUInt64(payload.Span[8..16]);
-                    _attackStateChanged.OnNext((true, attacker, victim));
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _attackStateChanged.OnNext((true, attacker, victim));
+                    }
                 }
                 else
                 {
-                    _attackStateChanged.OnNext((true, 0, 0));
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _attackStateChanged.OnNext((true, 0, 0));
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _attackErrors.OnNext($"Error parsing ATTACKSTART: {ex.Message}");
+                lock (_subjectLock)
+                {
+                    if (!_disposed)
+                        _attackErrors.OnNext($"Error parsing ATTACKSTART: {ex.Message}");
+                }
             }
             return Task.CompletedTask;
         }
@@ -573,16 +606,28 @@ namespace WoWSharpClient.Client
                 {
                     var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
                     var victim = BitConverter.ToUInt64(payload.Span[8..16]);
-                    _attackStateChanged.OnNext((false, attacker, victim));
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _attackStateChanged.OnNext((false, attacker, victim));
+                    }
                 }
                 else
                 {
-                    _attackStateChanged.OnNext((false, 0, 0));
+                    lock (_subjectLock)
+                    {
+                        if (!_disposed)
+                            _attackStateChanged.OnNext((false, 0, 0));
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _attackErrors.OnNext($"Error parsing ATTACKSTOP: {ex.Message}");
+                lock (_subjectLock)
+                {
+                    if (!_disposed)
+                        _attackErrors.OnNext($"Error parsing ATTACKSTOP: {ex.Message}");
+                }
             }
             return Task.CompletedTask;
         }
@@ -590,7 +635,11 @@ namespace WoWSharpClient.Client
         private Task HandleCancelCombat(ReadOnlyMemory<byte> payload)
         {
             // SMSG_CANCEL_COMBAT: server cancelled all combat (mob evade, etc.)
-            _attackStateChanged.OnNext((false, 0, 0));
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackStateChanged.OnNext((false, 0, 0));
+            }
             return Task.CompletedTask;
         }
 
@@ -598,7 +647,11 @@ namespace WoWSharpClient.Client
         {
             // SMSG_LOGOUT_COMPLETE: server confirmed logout. Character returns to char select.
             Serilog.Log.Information("[WorldClient] SMSG_LOGOUT_COMPLETE received — transitioning to char select");
-            _logoutComplete.OnNext(Unit.Default);
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _logoutComplete.OnNext(Unit.Default);
+            }
             return Task.CompletedTask;
         }
 
@@ -607,7 +660,11 @@ namespace WoWSharpClient.Client
             ClearRejectedLocalAutoAttack("not in range");
             _handlerContext?.ObjectManager.NoteMeleeRangeRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTINRANGE — server says player is out of melee range");
-            _attackErrors.OnNext("Attack failed: Not in range.");
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackErrors.OnNext("Attack failed: Not in range.");
+            }
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
@@ -615,21 +672,33 @@ namespace WoWSharpClient.Client
             ClearRejectedLocalAutoAttack("bad facing");
             _handlerContext?.ObjectManager.NoteMeleeFacingRejected();
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_BADFACING — server says player has wrong facing");
-            _attackErrors.OnNext("Attack failed: Bad facing.");
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackErrors.OnNext("Attack failed: Bad facing.");
+            }
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
         {
             ClearRejectedLocalAutoAttack("not standing");
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_NOTSTANDING — server says player is not standing");
-            _attackErrors.OnNext("Attack failed: Not standing.");
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackErrors.OnNext("Attack failed: Not standing.");
+            }
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
         {
             ClearRejectedLocalAutoAttack("dead target");
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_DEADTARGET — server says target is dead");
-            _attackErrors.OnNext("Attack failed: Target is dead.");
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackErrors.OnNext("Attack failed: Target is dead.");
+            }
             return Task.CompletedTask;
         }
 
@@ -646,7 +715,11 @@ namespace WoWSharpClient.Client
         private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
         {
             Log.Warning("[COMBAT] SMSG_ATTACKSWING_CANTATTACK — server says can't attack target");
-            _attackErrors.OnNext("Attack failed: Can't attack.");
+            lock (_subjectLock)
+            {
+                if (!_disposed)
+                    _attackErrors.OnNext("Attack failed: Can't attack.");
+            }
             return Task.CompletedTask;
         }
 
@@ -656,21 +729,26 @@ namespace WoWSharpClient.Client
             {
                 Interlocked.Increment(ref _pendingIntroCinematicAttemptId);
                 _pipeline?.Dispose();
-                _authenticationSucceeded.OnCompleted();
-                _authenticationFailed.OnCompleted();
-                _characterFound.OnCompleted();
-                _attackStateChanged.OnCompleted();
-                _attackErrors.OnCompleted();
-                foreach (var kv in _opcodeStreams)
+                lock (_subjectLock)
                 {
-                    kv.Value.OnCompleted();
+                    _disposed = true;
+                    _authenticationSucceeded.OnCompleted();
+                    _authenticationFailed.OnCompleted();
+                    _characterFound.OnCompleted();
+                    _attackStateChanged.OnCompleted();
+                    _attackErrors.OnCompleted();
+                    _logoutComplete.OnCompleted();
+                    foreach (var kv in _opcodeStreams)
+                    {
+                        kv.Value.OnCompleted();
+                    }
                 }
                 _authenticationSucceeded.Dispose();
                 _authenticationFailed.Dispose();
                 _characterFound.Dispose();
                 _attackStateChanged.Dispose();
                 _attackErrors.Dispose();
-                _disposed = true;
+                _logoutComplete.Dispose();
             }
         }
 

@@ -22,6 +22,8 @@ namespace BotRunner.Clients
         private readonly ILogger? _logger;
         private readonly int _pathRequestTimeoutMs;
         private int _consecutiveFailures;
+        private DateTime _lastFailureTime = DateTime.MinValue;
+        private const int FailureResetTimeoutSeconds = 60;
 
         /// <summary>
         /// True when Physics.dll is available for local spatial queries (BG bots).
@@ -61,6 +63,14 @@ namespace BotRunner.Clients
             IReadOnlyList<DynamicObjectProto>? nearbyObjects,
             bool smoothPath = false, Race race = 0, Gender gender = 0)
         {
+            // Reset failure counter if enough time has passed since the last failure,
+            // allowing pathfinding to recover after transient outages.
+            if (_consecutiveFailures > 0
+                && (UtcNow - _lastFailureTime).TotalSeconds > FailureResetTimeoutSeconds)
+            {
+                _consecutiveFailures = 0;
+            }
+
             try
             {
                 var request = new PathfindingRequest
@@ -160,6 +170,7 @@ namespace BotRunner.Clients
         private void NoteFailure(string operation, Exception ex)
         {
             _consecutiveFailures++;
+            _lastFailureTime = UtcNow;
             if (_consecutiveFailures <= 3)
                 _logger?.LogWarning("PathfindingService {Operation} failed ({Count}): {Msg}", operation, _consecutiveFailures, ex.Message);
             else if (_consecutiveFailures == 4)

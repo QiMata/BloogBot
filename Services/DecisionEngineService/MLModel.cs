@@ -7,6 +7,7 @@ namespace DecisionEngineService;
 public class MLModel(List<float> initialWeights)
 {
     private readonly List<float> _weights = initialWeights ?? [];
+    private readonly object _weightsLock = new();
 
     public void LearnFromSnapshot(WoWActivitySnapshot snapshot)
     {
@@ -15,7 +16,10 @@ public class MLModel(List<float> initialWeights)
             return;
         }
 
-        AdjustWeights(snapshot);
+        lock (_weightsLock)
+        {
+            AdjustWeights(snapshot);
+        }
     }
 
     public static List<ActionMap> Predict(WoWActivitySnapshot snapshot)
@@ -25,7 +29,10 @@ public class MLModel(List<float> initialWeights)
 
     public List<float> GetWeights()
     {
-        return _weights;
+        lock (_weightsLock)
+        {
+            return new List<float>(_weights);
+        }
     }
 
     private void AdjustWeights(WoWActivitySnapshot snapshot)

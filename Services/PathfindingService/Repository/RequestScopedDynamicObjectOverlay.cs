@@ -162,15 +162,11 @@ public sealed class RequestScopedDynamicObjectOverlay : IDisposable
             }
         }
 
-        // If ALL nearby objects were filtered (unknown displayId, etc.), no registry mutations
-        // were made. Downgrade to read lock so the pathfinding action runs concurrently with
-        // physics/LOS — prevents write-lock starvation when 9+ bots request paths simultaneously.
-        if (registeredGuids.Count == 0)
-        {
-            _rwLock.ExitWriteLock();
-            _rwLock.EnterReadLock();
-        }
-        var holdingWriteLock = registeredGuids.Count > 0;
+        // All code paths below hold the write lock. Previously this attempted a downgrade
+        // to a read lock when no objects were registered, but ReaderWriterLockSlim does not
+        // support atomic downgrade — another writer can slip in between ExitWriteLock and
+        // EnterReadLock. Holding the write lock for the (typically fast) action call is safe
+        // and avoids the race.
 
         var summary = new RequestScopedDynamicObjectOverlaySummary(
             RequestedCount: nearbyObjects.Count,
@@ -207,10 +203,7 @@ public sealed class RequestScopedDynamicObjectOverlay : IDisposable
                 }
             }
 
-            if (holdingWriteLock)
-                _rwLock.ExitWriteLock();
-            else
-                _rwLock.ExitReadLock();
+            _rwLock.ExitWriteLock();
         }
     }
 

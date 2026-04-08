@@ -51,7 +51,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     private const int SelfCastRetryThrottleMs = 1500;
 
     // Potion cooldown tracking (potions share a cooldown via Config.PotionCooldownMs)
-    private static DateTime _lastPotionUsed = DateTime.MinValue;
+    private DateTime _lastPotionUsed = DateTime.MinValue;
 
     // Kiting state
     private bool _isKiting;

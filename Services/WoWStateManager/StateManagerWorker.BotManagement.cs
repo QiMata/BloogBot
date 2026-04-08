@@ -12,6 +12,7 @@ using static WinProcessImports;
 using System.Threading.Tasks;
 using System;
 using System.Threading;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.Extensions.Hosting;
@@ -24,8 +25,6 @@ namespace WoWStateManager
 {
     public partial class StateManagerWorker
     {
-        private readonly object _managedServicesLock = new();
-
         // Prevent repeated launches each loop iteration
 
 
@@ -148,10 +147,7 @@ namespace WoWStateManager
                 });
             }
 
-            lock (_managedServicesLock)
-            {
-                _managedServices.Add(accountName, (null, tokenSource, Task.CompletedTask, pid));
-            }
+            _managedServices.TryAdd(accountName, (null, tokenSource, Task.CompletedTask, pid));
             _logger.LogInformation($"Started BackgroundBotRunner process for account {accountName} (PID: {pid})");
         }
 
@@ -159,15 +155,12 @@ namespace WoWStateManager
         public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
-            lock (_managedServicesLock)
+            if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
             {
-                if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
-                {
-                    _logger.LogWarning($"Skipping launch for {accountName} - last attempt {DateTime.UtcNow - last:g} ago (< {MinRelaunchInterval}).");
-                    return;
-                }
-                _lastLaunchTimes[accountName] = DateTime.UtcNow;
+                _logger.LogWarning($"Skipping launch for {accountName} - last attempt {DateTime.UtcNow - last:g} ago (< {MinRelaunchInterval}).");
+                return;
             }
+            _lastLaunchTimes[accountName] = DateTime.UtcNow;
 
             // Start WoW process and inject the bot worker service
             StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender, characterSpec, talentBuildName);
@@ -240,13 +233,9 @@ namespace WoWStateManager
         /// </summary>
         public string GetBotDetails(string accountName)
         {
-            (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
-            lock (_managedServicesLock)
+            if (!_managedServices.TryGetValue(accountName, out var serviceTuple))
             {
-                if (!_managedServices.TryGetValue(accountName, out serviceTuple))
-                {
-                    return $"Account '{accountName}' not found in managed services.";
-                }
+                return $"Account '{accountName}' not found in managed services.";
             }
 
             var (Service, TokenSource, Task, ProcessId) = serviceTuple;
@@ -321,8 +310,17 @@ namespace WoWStateManager
             if (!_botLogPipeServers.ContainsKey(accountName))
             {
                 var pipeServer = new BotLogPipeServer(accountName, _loggerFactory);
-                pipeServer.Start();
-                _botLogPipeServers[accountName] = pipeServer;
+                try
+                {
+                    pipeServer.Start();
+                    _botLogPipeServers[accountName] = pipeServer;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Failed to start BotLogPipeServer for {accountName}, disposing");
+                    pipeServer.Dispose();
+                    throw;
+                }
             }
 
             var PATH_TO_GAME = Environment.GetEnvironmentVariable("WWOW_WOW_EXE_PATH")
@@ -615,10 +613,7 @@ namespace WoWStateManager
                     // Only remove from managed services if process actually exited
                     if (processExited)
                     {
-                        lock (_managedServicesLock)
-                        {
-                            _managedServices.Remove(accountName);
-                        }
+                        _managedServices.TryRemove(accountName, out _);
                         // Reset the activity member slot so '?' assignment works on relaunch
                         if (_activityMemberSocketListener.CurrentActivityMemberList.ContainsKey(accountName))
                         {
@@ -631,10 +626,7 @@ namespace WoWStateManager
             });
 
             // Add to managed services IMMEDIATELY to prevent race condition with ApplyDesiredWorkerState
-            lock (_managedServicesLock)
-            {
-                _managedServices.Add(accountName, (null, tokenSource, monitoringTask, processId));
-            }
+            _managedServices[accountName] = (null, tokenSource, monitoringTask, processId);
             _logger.LogWarning($"Added {accountName} to managed services with PID {processId} - preventing duplicate launches");
 
             // 62a: Poll for WoW window before injection.
@@ -703,6 +695,8 @@ namespace WoWStateManager
 
             _logger.LogWarning($"ATTEMPTING DLL INJECTION: {loaderPath}");
 
+            try
+            {
             // allocate enough memory to hold the full file path to Loader.dll within the WoW process
             var loaderPathPtr = VirtualAllocEx(
                 processHandle,
@@ -913,12 +907,15 @@ namespace WoWStateManager
                 }
             }
 
-            // Close the process handle � we're done with low-level manipulation.
-            // The monitoring task uses Process.GetProcessById which opens its own handle.
-            CloseHandleSafe(processHandle);
-
             _logger.LogWarning($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
             _logger.LogWarning("=== DLL INJECTION DIAGNOSTICS END ===");
+            }
+            finally
+            {
+                // Close the process handle — we're done with low-level manipulation.
+                // The monitoring task uses Process.GetProcessById which opens its own handle.
+                CloseHandleSafe(processHandle);
+            }
         }
 
         /// <summary>
@@ -934,10 +931,8 @@ namespace WoWStateManager
         private void RemoveManagedService(string accountName, CancellationTokenSource tokenSource)
         {
             tokenSource.Cancel();
-            lock (_managedServicesLock)
-            {
-                _managedServices.Remove(accountName);
-            }
+            _managedServices.TryRemove(accountName, out _);
+            _lastLaunchTimes.TryRemove(accountName, out _);
             // Reset the activity member slot so '?' assignment works on relaunch
             if (_activityMemberSocketListener.CurrentActivityMemberList.ContainsKey(accountName))
             {
@@ -1002,13 +997,8 @@ namespace WoWStateManager
 
         public async Task StopManagedServiceAsync(string accountName)
         {
-            (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
-            bool found;
-            lock (_managedServicesLock)
-            {
-                found = _managedServices.TryGetValue(accountName, out serviceTuple);
-                if (found) _managedServices.Remove(accountName);
-            }
+            var found = _managedServices.TryRemove(accountName, out var serviceTuple);
+            _lastLaunchTimes.TryRemove(accountName, out _);
 
             if (found)
             {
@@ -1069,11 +1059,7 @@ namespace WoWStateManager
         {
             _logger.LogInformation("Stopping all managed services...");
 
-            List<KeyValuePair<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)>> servicesToStop;
-            lock (_managedServicesLock)
-            {
-                servicesToStop = _managedServices.ToList();
-            }
+            var servicesToStop = _managedServices.ToArray();
 
             foreach (var kvp in servicesToStop)
             {
@@ -1113,10 +1099,7 @@ namespace WoWStateManager
             }
 
             // Clear all services
-            lock (_managedServicesLock)
-            {
-                _managedServices.Clear();
-            }
+            _managedServices.Clear();
 
             // 63c: Dispose all named-pipe log servers
             foreach (var kvp in _botLogPipeServers)

@@ -12,6 +12,7 @@ using static WinProcessImports;
 using System.Threading.Tasks;
 using System;
 using System.Threading;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using Microsoft.Extensions.Hosting;
@@ -45,14 +46,14 @@ namespace WoWStateManager
 
         private readonly MangosSOAPClient _mangosSOAPClient;
 
-        private readonly Dictionary<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)> _managedServices = [];
+        private readonly ConcurrentDictionary<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)> _managedServices = new();
 
         // Optional basic backoff tracking (account -> last launch time)
-        private readonly Dictionary<string, DateTime> _lastLaunchTimes = new();
+        private readonly ConcurrentDictionary<string, DateTime> _lastLaunchTimes = new();
 
 
-        // 63c: Named-pipe log servers � one per foreground bot account
-        private readonly Dictionary<string, BotLogPipeServer> _botLogPipeServers = new();
+        // 63c: Named-pipe log servers — one per foreground bot account
+        private readonly ConcurrentDictionary<string, BotLogPipeServer> _botLogPipeServers = new();
 
         /// <summary>
         /// Shared mutable timestamp used to communicate the real injection time
@@ -110,13 +111,7 @@ namespace WoWStateManager
         {
             var status = new Dictionary<string, string>();
 
-            List<KeyValuePair<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)>> snapshot;
-            lock (_managedServicesLock)
-            {
-                snapshot = _managedServices.ToList();
-            }
-
-            foreach (var kvp in snapshot)
+            foreach (var kvp in _managedServices.ToArray())
             {
                 var accountName = kvp.Key;
                 var (Service, TokenSource, Task, ProcessId) = kvp.Value;
@@ -267,11 +262,7 @@ namespace WoWStateManager
             var lastLogAt = DateTime.MinValue;
             while (!stoppingToken.IsCancellationRequested)
             {
-                HashSet<string> managedAccounts;
-                lock (_managedServicesLock)
-                {
-                    managedAccounts = _managedServices.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                }
+                var managedAccounts = _managedServices.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var pendingStartupBots = CountPendingStartupBots(
                     configuredSettings,
@@ -330,12 +321,7 @@ namespace WoWStateManager
                 }
 
                 // Already tracked? skip
-                bool alreadyManaged;
-                lock (_managedServicesLock)
-                {
-                    alreadyManaged = _managedServices.ContainsKey(accountName);
-                }
-                if (alreadyManaged)
+                if (_managedServices.ContainsKey(accountName))
                 {
                     _logger.LogDebug($"Account {accountName} already managed, skipping");
                     continue;
@@ -415,15 +401,12 @@ namespace WoWStateManager
                     // The monitoring task removes dead entries from _managedServices, so if a
                     // configured account is no longer tracked it will be picked up again.
                     bool hasTerminated = false;
-                    lock (_managedServicesLock)
+                    foreach (var cs in StateManagerSettings.Instance.CharacterSettings)
                     {
-                        foreach (var cs in StateManagerSettings.Instance.CharacterSettings)
+                        if (cs.ShouldRun && !_managedServices.ContainsKey(cs.AccountName))
                         {
-                            if (cs.ShouldRun && !_managedServices.ContainsKey(cs.AccountName))
-                            {
-                                hasTerminated = true;
-                                break;
-                            }
+                            hasTerminated = true;
+                            break;
                         }
                     }
                     if (hasTerminated)
@@ -433,13 +416,7 @@ namespace WoWStateManager
                     }
 
                     // Log status of managed services periodically
-                    int serviceCount;
-                    lock (_managedServicesLock)
-                    {
-                        serviceCount = _managedServices.Count;
-                    }
-
-                    if (serviceCount > 0)
+                    if (_managedServices.Count > 0)
                     {
                         var statusReport = GetManagedBotStatus();
                         _logger.LogInformation($"Managed Services Status: {string.Join(", ", statusReport.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}");

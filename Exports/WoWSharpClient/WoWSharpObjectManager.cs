@@ -268,9 +268,21 @@ namespace WoWSharpClient
             _gameLoopTimer = null;
 
             _updateCancellation?.Cancel();
-            try { _backgroundUpdateTask?.Wait(TimeSpan.FromSeconds(2)); } catch { }
-            _updateCancellation?.Dispose();
-            _updateCancellation = null;
+            try
+            {
+                if (_backgroundUpdateTask != null && !_backgroundUpdateTask.Wait(TimeSpan.FromSeconds(2)))
+                    Log.Warning("[GameLoop] Background update task did not complete within timeout");
+            }
+            catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+            {
+                // Expected after cancellation
+            }
+            finally
+            {
+                _updateCancellation?.Dispose();
+                _updateCancellation = null;
+                _backgroundUpdateTask = null;
+            }
 
             IsGameLoopRunning = false;
             Log.Information("[GameLoop] Stopped");

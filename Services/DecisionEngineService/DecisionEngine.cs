@@ -74,7 +74,7 @@ namespace DecisionEngineService
         private static async Task<List<WoWActivitySnapshot>> ReadBinFileAsync(string filePath, CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
-            const int delayBetweenAttemptsMs = 50;
+            const int delayBetweenAttemptsMs = 200;
             Exception? lastError = null;
 
             for (int attempt = 0; attempt < maxAttempts; attempt++)
