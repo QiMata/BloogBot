@@ -53,8 +53,20 @@ namespace BotRunner
                         builder.Splice(BuildWaitSequence((float)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.GoTo:
-                        builder.Splice(BuildGoToSequence((float)actionEntry.Item2[0], (float)actionEntry.Item2[1], (float)actionEntry.Item2[2], (float)actionEntry.Item2[3]));
+                    {
+                        // Push a persistent GoToTask instead of an ephemeral behavior tree.
+                        // GoToTask survives across poll cycles, preserving NavigationPath state.
+                        var gotoX = (float)actionEntry.Item2[0];
+                        var gotoY = (float)actionEntry.Item2[1];
+                        var gotoZ = (float)actionEntry.Item2[2];
+                        var gotoTolerance = (float)actionEntry.Item2[3];
+                        builder.Do("Push GoTo Task", time =>
+                        {
+                            _botTasks.Push(new Tasks.GoToTask(context, gotoX, gotoY, gotoZ, gotoTolerance));
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
+                    }
                     case CharacterAction.InteractWith:
                     {
                         var interactGuid = UnboxGuid(actionEntry.Item2[0]);

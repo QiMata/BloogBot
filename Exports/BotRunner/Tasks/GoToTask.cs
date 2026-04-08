@@ -1,0 +1,129 @@
+using BotRunner.Interfaces;
+using BotRunner.Movement;
+using GameData.Core.Constants;
+using GameData.Core.Models;
+using Serilog;
+using System;
+
+namespace BotRunner.Tasks;
+
+/// <summary>
+/// Persistent GoTo task that navigates the bot to a target position.
+/// Unlike the ephemeral BuildGoToSequence behavior tree node, this task
+/// persists on the _botTasks stack across poll cycles, preserving its
+/// NavigationPath state (waypoints, corridor, stuck detection).
+///
+/// Supports interruption: if a combat task pushes on top, GoToTask
+/// pauses. When combat pops, GoToTask resumes from current position.
+/// </summary>
+public class GoToTask : BotTask, IBotTask
+{
+    private readonly Position _target;
+    private readonly float _tolerance;
+    private NavigationPath? _navPath;
+    private DateTime? _noPathSinceUtc;
+    private DateTime _lastNoPathLogUtc = DateTime.MinValue;
+    private const double NoPathTimeoutSec = 30.0;
+
+    public GoToTask(IBotContext botContext, float x, float y, float z, float tolerance = 3f)
+        : base(botContext)
+    {
+        _target = new Position(x, y, z);
+        _tolerance = tolerance > 0 ? tolerance : 3f;
+    }
+
+    public void Update()
+    {
+        var player = ObjectManager.Player;
+        if (player?.Position == null)
+            return;
+
+        // Arrived?
+        if (player.Position.DistanceTo2D(_target) < _tolerance)
+        {
+            ObjectManager.StopAllMovement();
+            _navPath?.Clear();
+            Log.Information("[GOTO-TASK] Arrived at ({X:F0},{Y:F0},{Z:F0}) dist2D={Dist:F1}",
+                _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target));
+            PopTask("arrived");
+            return;
+        }
+
+        // Create navigation path once — persists across Update() calls
+        if (_navPath == null)
+        {
+            var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
+            var pfClient = Container.PathfindingClient;
+            _navPath = new NavigationPath(pfClient,
+                capsuleRadius: radius,
+                capsuleHeight: height,
+                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
+                stuckRecoveryGenerationProvider: () => ObjectManager.MovementStuckRecoveryGeneration,
+                race: player.Race,
+                gender: player.Gender);
+        }
+
+        if (player.RunSpeed > 0)
+            _navPath.UpdateCharacterSpeed(player.RunSpeed);
+
+        // Physics wall contact hint for stuck detection
+        bool hitWall = false;
+        float wnx = 0f, wny = 0f, bf = 1f;
+        if (ObjectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
+        {
+            hitWall = wsOm.PhysicsHitWall;
+            var wn = wsOm.PhysicsWallNormal2D;
+            wnx = wn.X; wny = wn.Y;
+            bf = wsOm.PhysicsBlockedFraction;
+        }
+
+        try
+        {
+            var waypoint = _navPath.GetNextWaypoint(
+                player.Position, _target, player.MapId,
+                allowDirectFallback: false,
+                physicsHitWall: hitWall,
+                wallNormalX: wnx, wallNormalY: wny,
+                blockedFraction: bf);
+
+            if (waypoint == null)
+            {
+                ObjectManager.StopAllMovement();
+                _noPathSinceUtc ??= DateTime.UtcNow;
+
+                if (DateTime.UtcNow - _lastNoPathLogUtc > TimeSpan.FromSeconds(5))
+                {
+                    Log.Warning("[GOTO-TASK] No path to ({X:F0},{Y:F0},{Z:F0}) for {Sec:F0}s",
+                        _target.X, _target.Y, _target.Z,
+                        (DateTime.UtcNow - _noPathSinceUtc.Value).TotalSeconds);
+                    _lastNoPathLogUtc = DateTime.UtcNow;
+                }
+
+                if ((DateTime.UtcNow - _noPathSinceUtc.Value).TotalSeconds > NoPathTimeoutSec)
+                {
+                    Log.Warning("[GOTO-TASK] No path timeout ({Sec}s) — giving up", NoPathTimeoutSec);
+                    PopTask("no_path_timeout");
+                }
+                return;
+            }
+
+            _noPathSinceUtc = null;
+
+            var dx = waypoint.X - player.Position.X;
+            var dy = waypoint.Y - player.Position.Y;
+            var facing = MathF.Atan2(dy, dx);
+
+            ObjectManager.MoveToward(waypoint, facing);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning("[GOTO-TASK] Navigation error: {Msg}", ex.Message);
+        }
+    }
+
+    private void PopTask(string reason)
+    {
+        Log.Debug("[GOTO-TASK] Popping: {Reason}", reason);
+        BotTasks.Pop();
+    }
+}
