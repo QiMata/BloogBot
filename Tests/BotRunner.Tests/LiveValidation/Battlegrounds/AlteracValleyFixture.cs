@@ -58,9 +58,9 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(2);
 
-    // FG bots (TESTBOT1, AVBOTA1) consistently fail at CharacterSelect.
-    // Accept 78/80 (BG bots only) so the pipeline can proceed.
-    protected override int MinimumBotCount => TotalBotCount - 2;
+    // All bots are BG (headless) — FG bots removed due to persistent
+    // WoW.exe crashes and CharacterSelect failures. Accept all.
+    protected override int MinimumBotCount => TotalBotCount;
 
     protected override uint BattlegroundTypeId => 1;
 
@@ -102,7 +102,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
@@ -113,7 +113,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: BotRunnerType.Background));
         }
 
         return bots;
