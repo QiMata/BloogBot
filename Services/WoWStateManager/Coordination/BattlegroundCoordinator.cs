@@ -133,18 +133,31 @@ public class BattlegroundCoordinator
 
         if (ready < total || staged < total)
         {
+            var elapsed = DateTime.UtcNow - _stateEnteredAt;
             if (_tickCount % 20 == 1)
             {
                 _logger.LogWarning(
-                    "BG_COORD: Waiting for bots (ready={Ready}/{Total}, staged={Staged}/{Total}). Pending: {Pending}",
+                    "BG_COORD: Waiting for bots (ready={Ready}/{Total}, staged={Staged}/{Total}, elapsed={Elapsed:mm\\:ss}). Pending: {Pending}",
                     ready,
                     total,
                     staged,
                     total,
+                    elapsed,
                     string.Join(", ", pendingAccounts.Take(10)));
             }
 
-            return null;
+            // Timeout: if enough bots are ready to form a BG, proceed without stragglers.
+            // AV requires 40 per side but VMaNGOS may allow fewer. Proceed if >=75% staged.
+            if (elapsed > TimeSpan.FromSeconds(90) && staged >= (total * 3 / 4))
+            {
+                _logger.LogWarning(
+                    "BG_COORD: Timed out waiting for all bots. Proceeding with {Staged}/{Total} staged ({Pending} not ready).",
+                    staged, total, string.Join(", ", pendingAccounts));
+            }
+            else
+            {
+                return null;
+            }
         }
 
         _logger.LogWarning(
