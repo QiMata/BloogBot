@@ -85,10 +85,10 @@ namespace WoWSharpClient
         // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
 
         /// <summary>
-        /// P9.4: Per-instance SplineController. Falls back to Splines.Instance for backward compatibility.
-        /// Set this to a per-bot SplineController for multi-bot-per-process mode.
+        /// P9.4: Per-instance SplineController.
+        /// Each WoWSharpObjectManager owns its own SplineController for multi-bot-per-process mode.
         /// </summary>
-        public SplineController SplineCtrl { get; set; } = Splines.Instance;
+        public SplineController SplineCtrl { get; set; } = new SplineController();
 
         /// <summary>
         /// P9.2: Public constructor for per-bot instances.

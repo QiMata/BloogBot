@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -13,6 +14,13 @@ internal static class Program
     {
         try
         {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: false)
+                .AddEnvironmentVariables()
+                .Build();
+
             var previousDataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
             var resolvedDataDir = ResolveSceneDataDirectory(previousDataDir);
 
@@ -30,10 +38,13 @@ internal static class Program
             Environment.SetEnvironmentVariable("WWOW_DATA_DIR", resolvedDataDir);
             WriteStartupInfo($"[SceneDataService] WWOW_DATA_DIR set to: {resolvedDataDir}");
 
-            var ipAddress = Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP") ?? "127.0.0.1";
+            // Resolve IP/port: env vars take precedence, then appsettings.json, then defaults
+            var ipAddress = Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
+                ?? configuration["SceneData:IpAddress"]
+                ?? "127.0.0.1";
             var port = int.TryParse(Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT"), out var parsedPort)
                 ? parsedPort
-                : 5003;
+                : int.TryParse(configuration["SceneData:Port"], out var configPort) ? configPort : 5003;
 
             WriteStartupInfo($"[SceneDataService] Starting on {ipAddress}:{port}");
 

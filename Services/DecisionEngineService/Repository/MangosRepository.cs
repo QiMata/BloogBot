@@ -11,7 +11,7 @@ namespace DecisionEngineService.Repository
 {
     public partial class MangosRepository
     {
-        private const string DefaultConnectionString = "server=localhost;user=app;database=mangos;port=3306;password=app";
+        private const string DefaultConnectionString = "server=localhost;user=app;database=mangos;port=3306";
         private static string ConnectionString => GetConnectionString();
 
         public static int GetRowCountForTable(string tableName)
@@ -47,7 +47,8 @@ namespace DecisionEngineService.Repository
 
         private static string GetConnectionString()
         {
-            return Environment.GetEnvironmentVariable("WWOW_MANGOS_WORLD_CONNECTION_STRING")
+            return Environment.GetEnvironmentVariable("WWOW_MANGOS_CONNECTION_STRING")
+                ?? Environment.GetEnvironmentVariable("WWOW_MANGOS_WORLD_CONNECTION_STRING")
                 ?? Environment.GetEnvironmentVariable("ConnectionStrings__MangosWorld")
                 ?? DefaultConnectionString;
         }

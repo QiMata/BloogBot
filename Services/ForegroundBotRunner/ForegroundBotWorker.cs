@@ -91,12 +91,31 @@ namespace ForegroundBotRunner
             {
                 lock (DiagnosticLogLock)
                 {
+                    RotateLogIfNeeded();
                     _diagnosticLogCount++;
                     var line = $"[{DateTime.Now:HH:mm:ss.fff}] [{_diagnosticLogCount:D5}] {message}\n";
                     File.AppendAllText(DiagnosticLogPath, line);
                 }
             }
             catch { /* Ignore logging errors */ }
+        }
+
+        /// <summary>
+        /// Rotates the diagnostic log file if it exceeds 10 MB. The previous log is
+        /// kept as a single ".old" file; older history is discarded.
+        /// </summary>
+        private static void RotateLogIfNeeded()
+        {
+            try
+            {
+                if (File.Exists(DiagnosticLogPath) && new FileInfo(DiagnosticLogPath).Length > 10 * 1024 * 1024)
+                {
+                    var oldPath = DiagnosticLogPath + ".old";
+                    if (File.Exists(oldPath)) File.Delete(oldPath);
+                    File.Move(DiagnosticLogPath, oldPath);
+                }
+            }
+            catch { /* ignore rotation errors */ }
         }
 
         public ForegroundBotWorker(IConfiguration configuration, ILoggerFactory loggerFactory, PathfindingClient? pathfindingClient = null)

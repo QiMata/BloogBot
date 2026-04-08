@@ -377,7 +377,10 @@ namespace WoWSharpClient.Movement
         }
     }
 
-    /// <summary>Global helper (lazy-init singleton).</summary>
+    /// <summary>
+    /// Legacy global singleton. Prefer WoWSharpObjectManager.SplineCtrl for per-instance access.
+    /// </summary>
+    [System.Obsolete("Use WoWSharpObjectManager.SplineCtrl instead of the global singleton.")]
     public static class Splines
     {
         public static readonly SplineController Instance = new();

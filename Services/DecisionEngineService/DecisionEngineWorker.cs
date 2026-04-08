@@ -1,15 +1,13 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace DecisionEngineService
 {
     /// <summary>
-    /// Hosted worker for the decision engine. Currently logs lifecycle events.
-    /// Full listener/prediction wiring requires configuration (port, SQLite path,
-    /// training data directory) — see DES-MISS-002 in TASKS.md.
+    /// Hosted worker for the decision engine. Maintains service lifetime while
+    /// CombatPredictionService handles on-demand predictions via the socket listener.
     /// </summary>
     public class DecisionEngineWorker(ILogger<DecisionEngineWorker> logger) : BackgroundService
     {
@@ -17,18 +15,11 @@ namespace DecisionEngineService
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("DecisionEngineWorker started. Prediction service is not yet wired (DES-MISS-002).");
+            _logger.LogInformation("[DecisionEngine] Service started — CombatPredictionService available for on-demand predictions");
 
-            try
-            {
-                await Task.Delay(Timeout.Infinite, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                // Normal shutdown
-            }
-
-            _logger.LogInformation("DecisionEngineWorker stopped.");
+            // CombatPredictionService handles predictions on-demand via the socket listener.
+            // This worker maintains the service lifetime.
+            await Task.Delay(Timeout.Infinite, stoppingToken);
         }
     }
 }

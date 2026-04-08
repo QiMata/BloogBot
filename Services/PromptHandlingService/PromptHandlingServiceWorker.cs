@@ -13,19 +13,8 @@ namespace PromptHandlingService
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                _logger.LogDebug("Prompt cache ready at {DatabasePath}", _promptCache.DatabasePath);
-            }
-
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                //if (_logger.IsEnabled(LogLevel.Information))
-                //{
-                //    _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-                //}
-                await Task.Delay(1000, stoppingToken);
-            }
+            _logger.LogInformation("[PromptHandling] Service started — prompt cache ready at {DatabasePath}", _promptCache.DatabasePath);
+            await Task.Delay(Timeout.Infinite, stoppingToken);
         }
     }
 }

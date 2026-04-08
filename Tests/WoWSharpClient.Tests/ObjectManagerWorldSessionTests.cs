@@ -264,20 +264,20 @@ public class ObjectManagerWorldSessionTests
                 points: [new Position(10f, 0f, 0f)]),
             ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
-        WaitForCondition(() => Splines.Instance.HasActiveSpline(remoteGuid));
+        WaitForCondition(() => objectManager.SplineCtrl.HasActiveSpline(remoteGuid));
 
         var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
         Assert.Equal(startTime, unit.LastUpdated);
-        Assert.True(Splines.Instance.HasActiveSpline(remoteGuid));
+        Assert.True(objectManager.SplineCtrl.HasActiveSpline(remoteGuid));
 
-        Splines.Instance.Update(500f);
+        objectManager.SplineCtrl.Update(500f);
 
         Assert.Equal(5f, unit.Position.X, 2);
         Assert.Equal(0f, unit.Position.Y, 2);
         Assert.Equal(0f, unit.Position.Z, 2);
         Assert.Equal(0f, unit.Facing, 2);
 
-        Splines.Instance.Remove(remoteGuid);
+        objectManager.SplineCtrl.Remove(remoteGuid);
     }
 
     [Fact]
@@ -332,7 +332,7 @@ public class ObjectManagerWorldSessionTests
         WaitForCondition(() =>
         {
             var movedUnit = objectManager.GetObjectByGuid(remoteGuid) as WoWUnit;
-            return movedUnit?.TransportGuid == transportGuid && Splines.Instance.HasActiveSpline(remoteGuid);
+            return movedUnit?.TransportGuid == transportGuid && objectManager.SplineCtrl.HasActiveSpline(remoteGuid);
         });
 
         var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
@@ -344,7 +344,7 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(202f, unit.Position.Y, 2);
         Assert.Equal(53f, unit.Position.Z, 2);
 
-        Splines.Instance.Update(500f);
+        objectManager.SplineCtrl.Update(500f);
 
         Assert.Equal(3f, unit.TransportOffset.X, 2);
         Assert.Equal(-1f, unit.TransportOffset.Y, 2);
@@ -355,7 +355,7 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(0f, unit.TransportOrientation, 2);
         Assert.Equal(MathF.PI / 2f, unit.Facing, 2);
 
-        Splines.Instance.Remove(remoteGuid);
+        objectManager.SplineCtrl.Remove(remoteGuid);
     }
 
     [Fact]
@@ -416,13 +416,13 @@ public class ObjectManagerWorldSessionTests
                 points: [new Position(100f, 200f, 60f)]),
             ctx);
         UpdateProcessingHelper.DrainPendingUpdates();
-        WaitForCondition(() => Splines.Instance.HasActiveSpline(transportGuid));
+        WaitForCondition(() => objectManager.SplineCtrl.HasActiveSpline(transportGuid));
 
         var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
         Assert.Equal(50f, transport.Position.Z, 2);
         Assert.Equal(53f, player.Position.Z, 2);
 
-        Splines.Instance.Update(500f);
+        objectManager.SplineCtrl.Update(500f);
 
         Assert.Equal(55f, transport.Position.Z, 2);
         Assert.Equal(101f, player.Position.X, 2);
@@ -432,7 +432,7 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(-1f, player.TransportOffset.Y, 2);
         Assert.Equal(3f, player.TransportOffset.Z, 2);
 
-        Splines.Instance.Remove(transportGuid);
+        objectManager.SplineCtrl.Remove(transportGuid);
     }
 
     [Fact]

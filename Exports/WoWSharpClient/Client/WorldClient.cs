@@ -106,9 +106,19 @@ namespace WoWSharpClient.Client
             _isAuthenticated = false;
 
             Console.WriteLine($"[NewWorldClient] Connecting to world server {host}:{port} for user '{username}'");
-            
-            await _pipeline.ConnectAsync(host, port, cancellationToken);
-            
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            try
+            {
+                await _pipeline.ConnectAsync(host, port, linkedCts.Token);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                throw new TimeoutException($"Connection to {host}:{port} timed out after 10 seconds");
+            }
+
             Console.WriteLine("[NewWorldClient] Connected to world server. Waiting for SMSG_AUTH_CHALLENGE...");
         }
 

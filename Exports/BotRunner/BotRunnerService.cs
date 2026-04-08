@@ -41,12 +41,19 @@ namespace BotRunner
         private const int MaxBufferedMessages = 50;
 
         // DiagLog writes to file and Serilog. FG context lacks Serilog global config.
-        private static readonly string _diagLogPath = System.IO.Path.Combine(
-            AppContext.BaseDirectory, "botrunner_diag.log");
-        internal static void DiagLog(string msg)
+        // Instance path is scoped per bot account; static overload logs to Serilog only
+        // for callers (tasks) that don't have an instance reference.
+        private readonly string _diagLogPath;
+        internal void DiagLog(string msg)
         {
             Log.Information("[DIAG] {Msg}", msg);
             try { System.IO.File.AppendAllText(_diagLogPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n"); } catch { }
+        }
+        internal static void DiagLog(string msg, string? logPath = null)
+        {
+            Log.Information("[DIAG] {Msg}", msg);
+            if (logPath != null)
+                try { System.IO.File.AppendAllText(logPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n"); } catch { }
         }
 
         private Task? _asyncBotTaskRunnerTask;
@@ -123,6 +130,11 @@ namespace BotRunner
             _container = container ?? throw new ArgumentNullException(nameof(container));
             _behaviorConfig = behaviorConfig ?? new Constants.BotBehaviorConfig();
             _diagnosticPacketTraceRecorder = diagnosticPacketTraceRecorder;
+
+            var logsDir = System.IO.Path.Combine(AppContext.BaseDirectory, "logs");
+            System.IO.Directory.CreateDirectory(logsDir);
+            _diagLogPath = System.IO.Path.Combine(logsDir, $"botrunner_{accountName ?? "unknown"}.diag.log");
+
             _autoReleaseCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK");
             _autoRetrieveCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK");
 
