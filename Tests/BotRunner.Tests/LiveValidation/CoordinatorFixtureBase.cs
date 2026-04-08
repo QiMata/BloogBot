@@ -219,7 +219,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
             await RefreshSnapshotsAsync();
             var currentCount = AllBots.Count;
-            if (currentCount == expectedCount)
+            if (currentCount >= expectedCount)
                 return;
 
             if (currentCount != lastCount)
