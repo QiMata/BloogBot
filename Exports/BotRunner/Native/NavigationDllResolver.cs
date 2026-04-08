@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 
 namespace BotRunner.Native;
 

@@ -1,4 +1,4 @@
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

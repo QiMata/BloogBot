@@ -13,7 +13,7 @@ namespace BotRunner
                 var eh = _objectManager.EventHandler;
                 if (eh == null)
                 {
-                    Log.Warning("[BOT RUNNER] EventHandler is null — cannot subscribe to message events");
+                    Log.Warning("[BOT RUNNER] EventHandler is null -- cannot subscribe to message events");
                     return;
                 }
 
@@ -79,16 +79,11 @@ namespace BotRunner
 
         private void FlushMessageBuffers()
         {
-            // Copy buffered messages to snapshot — keep a rolling window of the last MaxBufferedMessages.
-            // Messages stay in the snapshot until displaced by newer ones (no clear-per-tick).
             lock (_recentChatMessages)
             {
-                // Dequeue all messages
                 while (_recentChatMessages.Count > 0)
                     _activitySnapshot.RecentChatMessages.Add(_recentChatMessages.Dequeue());
 
-                // Trim to max — keep only the last MaxBufferedMessages items.
-                // RepeatedField lacks RemoveRange, so copy the tail and rebuild in O(n).
                 if (_activitySnapshot.RecentChatMessages.Count > MaxBufferedMessages)
                 {
                     var kept = _activitySnapshot.RecentChatMessages.Skip(
@@ -100,11 +95,9 @@ namespace BotRunner
 
             lock (_recentErrors)
             {
-                // Dequeue all messages
                 while (_recentErrors.Count > 0)
                     _activitySnapshot.RecentErrors.Add(_recentErrors.Dequeue());
 
-                // Trim to max — keep only the last MaxBufferedMessages items.
                 if (_activitySnapshot.RecentErrors.Count > MaxBufferedMessages)
                 {
                     var kept = _activitySnapshot.RecentErrors.Skip(

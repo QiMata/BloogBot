@@ -1,7 +1,7 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using System;
 using System.Linq;
 

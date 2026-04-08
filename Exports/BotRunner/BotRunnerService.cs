@@ -2,6 +2,7 @@ using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Helpers;
 using BotRunner.Interfaces;
+using BotRunner.SequenceBuilders;
 using BotRunner.Tasks;
 using Communication;
 using GameData.Core.Enums;
@@ -32,10 +33,8 @@ namespace BotRunner
         private readonly bool _autoRetrieveCorpseTaskEnabled;
 
         private WoWActivitySnapshot _activitySnapshot;
-        private int _lastLoggedContainedItems = -1;
-        private int _lastLoggedItemObjects = -1;
 
-        // Message buffers — collected from IWoWEventHandler events, flushed to snapshot each tick
+        // Message buffers -- collected from IWoWEventHandler events, flushed to snapshot each tick
         private readonly Queue<string> _recentChatMessages = new();
         private readonly Queue<string> _recentErrors = new();
         private const int MaxBufferedMessages = 50;
@@ -68,7 +67,7 @@ namespace BotRunner
         private DateTime _spellCastLockoutUntil = DateTime.MinValue;
         private const double SpellCastLockoutSeconds = 20.0;
 
-        // Action dispatch correlation: stable token linking receive ? dispatch ? completion logs.
+        // Action dispatch correlation: stable token linking receive -> dispatch -> completion logs.
         private string _currentActionCorrelationId = "";
         private long _actionSequenceNumber;
 
@@ -85,6 +84,14 @@ namespace BotRunner
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
         private Position? _lastKnownAlivePosition;
+
+        // Extracted components
+        private readonly SnapshotBuilder _snapshotBuilder;
+        private readonly DiagnosticsRecorder _diagnosticsRecorder;
+        private readonly ActionDispatcher _actionDispatcher;
+        private readonly CombatSequenceBuilder _combatSequences;
+        private readonly MovementSequenceBuilder _movementSequences;
+        private readonly InteractionSequenceBuilder _interactionSequences;
 
         // Binary compatibility shim for already-built service binaries that still bind to the
         // pre-packet-recorder constructor signature. Keep parameter names distinct so current
@@ -138,6 +145,33 @@ namespace BotRunner
             _autoReleaseCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK");
             _autoRetrieveCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK");
 
+            // Initialize extracted components
+            _snapshotBuilder = new SnapshotBuilder(objectManager, agentFactoryAccessor);
+            _diagnosticsRecorder = new DiagnosticsRecorder(objectManager, diagnosticPacketTraceRecorder);
+            _diagnosticsRecorder.AccountNameAccessor = () => _activitySnapshot?.AccountName ?? "unknown";
+
+            _combatSequences = new CombatSequenceBuilder(objectManager, container);
+            _movementSequences = new MovementSequenceBuilder(objectManager, container);
+            _interactionSequences = new InteractionSequenceBuilder(objectManager, agentFactoryAccessor);
+
+            _actionDispatcher = new ActionDispatcher(
+                objectManager,
+                container,
+                agentFactoryAccessor,
+                _behaviorConfig,
+                _combatSequences,
+                _movementSequences,
+                _interactionSequences,
+                () => _botTasks,
+                EnqueueDiagnosticMessage,
+                msg => DiagLog(msg),
+                player => IsDeadOrGhostState(player),
+                player => IsGhostState(player),
+                player => IsCorpseState(player),
+                () => _lastReleaseSpiritCommandUtc,
+                value => _lastReleaseSpiritCommandUtc = value,
+                () => _lastKnownAlivePosition);
+
             // Subscribe to chat/error events for test observability
             SubscribeToMessageEvents();
         }
@@ -186,23 +220,19 @@ namespace BotRunner
             {
                 try
                 {
-                    // Skip ALL work during map transitions — the loading screen is active,
-                    // WoW's internal state is unstable, and any managed code activity
-                    // (IPC, memory reads, GC pressure) risks crashing the process.
-                    // Only applies AFTER first world entry — before that, we need the
-                    // login/realm/charselect sequence to run (ContinentId reads 0xFFFFFFFF
-                    // at the login screen, which falsely triggers IsInMapTransition).
                     if (_objectManager.HasEnteredWorld && _objectManager.IsInMapTransition)
                     {
-                        // Add jitter (500-1500ms) to prevent thundering herd when
-                        // 20+ bots resume from map transition simultaneously
                         var jitter = 500 + Random.Shared.Next(0, 1000);
                         await Task.Delay(jitter, cancellationToken);
                         continue;
                     }
 
-                    PopulateSnapshotFromObjectManager();
-                    CaptureTransformFrame();
+                    _snapshotBuilder.PopulateSnapshotFromObjectManager(
+                        _activitySnapshot,
+                        Interlocked.Read(ref _tickCount),
+                        FlushMessageBuffers,
+                        UpdateLastKnownAlivePosition);
+                    _diagnosticsRecorder.CaptureTransformFrame(_botTasks, Interlocked.Read(ref _tickCount), _activitySnapshot);
 
                     // DIAG: log MapId in snapshot for BG transfer debugging
                     var snapMapId = _activitySnapshot?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
@@ -220,22 +250,19 @@ namespace BotRunner
                         break;
                     }
                     catch (Exception ex) when (
-                        ex is ObjectDisposedException  // Socket disposed (StateManager restart)
-                        || ex is System.IO.IOException // Connection reset or broken pipe
-                        || ex is System.Net.Sockets.SocketException // Connection refused/reset
-                        || ex is InvalidOperationException // Reconnect failed after retries
-                        || ex is TimeoutException)     // Reconnect budget exceeded
+                        ex is ObjectDisposedException
+                        || ex is System.IO.IOException
+                        || ex is System.Net.Sockets.SocketException
+                        || ex is InvalidOperationException
+                        || ex is TimeoutException)
                     {
-                        // Connection to StateManager lost — bot keeps running autonomously
-                        // with its current behavior tree until the connection is restored.
-                        // ProtobufSocketClient handles reconnect internally on next send.
                     }
 
                     var playerWorldReady = _objectManager.HasEnteredWorld
                         && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
                     Interlocked.Increment(ref _tickCount);
-                    if (_tickCount % 100 == 1) // Every 10s
+                    if (_tickCount % 100 == 1)
                     {
                         var action = incomingActivityMemberState?.CurrentAction;
                         var actionType = action?.ActionType.ToString() ?? "null";
@@ -259,9 +286,6 @@ namespace BotRunner
                         }
                     }
 
-                    // Death recovery must continue even if a behavior tree is currently running.
-                    // Some chat/action trees can stay Running while dead, which otherwise starves
-                    // ReleaseCorpse/RetrieveCorpse and leaves the character ghost-stalled.
                     if (playerWorldReady)
                     {
                         PushDeathRecoveryIfNeeded();
@@ -288,7 +312,6 @@ namespace BotRunner
 
         private void UpdateBehaviorTree(WoWActivitySnapshot? incomingActivityMemberState)
         {
-            // Check for new incoming actions FIRST — they can interrupt a running tree
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
@@ -316,8 +339,6 @@ namespace BotRunner
                 var action = incomingActivityMemberState.CurrentAction;
                 DiagLog($"[ACTION-RECV] type={action.ActionType} params={action.Parameters.Count} ready={playerWorldReady}");
 
-                // Spell-cast lockout: don't let movement actions interrupt active spell casts.
-                // Channeled spells (fishing, etc.) need time to complete.
                 if (action.ActionType == Communication.ActionType.Goto
                     && DateTime.UtcNow < _spellCastLockoutUntil)
                 {
@@ -327,14 +348,12 @@ namespace BotRunner
                 _currentActionCorrelationId = $"act-{Interlocked.Increment(ref _actionSequenceNumber)}";
                 Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType}) [{_currentActionCorrelationId}]");
 
-                // Diagnostic actions — handle directly without CharacterAction mapping
-                if (HandleDiagnosticAction(action))
+                if (_diagnosticsRecorder.HandleDiagnosticAction(action))
                     return;
 
-                var actionList = ConvertActionMessageToCharacterActions(action);
+                var actionList = ActionDispatcher.ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
-                    // Set lockout when casting a spell
                     if (action.ActionType == Communication.ActionType.CastSpell
                         || action.ActionType == Communication.ActionType.GatherNode)
                     {
@@ -342,7 +361,7 @@ namespace BotRunner
                     }
 
                     Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1} [{_currentActionCorrelationId}]");
-                    _behaviorTree = BuildBehaviorTreeFromActions(actionList);
+                    _behaviorTree = _actionDispatcher.BuildBehaviorTreeFromActions(actionList);
                     _behaviorTreeStatus = BehaviourTreeStatus.Running;
                     _activitySnapshot.PreviousAction = action;
                     return;
@@ -354,9 +373,6 @@ namespace BotRunner
                 return;
             }
 
-            // Already in world — skip all login/charselect checks and go straight to InWorld handling.
-            // Without this guard, ICharacterSelectScreen implementations that return HasReceivedCharacterList=false
-            // when InWorld (e.g., FG's FgCharacterSelectScreen) cause an early return before InitializeTaskSequence.
             if (_objectManager.HasEnteredWorld)
             {
                 _everEnteredWorld = true;
@@ -376,36 +392,30 @@ namespace BotRunner
                 return;
             }
 
-            // CRITICAL: If we were ever in-world but HasEnteredWorld dropped transiently
-            // (teleport, zone transition, continent crossing), do NOT fall through to the
-            // login/charselect flow. That causes CreateCharacter/EnterWorld Lua spam while in-world.
-            // Only reset when LoginScreen explicitly shows (real logout).
             if (_everEnteredWorld)
             {
                 var loginScreen = _objectManager.LoginScreen;
                 if (loginScreen != null && loginScreen.IsOpen)
                 {
-                    // Explicit logout detected � allow re-login
                     Log.Information("[BOT RUNNER] Explicit logout detected, resetting world entry state");
                     _everEnteredWorld = false;
                     _tasksInitialized = false;
                 }
                 else
                 {
-                    // Transient state drop � wait for HasEnteredWorld to recover
                     return;
                 }
             }
 
             if (_objectManager.LoginScreen?.IsLoggedIn != true)
             {
-                _behaviorTree = BuildLoginSequence(incomingActivityMemberState?.AccountName ?? _activitySnapshot.AccountName, "PASSWORD");
+                _behaviorTree = _interactionSequences.BuildLoginSequence(incomingActivityMemberState?.AccountName ?? _activitySnapshot.AccountName, "PASSWORD");
                 return;
             }
 
             if (_objectManager.RealmSelectScreen?.CurrentRealm == null)
             {
-                _behaviorTree = BuildRealmSelectionSequence();
+                _behaviorTree = _interactionSequences.BuildRealmSelectionSequence();
                 return;
             }
 
@@ -413,7 +423,7 @@ namespace BotRunner
             {
                 if (_objectManager.CharacterSelectScreen?.HasRequestedCharacterList != true)
                 {
-                    _behaviorTree = BuildRequestCharacterSequence();
+                    _behaviorTree = _interactionSequences.BuildRequestCharacterSequence();
                 }
 
                 return;
@@ -425,10 +435,6 @@ namespace BotRunner
 
             var charSelects = _objectManager.CharacterSelectScreen?.CharacterSelects;
 
-            // If existing characters don't match the configured race/gender, delete first
-            // and recreate. This ensures parity tests use identical capsule dimensions.
-            // The _pendingCharacterDeletion flag prevents rebuilding the delete tree every tick
-            // while we wait for the server to process the delete and refresh the char list.
             if (charSelects?.Count > 0)
             {
                 var first = charSelects[0];
@@ -438,7 +444,7 @@ namespace BotRunner
                     {
                         Log.Warning("[BOT RUNNER] Character mismatch: existing={Race}/{Gender}, configured={CfgRace}/{CfgGender}. Deleting to recreate.",
                             first.Race, first.Gender, race, gender);
-                        _behaviorTree = BuildDeleteCharacterSequence(first.Guid);
+                        _behaviorTree = _interactionSequences.BuildDeleteCharacterSequence(first.Guid);
                         _pendingCharacterDeletion = true;
                     }
                     return;
@@ -461,7 +467,7 @@ namespace BotRunner
                         createAttempts + 1);
                 }
 
-                _behaviorTree = BuildCreateCharacterSequence(
+                _behaviorTree = _interactionSequences.BuildCreateCharacterSequence(
                     [
                         WoWNameGenerator.GenerateName(
                             race,
@@ -481,11 +487,8 @@ namespace BotRunner
                 return;
             }
 
-            // Character matches — clear any pending deletion flag
             _pendingCharacterDeletion = false;
-
-            // Not yet in world — build EnterWorld sequence
-            _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
+            _behaviorTree = _interactionSequences.BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
         }
 
         internal static string? BuildCharacterUniquenessSeed(string? accountName, int createAttempts)
@@ -526,18 +529,15 @@ namespace BotRunner
             if (!isDeadOrGhost)
                 return;
 
-            // Already have a death recovery task on the stack
             if (_botTasks.Count > 0 &&
                 (_botTasks.Peek() is Tasks.ReleaseCorpseTask || _botTasks.Peek() is Tasks.RetrieveCorpseTask))
                 return;
 
-            // Cooldown: wait 5s between pushes to avoid spamming while server processes the request
             if ((DateTime.UtcNow - _lastDeathRecoveryPush).TotalSeconds < 5)
                 return;
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new ActionDispatcher.BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
-            // Dead but not ghost - release spirit first
             if (isCorpse)
             {
                 if (!_autoReleaseCorpseTaskEnabled)
@@ -554,7 +554,6 @@ namespace BotRunner
                 return;
             }
 
-            // Ghost form — navigate to corpse and resurrect
             if (isGhost)
             {
                 if (!_autoRetrieveCorpseTaskEnabled)
@@ -587,7 +586,7 @@ namespace BotRunner
             }
         }
 
-        private static bool IsZeroPosition(Position? pos)
+        internal static bool IsZeroPosition(Position? pos)
         {
             if (pos == null)
                 return true;
@@ -613,7 +612,6 @@ namespace BotRunner
                 return;
 
             _lastKnownAlivePosition = new Position(pos!.X, pos.Y, pos.Z);
-            // DiagLog removed: fires every tick per bot, saturates stdout pipe with 10+ bots
         }
 
         private void InitializeTaskSequence()
@@ -625,15 +623,12 @@ namespace BotRunner
                 return;
             }
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new ActionDispatcher.BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
             try
             {
                 var @class = WoWNameGenerator.ResolveClass(accountName);
 
-                // IdleTask stays at the bottom of the stack until a live test or coordinator
-                // explicitly sends work. Startup travel is test-owned now, so do not inject
-                // default wait/teleport tasks here.
                 _botTasks.Push(new Tasks.IdleTask(context));
                 Log.Information("[BOT RUNNER] Initialized idle task sequence for {Account} using {Profile} ({Class})",
                     accountName, _container.ClassContainer.Name, @class);
@@ -645,4 +640,3 @@ namespace BotRunner
         }
     }
 }
-

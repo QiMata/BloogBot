@@ -5,7 +5,7 @@ using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger<T> when IBotContext exposes ILoggerFactory
 using System;
 using System.Collections.Generic;
 

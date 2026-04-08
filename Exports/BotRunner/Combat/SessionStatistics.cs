@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 
 namespace BotRunner.Combat
 {

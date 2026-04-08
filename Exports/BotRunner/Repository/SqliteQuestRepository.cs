@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using Microsoft.Data.Sqlite;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using System;
 using System.Collections.Generic;
 using System.IO;

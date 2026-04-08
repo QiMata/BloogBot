@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using System;
 
 namespace BotRunner.Tasks;

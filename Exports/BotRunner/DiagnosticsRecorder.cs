@@ -1,6 +1,6 @@
 using Communication;
-using GameData.Core.Enums;
-using Serilog;
+using GameData.Core.Interfaces;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,13 +9,22 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
+using BotRunner.Tasks;
 
 namespace BotRunner
 {
-    public partial class BotRunnerService
+    /// <summary>
+    /// Handles diagnostic physics/transform recording and diagnostic action dispatch.
+    /// Extracted from BotRunnerService.Diagnostics.cs partial.
+    /// </summary>
+    internal sealed class DiagnosticsRecorder
     {
+        private readonly IObjectManager _objectManager;
+        private readonly IDiagnosticPacketTraceRecorder? _diagnosticPacketTraceRecorder;
+
         /// <summary>
         /// Well-known directory for physics frame recordings.
         /// Tests read from here after stopping recording.
@@ -23,10 +32,7 @@ namespace BotRunner
         private static readonly string PhysicsRecordingDir =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WWoW", "PhysicsRecordings");
 
-        // ── Transform recording (works for BOTH FG and BG) ──
-        // FG: captures gold-standard position from WoW's memory each tick.
-        // BG: captures final position after MovementController/Physics each tick.
-        // BG also has the detailed physics CSV (guards, raw Z, etc.) via WoWSharpObjectManager.
+        // -- Transform recording (works for BOTH FG and BG) --
         private bool _isTransformRecording;
         private readonly List<TransformFrame> _transformFrames = new();
         private readonly Stopwatch _transformStopwatch = new();
@@ -60,11 +66,19 @@ namespace BotRunner
             NavigationTraceSnapshot? TraceSnapshot
         );
 
+        internal DiagnosticsRecorder(
+            IObjectManager objectManager,
+            IDiagnosticPacketTraceRecorder? diagnosticPacketTraceRecorder)
+        {
+            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
+            _diagnosticPacketTraceRecorder = diagnosticPacketTraceRecorder;
+        }
+
         /// <summary>
         /// Handle diagnostic action types that don't map to CharacterAction.
         /// Returns true if the action was handled (caller should return early).
         /// </summary>
-        private bool HandleDiagnosticAction(ActionMessage action)
+        internal bool HandleDiagnosticAction(ActionMessage action)
         {
             switch (action.ActionType)
             {
@@ -99,11 +113,11 @@ namespace BotRunner
             }
         }
 
-        // ── BG-specific physics frame recording (detailed guards, raw Z, etc.) ──
+        // -- BG-specific physics frame recording (detailed guards, raw Z, etc.) --
 
         private void StartPhysicsRecording()
         {
-            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            var accountName = GetAccountName();
             _diagnosticPacketTraceRecorder?.StartRecording(accountName);
 
             if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
@@ -116,7 +130,7 @@ namespace BotRunner
 
         private void StopPhysicsRecording()
         {
-            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            var accountName = GetAccountName();
             _diagnosticPacketTraceRecorder?.StopRecording(accountName);
 
             if (_objectManager is not WoWSharpClient.WoWSharpObjectManager wsOm)
@@ -124,7 +138,7 @@ namespace BotRunner
 
             wsOm.IsPhysicsRecording = false;
             var frames = wsOm.GetPhysicsFrameRecording();
-            Log.Information("[DIAG] Physics frame recording STOPPED — {Count} frames captured", frames.Count);
+            Log.Information("[DIAG] Physics frame recording STOPPED -- {Count} frames captured", frames.Count);
 
             if (frames.Count == 0) return;
 
@@ -181,7 +195,7 @@ namespace BotRunner
             Log.Information("[DIAG] Physics recording written to {Path} ({Count} frames)", filePath, frames.Count);
         }
 
-        // ── Generic transform recording (FG gold standard + BG final position) ──
+        // -- Generic transform recording (FG gold standard + BG final position) --
 
         private void StartTransformRecording()
         {
@@ -201,12 +215,12 @@ namespace BotRunner
         {
             _isTransformRecording = false;
             _transformStopwatch.Stop();
-            Log.Information("[DIAG] Transform recording STOPPED — {Count} frames captured", _transformFrames.Count);
+            Log.Information("[DIAG] Transform recording STOPPED -- {Count} frames captured", _transformFrames.Count);
 
             if (_transformFrames.Count == 0) return;
 
             Directory.CreateDirectory(PhysicsRecordingDir);
-            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            var accountName = GetAccountName();
             var filePath = Path.Combine(PhysicsRecordingDir, $"transform_{accountName}.csv");
 
             var sb = new StringBuilder();
@@ -233,14 +247,14 @@ namespace BotRunner
         /// <summary>
         /// Called every tick from the main bot loop. Captures player transform if recording.
         /// </summary>
-        internal void CaptureTransformFrame()
+        internal void CaptureTransformFrame(Stack<IBotTask> botTasks, long tickCount, WoWActivitySnapshot? activitySnapshot)
         {
             if (!_isTransformRecording) return;
 
             var player = _objectManager?.Player;
             if (player == null) return;
 
-            CaptureNavigationTraceFrame();
+            CaptureNavigationTraceFrame(botTasks, tickCount, activitySnapshot);
 
             var pos = player.Position;
             _transformFrames.Add(new TransformFrame(
@@ -256,12 +270,12 @@ namespace BotRunner
             ));
         }
 
-        private void CaptureNavigationTraceFrame()
+        private void CaptureNavigationTraceFrame(Stack<IBotTask> botTasks, long tickCount, WoWActivitySnapshot? activitySnapshot)
         {
-            if (_botTasks.Count == 0)
+            if (botTasks.Count == 0)
                 return;
 
-            if (_botTasks.Peek() is not INavigationTraceProvider traceProvider)
+            if (botTasks.Peek() is not INavigationTraceProvider traceProvider)
                 return;
 
             var trace = traceProvider.GetNavigationTraceSnapshot();
@@ -269,20 +283,20 @@ namespace BotRunner
                 return;
 
             _latestRecordedNavigationTrace = trace;
-            _latestRecordedTraceTaskName = _botTasks.Peek().GetType().Name;
-            var stackNames = new string[_botTasks.Count];
+            _latestRecordedTraceTaskName = botTasks.Peek().GetType().Name;
+            var stackNames = new string[botTasks.Count];
             var index = 0;
-            foreach (var task in _botTasks)
+            foreach (var task in botTasks)
                 stackNames[index++] = task.GetType().Name;
 
             _latestRecordedTraceTaskStack = stackNames;
-            _latestRecordedTraceTick = (int)Interlocked.Read(ref _tickCount);
-            _latestRecordedTraceAction = _activitySnapshot?.CurrentAction?.ActionType.ToString();
+            _latestRecordedTraceTick = (int)Interlocked.Read(ref tickCount);
+            _latestRecordedTraceAction = activitySnapshot?.CurrentAction?.ActionType.ToString();
         }
 
         private void WriteNavigationTraceRecording()
         {
-            var accountName = _activitySnapshot?.AccountName ?? "unknown";
+            var accountName = GetAccountName();
             var filePath = Path.Combine(PhysicsRecordingDir, $"navtrace_{accountName}.json");
             var payload = new NavigationTraceRecording(
                 AccountName: accountName,
@@ -302,5 +316,10 @@ namespace BotRunner
             Log.Information("[DIAG] Navigation trace recording written to {Path} (task={Task})",
                 filePath, _latestRecordedTraceTaskName ?? "none");
         }
+
+        /// <summary>Account name accessor for file naming; set externally by BotRunnerService.</summary>
+        internal Func<string>? AccountNameAccessor { get; set; }
+
+        private string GetAccountName() => AccountNameAccessor?.Invoke() ?? "unknown";
     }
 }

@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Serilog;
+using Serilog; // TODO: migrate to ILogger when DI is available
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BotRunner.Combat
