@@ -83,7 +83,16 @@ public class SceneTileSplitterTests
 
             // Determine which tiles have data by reading scene bounds
             var populatedTiles = DiscoverPopulatedTiles(mapId, scenePath);
-            _output.WriteLine($"  [Map {mapId}] {populatedTiles.Count} populated tiles");
+            if (populatedTiles.Count == 0)
+            {
+                // Brute-force: for small dungeons where GetGroundZ fails, try ALL tiles in bounds
+                populatedTiles = DiscoverAllTilesInBounds(scenePath);
+                _output.WriteLine($"  [Map {mapId}] GroundZ discovery empty — brute-force: {populatedTiles.Count} tiles in bounds");
+            }
+            else
+            {
+                _output.WriteLine($"  [Map {mapId}] {populatedTiles.Count} populated tiles");
+            }
 
             int mapTiles = 0;
             foreach (var (tx, ty) in populatedTiles)
@@ -203,6 +212,32 @@ public class SceneTileSplitterTests
                     tiles.Add((tx, ty));
             }
         }
+
+        return tiles;
+    }
+
+    /// <summary>
+    /// Fallback: return ALL tiles in the scene bounds without GetGroundZ validation.
+    /// Used for small dungeons where the physics engine can't find ground at sample points.
+    /// </summary>
+    private HashSet<(int tx, int ty)> DiscoverAllTilesInBounds(string scenePath)
+    {
+        var tiles = new HashSet<(int, int)>();
+        using var fs = File.OpenRead(scenePath);
+        using var br = new BinaryReader(fs);
+        // Skip: magic(4) + version(4) + mapId(4) + triCount(4) + cellSize(4) + cellsX(4) + cellsY(4) + triIdxCount(4) + liquidCellSize(4) + liquidCellsX(4) + liquidCellsY(4) = 44 bytes
+        br.ReadBytes(44); // skip to bounds
+        float minX = br.ReadSingle(), minY = br.ReadSingle();
+        float maxX = br.ReadSingle(), maxY = br.ReadSingle();
+
+        int minTileX = WorldToTileX(maxX);
+        int maxTileX = WorldToTileX(minX);
+        int minTileY = WorldToTileY(maxY);
+        int maxTileY = WorldToTileY(minY);
+
+        for (int tx = minTileX; tx <= maxTileX; tx++)
+            for (int ty = minTileY; ty <= maxTileY; ty++)
+                tiles.Add((tx, ty));
 
         return tiles;
     }
