@@ -33,7 +33,7 @@ namespace WoWSharpClient
 {
     public partial class WoWSharpObjectManager : IObjectManager
     {
-        private static WoWSharpObjectManager _instance;
+        private static readonly Lazy<WoWSharpObjectManager> _instance = new(() => new WoWSharpObjectManager());
 
         /// <summary>
         /// P9.2: Legacy singleton accessor. Use public constructor for multi-bot-per-process mode.
@@ -41,15 +41,7 @@ namespace WoWSharpClient
         /// New code should create instances directly: new WoWSharpObjectManager().
         /// </summary>
         [Obsolete("Use new WoWSharpObjectManager() for per-bot instances. This singleton will be removed after P9.6 migration.")]
-        public static WoWSharpObjectManager Instance
-        {
-            get
-            {
-                _instance ??= new WoWSharpObjectManager();
-
-                return _instance;
-            }
-        }
+        public static WoWSharpObjectManager Instance => _instance.Value;
 
 
         private ILogger<WoWSharpObjectManager> _logger;
@@ -109,8 +101,6 @@ namespace WoWSharpClient
         /// </summary>
         public WoWSharpObjectManager()
         {
-            // Bridge: first instance created becomes the legacy singleton
-            _instance ??= this;
         }
 
 

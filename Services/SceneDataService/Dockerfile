@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-RUN apt-get update \
+RUN apt-get update || true \
     && apt-get install -y --no-install-recommends cmake build-essential \
     && rm -rf /var/lib/apt/lists/*
 

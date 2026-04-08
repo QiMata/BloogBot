@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using PromptHandlingService.Cache.Models;
 using SQLite;
 
@@ -21,7 +23,7 @@ namespace PromptHandlingService.Cache
         public string? CheckForPreviousRun(string prompt)
         {
             EnsureNotDisposed();
-            var hash = prompt.GetHashCode(StringComparison.OrdinalIgnoreCase);
+            var hash = HashPrompt(prompt);
             var results = _conn.Query<PreviousPrompts>("select * from PreviousPrompts where PromptHash = ?", hash);
             if (results.Count <= 0)
             {
@@ -36,10 +38,16 @@ namespace PromptHandlingService.Cache
             EnsureNotDisposed();
             _conn.Insert(new PreviousPrompts
             {
-                PromptHash = prompt.GetHashCode(StringComparison.OrdinalIgnoreCase),
+                PromptHash = HashPrompt(prompt),
                 Response = response,
                 TotalPrompt = prompt
             });
+        }
+
+        private static string HashPrompt(string prompt)
+        {
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(prompt.ToLowerInvariant()));
+            return Convert.ToHexString(bytes);
         }
 
         public string DatabasePath => _databasePath;

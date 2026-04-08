@@ -223,7 +223,7 @@ namespace PathfindingService
                     requestId, requestSw.ElapsedMilliseconds, pathResult.Result, sanitizedPath.Length, pathResult.RawPath.Length);
             }
 
-            var requestOrdinal = ++_pathLogCounter;
+            var requestOrdinal = Interlocked.Increment(ref _pathLogCounter);
             if (PathRouteDiagnostics.ShouldLogRoute(dist2D, sanitizedPath.Length, pathResult.RawPath.Length, pathResult.Result, requestOrdinal))
             {
                 logger.LogInformation(
