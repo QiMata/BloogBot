@@ -7,7 +7,6 @@ namespace ShamanElemental.Tasks
     public class PullTargetTask : BotTask, IBotTask
     {
         private const string LightningBolt = "Lightning Bolt";
-        private readonly int stuckCount;
         private IWoWUnit target;
 
         internal PullTargetTask(IBotContext botContext) : base(botContext) { }

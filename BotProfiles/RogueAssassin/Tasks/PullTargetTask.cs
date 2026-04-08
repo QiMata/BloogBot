@@ -11,8 +11,6 @@ namespace RogueAssassin.Tasks
     {
         private bool SwapDaggerReady;
         private bool DaggerEquipped;
-        private bool SwapMaceOrSwordReady;
-        private bool MaceOrSwordEquipped;
 
         internal PullTargetTask(IBotContext botContext) : base(botContext) { }
 
@@ -48,15 +46,6 @@ namespace RogueAssassin.Tasks
 
             else DaggerEquipped = false;
 
-            // Check to see if a 1H Sword or Mace is Equipped in the mainhand
-
-            // if (MainHand.Info.ItemSubclass == ItemSubclass.OneHandedMace || ItemSubclass.OneHandedSword || ItemSubclass.OneHandedExotic)
-            if (MainHand.Info.ItemClass == ItemClass.SwordOneHand)
-
-                MaceOrSwordEquipped = true;
-
-            else MaceOrSwordEquipped = false;
-
             // Check to see if a Dagger is ready in the swap slot
 
             if (SwapSlotWeap.Info.ItemClass == ItemClass.Dagger)
@@ -66,24 +55,7 @@ namespace RogueAssassin.Tasks
             else SwapDaggerReady = false;
 
 
-            // Check to see if a Sword, 1H Mace, or fist weapon is ready in the swap slot
-
-            // if (SwapSlotWeap.Info.ItemSubclass == ItemSubclass.OneHandedMace || ItemSubclass.OneHandedSword || ItemSubclass.OneHandedExotic)
-            if (SwapSlotWeap.Info.ItemClass == ItemClass.SwordOneHand)
-
-                SwapMaceOrSwordReady = true;
-
-            else SwapMaceOrSwordReady = false;
-
-            // If there is a mace or swap in the swap slot, the player swap back to the 1H sword or mace.
-
-            // if (SwapMaceOrSwordReady == true)
-            // {
-            //    Functions.LuaCall($"UseContainerItem({4}, {2})");
-            //    Console.WriteLineVerbose(MainHand.Info.Name + "Swapped Into Mainhand!");
-            //}
-
-            // If Swap dagger is ready and the playe is not in combat, swap to a mainhand dagger.
+            // If Swap dagger is ready and the player is not in combat, swap to a mainhand dagger.
 
             if (SwapDaggerReady == true && !ObjectManager.Player.IsInCombat && !ObjectManager.Player.HasBuff(Stealth))
             {

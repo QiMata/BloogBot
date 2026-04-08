@@ -21,7 +21,9 @@ public class MailTransferTask : BotTask, IBotTask
     private readonly IReadOnlyList<uint> _itemIdsToSend;
     private readonly uint _goldToSend;
     private Position _mailboxPosition;
+#pragma warning disable CS0649 // TODO: increment when mail send logic is implemented
     private int _sentCount;
+#pragma warning restore CS0649
 
     // Mailbox positions in major cities
     public static readonly Dictionary<string, Position> MailboxPositions = new()

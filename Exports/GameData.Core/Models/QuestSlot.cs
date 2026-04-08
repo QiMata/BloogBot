@@ -14,6 +14,7 @@ namespace GameData.Core.Models
     /// <summary>
     ///     An object representing an quest
     /// </summary>
+#pragma warning disable CS0649 // Fields are populated via memory-mapped reads
     public abstract class QuestLogEntry
     {
         /// <summary>

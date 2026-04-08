@@ -15,11 +15,9 @@ namespace ForegroundBotRunner.Statics
     /// <summary>
     ///     Contains WoW Events to subscribe to
     /// </summary>
+#pragma warning disable CS0067 // Events are declared by IWoWEventHandler interface but not subscribed to in this implementation
     public sealed class WoWEventHandler : IWoWEventHandler
     {
-        private readonly Task thrLootUpdate;
-        private readonly Task thrMerchUpdate;
-
         private WoWEventHandler()
         {
             // Subscribe to BOTH event types - events with args AND events without args

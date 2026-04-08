@@ -19,7 +19,9 @@ public class BankDepositTask : BotTask, IBotTask
     private BankState _state = BankState.FindBank;
     private readonly IReadOnlySet<uint> _keepItemIds;
     private Position _bankerPosition;
+#pragma warning disable CS0649 // TODO: increment when deposit logic is implemented
     private int _depositedCount;
+#pragma warning restore CS0649
 
     private const float BankerInteractRange = 5f;
 

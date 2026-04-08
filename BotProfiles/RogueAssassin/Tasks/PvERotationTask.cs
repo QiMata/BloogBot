@@ -9,11 +9,7 @@ namespace RogueAssassin.Tasks
 {
     public class PvERotationTask : CombatRotationTask, IBotTask
     {
-        private IWoWUnit secondaryTarget;
-        private bool SwapDaggerReady;
-        private bool DaggerEquipped;
         private bool SwapMaceOrSwordReady;
-        private bool MaceOrSwordEquipped;
         private bool readyToRiposte;
         private int riposteStartTime;
 
@@ -47,32 +43,6 @@ namespace RogueAssassin.Tasks
                 //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
                 //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
                 //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
-
-                // Check to see if a Dagger is Equipped in the mainhand
-
-                if (MainHand.Info.ItemClass == ItemClass.Dagger)
-
-                    DaggerEquipped = true;
-
-                else DaggerEquipped = false;
-
-                // Check to see if a 1H Sword or Mace is Equipped in the mainhand
-
-                // if (MainHand.Info.ItemSubclass == ItemSubclass.OneHandedMace || ItemSubclass.OneHandedSword || ItemSubclass.OneHandedExotic)
-                if (MainHand.Info.ItemClass == ItemClass.SwordOneHand)
-
-                    MaceOrSwordEquipped = true;
-
-                else MaceOrSwordEquipped = false;
-
-                // Check to see if a Dagger is ready in the swap slot
-
-                if (SwapSlotWeap.Info.ItemClass == ItemClass.Dagger)
-
-                    SwapDaggerReady = true;
-
-                else SwapDaggerReady = false;
-
 
                 // Check to see if a Sword, 1H Mace, or fist weapon is ready in the swap slot
 

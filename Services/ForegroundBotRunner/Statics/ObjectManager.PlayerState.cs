@@ -22,12 +22,10 @@ namespace ForegroundBotRunner.Statics
 
         public HighGuid PlayerGuid { get; internal set; } = new HighGuid(new byte[4], new byte[4]);
 
-
-        private volatile bool _ingame1 = true;
-
-
-        private readonly bool _ingame2 = true;
-
+#pragma warning disable CS0414 // State flags assigned in ObjectManager.Interaction.cs but not yet read
+        private bool _ingame1;
+        private bool _ingame2;
+#pragma warning restore CS0414
 
         private readonly IWoWActivitySnapshot _characterState;
 

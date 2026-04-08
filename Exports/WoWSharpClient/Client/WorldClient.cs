@@ -27,7 +27,6 @@ namespace WoWSharpClient.Client
         private readonly IConnection _connection;
         private IEncryptor _encryptor;
         private bool _disposed;
-        private uint _lastPingTime;
         private long _pendingIntroCinematicAttemptId;
         
         // Authentication state

@@ -24,7 +24,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
         private readonly ILogger<InventoryNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        private uint _currentMoney;
         private bool _isInventoryOpen;
         private bool _disposed;
 

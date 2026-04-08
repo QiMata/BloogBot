@@ -65,7 +65,6 @@ public class DungeoneeringCoordinator
     private DateTime _phaseStartedAt = DateTime.UtcNow;
     private int _tickCount;
     private int _inviteIndex;
-    private int _acceptIndex;
 
     // Dungeoneering dispatch tracking
     private readonly ConcurrentDictionary<string, byte> _dungeoneeringDispatched = new();

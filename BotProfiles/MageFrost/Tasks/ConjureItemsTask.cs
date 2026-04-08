@@ -5,6 +5,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
 {
+#pragma warning disable CS0649 // TODO: assign foodItem/drinkItem from conjured inventory
     public class ConjureItemsTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         private IWoWItem foodItem;

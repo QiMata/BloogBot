@@ -4,6 +4,7 @@ using System.Linq;
 
 namespace GameData.Core.Models
 {
+#pragma warning disable CS0649 // Fields are populated via memory-mapped reads, not direct C# assignment
     public class ItemCacheEntry(nint address)
     {
         internal ItemClass ItemClass;

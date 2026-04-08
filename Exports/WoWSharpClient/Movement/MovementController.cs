@@ -73,9 +73,6 @@ namespace WoWSharpClient.Movement
         // but cumulate into 30y+ underground cascade over 3 seconds.
         // Max walkable slope: 60 degrees -> tan(60) = 1.73. Use 2.0 for stairs/ledges.
         // Once vertical/horizontal ratio exceeds this over accumulated travel, reject ground.
-        private float _descentAnchorZ = float.NaN;
-        private float _descentAnchorX = float.NaN;
-        private float _descentAnchorY = float.NaN;
         private const float MAX_SLOPE_RATIO = 2.0f; // tan(63 degrees) - generous for stairs
         private const float SLOPE_CHECK_MIN_HORIZONTAL = 3.0f; // Minimum horizontal travel before checking
 
@@ -613,17 +610,12 @@ namespace WoWSharpClient.Movement
                 && float.IsFinite(position.Y)
                 && float.IsFinite(position.Z);
 
-        private int _deadReckonCount = 0;
-        private float _prevOutX, _prevOutY, _prevOutZ;
-        private float _prev2OutX, _prev2OutY, _prev2OutZ;
         // Race-detection: position that was sent to the C++ physics engine.
         // If _player.Position diverges from this after RunPhysics returns,
         // a teleport occurred during the gRPC call and the result is stale.
         private float _physicsInputX, _physicsInputY, _physicsInputZ;
         private uint _physicsInputFlags;
         // _noGroundFrameCount removed — workaround
-        private int _falseFreefallCount = 0;
-        private float _ffsStartZ = float.NaN;  // Z where FFS first engaged — tracks cumulative drift
         // Track whether _prevGroundZ was established from actual physics ground contact
         // (not just constructor initialization from player.Position.Z). The hysteresis guard
         // must NOT engage until we've confirmed real ground contact — otherwise elevated spawns
@@ -640,7 +632,6 @@ namespace WoWSharpClient.Movement
         public void SetGroundedState(bool grounded) => _wasGroundedLastFrame = grounded;
         // _teleportZGraceFrames removed — workaround
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
-        private int _physicsMovedCount = 0;
         private ulong _lastTransportGuid = player.TransportGuid;
         private uint _lastSceneRefreshMapId = uint.MaxValue;
         private float _lastSceneRefreshX = float.NaN;
@@ -1287,11 +1278,6 @@ namespace WoWSharpClient.Movement
             _standingOnLocal = Vector3.Zero;
             _stepUpBaseZ = -200000f;
             _stepUpAge = 0;
-            _descentAnchorZ = float.NaN;
-            _descentAnchorX = float.NaN;
-            _descentAnchorY = float.NaN;
-            _falseFreefallCount = 0;
-            _ffsStartZ = float.NaN;
             _hasPhysicsGroundContact = false;
             // Don't assume grounded after teleport — the first physics frame will determine
             // the correct state. Setting true here prevents airborne tests from falling.

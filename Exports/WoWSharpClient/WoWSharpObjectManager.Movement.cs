@@ -30,8 +30,6 @@ namespace WoWSharpClient
 {
     public partial class WoWSharpObjectManager
     {
-        private ControlBits _controlBits = ControlBits.Nothing;
-
         public bool IsPlayerMoving => !Player.MovementFlags.Equals(MovementFlags.MOVEFLAG_NONE);
 
         /// <summary>
@@ -575,7 +573,6 @@ namespace WoWSharpClient
             if (Player is not WoWLocalPlayer player)
                 return;
 
-            _controlBits = ControlBits.Nothing;
             player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _movementController?.Reset(teleportDestZ);
 

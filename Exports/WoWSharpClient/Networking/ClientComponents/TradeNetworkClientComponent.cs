@@ -36,8 +36,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _isTradeWindowOpen;
         private ulong? _tradePartnerGuid;
         private uint _ourMoneyOffer;
-        private bool _weAccepted;
-        private bool _theyAccepted;
         private bool _disposed;
         private TradeWindowData? _traderWindowData;
         private TradeWindowData? _ownWindowData;
@@ -329,7 +327,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = new byte[4]; // zeros
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_ACCEPT_TRADE, payload, cancellationToken);
 
-                _weAccepted = true;
             }
             catch (Exception ex)
             {
@@ -350,7 +347,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_UNACCEPT_TRADE, Array.Empty<byte>(), cancellationToken);
-                _weAccepted = false;
             }
             catch (Exception ex)
             {
@@ -515,12 +511,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                     break;
 
                 case TradeStatus.TradeAccept:
-                    _theyAccepted = true;
                     _logger.LogDebug("Trade partner accepted");
                     break;
 
                 case TradeStatus.BackToTrade:
-                    _theyAccepted = false;
                     _logger.LogDebug("Trade partner unaccepted");
                     break;
 
@@ -577,8 +571,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             _isTradeWindowOpen = false;
             _tradePartnerGuid = null;
             _ourMoneyOffer = 0;
-            _weAccepted = false;
-            _theyAccepted = false;
             _traderWindowData = null;
             _ownWindowData = null;
         }

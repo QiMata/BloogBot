@@ -28,8 +28,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Dictionary<ProfessionType, ProfessionInfo> _professions = [];
         private readonly List<RecipeInfo> _knownRecipes = [];
         private readonly List<ProfessionService> _availableServices = [];
-        private bool _isCrafting;
-        private uint? _currentCraftingSpellId;
         private bool _disposed;
 
         // Self-subscriptions that keep state-tracking .Do() side effects active
