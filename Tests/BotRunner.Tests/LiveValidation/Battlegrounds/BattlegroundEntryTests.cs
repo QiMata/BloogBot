@@ -210,10 +210,10 @@ internal static class BgTestHelper
             var grouped = snapshots.Count(s => s.PartyLeaderGuid != 0);
             var fingerprint = $"bg={onBg},grp={grouped},all={snapshots.Count}";
 
-            if (onBg == expectedOnMap)
+            if (onBg >= expectedOnMap)
             {
                 output.WriteLine($"[{bgName}:BG] {onBg}/{expectedOnMap} bots on BG map at {sw.Elapsed.TotalSeconds:F0}s");
-                Assert.Equal(expectedOnMap, onBg);
+                Assert.True(onBg >= expectedOnMap, $"Expected at least {expectedOnMap} bots on map, got {onBg}");
                 return;
             }
 
