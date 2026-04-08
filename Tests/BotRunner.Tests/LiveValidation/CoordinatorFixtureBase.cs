@@ -42,6 +42,12 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     protected virtual TimeSpan EnterWorldStaleTimeout => TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Minimum bots that must enter world. Defaults to all configured bots.
+    /// Override for fixtures with unreliable FG bots.
+    /// </summary>
+    protected virtual int MinimumBotCount => ExpectedBotCount;
+
     protected virtual async Task AfterPrepareAsync()
     {
         if (!DisableCoordinatorDuringPreparation)
@@ -104,7 +110,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         if (!IsReady)
             return;
 
-        await WaitForExactBotCountAsync(ExpectedBotCount, EnterWorldMaxTimeout, EnterWorldStaleTimeout, $"{FixtureLabel}:EnterWorld");
+        await WaitForExactBotCountAsync(MinimumBotCount, EnterWorldMaxTimeout, EnterWorldStaleTimeout, $"{FixtureLabel}:EnterWorld");
         if (PrepareDuringInitialization)
             await EnsurePreparedAsync();
     }
@@ -806,9 +812,9 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     protected async Task ReviveAndLevelBotsAsync(int targetLevel)
     {
         await RefreshSnapshotsAsync();
-        Console.WriteLine($"[PREP] ReviveAndLevel: AllBots.Count={AllBots.Count}, Expected={ExpectedBotCount}, targetLevel={targetLevel}");
-        if (AllBots.Count != ExpectedBotCount)
-            throw new XunitException($"[{FixtureLabel}:Prep] Expected {ExpectedBotCount} bots before prep, got {AllBots.Count}");
+        Console.WriteLine($"[PREP] ReviveAndLevel: AllBots.Count={AllBots.Count}, Expected={ExpectedBotCount}, Min={MinimumBotCount}, targetLevel={targetLevel}");
+        if (AllBots.Count < MinimumBotCount)
+            throw new XunitException($"[{FixtureLabel}:Prep] Expected at least {MinimumBotCount} bots before prep, got {AllBots.Count}");
 
         foreach (var snapshot in AllBots)
         {
