@@ -206,8 +206,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     internal async Task MountRaidForFirstObjectiveAsync()
     {
-        // Use GM .cast to mount directly — bypasses item usage which fails due to
-        // ObjectManager not tracking GM-added items in container slots.
+        // Mount via CastSpell action — the mount spells were learned during prep.
         // 23509 = Frostwolf Howler (Horde), 23510 = Stormpike Battle Charger (Alliance)
         foreach (var settings in CharacterSettings)
         {
@@ -217,7 +216,11 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
                 || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
             var mountSpellId = isHorde ? 23509 : 23510;
-            await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
+            await SendSilentActionAsync(settings.AccountName, new ActionMessage
+            {
+                ActionType = ActionType.CastSpell,
+                Parameters = { new RequestParameter { IntParam = mountSpellId } }
+            });
             await Task.Delay(50);
         }
     }
@@ -235,9 +238,12 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
             TimeSpan.FromSeconds(5),
             pollIntervalMs: 250);
 
-        // Note: .modify honor rank does NOT exist in VMaNGOS. PvP rank is loaded from DB
-        // (honor_highest_rank column) on character login. DB was pre-populated for all AV characters.
+        // Learn riding + mount spell. Mount spells (23509/23510) are used directly
+        // via CastSpell action since UseItem fails for GM-added items.
         await SendSilentGmChatCommandAsync(accountName, $".learn {AlteracValleyLoadoutPlan.ApprenticeRidingSpellId}");
+        await Task.Delay(75);
+        var mountSpellId = HordeAccountsOrdered.Contains(accountName, StringComparer.OrdinalIgnoreCase) ? 23509 : 23510;
+        await SendSilentGmChatCommandAsync(accountName, $".learn {mountSpellId}");
         await Task.Delay(75);
         await SendSilentGmChatCommandAsync(
             accountName,
