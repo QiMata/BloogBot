@@ -45,7 +45,7 @@ Honor rank 15 set in DB for all 80 AV accounts. mangosd config updated: Alterac.
 - [x] P1.mount **Mount via .cast GM command** — UseItem and CastSpell actions failed for GM-added items. `.gm on` + `.targetself` + `.cast 23509/23510` works. 68/80 bots mount successfully.
 
 ### Open
-- [ ] P1.15 **AV navmesh tiles missing** — Pathfinding for map 30 (AV) returns no tiles (Tile 30_34_35 not found). Bots can't navigate to objectives. Need to build AV map tiles via detour/recast. Current test passes phases 1-4 (enter world, loadout, BG entry 72/80, mount 68/80) but fails phase 5 (objective navigation).
+- [x] P1.15 **Scene tiles for ALL maps** — Generated 695 scene tiles across 34 maps (was 142/5 maps). Includes Emerald Dream (169, 256 tiles). Docker scene-data-service redeployed with full coverage. Fixed brute-force tile discovery offset bug (36→44 bytes).
 - [ ] P1.13 **Equip items systemic failure** — ALL bots fail to equip PvP gear. Items in bags but EquipItem action doesn't work. Likely ObjectManager container tracking gap for GM-added items. Fire-and-forget workaround keeps pipeline moving.
 - [ ] P1.14 **8 straggler bots** — ~8 bots consistently don't enter AV (72-74/80). Likely BattlegroundQueueTask timeout for first-batch bots (AVBOT2-5) or auth failures.
 - [ ] P1.6 **FG bot CharacterSelect** — RESOLVED by making all AV bots BG (headless). FG not needed for BG pipeline.
