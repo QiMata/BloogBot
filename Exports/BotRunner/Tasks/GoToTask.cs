@@ -46,7 +46,7 @@ public class GoToTask : BotTask, IBotTask
 
         if (_updateCount <= 3 || _updateCount % 100 == 0)
         {
-            Log.Information("[GOTO-TASK] Update #{Count}: pos=({X:F0},{Y:F0},{Z:F0}) target=({TX:F0},{TY:F0},{TZ:F0}) dist2D={D:F0} map={Map}",
+            Log.Warning("[GOTO-TASK] Update #{Count}: pos=({X:F0},{Y:F0},{Z:F0}) target=({TX:F0},{TY:F0},{TZ:F0}) dist2D={D:F0} map={Map}",
                 _updateCount, player.Position.X, player.Position.Y, player.Position.Z,
                 _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target),
                 (player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0);
@@ -57,7 +57,7 @@ public class GoToTask : BotTask, IBotTask
         {
             ObjectManager.StopAllMovement();
             _navPath?.Clear();
-            Log.Information("[GOTO-TASK] Arrived at ({X:F0},{Y:F0},{Z:F0}) dist2D={Dist:F1}",
+            Log.Warning("[GOTO-TASK] Arrived at ({X:F0},{Y:F0},{Z:F0}) dist2D={Dist:F1}",
                 _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target));
             PopTask("arrived");
             return;
