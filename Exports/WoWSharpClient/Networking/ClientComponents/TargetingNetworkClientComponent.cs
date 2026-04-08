@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.ClientComponents.Helpers;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
@@ -33,9 +32,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<TargetingData> _targetChanges;
         private readonly IObservable<AssistData> _assistOperations;
         private readonly IObservable<TargetingErrorData> _targetingErrors;
-
-        // Legacy callback manager for backwards compatibility
-        private readonly CallbackManager<ulong?> _targetChangedCallbackManager = new();
 
         private bool _disposed;
 
@@ -124,8 +120,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                     var targetingData = new TargetingData(previousTarget, _currentTarget, DateTime.UtcNow);
                     _localTargetChanges.OnNext(targetingData);
 
-                    // Legacy callback support
-                    _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
                 }
             }
             catch (Exception ex)
@@ -237,9 +231,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 _logger.LogDebug("Server updated target from {PreviousTarget:X} to {NewTarget:X}",
                     previousTarget ?? 0, _currentTarget ?? 0);
-
-                // Legacy callback support
-                _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
             }
         }
 
@@ -258,9 +249,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var targetingData = new TargetingData(previousTarget, _currentTarget, DateTime.UtcNow);
                 _localTargetChanges.OnNext(targetingData);
-
-                // Legacy callback support
-                _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
             }
         }
 
@@ -273,29 +261,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             var errorData = new TargetingErrorData(errorMessage, targetGuid, DateTime.UtcNow);
             _localTargetingErrors.OnNext(errorData);
-        }
-
-        #endregion
-
-        #region Legacy Callback Support
-
-        /// <inheritdoc />
-        [Obsolete("Use TargetChanges observable instead")]
-        public void SetTargetChangedCallback(Action<ulong?>? callback)
-        {
-            _targetChangedCallbackManager.SetPermanentCallback(callback);
-        }
-
-        /// <summary>
-        /// Adds a temporary callback for target changes that can be removed later.
-        /// This is useful for operations that need to temporarily monitor target changes.
-        /// </summary>
-        /// <param name="callback">The temporary callback to add.</param>
-        /// <returns>A disposable that, when disposed, removes the temporary callback.</returns>
-        [Obsolete("Use TargetChanges observable instead")]
-        public IDisposable AddTemporaryTargetChangedCallback(Action<ulong?> callback)
-        {
-            return _targetChangedCallbackManager.AddTemporaryCallback(callback);
         }
 
         #endregion
@@ -319,21 +284,5 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Legacy Server Response Methods (for backwards compatibility)
-
-        /// <summary>
-        /// Updates the current target based on server response.
-        /// This should be called when receiving target update packets.
-        /// Use HandleTargetChanged instead.
-        /// </summary>
-        /// <param name="targetGuid">The new target GUID from the server.</param>
-        [Obsolete("Use HandleTargetChanged instead")]
-        public void UpdateCurrentTarget(ulong targetGuid)
-        {
-            var newTarget = targetGuid == 0 ? null : (ulong?)targetGuid;
-            HandleTargetChanged(newTarget);
-        }
-
-        #endregion
     }
 }

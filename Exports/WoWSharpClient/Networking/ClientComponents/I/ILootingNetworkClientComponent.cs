@@ -374,48 +374,5 @@ namespace WoWSharpClient.Networking.ClientComponents.I
 
         #endregion
 
-        #region Legacy Callback Support (for backwards compatibility)
-
-        /// <summary>
-        /// Sets the callback function to be invoked when a loot window is opened.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the loot target GUID.</param>
-        [Obsolete("Use LootWindowOpened observable instead")]
-        void SetLootWindowOpenedCallback(Action<ulong>? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when a loot window is closed.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function to invoke when loot window closes.</param>
-        [Obsolete("Use LootWindowClosed observable instead")]
-        void SetLootWindowClosedCallback(Action? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when an item is successfully looted.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives ItemId and Quantity.</param>
-        [Obsolete("Use ItemLoot observable instead")]
-        void SetItemLootedCallback(Action<uint, uint>? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when money is looted.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the amount in copper.</param>
-        [Obsolete("Use MoneyLoot observable instead")]
-        void SetMoneyLootedCallback(Action<uint>? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when a loot error occurs.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the error message.</param>
-        [Obsolete("Use LootErrors observable instead")]
-        void SetLootErrorCallback(Action<string>? callback);
-
-        #endregion
     }
 }

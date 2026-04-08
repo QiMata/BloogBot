@@ -43,13 +43,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<IObserver<BindOnPickupData>> _bopObservers = new();
         private readonly List<IObserver<MasterLootData>> _masterLootObservers = new();
 
-        // Legacy callbacks
-        private Action<ulong>? _lootWindowOpenedCallback;
-        private Action? _lootWindowClosedCallback;
-        private Action<uint, uint>? _itemLootedCallback;
-        private Action<uint>? _moneyLootedCallback;
-        private Action<string>? _lootErrorCallback;
-
         private bool _disposed;
         private readonly IDisposable _lootWindowChangesSub;
 
@@ -594,7 +587,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _currentLootTarget = lootTargetGuid.Value;
                 _logger.LogDebug("Loot window opened for target: {LootTargetGuid:X}", lootTargetGuid.Value);
                 Publish(_lootWindowObservers, new LootWindowData(true, lootTargetGuid.Value, availableItems, availableMoney, DateTime.UtcNow));
-                _lootWindowOpenedCallback?.Invoke(lootTargetGuid.Value);
             }
             else if (!isOpen)
             {
@@ -603,7 +595,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _availableLoot.Clear();
                 _pendingRolls.Clear();
                 Publish(_lootWindowObservers, new LootWindowData(false, null, availableItems, availableMoney, DateTime.UtcNow));
-                _lootWindowClosedCallback?.Invoke();
             }
         }
 
@@ -638,7 +629,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogInformation("Item looted: {ItemName} x{Quantity} from slot {LootSlot}", itemName, quantity, lootSlot);
             _availableLoot.TryRemove(lootSlot, out _);
             Publish(_itemLootObservers, new LootData(lootTargetGuid, itemId, itemName, quantity, quality, lootSlot, DateTime.UtcNow));
-            _itemLootedCallback?.Invoke(itemId, quantity);
         }
 
         public void HandleMoneyLooted(ulong lootTargetGuid, uint amount)
@@ -646,7 +636,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
             _logger.LogInformation("Money looted: {Amount} copper", amount);
             Publish(_moneyLootObservers, new MoneyLootData(lootTargetGuid, amount, DateTime.UtcNow));
-            _moneyLootedCallback?.Invoke(amount);
         }
 
         public void HandleLootRoll(ulong lootGuid, byte itemSlot, uint itemId, LootRollType rollType, uint rollResult)
@@ -704,7 +693,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogError("Loot error: {ErrorMessage} (Target: {LootTargetGuid:X}, Slot: {LootSlot})",
                 errorMessage, lootTargetGuid ?? 0, lootSlot);
             Publish(_lootErrorObservers, new LootErrorData(errorMessage, lootTargetGuid, lootSlot, DateTime.UtcNow));
-            _lootErrorCallback?.Invoke(errorMessage);
         }
 
         #endregion
@@ -834,56 +822,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             GC.SuppressFinalize(this);
         }
         #endregion
-
-        #region Legacy Callback Support
-        [Obsolete("Use LootWindowOpened observable instead")]
-        public void SetLootWindowOpenedCallback(Action<ulong>? callback) { _lootWindowOpenedCallback = callback; }
-
-        [Obsolete("Use LootWindowClosed observable instead")]
-        public void SetLootWindowClosedCallback(Action? callback) { _lootWindowClosedCallback = callback; }
-
-        [Obsolete("Use ItemLoot observable instead")]
-        public void SetItemLootedCallback(Action<uint, uint>? callback) { _itemLootedCallback = callback; }
-
-        [Obsolete("Use MoneyLoot observable instead")]
-        public void SetMoneyLootedCallback(Action<uint>? callback) { _moneyLootedCallback = callback; }
-
-        [Obsolete("Use LootErrors observable instead")]
-        public void SetLootErrorCallback(Action<string>? callback) { _lootErrorCallback = callback; }
-        #endregion
-
-        [Obsolete("Use HandleLootWindowChanged instead")]
-        public void UpdateLootWindowState(bool isOpen, ulong? lootTargetGuid = null)
-        {
-            if (isOpen && lootTargetGuid.HasValue) HandleLootWindowChanged(true, lootTargetGuid.Value);
-            else HandleLootWindowChanged(false, null);
-        }
-
-        [Obsolete("Use specific Handle methods instead")]
-        public void ReportLootEvent(string eventType, uint? itemId = null, uint? quantity = null, string? errorMessage = null)
-        {
-            switch (eventType.ToLowerInvariant())
-            {
-                case "item":
-                    if (itemId.HasValue && quantity.HasValue)
-                    {
-                        _itemLootedCallback?.Invoke(itemId.Value, quantity.Value);
-                    }
-                    break;
-                case "money":
-                    if (quantity.HasValue)
-                    {
-                        _moneyLootedCallback?.Invoke(quantity.Value);
-                    }
-                    break;
-                case "error":
-                    if (!string.IsNullOrEmpty(errorMessage))
-                    {
-                        _lootErrorCallback?.Invoke(errorMessage);
-                    }
-                    break;
-            }
-        }
 
         private IObservable<T> CreateManualStream<T>(List<IObserver<T>> observers)
         {

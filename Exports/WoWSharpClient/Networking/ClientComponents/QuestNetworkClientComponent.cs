@@ -516,9 +516,5 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Legacy Methods (for backwards compatibility)
-        [Obsolete("Use opcode-backed observables")] 
-        public void ReportQuestEvent(string eventType, uint questId, string? message = null) { }
-        #endregion
     }
 }

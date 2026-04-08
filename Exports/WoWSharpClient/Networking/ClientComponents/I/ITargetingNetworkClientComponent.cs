@@ -104,17 +104,5 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         void HandleTargetingError(string errorMessage, ulong? targetGuid = null);
 
         #endregion
-
-        #region Legacy Callback Support (for backwards compatibility)
-
-        /// <summary>
-        /// Sets the callback function to be invoked when the target changes.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the new target GUID (null if target is cleared).</param>
-        [Obsolete("Use TargetChanges observable instead")]
-        void SetTargetChangedCallback(Action<ulong?>? callback);
-
-        #endregion
     }
 }

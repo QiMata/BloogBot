@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <!-- Suppress TFM/RID/Platform appendage; we set OutputPath explicitly below -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- P9.6: Suppress CS0618 for WoWSharpObjectManager.Instance / WoWSharpEventEmitter.Instance
+         until full DI migration replaces 658 singleton call sites across handlers/tests -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 

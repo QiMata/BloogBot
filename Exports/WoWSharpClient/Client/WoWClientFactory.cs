@@ -146,17 +146,6 @@ namespace WoWSharpClient.Client
         }
 
         /// <summary>
-        /// Creates a legacy WoWClient for backward compatibility.
-        /// This is deprecated and will be removed in a future version.
-        /// </summary>
-        /// <returns>A legacy WoWClient instance.</returns>
-        [Obsolete("Use CreateModernWoWClient() instead. Legacy client will be removed in a future version.")]
-        public static WoWClient CreateLegacyWoWClient()
-        {
-            return new WoWClient();
-        }
-
-        /// <summary>
         /// Creates a targeting network agent for the specified world client.
         /// </summary>
         /// <param name="worldClient">The world client to use for sending targeting packets.</param>
