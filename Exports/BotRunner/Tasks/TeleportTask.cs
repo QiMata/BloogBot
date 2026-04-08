@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using GameData.Core.Models;
 using Serilog;
@@ -11,10 +12,6 @@ namespace BotRunner.Tasks;
 /// </summary>
 public class TeleportTask(IBotContext botContext, string destination) : BotTask(botContext), IBotTask
 {
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-
     private readonly string _destination = destination;
     private Position? _startPosition;
     private bool _commandSent;
@@ -22,11 +19,7 @@ public class TeleportTask(IBotContext botContext, string destination) : BotTask(
     private const int TELEPORT_TIMEOUT_MS = 10000;
 
     private static bool IsDeadOrGhost(GameData.Core.Interfaces.IWoWLocalPlayer player)
-    {
-        var hasGhostFlag = (((uint)player.PlayerFlags) & PlayerFlagGhost) != 0;
-        var standDead = player.Bytes1 != null && player.Bytes1.Length > 0 && (player.Bytes1[0] & StandStateMask) == StandStateDead;
-        return player.Health == 0 || hasGhostFlag || standDead || player.InGhostForm;
-    }
+        => DeathStateDetection.IsDeadOrGhostBroad(player);
 
     public void Update()
     {

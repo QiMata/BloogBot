@@ -1,5 +1,6 @@
 using BotRunner.Clients;
 using BotRunner.Combat;
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using Communication;
@@ -77,9 +78,6 @@ namespace BotRunner
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
         private Position? _lastKnownAlivePosition;
-        private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-        private const uint StandStateMask = 0xFF;
-        private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
         // Binary compatibility shim for already-built service binaries that still bind to the
         // pre-packet-recorder constructor signature. Keep parameter names distinct so current
@@ -587,48 +585,11 @@ namespace BotRunner
                 && Math.Abs(pos.Z) < 0.001f;
         }
 
-        private static bool HasGhostFlag(IWoWLocalPlayer player)
-        {
-            try { return (((uint)player.PlayerFlags) & PlayerFlagGhost) != 0; }
-            catch { return false; }
-        }
-
-        private static bool IsStandStateDead(IWoWLocalPlayer player)
-        {
-            try
-            {
-                var bytes1 = player.Bytes1;
-                return bytes1 != null
-                    && bytes1.Length > 0
-                    && (bytes1[0] & StandStateMask) == StandStateDead;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool IsGhostState(IWoWLocalPlayer player)
-        {
-            if (HasGhostFlag(player))
-                return true;
-
-            try { return player.InGhostForm; }
-            catch { return false; }
-        }
-
-        private static bool IsCorpseState(IWoWLocalPlayer player)
-        {
-            if (IsGhostState(player)) return false;
-            // Require stand-state-dead flag from the server, not just HP==0.
-            // GM level 6 accounts sit at HP 0/1 under damage without actually dying —
-            // the server never sets UNIT_STAND_STATE_DEAD for them.
-            // HP==0 alone is NOT sufficient to declare death.
-            return IsStandStateDead(player);
-        }
-
-        private static bool IsDeadOrGhostState(IWoWLocalPlayer player)
-            => IsGhostState(player) || IsCorpseState(player);
+        private static bool HasGhostFlag(IWoWLocalPlayer player) => DeathStateDetection.HasGhostFlag(player);
+        private static bool IsStandStateDead(IWoWLocalPlayer player) => DeathStateDetection.IsStandStateDead(player);
+        private static bool IsGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsGhost(player);
+        private static bool IsCorpseState(IWoWLocalPlayer player) => DeathStateDetection.IsCorpse(player);
+        private static bool IsDeadOrGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsDeadOrGhost(player);
 
         private void UpdateLastKnownAlivePosition(IWoWLocalPlayer player)
         {

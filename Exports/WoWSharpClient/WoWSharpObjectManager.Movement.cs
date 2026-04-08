@@ -564,7 +564,7 @@ namespace WoWSharpClient
                 {
                     _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
                 }
-            });
+            }, TaskScheduler.Default);
         }
 
 

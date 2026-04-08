@@ -354,7 +354,7 @@ namespace WoWSharpClient
             {
                 _sniffingGameObjUse = false;
                 Log.Information("[GAMEOBJ_USE] Packet sniffer ended — no more logging");
-            });
+            }, TaskScheduler.Default);
         }
 
 

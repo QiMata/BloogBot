@@ -1,5 +1,6 @@
 using Serilog;
 using System;
+using System.Linq;
 
 namespace BotRunner
 {
@@ -82,22 +83,34 @@ namespace BotRunner
             // Messages stay in the snapshot until displaced by newer ones (no clear-per-tick).
             lock (_recentChatMessages)
             {
+                // Dequeue all messages
                 while (_recentChatMessages.Count > 0)
-                {
                     _activitySnapshot.RecentChatMessages.Add(_recentChatMessages.Dequeue());
-                    // Trim to rolling window
-                    while (_activitySnapshot.RecentChatMessages.Count > MaxBufferedMessages)
-                        _activitySnapshot.RecentChatMessages.RemoveAt(0);
+
+                // Trim to max — keep only the last MaxBufferedMessages items.
+                // RepeatedField lacks RemoveRange, so copy the tail and rebuild in O(n).
+                if (_activitySnapshot.RecentChatMessages.Count > MaxBufferedMessages)
+                {
+                    var kept = _activitySnapshot.RecentChatMessages.Skip(
+                        _activitySnapshot.RecentChatMessages.Count - MaxBufferedMessages).ToList();
+                    _activitySnapshot.RecentChatMessages.Clear();
+                    _activitySnapshot.RecentChatMessages.Add(kept);
                 }
             }
 
             lock (_recentErrors)
             {
+                // Dequeue all messages
                 while (_recentErrors.Count > 0)
-                {
                     _activitySnapshot.RecentErrors.Add(_recentErrors.Dequeue());
-                    while (_activitySnapshot.RecentErrors.Count > MaxBufferedMessages)
-                        _activitySnapshot.RecentErrors.RemoveAt(0);
+
+                // Trim to max — keep only the last MaxBufferedMessages items.
+                if (_activitySnapshot.RecentErrors.Count > MaxBufferedMessages)
+                {
+                    var kept = _activitySnapshot.RecentErrors.Skip(
+                        _activitySnapshot.RecentErrors.Count - MaxBufferedMessages).ToList();
+                    _activitySnapshot.RecentErrors.Clear();
+                    _activitySnapshot.RecentErrors.Add(kept);
                 }
             }
         }

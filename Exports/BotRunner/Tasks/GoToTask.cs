@@ -1,3 +1,5 @@
+using BotRunner.Constants;
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
 using GameData.Core.Constants;
@@ -23,7 +25,7 @@ public class GoToTask : BotTask, IBotTask
     private NavigationPath? _navPath;
     private DateTime? _noPathSinceUtc;
     private DateTime _lastNoPathLogUtc = DateTime.MinValue;
-    private const double NoPathTimeoutSec = 30.0;
+    private const double NoPathTimeoutSec = BotTaskTimeouts.NoPathTimeoutSec;
 
     public GoToTask(IBotContext botContext, float x, float y, float z, float tolerance = 3f)
         : base(botContext)
@@ -66,39 +68,23 @@ public class GoToTask : BotTask, IBotTask
         // Create navigation path once — persists across Update() calls
         if (_navPath == null)
         {
-            var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
-            var pfClient = Container.PathfindingClient;
-            _navPath = new NavigationPath(pfClient,
-                capsuleRadius: radius,
-                capsuleHeight: height,
-                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
-                stuckRecoveryGenerationProvider: () => ObjectManager.MovementStuckRecoveryGeneration,
-                race: player.Race,
-                gender: player.Gender);
+            _navPath = NavigationPathFactory.Create(Container.PathfindingClient, player, ObjectManager);
         }
 
         if (player.RunSpeed > 0)
             _navPath.UpdateCharacterSpeed(player.RunSpeed);
 
         // Physics wall contact hint for stuck detection
-        bool hitWall = false;
-        float wnx = 0f, wny = 0f, bf = 1f;
-        if (ObjectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
-        {
-            hitWall = wsOm.PhysicsHitWall;
-            var wn = wsOm.PhysicsWallNormal2D;
-            wnx = wn.X; wny = wn.Y;
-            bf = wsOm.PhysicsBlockedFraction;
-        }
+        var physics = PhysicsStateHelper.GetPhysicsState(ObjectManager);
 
         try
         {
             var waypoint = _navPath.GetNextWaypoint(
                 player.Position, _target, player.MapId,
                 allowDirectFallback: false,
-                physicsHitWall: hitWall,
-                wallNormalX: wnx, wallNormalY: wny,
-                blockedFraction: bf);
+                physicsHitWall: physics.HitWall,
+                wallNormalX: physics.NormalX, wallNormalY: physics.NormalY,
+                blockedFraction: physics.BlockedFraction);
 
             if (waypoint == null)
             {

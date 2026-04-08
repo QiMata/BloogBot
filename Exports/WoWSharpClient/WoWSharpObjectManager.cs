@@ -552,7 +552,7 @@ namespace WoWSharpClient
                         Log.Error(t.Exception, "[PET] Failed to send CMSG_PET_ACTION");
                     else
                         Log.Debug("[PET] CMSG_PET_ACTION sent ({Len} bytes)", payload.Length);
-                });
+                }, TaskScheduler.Default);
         }
 
         public ILoginScreen LoginScreen => _loginScreen;
@@ -637,7 +637,7 @@ namespace WoWSharpClient
 
                 _ = _woWClient.EnterWorldAsync(characterGuid);
                 SchedulePendingWorldEntryRetry(characterGuid);
-            });
+            }, TaskScheduler.Default);
         }
 
         private void ClearPendingWorldEntry()

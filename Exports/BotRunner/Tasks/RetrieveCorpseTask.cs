@@ -1,3 +1,5 @@
+using BotRunner.Constants;
+using BotRunner.Helpers;
 using BotRunner.Movement;
 using BotRunner.Interfaces;
 using GameData.Core.Constants;
@@ -15,34 +17,12 @@ namespace BotRunner.Tasks;
 /// </summary>
 public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition) : BotTask(botContext), IBotTask
 {
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-
     // Corpse runback follows the navmesh path faithfully.
     // Disable probe heuristics/pruning so corners are not skipped into walls.
     // strictPathValidation is OFF because long outdoor corpse runs (460y+) have
     // segments where collision-based LOS rejects valid navmesh paths.
-    private readonly NavigationPath _navPath = CreateCorpseNavPath(botContext);
-
-    private static NavigationPath CreateCorpseNavPath(IBotContext ctx)
-    {
-        var player = ctx.ObjectManager.Player;
-        var (radius, height) = player != null
-            ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
-            : (0.3064f, 2.0313f);
-        return new NavigationPath(
-            ctx.Container.PathfindingClient,
-            enableProbeHeuristics: false,
-            enableDynamicProbeSkipping: false,
-            strictPathValidation: false,
-            capsuleRadius: radius,
-            capsuleHeight: height,
-            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ctx.ObjectManager, start, end),
-            stuckRecoveryGenerationProvider: () => ctx.ObjectManager.MovementStuckRecoveryGeneration,
-            race: player?.Race ?? 0,
-            gender: player?.Gender ?? 0);
-    }
+    private readonly NavigationPath _navPath = NavigationPathFactory.CreateForCorpseRun(
+        botContext.Container.PathfindingClient, botContext.ObjectManager.Player, botContext.ObjectManager);
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;
     private DateTime _lastCooldownLog = DateTime.MinValue;
@@ -75,8 +55,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const float ServerReclaimRadius3D = 39f;
     private const float ReclaimSafetyMargin = 5f; // stay 5y inside the 39y sphere
     private const float MinRetrieveRange2D = 5f;   // never stop further than this minimum
-    private static readonly TimeSpan TaskTimeout = TimeSpan.FromMinutes(12);
-    private static readonly TimeSpan NoPathTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan TaskTimeout = TimeSpan.FromMinutes(BotTaskTimeouts.CorpseRetrievalMinutes);
+    private static readonly TimeSpan NoPathTimeout = TimeSpan.FromSeconds(BotTaskTimeouts.NoPathTimeoutSec);
     private static readonly TimeSpan ReclaimRetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CooldownLogInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RunbackSampleInterval = TimeSpan.FromMilliseconds(750);
@@ -100,41 +80,11 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const int TraceSummaryWaypointLimit = 4;
     private const int TraceSummarySampleLimit = 3;
 
-    private static bool HasGhostFlag(IWoWLocalPlayer player)
-    {
-        try { return (((uint)player.PlayerFlags) & PlayerFlagGhost) != 0; }
-        catch { return false; }
-    }
-
-    private static bool IsStandStateDeadFlag(IWoWLocalPlayer player)
-    {
-        try
-        {
-            var bytes1 = player.Bytes1;
-            return bytes1 != null
-                && bytes1.Length > 0
-                && (bytes1[0] & StandStateMask) == StandStateDead;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool IsStrictAlive(IWoWLocalPlayer player)
-        => player.Health > 0 && !HasGhostFlag(player) && !IsStandStateDeadFlag(player);
-
-    private static bool IsGhostState(IWoWLocalPlayer player)
-    {
-        if (HasGhostFlag(player))
-            return true;
-
-        try { return player.InGhostForm; }
-        catch { return false; }
-    }
-
-    private static bool IsDeadOrGhostState(IWoWLocalPlayer player)
-        => player.Health == 0 || HasGhostFlag(player) || IsStandStateDeadFlag(player) || IsGhostState(player);
+    private static bool HasGhostFlag(IWoWLocalPlayer player) => DeathStateDetection.HasGhostFlag(player);
+    private static bool IsStandStateDeadFlag(IWoWLocalPlayer player) => DeathStateDetection.IsStandStateDead(player);
+    private static bool IsStrictAlive(IWoWLocalPlayer player) => DeathStateDetection.IsStrictAlive(player);
+    private static bool IsGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsGhost(player);
+    private static bool IsDeadOrGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsDeadOrGhostBroad(player);
 
     private static bool HasHorizontalMovementIntent(IWoWLocalPlayer player)
     {

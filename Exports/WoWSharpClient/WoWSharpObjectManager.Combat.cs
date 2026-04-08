@@ -249,7 +249,7 @@ namespace WoWSharpClient
                         Log.Error(t.Exception, "[CastSpell] SEND FAILED for spell {SpellId}", spellId);
                     else
                         Log.Information("[CastSpell] SEND OK for spell {SpellId}", spellId);
-                });
+                }, TaskScheduler.Default);
         }
 
         public void CastSpellAtLocation(int spellId, float x, float y, float z)
@@ -274,7 +274,7 @@ namespace WoWSharpClient
                         Log.Error(t.Exception, "[CastSpellAtLocation] SEND FAILED for spell {SpellId}", spellId);
                     else
                         Log.Information("[CastSpellAtLocation] SEND OK for spell {SpellId}", spellId);
-                });
+                }, TaskScheduler.Default);
         }
 
 

@@ -1,3 +1,4 @@
+using BotRunner.Constants;
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -498,19 +499,17 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         if ((DateTime.Now - _lastPotionUsed).TotalMilliseconds < Config.PotionCooldownMs)
             return false;
 
-        // Scan inventory for matching potion
+        // Scan inventory for matching potion (prefer ID-based lookup, fall back to name)
         var items = ObjectManager.GetContainedItems();
         foreach (var item in items)
         {
             if (item == null) continue;
-            var name = item.Name?.ToLowerInvariant() ?? "";
-            if (type == "health" && IsHealthPotion(name))
-            {
-                UseItemFromInventory(item);
-                _lastPotionUsed = DateTime.Now;
-                return true;
-            }
-            if (type == "mana" && IsManaPotion(name))
+            bool match = type == "health"
+                ? ConsumableIds.IsHealthPotion(item.ItemId)
+                  || ConsumableIds.IsHealthPotionByName(item.Name ?? "")
+                : ConsumableIds.IsManaPotion(item.ItemId)
+                  || ConsumableIds.IsManaPotionByName(item.Name ?? "");
+            if (match)
             {
                 UseItemFromInventory(item);
                 _lastPotionUsed = DateTime.Now;
@@ -717,21 +716,8 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
             .FirstOrDefault();
     }
 
-    private static bool IsHealthPotion(string name)
-    {
-        return name.Contains("healing potion") || name.Contains("health potion")
-            || name == "minor healing potion" || name == "lesser healing potion"
-            || name == "healing potion" || name == "greater healing potion"
-            || name == "superior healing potion" || name == "major healing potion";
-    }
-
-    private static bool IsManaPotion(string name)
-    {
-        return name.Contains("mana potion")
-            || name == "minor mana potion" || name == "lesser mana potion"
-            || name == "mana potion" || name == "greater mana potion"
-            || name == "superior mana potion" || name == "major mana potion";
-    }
+    // Potion identification moved to BotRunner.Constants.ConsumableIds
+    // (ID-based lookup with case-insensitive string fallback).
 
     private bool CanQueueOnNextSwingAbility(string abilityName)
     {

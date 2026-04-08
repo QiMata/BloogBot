@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Models;
@@ -38,16 +39,7 @@ namespace BotRunner
 
                     if (navPath == null)
                     {
-                        var (radius, height) = RaceDimensions.GetCapsuleForRace(
-                            _objectManager.Player.Race, _objectManager.Player.Gender);
-                        var pfClient = _container.PathfindingClient;
-                        navPath = new NavigationPath(pfClient,
-                            capsuleRadius: radius,
-                            capsuleHeight: height,
-                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
-                            stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
-                            race: _objectManager.Player.Race,
-                            gender: _objectManager.Player.Gender);
+                        navPath = NavigationPathFactory.Create(_container.PathfindingClient, _objectManager.Player, _objectManager);
                     }
 
                     var target = new Position(x, y, z);
@@ -68,17 +60,9 @@ namespace BotRunner
                     // long stuck-forward loops when direct steering has no valid route.
                     // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
                     // detection when the bot is genuinely blocked by geometry.
-                    bool hitWall = false;
-                    float wnx = 0f, wny = 0f, bf = 1f;
-                    if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
-                    {
-                        hitWall = wsOm.PhysicsHitWall;
-                        var wn = wsOm.PhysicsWallNormal2D;
-                        wnx = wn.X; wny = wn.Y;
-                        bf = wsOm.PhysicsBlockedFraction;
-                    }
+                    var physics = PhysicsStateHelper.GetPhysicsState(_objectManager);
                     try {
-                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: physics.HitWall, wallNormalX: physics.NormalX, wallNormalY: physics.NormalY, blockedFraction: physics.BlockedFraction);
                         if (waypoint == null)
                         {
                             _objectManager.StopAllMovement();
@@ -156,16 +140,7 @@ namespace BotRunner
                     // Too far — move toward target
                     if (navPath == null)
                     {
-                        var (radius, height) = GameData.Core.Constants.RaceDimensions.GetCapsuleForRace(
-                            _objectManager.Player.Race, _objectManager.Player.Gender);
-                        var pfClient = _container.PathfindingClient;
-                        navPath = new NavigationPath(pfClient,
-                            capsuleRadius: radius,
-                            capsuleHeight: height,
-                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
-                            stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
-                            race: _objectManager.Player.Race,
-                            gender: _objectManager.Player.Gender);
+                        navPath = NavigationPathFactory.Create(_container.PathfindingClient, _objectManager.Player, _objectManager);
                     }
 
                     if (_objectManager.Player.RunSpeed > 0)

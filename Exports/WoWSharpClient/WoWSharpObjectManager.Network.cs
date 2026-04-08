@@ -109,7 +109,7 @@ namespace WoWSharpClient
                             Log.Warning("[TELEPORT] 2s timeout: clearing _isBeingTeleported (MSG_MOVE_TELEPORT never arrived after chat notification)");
                             _isBeingTeleported = false;
                         }
-                    });
+                    }, TaskScheduler.Default);
                 }
             }
 

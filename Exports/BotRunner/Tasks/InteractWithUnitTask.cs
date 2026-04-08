@@ -1,3 +1,4 @@
+using BotRunner.Constants;
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using Serilog;
@@ -27,8 +28,8 @@ public class InteractWithUnitTask(IBotContext botContext, ulong targetGuid) : Bo
             return;
         }
 
-        // Timeout after 30 seconds
-        if ((DateTime.Now - _startTime).TotalSeconds > 30)
+        // Timeout after configured duration
+        if ((DateTime.Now - _startTime).TotalSeconds > BotTaskTimeouts.InteractWithUnitSec)
         {
             Log.Warning("[INTERACT] Timed out trying to reach {Guid:X}", targetGuid);
             ObjectManager.StopAllMovement();

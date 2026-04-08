@@ -1,4 +1,5 @@
 using BotRunner.Constants;
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
 using GameData.Core.Constants;
@@ -71,16 +72,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         var player = ObjectManager.Player;
         if (_navPath == null)
         {
-            var (radius, height) = player != null
-                ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
-                : (0.3064f, 2.0313f);
-            _navPath = new NavigationPath(Container.PathfindingClient,
-                capsuleRadius: radius,
-                capsuleHeight: height,
-                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
-                stuckRecoveryGenerationProvider: () => ObjectManager.MovementStuckRecoveryGeneration,
-                race: player?.Race ?? 0,
-                gender: player?.Gender ?? 0);
+            _navPath = NavigationPathFactory.Create(Container.PathfindingClient, player, ObjectManager);
         }
         if (player?.Position == null)
         {
@@ -88,16 +80,16 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             return false;
         }
 
-        var wallNormal = ObjectManager.PhysicsWallNormal2D;
+        var physics = PhysicsStateHelper.GetPhysicsState(ObjectManager);
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
             destination,
             player.MapId,
             allowDirectFallback: allowDirectFallback,
-            physicsHitWall: ObjectManager.PhysicsHitWall,
-            wallNormalX: wallNormal.X,
-            wallNormalY: wallNormal.Y,
-            blockedFraction: ObjectManager.PhysicsBlockedFraction);
+            physicsHitWall: physics.HitWall,
+            wallNormalX: physics.NormalX,
+            wallNormalY: physics.NormalY,
+            blockedFraction: physics.BlockedFraction);
 
         if (waypoint != null)
         {

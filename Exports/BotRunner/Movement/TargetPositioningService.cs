@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using BotRunner.Helpers;
 using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using System;
@@ -37,14 +38,7 @@ namespace BotRunner.Movement
 
             if (_navPath == null)
             {
-                var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
-                _navPath = new NavigationPath(_pathfindingClient,
-                    capsuleRadius: radius,
-                    capsuleHeight: height,
-                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
-                    stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
-                    race: player.Race,
-                    gender: player.Gender);
+                _navPath = NavigationPathFactory.Create(_pathfindingClient, player, _objectManager);
             }
 
             var playerPosition = player.Position;

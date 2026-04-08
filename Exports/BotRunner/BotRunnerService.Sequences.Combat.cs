@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Interfaces;
@@ -83,30 +84,15 @@ namespace BotRunner
                             // gets back inside real melee range.
                             if (navPath == null)
                             {
-                                var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
-                                navPath = new NavigationPath(_container.PathfindingClient,
-                                    capsuleRadius: radius,
-                                    capsuleHeight: height,
-                                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
-                                    stuckRecoveryGenerationProvider: () => _objectManager.MovementStuckRecoveryGeneration,
-                                    race: player.Race,
-                                    gender: player.Gender);
+                                navPath = NavigationPathFactory.Create(_container.PathfindingClient, player, _objectManager);
                             }
 
                             if (player.RunSpeed > 0)
                                 navPath.UpdateCharacterSpeed(player.RunSpeed);
 
-                            bool hitWall = false;
-                            float wnx = 0f, wny = 0f, bf = 1f;
-                            if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm2)
-                            {
-                                hitWall = wsOm2.PhysicsHitWall;
-                                var wn = wsOm2.PhysicsWallNormal2D;
-                                wnx = wn.X; wny = wn.Y;
-                                bf = wsOm2.PhysicsBlockedFraction;
-                            }
+                            var physics = PhysicsStateHelper.GetPhysicsState(_objectManager);
                             var waypoint = navPath.GetNextWaypoint(player.Position, target.Position,
-                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
+                                player.MapId, allowDirectFallback: true, physicsHitWall: physics.HitWall, wallNormalX: physics.NormalX, wallNormalY: physics.NormalY, blockedFraction: physics.BlockedFraction);
 
                             if (waypoint != null)
                             {
@@ -301,7 +287,7 @@ namespace BotRunner
         /// </summary>
         private IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
             .Sequence("Resurrect Sequence")
-                .Condition("Can Resurrect", time => IsGhostState(_objectManager.Player) && _objectManager.Player.CanResurrect)
+                .Condition("Can Resurrect", time => DeathStateDetection.IsGhost(_objectManager.Player) && _objectManager.Player.CanResurrect)
                 .Do("Resurrect", time =>
                 {
                     _objectManager.AcceptResurrect();

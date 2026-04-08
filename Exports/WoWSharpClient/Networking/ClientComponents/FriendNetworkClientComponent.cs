@@ -26,6 +26,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Subject<IReadOnlyList<FriendEntry>> _friendListUpdates = new();
         private readonly Subject<FriendEntry> _friendStatusUpdates = new();
 
+        private readonly List<IDisposable> _subscriptions = new();
         private bool _disposed;
 
         public FriendNetworkClientComponent(IWorldClient worldClient, ILogger<FriendNetworkClientComponent> logger)
@@ -36,13 +37,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             var listStream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_LIST);
             if (listStream is not null)
             {
-                _ = listStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_LIST, payload.ToArray()));
+                _subscriptions.Add(listStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_LIST, payload.ToArray())));
             }
 
             var statusStream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_STATUS);
             if (statusStream is not null)
             {
-                _ = statusStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_STATUS, payload.ToArray()));
+                _subscriptions.Add(statusStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_STATUS, payload.ToArray())));
             }
         }
 
@@ -304,6 +305,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
             _disposed = true;
             _logger.LogDebug("Disposing FriendNetworkClientComponent");
+            foreach (var subscription in _subscriptions)
+                subscription.Dispose();
+            _subscriptions.Clear();
             _friendListUpdates.OnCompleted();
             _friendStatusUpdates.OnCompleted();
             _friendListUpdates.Dispose();
