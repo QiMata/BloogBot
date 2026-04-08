@@ -206,15 +206,18 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     internal async Task MountRaidForFirstObjectiveAsync()
     {
-        var loadouts = BuildLoadoutMap();
+        // Use GM .cast to mount directly — bypasses item usage which fails due to
+        // ObjectManager not tracking GM-added items in container slots.
+        // 23509 = Frostwolf Howler (Horde), 23510 = Stormpike Battle Charger (Alliance)
         foreach (var settings in CharacterSettings)
         {
-            var mountItemId = loadouts[settings.AccountName].MountItemId;
-            await SendSilentActionAsync(settings.AccountName, new ActionMessage
-            {
-                ActionType = ActionType.UseItem,
-                Parameters = { new RequestParameter { IntParam = (int)mountItemId } }
-            });
+            var isHorde = settings.CharacterRace != null && (
+                settings.CharacterRace.Equals("Orc", StringComparison.OrdinalIgnoreCase)
+                || settings.CharacterRace.Equals("Undead", StringComparison.OrdinalIgnoreCase)
+                || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
+                || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
+            var mountSpellId = isHorde ? 23509 : 23510;
+            await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
             await Task.Delay(50);
         }
     }
