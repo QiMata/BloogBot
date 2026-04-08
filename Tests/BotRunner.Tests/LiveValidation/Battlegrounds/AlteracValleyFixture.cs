@@ -206,7 +206,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     internal async Task MountRaidForFirstObjectiveAsync()
     {
-        // Mount via CastSpell action — the mount spells were learned during prep.
+        // Mount via GM .cast command with explicit self-target.
         // 23509 = Frostwolf Howler (Horde), 23510 = Stormpike Battle Charger (Alliance)
         foreach (var settings in CharacterSettings)
         {
@@ -216,11 +216,11 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
                 || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
             var mountSpellId = isHorde ? 23509 : 23510;
-            await SendSilentActionAsync(settings.AccountName, new ActionMessage
-            {
-                ActionType = ActionType.CastSpell,
-                Parameters = { new RequestParameter { IntParam = mountSpellId } }
-            });
+            await SendSilentGmChatCommandAsync(settings.AccountName, ".gm on");
+            await Task.Delay(50);
+            await SendSilentGmChatCommandAsync(settings.AccountName, ".targetself");
+            await Task.Delay(50);
+            await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
             await Task.Delay(50);
         }
     }
