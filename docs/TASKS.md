@@ -40,12 +40,15 @@ Honor rank 15 set in DB for all 80 AV accounts. mangosd config updated: Alterac.
 - [x] P1.9 **BG queue pop** — BG coordinator transitions through all states. 73-74/80 bots enter AV map 30. VMaNGOS AV config fixed: Alterac.MinPlayersInQueue=1, InitMaxPlayers=40, min_players_per_team=1 in DB
 - [x] P1.10 **Enter world tolerance** — MinimumBotCount override accepts 78/80 for FG stragglers. All >= checks fixed
 - [x] P1.11 **Coordinator timeout** — 90s timeout for WaitingForBots so pipeline proceeds with >=75% staged
+- [x] P1.12 **High Warlord / Grand Marshal** — Leaders have HW Battle Axe (18831) / GM Claymore (18876) + Warlord/FM armor sets. DB rank 15. All bots now BG (headless) to avoid FG crashes.
+- [x] P1.6-resolved **FG bots removed** — All AV bots BG. FG crash/CharacterSelect issues no longer block the pipeline.
+- [x] P1.mount **Mount via .cast GM command** — UseItem and CastSpell actions failed for GM-added items. `.gm on` + `.targetself` + `.cast 23509/23510` works. 68/80 bots mount successfully.
 
 ### Open
-- [ ] P1.6 **FG bot character creation flakiness** — TESTBOT1 and AVBOTA1 (Foreground) sometimes get stuck at CharacterSelect. Inconsistent — sometimes both enter world, sometimes neither. Needs hardening of the create flow or retry with reconnect. Currently tolerated via MinimumBotCount=78.
-- [ ] P1.12 **High Warlord / Grand Marshal designation** — Leaders (TESTBOT1, AVBOTA1) should be designated as High Warlord (Horde) and Grand Marshal (Alliance) with appropriate rank-14 gear sets. Currently using Warlord's/Field Marshal's gear (rank 10-13).
-- [ ] P1.13 **Equip items systemic failure** — ALL 80 bots fail to equip PvP gear. Items added to bags via `.additemset` but EquipItem action doesn't remove them from bags. Root cause unclear — possibly CMSG_AUTOEQUIP_ITEM silent rejection, bag slot mapping, or ObjectManager tracking gap. Fire-and-forget works around it but bots enter AV with gear in bags, not equipped.
-- [ ] P1.14 **7 straggler bots** — AVBOT2-4, AVBOTA1-2, AVBOTA16, TESTBOT1 consistently don't enter AV. AVBOT2-4 are Horde BG bots (possibly BattlegroundQueueTask timeout). AVBOTA1/TESTBOT1 are FG bots (CharacterSelect issue). AVBOTA2/AVBOTA16 need investigation.
+- [ ] P1.15 **AV navmesh tiles missing** — Pathfinding for map 30 (AV) returns no tiles (Tile 30_34_35 not found). Bots can't navigate to objectives. Need to build AV map tiles via detour/recast. Current test passes phases 1-4 (enter world, loadout, BG entry 72/80, mount 68/80) but fails phase 5 (objective navigation).
+- [ ] P1.13 **Equip items systemic failure** — ALL bots fail to equip PvP gear. Items in bags but EquipItem action doesn't work. Likely ObjectManager container tracking gap for GM-added items. Fire-and-forget workaround keeps pipeline moving.
+- [ ] P1.14 **8 straggler bots** — ~8 bots consistently don't enter AV (72-74/80). Likely BattlegroundQueueTask timeout for first-batch bots (AVBOT2-5) or auth failures.
+- [ ] P1.6 **FG bot CharacterSelect** — RESOLVED by making all AV bots BG (headless). FG not needed for BG pipeline.
 
 ---
 
