@@ -1068,9 +1068,45 @@ namespace ForegroundBotRunner.Statics
                     // (above) can run on the next iteration with native calls.
                     else if (PauseNativeCallsDuringWorldEntry && isLoggedIn && !isLoadingWorld)
                     {
-                        DiagLog($"SimplePolling[{loopCount}]: World entry detected via memory GUID during pause phase — clearing PauseNativeCallsDuringWorldEntry");
+                        DiagLog($"SimplePolling[{loopCount}]: World entry detected via memory GUID during pause phase — clearing PauseNativeCallsDuringWorldEntry and attempting immediate player detection");
                         PauseNativeCallsDuringWorldEntry = false;
                         _enterWorldStartedAt = null;
+
+                        // Immediately attempt player detection instead of waiting 500ms.
+                        // Without this, the next iteration might re-check IsLoggedIn/IsLoadingWorld
+                        // with stale state and miss the player creation window.
+                        try
+                        {
+                            ulong playerGuid = GetPlayerGuidFromMemory();
+                            if (playerGuid != 0)
+                            {
+                                UpdateCachedGuid(playerGuid);
+                                byte[] guidParts = BitConverter.GetBytes(playerGuid);
+                                PlayerGuid = new HighGuid(guidParts[0..4], guidParts[4..8]);
+
+                                var playerObject = GetObjectPtrFromMemory(playerGuid);
+                                if (playerObject == nint.Zero)
+                                    playerObject = ThreadSynchronizer.RunOnMainThread(() => Functions.GetObjectPtr(PlayerGuid.FullGuid));
+
+                                if (playerObject != nint.Zero)
+                                {
+                                    if (Player == null || ((WoWObject)Player).Pointer != playerObject)
+                                    {
+                                        Player = new LocalPlayer(playerObject, PlayerGuid, WoWObjectType.Player);
+                                        DiagLog($"SimplePolling[{loopCount}]: IMMEDIATE LocalPlayer at 0x{playerObject:X}, GUID={playerGuid}");
+                                    }
+                                    if (!HasEnteredWorld && Player != null)
+                                    {
+                                        HasEnteredWorld = true;
+                                        DiagLog($"SimplePolling[{loopCount}]: IMMEDIATE ENTERED_WORLD! GUID={playerGuid}");
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            DiagLog($"SimplePolling[{loopCount}]: Immediate player detection failed: {ex.Message}");
+                        }
                     }
                     await Task.Delay(500);
                 }
