@@ -38,8 +38,16 @@ public class SceneTileSplitterTests
     public static float TileMaxX(int tileX) => TileMinX(tileX) + TILE_SIZE;
     public static float TileMaxY(int tileY) => TileMinY(tileY) + TILE_SIZE;
 
-    // Maps to split (only the big open-world maps need tiling)
-    private static readonly uint[] MapsToSplit = [0, 1, 30, 489, 529];
+    // All maps with .scene files need tile splitting for SceneDataService.
+    // Open world (0, 1), battlegrounds (30, 489, 529), and all dungeons/raids.
+    private static readonly uint[] MapsToSplit = [
+        0, 1,                                          // Continents
+        30, 489, 529,                                  // Battlegrounds (AV, WSG, AB)
+        13, 33, 34, 36, 43, 47, 48, 70, 90,          // Dungeons (low)
+        109, 129, 169, 189, 209, 229, 230, 289, 329, 349, // Dungeons (mid-high) + Emerald Dream
+        369, 389, 429,                                 // Dungeons (misc)
+        249, 309, 409, 449, 469, 509, 531, 533,       // Raids + PvP halls
+    ];
 
     [Fact]
     [Trait("Category", "SceneExtraction")]
@@ -181,11 +189,17 @@ public class SceneTileSplitterTests
         {
             for (int ty = minTileY; ty <= maxTileY; ty++)
             {
-                // Quick check: does this tile have any ground?
-                float centerX = TileMinX(tx) + TILE_SIZE / 2;
-                float centerY = TileMinY(ty) + TILE_SIZE / 2;
-                float gz = GetGroundZ(mapId, centerX, centerY, 500f, 1000f);
-                if (gz > -199000f)
+                // Check center + 4 quadrant samples. Small dungeons may not cover the center.
+                float x0 = TileMinX(tx), y0 = TileMinY(ty);
+                float cx = x0 + TILE_SIZE / 2, cy = y0 + TILE_SIZE / 2;
+                float q = TILE_SIZE / 4;
+                bool found = false;
+                foreach (var (sx, sy) in new[] { (cx, cy), (x0 + q, y0 + q), (x0 + 3 * q, y0 + q), (x0 + q, y0 + 3 * q), (x0 + 3 * q, y0 + 3 * q) })
+                {
+                    float gz = GetGroundZ(mapId, sx, sy, 500f, 1000f);
+                    if (gz > -199000f) { found = true; break; }
+                }
+                if (found)
                     tiles.Add((tx, ty));
             }
         }

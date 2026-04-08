@@ -36,6 +36,7 @@ public class SceneCacheExtractorTests
         (90, "Gnomeregan"),
         (109, "Sunken Temple"),
         (129, "Razorfen Downs"),
+        (169, "Emerald Dream"),
         (189, "Scarlet Monastery"),
         (209, "Zul'Farrak"),
         (229, "Blackrock Spire"),
