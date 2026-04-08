@@ -32,11 +32,25 @@ public class GoToTask : BotTask, IBotTask
         _tolerance = tolerance > 0 ? tolerance : 3f;
     }
 
+    private int _updateCount;
+
     public void Update()
     {
+        _updateCount++;
         var player = ObjectManager.Player;
         if (player?.Position == null)
+        {
+            if (_updateCount % 50 == 1) Log.Warning("[GOTO-TASK] Update #{Count}: player/position null", _updateCount);
             return;
+        }
+
+        if (_updateCount <= 3 || _updateCount % 100 == 0)
+        {
+            Log.Information("[GOTO-TASK] Update #{Count}: pos=({X:F0},{Y:F0},{Z:F0}) target=({TX:F0},{TY:F0},{TZ:F0}) dist2D={D:F0} map={Map}",
+                _updateCount, player.Position.X, player.Position.Y, player.Position.Z,
+                _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target),
+                (player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0);
+        }
 
         // Arrived?
         if (player.Position.DistanceTo2D(_target) < _tolerance)
