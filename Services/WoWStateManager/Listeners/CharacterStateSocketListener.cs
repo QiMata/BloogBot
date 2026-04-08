@@ -317,7 +317,9 @@ namespace WoWStateManager.Listeners
                     && (_dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.DispatchDungeoneering
                      || _dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.DungeonInProgress
                      || _dungeoneeringCoordinator.State == DungeoneeringCoordinator.CoordState.WaitForRFCSettle);
-                if (!isDungeonDispatch)
+                var isBgQueue = _battlegroundCoordinator != null
+                    && _battlegroundCoordinator.State == BattlegroundCoordinator.CoordState.QueueForBattleground;
+                if (!isDungeonDispatch && !isBgQueue)
                     return;
             }
 
