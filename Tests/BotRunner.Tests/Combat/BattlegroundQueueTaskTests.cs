@@ -314,7 +314,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -337,7 +337,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
         SetPrivateField(task, "_inviteRetryAttempts", 3);
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -371,7 +371,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -406,7 +406,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -429,7 +429,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(301));
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 
@@ -453,7 +453,7 @@ public class BattlegroundQueueTaskTests
         SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(301));
         SetPrivateField(task, "_inviteTimeoutRequeues", 2);
         stack.Push(task);
-        ResetSharedWaits();
+        ResetSharedWaits(task);
 
         task.Update();
 

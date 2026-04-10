@@ -87,6 +87,20 @@ namespace BotRunner
         private int _lastLoggedContainedItems = -1;
         private int _lastLoggedItemObjects = -1;
 
+        // Inventory slot constants for item-by-ID fallback probing
+        internal const int BackpackSlots = 16;
+        internal const int ExtraBagCount = 4;
+        internal const int ExtraBagSlots = 20;
+
+        internal static IEnumerable<(int bag, int slot)> EnumerateByIdFallbackSlots()
+        {
+            for (int slot = 0; slot < BackpackSlots; slot++)
+                yield return (0, slot);
+            for (int bag = 1; bag <= ExtraBagCount; bag++)
+                for (int slot = 0; slot < ExtraBagSlots; slot++)
+                    yield return (bag, slot);
+        }
+
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
         private readonly InteractionSequenceBuilder _interactionSequences;
