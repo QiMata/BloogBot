@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using BotRunner.Travel;
+using Tests.Infrastructure;
 using Xunit;
 
 namespace BotRunner.Tests.LiveValidation;
@@ -98,8 +99,7 @@ public class DungeonInstanceFixture : LiveBotFixture, IAsyncLifetime
         }
 
         var json = JsonSerializer.Serialize(bots, new JsonSerializerOptions { WriteIndented = true });
-        var dir = Path.Combine(Path.GetTempPath(), "WWoW", "TestSettings");
-        Directory.CreateDirectory(dir);
+        var dir = TestRuntimePaths.GetOrCreateSubdirectory("settings", "WWoW", "TestSettings");
         var fileName = $"{Dungeon!.Abbreviation}.settings.json";
         var path = Path.Combine(dir, fileName);
         File.WriteAllText(path, json);

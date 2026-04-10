@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -61,8 +62,9 @@ public class SceneTileSplitterTests
         Directory.CreateDirectory(tilesDir);
 
         int totalTiles = 0, totalTriangles = 0;
+        int totalNewTiles = 0;
 
-        foreach (var mapId in MapsToSplit)
+        foreach (var mapId in ResolveMapsToSplit())
         {
             var scenePath = Path.Combine(scenesDir, $"{mapId}.scene");
             if (!File.Exists(scenePath))
@@ -81,21 +83,16 @@ public class SceneTileSplitterTests
                 continue;
             }
 
-            // Determine which tiles have data by reading scene bounds
-            var populatedTiles = DiscoverPopulatedTiles(mapId, scenePath);
-            if (populatedTiles.Count == 0)
-            {
-                // Brute-force: for small dungeons where GetGroundZ fails, try ALL tiles in bounds
-                populatedTiles = DiscoverAllTilesInBounds(scenePath);
-                _output.WriteLine($"  [Map {mapId}] GroundZ discovery empty — brute-force: {populatedTiles.Count} tiles in bounds");
-            }
-            else
-            {
-                _output.WriteLine($"  [Map {mapId}] {populatedTiles.Count} populated tiles");
-            }
+            // Use brute-force bounds for ALL maps. The 5-point GroundZ sampling
+            // misses tiles with only indoor/underground geometry (e.g. Stormwind
+            // Champion's Hall), causing the physics engine to have no collision data
+            // and bots to float after teleport.
+            var populatedTiles = DiscoverTilesForMap(mapId, dataDir!, scenePath);
+            _output.WriteLine($"  [Map {mapId}] {populatedTiles.Count} candidate tiles");
 
             int mapTiles = 0;
-            foreach (var (tx, ty) in populatedTiles)
+            int mapNewTiles = 0;
+            foreach (var (tx, ty) in populatedTiles.OrderBy(t => t.tx).ThenBy(t => t.ty))
             {
                 var tilePath = Path.Combine(tilesDir, $"{mapId}_{tx:D2}_{ty:D2}.scenetile");
                 if (File.Exists(tilePath))
@@ -115,18 +112,78 @@ public class SceneTileSplitterTests
                 {
                     var tileSize = new FileInfo(tilePath).Length;
                     mapTiles++;
+                    mapNewTiles++;
                     totalTriangles += (int)(tileSize / 40); // rough estimate
                 }
             }
 
             totalTiles += mapTiles;
-            _output.WriteLine($"  [Map {mapId}] {mapTiles} tiles written to {tilesDir}");
+            totalNewTiles += mapNewTiles;
+            _output.WriteLine($"  [Map {mapId}] {mapTiles} tiles available ({mapNewTiles} new) in {tilesDir}");
 
             // Unload to free memory
             ClearSceneCache(mapId);
         }
 
-        _output.WriteLine($"\nDone: {totalTiles} tiles, ~{totalTriangles} triangles");
+        _output.WriteLine($"\nDone: {totalTiles} tiles ({totalNewTiles} new), ~{totalTriangles} triangles");
+    }
+
+    [Fact]
+    [Trait("Category", "SceneExtraction")]
+    public void ExtractExplicitSceneTiles()
+    {
+        var requestedTiles = ParseExplicitTileKeys();
+        Skip.If(requestedTiles.Count == 0, "No explicit tile keys set (WWOW_SCENE_TILE_KEYS).");
+
+        var dataDir = ResolveDataDir();
+        Skip.If(string.IsNullOrEmpty(dataDir), "No data directory found");
+
+        var scenesDir = Path.Combine(dataDir!, "scenes");
+        var tilesDir = Path.Combine(scenesDir, "tiles");
+        Directory.CreateDirectory(tilesDir);
+
+        var loadedMaps = new HashSet<uint>();
+        try
+        {
+            foreach (var (mapId, tileX, tileY) in requestedTiles)
+            {
+                var scenePath = Path.Combine(scenesDir, $"{mapId}.scene");
+                if (File.Exists(scenePath) && !loadedMaps.Contains(mapId))
+                {
+                    if (!LoadSceneCache(mapId, scenePath))
+                    {
+                        throw new InvalidOperationException($"Failed to load source .scene for map {mapId}: {scenePath}");
+                    }
+
+                    loadedMaps.Add(mapId);
+                }
+
+                var tilePath = Path.Combine(tilesDir, $"{mapId}_{tileX:D2}_{tileY:D2}.scenetile");
+                if (File.Exists(tilePath))
+                {
+                    _output.WriteLine($"  [Tile {mapId}_{tileX:D2}_{tileY:D2}] already exists");
+                    continue;
+                }
+
+                float minX = TileMinX(tileX);
+                float minY = TileMinY(tileY);
+                float maxX = TileMaxX(tileX);
+                float maxY = TileMaxY(tileY);
+
+                bool ok = ExtractSceneCache(mapId, tilePath, minX, minY, maxX, maxY);
+                Assert.True(ok, $"ExtractSceneCache failed for {mapId}_{tileX:D2}_{tileY:D2}");
+                Assert.True(File.Exists(tilePath), $"Output tile not created: {tilePath}");
+
+                _output.WriteLine($"  [Tile {mapId}_{tileX:D2}_{tileY:D2}] extracted ({new FileInfo(tilePath).Length} bytes)");
+            }
+        }
+        finally
+        {
+            foreach (var mapId in loadedMaps)
+            {
+                ClearSceneCache(mapId);
+            }
+        }
     }
 
     [Theory]
@@ -240,6 +297,105 @@ public class SceneTileSplitterTests
                 tiles.Add((tx, ty));
 
         return tiles;
+    }
+
+    private HashSet<(int tx, int ty)> DiscoverTilesForMap(uint mapId, string dataDir, string scenePath)
+    {
+        // Prefer ADT map-file discovery for full continent coverage. Some .scene files are
+        // intentionally bounded and do not include all populated map tiles.
+        var tilesFromMapFiles = DiscoverTilesFromMapFiles(dataDir, mapId);
+        if (tilesFromMapFiles.Count > 0)
+        {
+            _output.WriteLine($"    Tile source: maps/ ({tilesFromMapFiles.Count} tiles)");
+            return tilesFromMapFiles;
+        }
+
+        var tilesFromBounds = DiscoverAllTilesInBounds(scenePath);
+        _output.WriteLine($"    Tile source: .scene bounds ({tilesFromBounds.Count} tiles)");
+        return tilesFromBounds;
+    }
+
+    private static HashSet<(int tx, int ty)> DiscoverTilesFromMapFiles(string dataDir, uint mapId)
+    {
+        var mapsDir = Path.Combine(dataDir, "maps");
+        if (!Directory.Exists(mapsDir))
+            return [];
+
+        var tiles = new HashSet<(int, int)>();
+        var prefix = mapId.ToString("D3", CultureInfo.InvariantCulture);
+
+        foreach (var path in Directory.EnumerateFiles(mapsDir, $"{prefix}????.map"))
+        {
+            var stem = Path.GetFileNameWithoutExtension(path);
+            if (stem.Length < 7)
+                continue;
+
+            if (!int.TryParse(stem.AsSpan(3, 2), NumberStyles.None, CultureInfo.InvariantCulture, out var tileX))
+                continue;
+
+            if (!int.TryParse(stem.AsSpan(5, 2), NumberStyles.None, CultureInfo.InvariantCulture, out var tileY))
+                continue;
+
+            if (tileX is < 0 or > 63 || tileY is < 0 or > 63)
+                continue;
+
+            tiles.Add((tileX, tileY));
+        }
+
+        return tiles;
+    }
+
+    private List<(uint mapId, int tileX, int tileY)> ParseExplicitTileKeys()
+    {
+        var explicitTiles = Environment.GetEnvironmentVariable("WWOW_SCENE_TILE_KEYS");
+        if (string.IsNullOrWhiteSpace(explicitTiles))
+            return [];
+
+        var parsed = new List<(uint mapId, int tileX, int tileY)>();
+        foreach (var token in explicitTiles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = token.Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length != 3)
+            {
+                _output.WriteLine($"  [ExplicitTiles] SKIP invalid token: {token}");
+                continue;
+            }
+
+            if (!uint.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var mapId) ||
+                !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var tileX) ||
+                !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var tileY))
+            {
+                _output.WriteLine($"  [ExplicitTiles] SKIP unparsable token: {token}");
+                continue;
+            }
+
+            if (tileX is < 0 or > 63 || tileY is < 0 or > 63)
+            {
+                _output.WriteLine($"  [ExplicitTiles] SKIP out-of-range tile token: {token}");
+                continue;
+            }
+
+            parsed.Add((mapId, tileX, tileY));
+        }
+
+        return parsed.Distinct().ToList();
+    }
+
+    private IEnumerable<uint> ResolveMapsToSplit()
+    {
+        var overrideMaps = Environment.GetEnvironmentVariable("WWOW_SCENE_TILE_MAP_IDS");
+        if (string.IsNullOrWhiteSpace(overrideMaps))
+            return MapsToSplit;
+
+        var parsed = overrideMaps
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => uint.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out var id) ? (uint?)id : null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToArray();
+
+        return parsed.Length > 0 ? parsed : MapsToSplit;
     }
 
     private static string? ResolveDataDir()

@@ -1,6 +1,4 @@
 using BotRunner.Clients;
-using BotRunner.Helpers;
-using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using System;
 
@@ -38,7 +36,10 @@ namespace BotRunner.Movement
 
             if (_navPath == null)
             {
-                _navPath = NavigationPathFactory.Create(_pathfindingClient, player, _objectManager);
+                _navPath = NavigationPathFactory.Create(
+                    _pathfindingClient,
+                    _objectManager,
+                    NavigationRoutePolicy.Standard);
             }
 
             var playerPosition = player.Position;

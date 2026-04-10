@@ -71,12 +71,46 @@ public class BgTestHelperTests
         Assert.Equal(2, count);
     }
 
+    [Fact]
+    public void BuildIncrementalRedispatchTarget_ReturnsIntermediateHopOnLargeVerticalDelta()
+    {
+        var snapshots = new List<WoWActivitySnapshot>
+        {
+            CreateSnapshot(accountName: "A", currentMapId: 30, nestedMapId: 30, x: -831, y: -592, z: 154),
+        };
+
+        var objective = new AlteracValleyLoadoutPlan.ObjectiveTarget(30, -799, -552, 54);
+
+        var redispatchTarget = BgTestHelper.BuildIncrementalRedispatchTarget(snapshots, "A", objective);
+
+        Assert.Equal(30u, redispatchTarget.MapId);
+        Assert.Equal(154f, redispatchTarget.Z);
+        Assert.True(BgTestHelper.Distance2D(redispatchTarget.X, redispatchTarget.Y, -831, -592) <= 28.5f);
+        Assert.True(BgTestHelper.Distance2D(redispatchTarget.X, redispatchTarget.Y, objective.X, objective.Y) < 51f);
+    }
+
+    [Fact]
+    public void BuildIncrementalRedispatchTarget_ReturnsObjectiveWhenAlreadyNearTarget()
+    {
+        var snapshots = new List<WoWActivitySnapshot>
+        {
+            CreateSnapshot(accountName: "A", currentMapId: 30, nestedMapId: 30, x: 100, y: 100, z: 40),
+        };
+
+        var objective = new AlteracValleyLoadoutPlan.ObjectiveTarget(30, 108, 106, 40);
+
+        var redispatchTarget = BgTestHelper.BuildIncrementalRedispatchTarget(snapshots, "A", objective);
+
+        Assert.Equal(objective, redispatchTarget);
+    }
+
     private static WoWActivitySnapshot CreateSnapshot(
         string accountName = "BOT",
         uint currentMapId = 1,
         uint nestedMapId = 1,
         float x = 0,
         float y = 0,
+        float z = 0,
         ulong guid = 1,
         ulong partyLeaderGuid = 0,
         uint mountDisplayId = 0)
@@ -101,6 +135,7 @@ public class BgTestHelperTests
                             {
                                 X = x,
                                 Y = y,
+                                Z = z,
                             }
                         }
                     }

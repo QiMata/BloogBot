@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BotCommLayer;
 using Microsoft.Extensions.Logging.Abstractions;
 using SceneData;
 using WoWSharpClient.Movement;
@@ -170,5 +171,41 @@ public sealed class SceneDataClientIntegrationTests
         var result = client.EnsureSceneDataAround(389, 3f, -11f);
 
         Skip.IfNot(result, "SceneDataService not reachable or returned no data for RFC (map 389)");
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public void LiveService_Map0_48_32_TileExists()
+    {
+        using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
+            "127.0.0.1", 5003, NullLogger.Instance);
+
+        var response = client.SendMessage(new SceneTileRequest
+        {
+            MapId = 0,
+            TileX = 48,
+            TileY = 32,
+        });
+
+        Skip.IfNot(response.Success && response.TriangleCount > 0,
+            $"Tile 0_48_32 missing or empty (success={response.Success}, triangles={response.TriangleCount}, error={response.ErrorMessage})");
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public void LiveService_Map1_28_41_TileExists()
+    {
+        using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
+            "127.0.0.1", 5003, NullLogger.Instance);
+
+        var response = client.SendMessage(new SceneTileRequest
+        {
+            MapId = 1,
+            TileX = 28,
+            TileY = 41,
+        });
+
+        Skip.IfNot(response.Success && response.TriangleCount > 0,
+            $"Tile 1_28_41 missing or empty (success={response.Success}, triangles={response.TriangleCount}, error={response.ErrorMessage})");
     }
 }

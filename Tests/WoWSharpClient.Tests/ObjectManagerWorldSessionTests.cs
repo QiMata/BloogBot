@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -712,6 +713,188 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Theory]
+    [InlineData(Opcode.SMSG_FORCE_MOVE_ROOT, Opcode.CMSG_FORCE_MOVE_ROOT_ACK, true)]
+    [InlineData(Opcode.SMSG_FORCE_MOVE_UNROOT, Opcode.CMSG_FORCE_MOVE_UNROOT_ACK, false)]
+    public void CompressedForceMoveRootOpcodes_ParseApplyAndAck(
+        Opcode serverOpcode,
+        Opcode ackOpcode,
+        bool expectRooted)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x1020304050607081ul;
+        const uint movementCounter = 96u;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = (WoWLocalPlayer)objectManager.Player;
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 1.25f;
+        player.MovementFlags = expectRooted
+            ? MovementFlags.MOVEFLAG_FORWARD
+            : (MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ROOT);
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+
+        var payload = BuildCompressedMovePacket(
+            BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+
+        if (expectRooted)
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+
+        var sent = Assert.Single(sentPackets);
+        Assert.Equal(ackOpcode, sent.opcode);
+
+        using var ms = new MemoryStream(sent.payload);
+        using var reader = new BinaryReader(ms);
+        Assert.Equal(playerGuid, reader.ReadUInt64());
+        Assert.Equal(movementCounter, reader.ReadUInt32());
+        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
+
+        if (expectRooted)
+            Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        Assert.Equal(ms.Length, ms.Position);
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_MOVE_WATER_WALK, Opcode.CMSG_MOVE_WATER_WALK_ACK, MovementFlags.MOVEFLAG_WATERWALKING, true)]
+    [InlineData(Opcode.SMSG_MOVE_LAND_WALK, Opcode.CMSG_MOVE_WATER_WALK_ACK, MovementFlags.MOVEFLAG_WATERWALKING, false)]
+    [InlineData(Opcode.SMSG_MOVE_SET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, true)]
+    [InlineData(Opcode.SMSG_MOVE_UNSET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, false)]
+    [InlineData(Opcode.SMSG_MOVE_FEATHER_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
+    [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    public void CompressedServerControlledMovementFlagChanges_ParseApplyAndAck(
+        Opcode serverOpcode,
+        Opcode ackOpcode,
+        MovementFlags flag,
+        bool apply)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x1020304050607082ul;
+        const uint movementCounter = 97u;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = (WoWLocalPlayer)objectManager.Player;
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 1.25f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+
+        var payload = BuildCompressedMovePacket(
+            BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+
+        if (apply)
+            Assert.True(player.MovementFlags.HasFlag(flag));
+        else
+            Assert.False(player.MovementFlags.HasFlag(flag));
+
+        var sent = Assert.Single(sentPackets);
+        Assert.Equal(ackOpcode, sent.opcode);
+
+        using var ms = new MemoryStream(sent.payload);
+        using var reader = new BinaryReader(ms);
+
+        Assert.Equal(playerGuid, reader.ReadUInt64());
+        Assert.Equal(movementCounter, reader.ReadUInt32());
+
+        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
+        if (apply)
+            Assert.True(ackMovement.MovementFlags.HasFlag(flag));
+        else
+            Assert.False(ackMovement.MovementFlags.HasFlag(flag));
+        Assert.Equal(ms.Length, ms.Position);
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_FORCE_RUN_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK, 8.5f)]
+    [InlineData(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK, 4.25f)]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK, 5.5f)]
+    [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, 2.5f)]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, 1.25f)]
+    [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
+    public void CompressedForceSpeedChangeOpcodes_ParseApplyAndAck(
+        Opcode serverOpcode,
+        Opcode ackOpcode,
+        float newValue)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x1020304050607083ul;
+        const uint movementCounter = 98u;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = (WoWLocalPlayer)objectManager.Player;
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 1.25f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.WalkSpeed = 1.5f;
+        player.SwimBackSpeed = 0.75f;
+        player.TurnRate = 2.0f;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+
+        var payload = BuildCompressedMovePacket(
+            BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildCounterAndFloatPayload(movementCounter, newValue)));
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+
+        switch (serverOpcode)
+        {
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                Assert.Equal(newValue, player.RunSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.RunBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                Assert.Equal(newValue, player.SwimSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.WalkSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                Assert.Equal(newValue, player.SwimBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                Assert.Equal(newValue, player.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+
+        var sent = Assert.Single(sentPackets);
+        Assert.Equal(ackOpcode, sent.opcode);
+
+        using var ms = new MemoryStream(sent.payload);
+        using var reader = new BinaryReader(ms);
+        Assert.Equal(playerGuid, reader.ReadUInt64());
+        Assert.Equal(movementCounter, reader.ReadUInt32());
+        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
+        Assert.Equal(player.Position.X, ackMovement.X, 5);
+        Assert.Equal(player.Position.Y, ackMovement.Y, 5);
+        Assert.Equal(player.Position.Z, ackMovement.Z, 5);
+        Assert.Equal(player.Facing, ackMovement.Facing, 5);
+        Assert.Equal(player.MovementFlags, ackMovement.MovementFlags);
+        Assert.Equal(newValue, reader.ReadSingle(), 5);
+        Assert.Equal(ms.Length, ms.Position);
+    }
+
+    [Theory]
     [InlineData(Opcode.SMSG_SPLINE_SET_RUN_SPEED, 8.5f)]
     [InlineData(Opcode.SMSG_SPLINE_SET_RUN_BACK_SPEED, 4.25f)]
     [InlineData(Opcode.SMSG_SPLINE_SET_SWIM_SPEED, 5.5f)]
@@ -801,6 +984,108 @@ public class ObjectManagerWorldSessionTests
         var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
 
         MovementHandler.HandleUpdateMovement(serverOpcode, BuildPackedGuidPayload(remoteGuid), ctx);
+
+        if (apply)
+            Assert.True(unit.MovementFlags.HasFlag(flag));
+        else
+            Assert.False(unit.MovementFlags.HasFlag(flag));
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_SPLINE_SET_RUN_SPEED, 8.5f)]
+    [InlineData(Opcode.SMSG_SPLINE_SET_RUN_BACK_SPEED, 4.25f)]
+    [InlineData(Opcode.SMSG_SPLINE_SET_SWIM_SPEED, 5.5f)]
+    [InlineData(Opcode.SMSG_SPLINE_SET_WALK_SPEED, 2.0f)]
+    [InlineData(Opcode.SMSG_SPLINE_SET_SWIM_BACK_SPEED, 1.5f)]
+    [InlineData(Opcode.SMSG_SPLINE_SET_TURN_RATE, 3.2f)]
+    public void CompressedSplineSpeedOpcodes_UpdateRemoteUnitState(
+        Opcode serverOpcode,
+        float newValue)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x224;
+        const ulong remoteGuid = 0xF130000000001212ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+        var payload = BuildCompressedMovePacket(
+            BuildCompressedMoveEntry(serverOpcode, remoteGuid, BuildSingleFloatPayload(newValue)));
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+
+        switch (serverOpcode)
+        {
+            case Opcode.SMSG_SPLINE_SET_RUN_SPEED:
+                Assert.Equal(newValue, unit.RunSpeed, 5);
+                break;
+            case Opcode.SMSG_SPLINE_SET_RUN_BACK_SPEED:
+                Assert.Equal(newValue, unit.RunBackSpeed, 5);
+                break;
+            case Opcode.SMSG_SPLINE_SET_SWIM_SPEED:
+                Assert.Equal(newValue, unit.SwimSpeed, 5);
+                break;
+            case Opcode.SMSG_SPLINE_SET_WALK_SPEED:
+                Assert.Equal(newValue, unit.WalkSpeed, 5);
+                break;
+            case Opcode.SMSG_SPLINE_SET_SWIM_BACK_SPEED:
+                Assert.Equal(newValue, unit.SwimBackSpeed, 5);
+                break;
+            case Opcode.SMSG_SPLINE_SET_TURN_RATE:
+                Assert.Equal(newValue, unit.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE, MovementFlags.MOVEFLAG_WALK_MODE, false)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE, MovementFlags.MOVEFLAG_WALK_MODE, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_ROOT, MovementFlags.MOVEFLAG_ROOT, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_UNROOT, MovementFlags.MOVEFLAG_ROOT, false)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_WATER_WALK, MovementFlags.MOVEFLAG_WATERWALKING, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_LAND_WALK, MovementFlags.MOVEFLAG_WATERWALKING, false)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_FEATHER_FALL, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_NORMAL_FALL, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_SET_HOVER, MovementFlags.MOVEFLAG_HOVER, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_UNSET_HOVER, MovementFlags.MOVEFLAG_HOVER, false)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_START_SWIM, MovementFlags.MOVEFLAG_SWIMMING, true)]
+    [InlineData(Opcode.SMSG_SPLINE_MOVE_STOP_SWIM, MovementFlags.MOVEFLAG_SWIMMING, false)]
+    public void CompressedSplineFlagOpcodes_UpdateRemoteUnitState(
+        Opcode serverOpcode,
+        MovementFlags flag,
+        bool apply)
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x225;
+        const ulong remoteGuid = 0xF130000000001213ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            remoteGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Add,
+            WoWObjectType.Unit,
+            null,
+            new Dictionary<uint, object?>()));
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
+        unit.MovementFlags = apply ? MovementFlags.MOVEFLAG_FORWARD : (MovementFlags.MOVEFLAG_FORWARD | flag);
+
+        var payload = BuildCompressedMovePacket(
+            BuildCompressedMoveEntry(serverOpcode, remoteGuid));
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
 
         if (apply)
             Assert.True(unit.MovementFlags.HasFlag(flag));
@@ -1233,6 +1518,68 @@ public class ObjectManagerWorldSessionTests
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         ReaderUtils.WritePackedGuid(writer, guid);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildCompressedMovePacket(params byte[][] entries)
+    {
+        var decompressedPayload = entries.SelectMany(entry => entry).ToArray();
+        var compressedPayload = PacketManager.Compress(decompressedPayload);
+
+        using var packetStream = new MemoryStream();
+        using var packetWriter = new BinaryWriter(packetStream);
+        packetWriter.Write((uint)decompressedPayload.Length);
+        packetWriter.Write(compressedPayload);
+        packetWriter.Flush();
+
+        return packetStream.ToArray();
+    }
+
+    private static byte[] BuildCompressedMoveEntry(Opcode opcode, ulong guid, byte[]? payload = null)
+    {
+        using var bodyStream = new MemoryStream();
+        using (var bodyWriter = new BinaryWriter(bodyStream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            bodyWriter.Write((ushort)opcode);
+            ReaderUtils.WritePackedGuid(bodyWriter, guid);
+            if (payload is { Length: > 0 })
+                bodyWriter.Write(payload);
+            bodyWriter.Flush();
+        }
+
+        var body = bodyStream.ToArray();
+        Assert.InRange(body.Length, 0, byte.MaxValue);
+
+        using var entryStream = new MemoryStream();
+        using var entryWriter = new BinaryWriter(entryStream);
+        entryWriter.Write((byte)body.Length);
+        entryWriter.Write(body);
+        entryWriter.Flush();
+        return entryStream.ToArray();
+    }
+
+    private static byte[] BuildSingleFloatPayload(float value)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        writer.Write(value);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildSingleUIntPayload(uint value)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        writer.Write(value);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildCounterAndFloatPayload(uint counter, float value)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        writer.Write(counter);
+        writer.Write(value);
         return ms.ToArray();
     }
 

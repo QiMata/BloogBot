@@ -7,6 +7,7 @@ using Communication;
 using Game;
 using Google.Protobuf;
 using WoWStateManager.Listeners;
+using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -466,6 +467,74 @@ public class ActionForwardingContractTests
         Assert.True(enableResult);
     }
 
+    [Fact]
+    public void HandleRequest_PrioritizesJoinBattleground_OverPendingAction()
+    {
+        var previousMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE");
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
+            var listener = CreateListener("TESTBOT1", "AVBOTA1");
+
+            var coordinator = new BattlegroundCoordinator(
+                leaderAccount: "TESTBOT1",
+                allAccounts: ["TESTBOT1", "AVBOTA1"],
+                bgTypeId: 1,
+                bgMapId: 30,
+                logger: NullLoggerFactory.Instance.CreateLogger<BattlegroundCoordinator>(),
+                stagingTargets: new Dictionary<string, BattlegroundCoordinator.StagingTarget>());
+
+            SetPrivateField(coordinator, "_state", BattlegroundCoordinator.CoordState.QueueForBattleground);
+            SetPrivateField(listener, "_battlegroundCoordinator", coordinator);
+
+            Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+
+            var request = BuildReadySnapshot("TESTBOT1");
+            var response = InvokeHandleRequest(listener, request);
+
+            Assert.NotNull(response.CurrentAction);
+            Assert.Equal(ActionType.JoinBattleground, response.CurrentAction.ActionType);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", previousMode);
+        }
+    }
+
+    [Fact]
+    public void HandleRequest_DeliversPendingAction_WhenCoordinatorHasNoPriorityAction()
+    {
+        var previousMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE");
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
+            var listener = CreateListener("TESTBOT1", "AVBOTA1");
+
+            var coordinator = new BattlegroundCoordinator(
+                leaderAccount: "TESTBOT1",
+                allAccounts: ["TESTBOT1", "AVBOTA1"],
+                bgTypeId: 1,
+                bgMapId: 30,
+                logger: NullLoggerFactory.Instance.CreateLogger<BattlegroundCoordinator>(),
+                stagingTargets: new Dictionary<string, BattlegroundCoordinator.StagingTarget>());
+
+            SetPrivateField(coordinator, "_state", BattlegroundCoordinator.CoordState.InBattleground);
+            SetPrivateField(listener, "_battlegroundCoordinator", coordinator);
+
+            Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+
+            var request = BuildReadySnapshot("TESTBOT1");
+            var response = InvokeHandleRequest(listener, request);
+
+            Assert.NotNull(response.CurrentAction);
+            Assert.Equal(ActionType.SendChat, response.CurrentAction.ActionType);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", previousMode);
+        }
+    }
+
     // ===== ActionType coverage =====
 
     [Theory]
@@ -515,5 +584,37 @@ public class ActionForwardingContractTests
             {
             }
         }
+    }
+
+    private static WoWActivitySnapshot BuildReadySnapshot(string accountName)
+    {
+        return new WoWActivitySnapshot
+        {
+            AccountName = accountName,
+            CharacterName = accountName,
+            ScreenState = "InWorld",
+            IsObjectManagerValid = true,
+            CurrentMapId = 0,
+            Player = new WoWPlayer
+            {
+                Unit = new WoWUnit
+                {
+                    Health = 100,
+                    MaxHealth = 100,
+                    GameObject = new WoWGameObject
+                    {
+                        Level = 60,
+                        Base = new WoWObject { MapId = 0 }
+                    }
+                }
+            }
+        };
+    }
+
+    private static void SetPrivateField(object instance, string fieldName, object? value)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingFieldException(instance.GetType().FullName, fieldName);
+        field.SetValue(instance, value);
     }
 }

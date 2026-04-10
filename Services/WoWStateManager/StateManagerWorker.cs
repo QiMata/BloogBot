@@ -251,6 +251,17 @@ namespace WoWStateManager
             return pending;
         }
 
+        internal static IReadOnlyList<Settings.CharacterSettings> OrderLaunchSettings(
+            IEnumerable<Settings.CharacterSettings> configuredSettings)
+        {
+            return configuredSettings
+                .Select((settings, index) => new { settings, index })
+                .OrderBy(entry => entry.settings.RunnerType == Settings.BotRunnerType.Foreground ? 0 : 1)
+                .ThenBy(entry => entry.index)
+                .Select(entry => entry.settings)
+                .ToArray();
+        }
+
         private async Task WaitForLaunchThrottleAsync(
             IReadOnlyList<Settings.CharacterSettings> configuredSettings,
             string nextAccountName,
@@ -308,9 +319,11 @@ namespace WoWStateManager
                 deduplicatedSettings.Add(cs);
             }
 
-            for (int i = 0; i < deduplicatedSettings.Count; i++)
+            var orderedLaunchSettings = OrderLaunchSettings(deduplicatedSettings);
+
+            for (int i = 0; i < orderedLaunchSettings.Count; i++)
             {
-                var characterSettings = deduplicatedSettings[i];
+                var characterSettings = orderedLaunchSettings[i];
                 var accountName = characterSettings.AccountName;
 
                 // Skip if not configured to run
@@ -327,7 +340,7 @@ namespace WoWStateManager
                     continue;
                 }
 
-                await WaitForLaunchThrottleAsync(deduplicatedSettings, accountName, stoppingToken);
+                await WaitForLaunchThrottleAsync(orderedLaunchSettings, accountName, stoppingToken);
 
                 _logger.LogInformation($"Setting up new bot for account: {accountName} (RunnerType: {characterSettings.RunnerType})");
 

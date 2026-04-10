@@ -193,6 +193,95 @@ public class GatheringRouteTaskTests
         Assert.Equal(1, combatFactoryCalls);
     }
 
+    [Fact]
+    public void AdvanceToNextCandidate_TimeoutReason_ResequencesRemainingRouteFromCurrentPosition()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(105f, 0f, 0f));
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GameObjects).Returns([]);
+
+        var task = new GatheringRouteTask(
+            ctx.Object,
+            [new Position(100f, 0f, 0f), new Position(1000f, 0f, 0f), new Position(110f, 0f, 0f)],
+            [1731u],
+            2575);
+        stack.Push(task);
+
+        // Seed an in-progress route where the next sequential candidate is far but a closer
+        // candidate still exists in the remaining list.
+        var orderedRouteField = typeof(GatheringRouteTask).GetField("_orderedRoute", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._orderedRoute field not found.");
+        var route = (List<Position>)orderedRouteField.GetValue(task)!;
+        route.Clear();
+        route.AddRange(
+        [
+            new Position(100f, 0f, 0f),
+            new Position(1000f, 0f, 0f),
+            new Position(110f, 0f, 0f)
+        ]);
+
+        var routeIndexField = typeof(GatheringRouteTask).GetField("_routeIndex", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._routeIndex field not found.");
+        routeIndexField.SetValue(task, 1);
+
+        var advanceMethod = typeof(GatheringRouteTask).GetMethod("AdvanceToNextCandidate", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask.AdvanceToNextCandidate method not found.");
+        advanceMethod.Invoke(task, ["candidate_timeout"]);
+
+        var currentCandidateField = typeof(GatheringRouteTask).GetField("_currentCandidate", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._currentCandidate field not found.");
+        var selected = (Position?)currentCandidateField.GetValue(task);
+
+        Assert.NotNull(selected);
+        Assert.Equal(110f, selected!.X);
+        Assert.Equal(0f, selected.Y);
+    }
+
+    [Fact]
+    public void AdvanceToNextCandidate_UnknownReason_DoesNotResequenceRemainingRoute()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(105f, 0f, 0f));
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GameObjects).Returns([]);
+
+        var task = new GatheringRouteTask(
+            ctx.Object,
+            [new Position(100f, 0f, 0f), new Position(1000f, 0f, 0f), new Position(110f, 0f, 0f)],
+            [1731u],
+            2575);
+        stack.Push(task);
+
+        // Seed an in-progress route where resequencing would choose 110 next.
+        var orderedRouteField = typeof(GatheringRouteTask).GetField("_orderedRoute", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._orderedRoute field not found.");
+        var route = (List<Position>)orderedRouteField.GetValue(task)!;
+        route.Clear();
+        route.AddRange(
+        [
+            new Position(100f, 0f, 0f),
+            new Position(1000f, 0f, 0f),
+            new Position(110f, 0f, 0f)
+        ]);
+
+        var routeIndexField = typeof(GatheringRouteTask).GetField("_routeIndex", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._routeIndex field not found.");
+        routeIndexField.SetValue(task, 1);
+
+        var advanceMethod = typeof(GatheringRouteTask).GetMethod("AdvanceToNextCandidate", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask.AdvanceToNextCandidate method not found.");
+        advanceMethod.Invoke(task, ["unknown_reason"]);
+
+        var currentCandidateField = typeof(GatheringRouteTask).GetField("_currentCandidate", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("GatheringRouteTask._currentCandidate field not found.");
+        var selected = (Position?)currentCandidateField.GetValue(task);
+
+        Assert.NotNull(selected);
+        Assert.Equal(1000f, selected!.X);
+        Assert.Equal(0f, selected.Y);
+    }
+
     private static void RewindStateTimer(GatheringRouteTask task, TimeSpan elapsed)
     {
         var field = typeof(GatheringRouteTask).GetField(

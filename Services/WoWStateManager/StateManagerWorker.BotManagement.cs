@@ -635,7 +635,7 @@ namespace WoWStateManager
             // Uses WaitForSingleObject + EnumWindows instead of Process.GetProcessById
             // to avoid "Access denied" when the test host isn't running elevated.
             {
-                var windowPollTimeoutSeconds = 45;
+                var windowPollTimeoutSeconds = 90;
                 var configuredWindowTimeout =
                     Environment.GetEnvironmentVariable("WWOW_FOREGROUND_WINDOW_TIMEOUT_SECONDS")
                     ?? _configuration["Injection:WindowTimeoutSeconds"];
@@ -645,9 +645,22 @@ namespace WoWStateManager
                     windowPollTimeoutSeconds = parsedWindowTimeoutSeconds;
                 }
 
+                var hiddenWindowGraceSeconds = 15;
+                var configuredHiddenWindowGrace =
+                    Environment.GetEnvironmentVariable("WWOW_FOREGROUND_HIDDEN_WINDOW_GRACE_SECONDS")
+                    ?? _configuration["Injection:HiddenWindowGraceSeconds"];
+                if (int.TryParse(configuredHiddenWindowGrace, out var parsedHiddenWindowGraceSeconds)
+                    && parsedHiddenWindowGraceSeconds > 0)
+                {
+                    hiddenWindowGraceSeconds = parsedHiddenWindowGraceSeconds;
+                }
+
                 var windowPollTimeout = TimeSpan.FromSeconds(windowPollTimeoutSeconds);
+                var hiddenWindowGrace = TimeSpan.FromSeconds(hiddenWindowGraceSeconds);
                 var windowPollSw = Stopwatch.StartNew();
                 bool windowReady = false;
+                bool sawTopLevelWindow = false;
+                bool sawVisibleWindow = false;
 
                 while (windowPollSw.Elapsed < windowPollTimeout)
                 {
@@ -661,24 +674,44 @@ namespace WoWStateManager
                         return;
                     }
 
-                    // Check for a visible window belonging to this process ID
-                    bool foundWindow = false;
+                    bool foundAnyWindow = false;
+                    bool foundVisibleWindow = false;
                     EnumWindows((hWnd, lParam) =>
                     {
                         GetWindowThreadProcessId(hWnd, out uint windowPid);
-                        if (windowPid == processId && IsWindowVisible(hWnd))
+                        if (windowPid != processId)
+                            return true;
+
+                        foundAnyWindow = true;
+                        if (IsWindowVisible(hWnd))
                         {
-                            foundWindow = true;
+                            foundVisibleWindow = true;
                             return false; // stop enumerating
                         }
-                        return true; // continue
+
+                        return true; // continue scanning for visible windows owned by this PID
                     }, IntPtr.Zero);
 
-                    if (foundWindow)
+                    if (foundAnyWindow)
                     {
-                        windowReady = true;
-                        _logger.LogWarning($"WoW window detected for PID {processId} after {windowPollSw.Elapsed.TotalSeconds:F1}s");
-                        break;
+                        sawTopLevelWindow = true;
+                        if (foundVisibleWindow)
+                        {
+                            sawVisibleWindow = true;
+                            windowReady = true;
+                            _logger.LogWarning($"WoW visible window detected for PID {processId} after {windowPollSw.Elapsed.TotalSeconds:F1}s");
+                            break;
+                        }
+
+                        if (windowPollSw.Elapsed >= hiddenWindowGrace)
+                        {
+                            windowReady = true;
+                            _logger.LogWarning(
+                                "WoW window handle detected for PID {ProcessId} after {Elapsed:F1}s but it is not visible yet; proceeding with injection.",
+                                processId,
+                                windowPollSw.Elapsed.TotalSeconds);
+                            break;
+                        }
                     }
 
                     Thread.Sleep(250);
@@ -686,10 +719,22 @@ namespace WoWStateManager
 
                 if (!windowReady)
                 {
-                    _logger.LogError($"WoW window did not appear within {windowPollTimeout.TotalSeconds}s for PID {processId}. Aborting injection for {accountName}.");
-                    RemoveManagedService(accountName, tokenSource);
-                    CloseHandleSafe(processHandle);
-                    return;
+                    var processWait = WaitForSingleObject(processHandle, 0);
+                    if (processWait == WAIT_OBJECT_0)
+                    {
+                        _logger.LogError($"WoW process (PID {processId}) exited during window readiness wait. Aborting injection for {accountName}.");
+                        RemoveManagedService(accountName, tokenSource);
+                        CloseHandleSafe(processHandle);
+                        return;
+                    }
+
+                    _logger.LogWarning(
+                        "WoW window did not become ready within {Timeout}s for PID {ProcessId} (topLevelSeen={TopLevelSeen}, visibleSeen={VisibleSeen}). Proceeding with best-effort injection.",
+                        windowPollTimeout.TotalSeconds,
+                        processId,
+                        sawTopLevelWindow,
+                        sawVisibleWindow);
+                    Thread.Sleep(1000);
                 }
             }
 

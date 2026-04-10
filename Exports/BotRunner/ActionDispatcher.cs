@@ -1,7 +1,3 @@
-using BotRunner.Combat;
-using BotRunner.Helpers;
-using BotRunner.Interfaces;
-using BotRunner.SequenceBuilders;
 using Communication;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -11,218 +7,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using WoWSharpClient.Networking.ClientComponents.I;
 using Xas.FluentBehaviourTree;
 
 namespace BotRunner
 {
-    /// <summary>
-    /// Maps CharacterAction enums to behavior tree sequences via the sequence builders.
-    /// Extracted from BotRunnerService.ActionDispatch.cs + ActionMapping.cs partials.
-    /// </summary>
-    internal sealed class ActionDispatcher
+    public partial class BotRunnerService
     {
-        private readonly IObjectManager _objectManager;
-        private readonly IDependencyContainer _container;
-        private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
-        private readonly Constants.BotBehaviorConfig _behaviorConfig;
-        private readonly CombatSequenceBuilder _combat;
-        private readonly MovementSequenceBuilder _movement;
-        private readonly InteractionSequenceBuilder _interaction;
-
-        // Delegate for pushing bot tasks and accessing shared state
-        private readonly Func<Stack<IBotTask>> _botTasksAccessor;
-        private readonly Action<string> _enqueueDiagnosticMessage;
-        private readonly Action<string> _diagLog;
-
-        // Death state checks passed in from BotRunnerService
-        private readonly Func<IWoWLocalPlayer, bool> _isDeadOrGhostState;
-        private readonly Func<IWoWLocalPlayer, bool> _isGhostState;
-        private readonly Func<IWoWLocalPlayer, bool> _isCorpseState;
-
-        // Shared state from BotRunnerService
-        private readonly Func<DateTime> _getLastReleaseSpiritCommandUtc;
-        private readonly Action<DateTime> _setLastReleaseSpiritCommandUtc;
-        private readonly Func<Position?> _getLastKnownAlivePosition;
-
-        internal ActionDispatcher(
-            IObjectManager objectManager,
-            IDependencyContainer container,
-            Func<IAgentFactory?>? agentFactoryAccessor,
-            Constants.BotBehaviorConfig behaviorConfig,
-            CombatSequenceBuilder combat,
-            MovementSequenceBuilder movement,
-            InteractionSequenceBuilder interaction,
-            Func<Stack<IBotTask>> botTasksAccessor,
-            Action<string> enqueueDiagnosticMessage,
-            Action<string> diagLog,
-            Func<IWoWLocalPlayer, bool> isDeadOrGhostState,
-            Func<IWoWLocalPlayer, bool> isGhostState,
-            Func<IWoWLocalPlayer, bool> isCorpseState,
-            Func<DateTime> getLastReleaseSpiritCommandUtc,
-            Action<DateTime> setLastReleaseSpiritCommandUtc,
-            Func<Position?> getLastKnownAlivePosition)
-        {
-            _objectManager = objectManager;
-            _container = container;
-            _agentFactoryAccessor = agentFactoryAccessor;
-            _behaviorConfig = behaviorConfig;
-            _combat = combat;
-            _movement = movement;
-            _interaction = interaction;
-            _botTasksAccessor = botTasksAccessor;
-            _enqueueDiagnosticMessage = enqueueDiagnosticMessage;
-            _diagLog = diagLog;
-            _isDeadOrGhostState = isDeadOrGhostState;
-            _isGhostState = isGhostState;
-            _isCorpseState = isCorpseState;
-            _getLastReleaseSpiritCommandUtc = getLastReleaseSpiritCommandUtc;
-            _setLastReleaseSpiritCommandUtc = setLastReleaseSpiritCommandUtc;
-            _getLastKnownAlivePosition = getLastKnownAlivePosition;
-        }
-
-        // =====================================================================
-        // Action mapping (from BotRunnerService.ActionMapping.cs)
-        // =====================================================================
-
-        /// <summary>
-        /// Maps Communication.ActionType (proto) to CharacterAction (C# enum).
-        /// These enums are NOT identical -- proto is missing AbandonQuest and has
-        /// StartMeleeAttack/StartRangedAttack/StartWandAttack that C# doesn't.
-        /// A direct (CharacterAction)(int) cast gives wrong values for most actions.
-        /// </summary>
-        internal static CharacterAction? MapProtoActionType(Communication.ActionType actionType) => actionType switch
-        {
-            Communication.ActionType.Wait => CharacterAction.Wait,
-            Communication.ActionType.Goto => CharacterAction.GoTo,
-            Communication.ActionType.InteractWith => CharacterAction.InteractWith,
-            Communication.ActionType.SelectGossip => CharacterAction.SelectGossip,
-            Communication.ActionType.SelectTaxiNode => CharacterAction.SelectTaxiNode,
-            Communication.ActionType.AcceptQuest => CharacterAction.AcceptQuest,
-            Communication.ActionType.DeclineQuest => CharacterAction.DeclineQuest,
-            Communication.ActionType.SelectReward => CharacterAction.SelectReward,
-            Communication.ActionType.CompleteQuest => CharacterAction.CompleteQuest,
-            Communication.ActionType.TrainSkill => CharacterAction.TrainSkill,
-            Communication.ActionType.TrainTalent => CharacterAction.TrainTalent,
-            Communication.ActionType.OfferTrade => CharacterAction.OfferTrade,
-            Communication.ActionType.OfferGold => CharacterAction.OfferGold,
-            Communication.ActionType.OfferItem => CharacterAction.OfferItem,
-            Communication.ActionType.AcceptTrade => CharacterAction.AcceptTrade,
-            Communication.ActionType.DeclineTrade => CharacterAction.DeclineTrade,
-            Communication.ActionType.EnchantTrade => CharacterAction.EnchantTrade,
-            Communication.ActionType.LockpickTrade => CharacterAction.LockpickTrade,
-            Communication.ActionType.PromoteLeader => CharacterAction.PromoteLeader,
-            Communication.ActionType.PromoteAssistant => CharacterAction.PromoteAssistant,
-            Communication.ActionType.PromoteLootManager => CharacterAction.PromoteLootManager,
-            Communication.ActionType.SetGroupLoot => CharacterAction.SetGroupLoot,
-            Communication.ActionType.AssignLoot => CharacterAction.AssignLoot,
-            Communication.ActionType.LootRollNeed => CharacterAction.LootRollNeed,
-            Communication.ActionType.LootRollGreed => CharacterAction.LootRollGreed,
-            Communication.ActionType.LootPass => CharacterAction.LootPass,
-            Communication.ActionType.SendGroupInvite => CharacterAction.SendGroupInvite,
-            Communication.ActionType.AcceptGroupInvite => CharacterAction.AcceptGroupInvite,
-            Communication.ActionType.DeclineGroupInvite => CharacterAction.DeclineGroupInvite,
-            Communication.ActionType.KickPlayer => CharacterAction.KickPlayer,
-            Communication.ActionType.LeaveGroup => CharacterAction.LeaveGroup,
-            Communication.ActionType.DisbandGroup => CharacterAction.DisbandGroup,
-            Communication.ActionType.StartMeleeAttack => CharacterAction.StartMeleeAttack,
-            Communication.ActionType.StartRangedAttack => CharacterAction.StartRangedAttack,
-            Communication.ActionType.StartWandAttack => CharacterAction.StartWandAttack,
-            Communication.ActionType.StopAttack => CharacterAction.StopAttack,
-            Communication.ActionType.CastSpell => CharacterAction.CastSpell,
-            Communication.ActionType.StopCast => CharacterAction.StopCast,
-            Communication.ActionType.UseItem => CharacterAction.UseItem,
-            Communication.ActionType.EquipItem => CharacterAction.EquipItem,
-            Communication.ActionType.UnequipItem => CharacterAction.UnequipItem,
-            Communication.ActionType.DestroyItem => CharacterAction.DestroyItem,
-            Communication.ActionType.MoveItem => CharacterAction.MoveItem,
-            Communication.ActionType.SplitStack => CharacterAction.SplitStack,
-            Communication.ActionType.BuyItem => CharacterAction.BuyItem,
-            Communication.ActionType.BuybackItem => CharacterAction.BuybackItem,
-            Communication.ActionType.SellItem => CharacterAction.SellItem,
-            Communication.ActionType.RepairItem => CharacterAction.RepairItem,
-            Communication.ActionType.RepairAllItems => CharacterAction.RepairAllItems,
-            Communication.ActionType.DismissBuff => CharacterAction.DismissBuff,
-            Communication.ActionType.Resurrect => CharacterAction.Resurrect,
-            Communication.ActionType.Craft => CharacterAction.Craft,
-            Communication.ActionType.Login => CharacterAction.Login,
-            Communication.ActionType.Logout => CharacterAction.Logout,
-            Communication.ActionType.CreateCharacter => CharacterAction.CreateCharacter,
-            Communication.ActionType.DeleteCharacter => CharacterAction.DeleteCharacter,
-            Communication.ActionType.EnterWorld => CharacterAction.EnterWorld,
-            Communication.ActionType.LootCorpse => CharacterAction.LootCorpse,
-            Communication.ActionType.ReleaseCorpse => CharacterAction.ReleaseCorpse,
-            Communication.ActionType.RetrieveCorpse => CharacterAction.RetrieveCorpse,
-            Communication.ActionType.SkinCorpse => CharacterAction.SkinCorpse,
-            Communication.ActionType.GatherNode => CharacterAction.GatherNode,
-            Communication.ActionType.SendChat => CharacterAction.SendChat,
-            Communication.ActionType.SetFacing => CharacterAction.SetFacing,
-            Communication.ActionType.VisitVendor => CharacterAction.VisitVendor,
-            Communication.ActionType.VisitTrainer => CharacterAction.VisitTrainer,
-            Communication.ActionType.VisitFlightMaster => CharacterAction.VisitFlightMaster,
-            Communication.ActionType.StartFishing => CharacterAction.StartFishing,
-            Communication.ActionType.StartGatheringRoute => CharacterAction.StartGatheringRoute,
-            Communication.ActionType.CheckMail => CharacterAction.CheckMail,
-            Communication.ActionType.StartDungeoneering => CharacterAction.StartDungeoneering,
-            Communication.ActionType.ConvertToRaid => CharacterAction.ConvertToRaid,
-            Communication.ActionType.ChangeRaidSubgroup => CharacterAction.ChangeRaidSubgroup,
-            Communication.ActionType.FollowTarget => CharacterAction.FollowTarget,
-            Communication.ActionType.JoinBattleground => CharacterAction.JoinBattleground,
-            Communication.ActionType.AcceptBattleground => CharacterAction.AcceptBattleground,
-            Communication.ActionType.LeaveBattleground => CharacterAction.LeaveBattleground,
-            Communication.ActionType.TravelTo => CharacterAction.TravelTo,
-            _ => null,
-        };
-
-        internal static List<(CharacterAction, List<object>)> ConvertActionMessageToCharacterActions(Communication.ActionMessage action)
-        {
-            var result = new List<(CharacterAction, List<object>)>();
-
-            var charAction = MapProtoActionType(action.ActionType);
-            if (charAction == null)
-            {
-                Log.Warning($"[BOT RUNNER] Unknown ActionType {action.ActionType} ({(int)action.ActionType}), cannot map to CharacterAction");
-                return result;
-            }
-
-            var parameters = new List<object>();
-
-            foreach (var param in action.Parameters)
-            {
-                switch (param.ParameterCase)
-                {
-                    case Communication.RequestParameter.ParameterOneofCase.FloatParam:
-                        parameters.Add(param.FloatParam);
-                        break;
-                    case Communication.RequestParameter.ParameterOneofCase.IntParam:
-                        parameters.Add(param.IntParam);
-                        break;
-                    case Communication.RequestParameter.ParameterOneofCase.LongParam:
-                        parameters.Add(param.LongParam);
-                        break;
-                    case Communication.RequestParameter.ParameterOneofCase.StringParam:
-                        parameters.Add(param.StringParam);
-                        break;
-                }
-            }
-
-            result.Add((charAction.Value, parameters));
-            return result;
-        }
-
-        /// <summary>
-        /// Safely unboxes a numeric value to ulong. Handles boxed long, ulong, int, uint.
-        /// Needed because protobuf int64 fields are boxed as long, and C# cannot unbox long to ulong directly.
-        /// </summary>
-        internal static ulong UnboxGuid(object value) => value switch
-        {
-            long l => unchecked((ulong)l),
-            ulong u => u,
-            int i => unchecked((ulong)i),
-            uint u => u,
-            _ => throw new InvalidCastException($"Cannot convert {value?.GetType()} to GUID (ulong)")
-        };
-
         internal static IReadOnlyList<string> SendChatThroughBestAvailablePath(IObjectManager objectManager, string chatMsg)
         {
             ArgumentNullException.ThrowIfNull(objectManager);
@@ -248,33 +38,37 @@ namespace BotRunner
                 : 2000;
         }
 
-        // =====================================================================
-        // Action dispatch (from BotRunnerService.ActionDispatch.cs)
-        // =====================================================================
-
-        internal IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
+        private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-            var botTasks = _botTasksAccessor();
-            var context = new BotRunnerContext(_objectManager, botTasks, _container, _behaviorConfig, _enqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 
+            // Iterate over the action map and build sequences for each action with its parameters
             foreach (var actionEntry in actionMap)
             {
                 switch (actionEntry.Item1)
                 {
                     case CharacterAction.Wait:
-                        builder.Splice(MovementSequenceBuilder.BuildWaitSequence((float)actionEntry.Item2[0]));
+                        builder.Splice(BuildWaitSequence((float)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.GoTo:
                     {
+                        // Upsert a persistent GoToTask instead of pushing a new one every
+                        // poll cycle. Repeated Goto dispatches can otherwise reset the task's
+                        // cached NavigationPath and stall long routes.
                         var gotoX = (float)actionEntry.Item2[0];
                         var gotoY = (float)actionEntry.Item2[1];
                         var gotoZ = (float)actionEntry.Item2[2];
                         var gotoTolerance = (float)actionEntry.Item2[3];
-                        builder.Do("Push GoTo Task", time =>
+                        builder.Do("Upsert GoTo Task", time =>
                         {
-                            botTasks.Push(new Tasks.GoToTask(context, gotoX, gotoY, gotoZ, gotoTolerance));
+                            var result = UpsertGoToTask(_botTasks, context, gotoX, gotoY, gotoZ, gotoTolerance);
+                            if (result != GoToTaskUpsertResult.Duplicate)
+                            {
+                                Log.Information("[BOT RUNNER] GoTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance={Tolerance:F1}",
+                                    result, gotoX, gotoY, gotoZ, gotoTolerance);
+                            }
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -282,10 +76,11 @@ namespace BotRunner
                     case CharacterAction.InteractWith:
                     {
                         var interactGuid = UnboxGuid(actionEntry.Item2[0]);
+                        // Try GameObjects first; fall back to NPC interaction via AgentFactory
                         var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
                         if (isGameObject)
                         {
-                            builder.Splice(_movement.BuildInteractWithSequence(interactGuid, _combat.CheckForTarget(interactGuid)));
+                            builder.Splice(BuildInteractWithSequence(interactGuid));
                         }
                         else
                         {
@@ -300,6 +95,8 @@ namespace BotRunner
                     }
 
                     case CharacterAction.SelectGossip:
+                        // With npcGuid + optionIndex: packet-based via GossipAgent (BG compatible)
+                        // Without: legacy GossipFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var gossipNpcGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -319,11 +116,13 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildSelectGossipSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
                     case CharacterAction.SelectTaxiNode:
+                        // With flightMasterGuid + sourceNodeId + destinationNodeId: packet-based (BG compatible)
+                        // Without: legacy TaxiFrame path (FG only)
                         if (actionEntry.Item2.Count >= 3)
                         {
                             var taxiFmGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -344,20 +143,23 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
                     case CharacterAction.VisitFlightMaster:
                         builder.Do("Queue Flight Master Visit Task", time =>
                         {
-                            if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.FlightMasterVisitTask)
-                                botTasks.Push(new Tasks.FlightMasterVisitTask(context));
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG taxi discovery coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FlightMasterVisitTask)
+                                _botTasks.Push(new Tasks.FlightMasterVisitTask(context));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
 
                     case CharacterAction.AcceptQuest:
+                        // With params: [0]=npcGuid, [1]=questId — packet-based via AgentFactory
+                        // Without params: legacy QuestFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var questNpcGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -371,13 +173,14 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.AcceptQuestSequence);
+                            builder.Splice(AcceptQuestSequence);
                         }
                         break;
                     case CharacterAction.DeclineQuest:
-                        builder.Splice(_interaction.DeclineQuestSequence);
+                        builder.Splice(DeclineQuestSequence);
                         break;
                     case CharacterAction.AbandonQuest:
+                        // Params: [0]=questLogSlot (byte index in quest log)
                         if (actionEntry.Item2.Count >= 1)
                         {
                             var questSlot = (byte)(int)actionEntry.Item2[0];
@@ -394,9 +197,11 @@ namespace BotRunner
                         }
                         break;
                     case CharacterAction.SelectReward:
-                        builder.Splice(_interaction.BuildSelectRewardSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.CompleteQuest:
+                        // With params: [0]=npcGuid, [1]=questId, optional [2]=rewardIndex
+                        // Without params: legacy QuestFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var turnInNpcGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -411,11 +216,13 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.CompleteQuestSequence);
+                            builder.Splice(CompleteQuestSequence);
                         }
                         break;
 
                     case CharacterAction.TrainSkill:
+                        // With trainerGuid + spellId: packet-based via TrainerAgent (BG compatible)
+                        // Without: legacy TrainerFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var trainSkillGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -435,10 +242,14 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildTrainSkillSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildTrainSkillSequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.TrainTalent:
+                        // With talentId as sole param AND agentFactory available: packet-based (BG compatible)
+                        // The frame path takes a talentSpellId; the packet path takes a talentId.
+                        // When 2+ params: [0]=talentId — use packet path via TalentAgent
+                        // When 1 param: legacy TalentFrame path (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var talentId = (uint)(int)actionEntry.Item2[0];
@@ -457,20 +268,22 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
                     case CharacterAction.VisitTrainer:
                         builder.Do("Queue Trainer Visit Task", time =>
                         {
-                            if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.TrainerVisitTask)
-                                botTasks.Push(new Tasks.TrainerVisitTask(context));
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG trainer coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.TrainerVisitTask)
+                                _botTasks.Push(new Tasks.TrainerVisitTask(context));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
 
                     case CharacterAction.OfferTrade:
+                        // Always packet-based: CMSG_INITIATE_TRADE
                         builder.Do("Initiate Trade (packet)", time =>
                         {
                             _objectManager.InitiateTradeAsync(UnboxGuid(actionEntry.Item2[0]), CancellationToken.None)
@@ -479,6 +292,7 @@ namespace BotRunner
                         });
                         break;
                     case CharacterAction.OfferGold:
+                        // BG: CMSG_SET_TRADE_GOLD, FG: TradeFrame
                         if (_objectManager.TradeFrame == null)
                         {
                             var goldCopper = (uint)(int)actionEntry.Item2[0];
@@ -491,10 +305,11 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildOfferMoneySequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildOfferMoneySequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.OfferItem:
+                        // BG: CMSG_SET_TRADE_ITEM, FG: TradeFrame
                         if (_objectManager.TradeFrame == null)
                         {
                             var tradeSlot = (byte)(int)actionEntry.Item2[3];
@@ -509,10 +324,11 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildOfferItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3]));
+                            builder.Splice(BuildOfferItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3]));
                         }
                         break;
                     case CharacterAction.AcceptTrade:
+                        // BG: CMSG_ACCEPT_TRADE, FG: TradeFrame
                         if (_objectManager.TradeFrame == null)
                         {
                             builder.Do("Accept Trade (packet)", time =>
@@ -524,10 +340,11 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.AcceptTradeSequence);
+                            builder.Splice(AcceptTradeSequence);
                         }
                         break;
                     case CharacterAction.DeclineTrade:
+                        // BG: CMSG_CANCEL_TRADE, FG: TradeFrame
                         if (_objectManager.TradeFrame == null)
                         {
                             builder.Do("Cancel Trade (packet)", time =>
@@ -539,86 +356,86 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.DeclineTradeSequence);
+                            builder.Splice(DeclineTradeSequence);
                         }
                         break;
                     case CharacterAction.EnchantTrade:
-                        builder.Splice(_interaction.BuildOfferEnchantSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(BuildOfferEnchantSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LockpickTrade:
-                        builder.Splice(_interaction.OfferLockpickSequence);
+                        builder.Splice(OfferLockpickSequence);
                         break;
 
                     case CharacterAction.PromoteLeader:
-                        builder.Splice(_interaction.BuildPromoteLeaderSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildPromoteLeaderSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteAssistant:
-                        builder.Splice(_interaction.BuildPromoteAssistantSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildPromoteAssistantSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteLootManager:
-                        builder.Splice(_interaction.BuildPromoteLootManagerSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildPromoteLootManagerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.SetGroupLoot:
-                        builder.Splice(_interaction.BuildSetGroupLootSequence((GroupLootSetting)actionEntry.Item2[0]));
+                        builder.Splice(BuildSetGroupLootSequence((GroupLootSetting)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.AssignLoot:
-                        builder.Splice(_interaction.BuildAssignLootSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
+                        builder.Splice(BuildAssignLootSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
                         break;
 
                     case CharacterAction.LootRollNeed:
-                        builder.Splice(_interaction.BuildLootRollNeedSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(BuildLootRollNeedSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LootRollGreed:
-                        builder.Splice(_interaction.BuildLootRollGreedSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(BuildLootRollGreedSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LootPass:
-                        builder.Splice(_interaction.BuildLootPassSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(BuildLootPassSequence((int)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.SendGroupInvite:
                         if (actionEntry.Item2[0] is string playerName)
-                            builder.Splice(_interaction.BuildSendGroupInviteByNameSequence(playerName));
+                            builder.Splice(BuildSendGroupInviteByNameSequence(playerName));
                         else
-                            builder.Splice(_interaction.BuildSendGroupInviteSequence(UnboxGuid(actionEntry.Item2[0])));
+                            builder.Splice(BuildSendGroupInviteSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.AcceptGroupInvite:
-                        builder.Splice(_interaction.AcceptGroupInviteSequence);
+                        builder.Splice(AcceptGroupInviteSequence);
                         break;
                     case CharacterAction.DeclineGroupInvite:
-                        builder.Splice(_interaction.DeclineGroupInviteSequence);
+                        builder.Splice(DeclineGroupInviteSequence);
                         break;
                     case CharacterAction.KickPlayer:
-                        builder.Splice(_interaction.BuildKickPlayerSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildKickPlayerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.LeaveGroup:
-                        builder.Splice(_interaction.LeaveGroupSequence);
+                        builder.Splice(LeaveGroupSequence);
                         break;
                     case CharacterAction.DisbandGroup:
-                        builder.Splice(_interaction.DisbandGroupSequence);
+                        builder.Splice(DisbandGroupSequence);
                         break;
                     case CharacterAction.StartMeleeAttack:
-                        builder.Splice(_combat.BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.StartRangedAttack:
-                        builder.Splice(_combat.BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.StartWandAttack:
-                        builder.Splice(_combat.BuildStartWandAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(BuildStartWandAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.StopAttack:
-                        builder.Splice(_combat.StopAttackSequence);
+                        builder.Splice(StopAttackSequence);
                         break;
                     case CharacterAction.CastSpell:
                         var castTargetGuid = actionEntry.Item2.Count > 1 ? UnboxGuid(actionEntry.Item2[1]) : 0UL;
-                        builder.Splice(_combat.BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
+                        builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
                     case CharacterAction.StartFishing:
                     {
                         var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2);
                         builder.Do("Queue Fishing Task", time =>
                         {
-                            if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.FishingTask)
-                                botTasks.Push(new Tasks.FishingTask(context, fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null));
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
+                                _botTasks.Push(new Tasks.FishingTask(context, fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -627,6 +444,8 @@ namespace BotRunner
                     {
                         int gatheringRouteSpellId = (int)actionEntry.Item2[0];
                         var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
+                        // Optional [2] = maxRouteLoops (int), then [3+] = float positions.
+                        // If [2] is an int (not a float), treat it as maxRouteLoops; otherwise positions start at [2].
                         int routeLoops = 1;
                         int positionStartIndex = 2;
                         if (actionEntry.Item2.Count > 2 && actionEntry.Item2[2] is int loopParam)
@@ -644,41 +463,41 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.GatheringRouteTask)
-                                botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
+                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
                     }
                     case CharacterAction.StopCast:
-                        builder.Splice(_combat.StopCastSequence);
+                        builder.Splice(StopCastSequence);
                         break;
 
                     case CharacterAction.UseItem:
                         if (actionEntry.Item2.Count >= 3)
-                            builder.Splice(_interaction.BuildUseItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (ulong)actionEntry.Item2[2]));
+                            builder.Splice(BuildUseItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (ulong)actionEntry.Item2[2]));
                         else
-                            builder.Splice(_interaction.BuildUseItemByIdSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildUseItemByIdSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.EquipItem:
                         if (actionEntry.Item2.Count >= 3)
-                            builder.Splice(_interaction.BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
+                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
                         else if (actionEntry.Item2.Count >= 2)
-                            builder.Splice(_interaction.BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         else
-                            builder.Splice(_interaction.BuildEquipItemByIdSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildEquipItemByIdSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.UnequipItem:
-                        builder.Splice(_interaction.BuildUnequipItemSequence((EquipSlot)actionEntry.Item2[0]));
+                        builder.Splice(BuildUnequipItemSequence((EquipSlot)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.DestroyItem:
-                        builder.Splice(_interaction.BuildDestroyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                        builder.Splice(BuildDestroyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
                         break;
                     case CharacterAction.MoveItem:
-                        builder.Splice(_interaction.BuildMoveItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3], (int)actionEntry.Item2[4]));
+                        builder.Splice(BuildMoveItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3], (int)actionEntry.Item2[4]));
                         break;
                     case CharacterAction.SplitStack:
-                        builder.Splice(_interaction.BuildSplitStackSequence((int)actionEntry.Item2[0],
+                        builder.Splice(BuildSplitStackSequence((int)actionEntry.Item2[0],
                             (int)actionEntry.Item2[1],
                             (int)actionEntry.Item2[2],
                             (int)actionEntry.Item2[3],
@@ -686,6 +505,8 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.BuyItem:
+                        // With vendorGuid: [0]=vendorGuid, [1]=itemId, [2]=quantity — packet-based
+                        // Without: [0]=slotId, [1]=quantity — legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 3)
                         {
                             var buyVendorGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -700,10 +521,12 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         }
                         break;
                     case CharacterAction.BuybackItem:
+                        // With vendorGuid + buybackSlot: packet-based via VendorAgent (BG compatible)
+                        // Without: legacy MerchantFrame path (FG only)
                         if (actionEntry.Item2.Count >= 3)
                         {
                             var buybackVendorGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -723,10 +546,12 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         }
                         break;
                     case CharacterAction.SellItem:
+                        // With vendorGuid: [0]=vendorGuid, [1]=bagId, [2]=slotId, [3]=quantity — packet-based
+                        // Without: [0]=bagId, [1]=slotId, [2]=quantity — legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 4)
                         {
                             var sellVendorGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -742,16 +567,20 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                            builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
                         }
                         break;
                     case CharacterAction.RepairItem:
+                        // With vendorGuid: [0]=vendorGuid, [1]=repairSlot — packet-based
+                        // Without: [0]=repairSlot — legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var repairItemVendorGuid = UnboxGuid(actionEntry.Item2[0]);
                             var repairSlot = (int)actionEntry.Item2[1];
                             builder.Do($"Repair slot {repairSlot} at vendor {repairItemVendorGuid:X}", time =>
                             {
+                                // Use RepairAllItems as the packet path — individual slot repair
+                                // is not supported by the packet API; repair-all is the server norm.
                                 _objectManager.RepairAllItemsAsync(repairItemVendorGuid, CancellationToken.None)
                                     .GetAwaiter().GetResult();
                                 return BehaviourTreeStatus.Success;
@@ -759,10 +588,12 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildRepairItemSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.RepairAllItems:
+                        // With vendorGuid: [0]=vendorGuid — packet-based
+                        // Without: legacy MerchantFrame (FG only)
                         if (actionEntry.Item2.Count >= 1)
                         {
                             var repairVendorGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -775,28 +606,30 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.RepairAllItemsSequence);
+                            builder.Splice(RepairAllItemsSequence);
                         }
                         break;
 
                     case CharacterAction.VisitVendor:
                         builder.Do("Queue Vendor Visit Task", time =>
                         {
-                            if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.VendorVisitTask)
-                                botTasks.Push(new Tasks.VendorVisitTask(context));
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.VendorVisitTask)
+                                _botTasks.Push(new Tasks.VendorVisitTask(context));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
 
                     case CharacterAction.DismissBuff:
-                        builder.Splice(_interaction.BuildDismissBuffSequence((string)actionEntry.Item2[0]));
+                        builder.Splice(BuildDismissBuffSequence((string)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.Resurrect:
-                        builder.Splice(_combat.ResurrectSequence);
+                        builder.Splice(ResurrectSequence);
                         break;
 
                     case CharacterAction.Craft:
+                        // With 2+ params: [0]=spellId, [1]=quantity — packet-based via CastSpell (BG compatible)
+                        // With 1 param: legacy CraftFrame path (FG only) OR packet path if frame is null
                         if (actionEntry.Item2.Count >= 2)
                         {
                             var craftSpellId = (int)actionEntry.Item2[0];
@@ -814,35 +647,38 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(_interaction.BuildCraftSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(BuildCraftSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
                     case CharacterAction.Login:
-                        builder.Splice(_interaction.BuildLoginSequence((string)actionEntry.Item2[0], (string)actionEntry.Item2[1]));
+                        builder.Splice(BuildLoginSequence((string)actionEntry.Item2[0], (string)actionEntry.Item2[1]));
                         break;
                     case CharacterAction.Logout:
-                        builder.Splice(_interaction.LogoutSequence);
+                        builder.Splice(LogoutSequence);
                         break;
                     case CharacterAction.CreateCharacter:
-                        builder.Splice(_interaction.BuildCreateCharacterSequence(actionEntry.Item2));
+                        builder.Splice(BuildCreateCharacterSequence(actionEntry.Item2));
                         break;
                     case CharacterAction.DeleteCharacter:
-                        builder.Splice(_interaction.BuildDeleteCharacterSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildDeleteCharacterSequence((ulong)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.EnterWorld:
-                        builder.Splice(_interaction.BuildEnterWorldSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildEnterWorldSequence((ulong)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.GatherNode:
                         var gatherGuid = UnboxGuid(actionEntry.Item2[0]);
                         int gatherSpellId = actionEntry.Item2.Count > 1 ? (int)actionEntry.Item2[1] : 0;
-                        builder.Splice(_movement.BuildGatherNodeSequence(gatherGuid, gatherSpellId));
+                        builder.Splice(BuildGatherNodeSequence(gatherGuid, gatherSpellId));
                         break;
 
                     case CharacterAction.SendChat:
                         var chatMsg = (string)actionEntry.Item2[0];
 
+                        // Internal bot command: .targetself sets CMSG_SET_SELECTION to the
+                        // player's own GUID without sending anything to server chat.
+                        // This enables GM commands like .setskill that require a selected target.
                         if (chatMsg.Equals(".targetself", StringComparison.OrdinalIgnoreCase))
                         {
                             builder.Do("Target Self", time =>
@@ -859,8 +695,8 @@ namespace BotRunner
                         builder.Do($"Send Chat: {chatMsg}", time =>
                         {
                             var player = _objectManager.Player;
-                            var isDeadOrGhost = player != null && _isDeadOrGhostState(player);
-                            _diagLog($"SENDCHAT-ACTION: chatMsg='{chatMsg}' dead={isDeadOrGhost} health={player?.Health ?? 0}");
+                            var isDeadOrGhost = player != null && IsDeadOrGhostState(player);
+                            DiagLog($"SENDCHAT-ACTION: chatMsg='{chatMsg}' dead={isDeadOrGhost} health={player?.Health ?? 0}");
                             if (isDeadOrGhost)
                             {
                                 Log.Information("[BOT RUNNER] Skipping chat while dead/ghost: {ChatMessage}", chatMsg);
@@ -872,9 +708,9 @@ namespace BotRunner
                             foreach (var response in gmResponses)
                             {
                                 if (!string.IsNullOrWhiteSpace(response))
-                                    _enqueueDiagnosticMessage($"[SYSTEM] {response}");
+                                    EnqueueDiagnosticMessage($"[SYSTEM] {response}");
                             }
-                            _diagLog($"SENDCHAT-SENT: '{chatMsg}'");
+                            DiagLog($"SENDCHAT-SENT: '{chatMsg}'");
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -896,25 +732,27 @@ namespace BotRunner
                             if (player == null)
                                 return BehaviourTreeStatus.Success;
 
-                            if (_isGhostState(player))
+                            // Only release when actually in corpse state. Releasing while already ghosted
+                            // can re-trigger graveyard transitions and stall corpse-run movement.
+                            if (IsGhostState(player))
                             {
                                 Log.Information("[BOT RUNNER] Skipping ReleaseCorpse: player is already ghosted.");
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            if (!_isCorpseState(player))
+                            if (!IsCorpseState(player))
                             {
                                 Log.Information("[BOT RUNNER] Skipping ReleaseCorpse: player is not in corpse state.");
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            if (DateTime.UtcNow - _getLastReleaseSpiritCommandUtc() < TimeSpan.FromSeconds(2))
+                            if (DateTime.UtcNow - _lastReleaseSpiritCommandUtc < ReleaseSpiritCommandCooldown)
                             {
                                 Log.Debug("[BOT RUNNER] Skipping duplicate ReleaseCorpse command within cooldown window.");
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            _setLastReleaseSpiritCommandUtc(DateTime.UtcNow);
+                            _lastReleaseSpiritCommandUtc = DateTime.UtcNow;
                             Log.Information("[BOT RUNNER] Releasing spirit (CMSG_REPOP_REQUEST)");
                             _objectManager.ReleaseSpirit();
                             return BehaviourTreeStatus.Success;
@@ -925,43 +763,42 @@ namespace BotRunner
                         builder.Do("Retrieve Corpse", time =>
                         {
                             var player = _objectManager.Player;
-                            _diagLog($"[RETRIEVE_DIAG] player={player != null} playerFlags=0x{(player != null ? (uint)player.PlayerFlags : 0u):X} hp={player?.Health ?? -1u}/{player?.MaxHealth ?? -1u}");
+                            DiagLog($"[RETRIEVE_DIAG] player={player != null} playerFlags=0x{(player != null ? (uint)player.PlayerFlags : 0u):X} hp={player?.Health ?? -1u}/{player?.MaxHealth ?? -1u}");
                             if (player != null)
                             {
-                                var ghostResult = _isGhostState(player);
-                                _diagLog($"[RETRIEVE_DIAG] IsGhostState={ghostResult} HasGhostFlag={DeathStateDetection.HasGhostFlag(player)}");
+                                var ghostResult = IsGhostState(player);
+                                DiagLog($"[RETRIEVE_DIAG] IsGhostState={ghostResult} HasGhostFlag={HasGhostFlag(player)}");
                                 if (ghostResult)
                                 {
                                     var corpsePos = player.CorpsePosition;
-                                    _diagLog($"[RETRIEVE_DIAG] corpsePos=({corpsePos?.X:F1},{corpsePos?.Y:F1},{corpsePos?.Z:F1})");
-                                    var lastAlive = _getLastKnownAlivePosition();
-                                    if (BotRunnerService.IsZeroPosition(corpsePos) && lastAlive != null)
+                                    DiagLog($"[RETRIEVE_DIAG] corpsePos=({corpsePos?.X:F1},{corpsePos?.Y:F1},{corpsePos?.Z:F1})");
+                                    if (IsZeroPosition(corpsePos) && _lastKnownAlivePosition != null)
                                     {
                                         corpsePos = new GameData.Core.Models.Position(
-                                            lastAlive.X,
-                                            lastAlive.Y,
-                                            lastAlive.Z);
-                                        _diagLog($"[RETRIEVE_DIAG] using fallback corpsePos=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
+                                            _lastKnownAlivePosition.X,
+                                            _lastKnownAlivePosition.Y,
+                                            _lastKnownAlivePosition.Z);
+                                        DiagLog($"[RETRIEVE_DIAG] using fallback corpsePos=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
                                     }
 
                                     if (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0)
                                     {
-                                        if (botTasks.Count == 0 || botTasks.Peek() is not Tasks.RetrieveCorpseTask)
+                                        if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.RetrieveCorpseTask)
                                         {
                                             Log.Information("[BOT RUNNER] Queueing pathfinding corpse run to ({X:F0}, {Y:F0}, {Z:F0})",
                                                 corpsePos.X, corpsePos.Y, corpsePos.Z);
-                                            _diagLog($"[RETRIEVE_DIAG] PUSHING RetrieveCorpseTask corpse=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
-                                            botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
+                                            DiagLog($"[RETRIEVE_DIAG] PUSHING RetrieveCorpseTask corpse=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
+                                            _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
                                         }
                                         else
                                         {
-                                            _diagLog("[RETRIEVE_DIAG] RetrieveCorpseTask already on stack");
+                                            DiagLog("[RETRIEVE_DIAG] RetrieveCorpseTask already on stack");
                                         }
                                         return BehaviourTreeStatus.Success;
                                     }
                                     else
                                     {
-                                        _diagLog("[RETRIEVE_DIAG] corpsePos is ZERO, skipping task push");
+                                        DiagLog("[RETRIEVE_DIAG] corpsePos is ZERO, skipping task push");
                                     }
                                 }
 
@@ -969,13 +806,13 @@ namespace BotRunner
                                 if (reclaimDelay > 0)
                                 {
                                     Log.Information("[BOT RUNNER] Corpse reclaim cooldown active ({Seconds}s remaining); waiting.", reclaimDelay);
-                                    _diagLog($"[RETRIEVE_DIAG] reclaimDelay={reclaimDelay}s -- NOT pushing task");
+                                    DiagLog($"[RETRIEVE_DIAG] reclaimDelay={reclaimDelay}s — NOT pushing task");
                                     return BehaviourTreeStatus.Success;
                                 }
                             }
 
                             Log.Information("[BOT RUNNER] Retrieving corpse (CMSG_RECLAIM_CORPSE direct)");
-                            _diagLog("[RETRIEVE_DIAG] fallthrough to direct RetrieveCorpse()");
+                            DiagLog("[RETRIEVE_DIAG] fallthrough to direct RetrieveCorpse()");
                             _objectManager.RetrieveCorpse();
                             return BehaviourTreeStatus.Success;
                         });
@@ -1030,9 +867,10 @@ namespace BotRunner
 
                     case CharacterAction.ChangeRaidSubgroup:
                     {
+                        // Params: [0] = string playerName, [1] = int subGroup (0-7)
                         var rsgName = actionEntry.Item2.Count > 0 ? (string)actionEntry.Item2[0] : "";
                         var rsgGroup = actionEntry.Item2.Count > 1 ? (byte)(int)actionEntry.Item2[1] : (byte)0;
-                        builder.Do($"Change Raid Subgroup: {rsgName} -> group {rsgGroup}", time =>
+                        builder.Do($"Change Raid Subgroup: {rsgName} → group {rsgGroup}", time =>
                         {
                             _objectManager.ChangeRaidSubgroup(rsgName, rsgGroup);
                             return BehaviourTreeStatus.Success;
@@ -1042,6 +880,10 @@ namespace BotRunner
 
                     case CharacterAction.StartDungeoneering:
                     {
+                        // Params: [0] = isLeader (int, 1=leader 0=follower)
+                        //         [1] = target map ID (int, e.g. 389 for RFC)
+                        // Optional: [2..N] = float waypoints (x,y,z triples)
+                        // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
                         bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
                         uint targetMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0;
                         var waypointPositions = actionEntry.Item2.Count > 2
@@ -1050,15 +892,17 @@ namespace BotRunner
 
                         builder.Do("Queue Dungeoneering Task", time =>
                         {
-                            var existingTask = botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
+                            var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
                             Log.Information("[BOT RUNNER] StartDungeoneering: isLeader={IsLeader}, existing={Existing}, existingIsLeader={ExLeader}",
                                 isLeader, existingTask != null, existingTask?.IsLeader);
                             if (existingTask != null && existingTask.IsLeader == isLeader)
                             {
-                                // Same role task already running
+                                // Same role task already running — skip duplicate dispatch
                             }
                             else
                             {
+                                // Use target map ID from coordinator (reliable), falling back to
+                                // player's current MapId (may be stale during instance loading).
                                 uint mapId = targetMapId != 0
                                     ? targetMapId
                                     : (_objectManager.Player?.MapId ?? 0);
@@ -1067,7 +911,7 @@ namespace BotRunner
                                     ? waypointPositions
                                     : mapWaypoints;
 
-                                botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints, mapId));
+                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints, mapId));
                             }
                             return BehaviourTreeStatus.Success;
                         });
@@ -1076,19 +920,23 @@ namespace BotRunner
 
                     case CharacterAction.FollowTarget:
                     {
+                        // Params: [0] = targetGuid (long)
+                        // [1] = followDistance (float, optional, default 5.0)
                         var followGuid = UnboxGuid(actionEntry.Item2[0]);
                         var followDistance = actionEntry.Item2.Count > 1 ? (float)actionEntry.Item2[1] : 5.0f;
-                        builder.Splice(_movement.BuildFollowTargetSequence(followGuid, followDistance));
+                        builder.Splice(BuildFollowTargetSequence(followGuid, followDistance));
                         break;
                     }
 
                     case CharacterAction.JoinBattleground:
                     {
+                        // Params: [0] = bgTypeId (int), [1] = expectedMapId (int)
                         var bgTypeId = (int)actionEntry.Item2[0];
                         var expectedMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0u;
 
                         builder.Do("Queue BG Join Task", time =>
                         {
+                            // Get BG network client from agent factory
                             WoWSharpClient.Networking.ClientComponents.BattlegroundNetworkClientComponent? bgClient = null;
                             var factory = _agentFactoryAccessor?.Invoke();
                             if (factory != null)
@@ -1096,7 +944,7 @@ namespace BotRunner
                                 bgClient = factory.BattlegroundAgent;
                             }
 
-                            botTasks.Push(new Tasks.Battlegrounds.BattlegroundQueueTask(
+                            _botTasks.Push(new Tasks.Battlegrounds.BattlegroundQueueTask(
                                 context,
                                 (BotRunner.Travel.BattlemasterData.BattlegroundType)bgTypeId,
                                 expectedMapId,
@@ -1151,6 +999,7 @@ namespace BotRunner
 
                     case CharacterAction.TravelTo:
                     {
+                        // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
                         var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
                         var targetX = Convert.ToSingle(actionEntry.Item2[1]);
                         var targetY = Convert.ToSingle(actionEntry.Item2[2]);
@@ -1173,6 +1022,7 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Success;
                             }
 
+                            // Compute path on first tick
                             if (travelPath == null)
                             {
                                 try
@@ -1195,6 +1045,7 @@ namespace BotRunner
                                 }
                             }
 
+                            // Use pathfinding waypoints if available, else direct line
                             if (travelPath.Length > 0 && travelWaypointIdx < travelPath.Length)
                             {
                                 var wp = travelPath[travelWaypointIdx];
@@ -1228,14 +1079,45 @@ namespace BotRunner
             return builder.End().Build();
         }
 
-        internal static List<uint> ParseGatheringEntries(string csv)
+        internal enum GoToTaskUpsertResult
+        {
+            Pushed,
+            Retargeted,
+            Duplicate
+        }
+
+        internal static GoToTaskUpsertResult UpsertGoToTask(
+            Stack<Interfaces.IBotTask> botTasks,
+            Interfaces.IBotContext botContext,
+            float x,
+            float y,
+            float z,
+            float tolerance)
+        {
+            var target = new Position(x, y, z);
+            var normalizedTolerance = tolerance > 0f ? tolerance : 3f;
+            var existingTask = botTasks.OfType<Tasks.GoToTask>().FirstOrDefault();
+            if (existingTask != null)
+            {
+                if (existingTask.MatchesTarget(target, normalizedTolerance))
+                    return GoToTaskUpsertResult.Duplicate;
+
+                existingTask.Retarget(target, normalizedTolerance);
+                return GoToTaskUpsertResult.Retargeted;
+            }
+
+            botTasks.Push(new Tasks.GoToTask(botContext, target.X, target.Y, target.Z, normalizedTolerance));
+            return GoToTaskUpsertResult.Pushed;
+        }
+
+        private static List<uint> ParseGatheringEntries(string csv)
             => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(token => uint.TryParse(token, out var entry) ? entry : 0u)
                 .Where(entry => entry != 0)
                 .Distinct()
                 .ToList();
 
-        internal static List<Position> ParseGatheringRoutePositions(IEnumerable<object> rawParameters)
+        private static List<Position> ParseGatheringRoutePositions(IEnumerable<object> rawParameters)
         {
             var floats = rawParameters
                 .Select(parameter => parameter switch
@@ -1254,26 +1136,6 @@ namespace BotRunner
                 positions.Add(new Position(floats[index], floats[index + 1], floats[index + 2]));
 
             return positions;
-        }
-
-        /// <summary>
-        /// BotRunnerContext implementation shared between ActionDispatcher and BotRunnerService.
-        /// </summary>
-        internal sealed class BotRunnerContext(
-            IObjectManager objectManager,
-            Stack<IBotTask> tasks,
-            IDependencyContainer container,
-            Constants.BotBehaviorConfig config,
-            Action<string> addDiagnosticMessage,
-            Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null) : IBotContext
-        {
-            public IObjectManager ObjectManager => objectManager;
-            public Stack<IBotTask> BotTasks => tasks;
-            public IDependencyContainer Container => container;
-            public Constants.BotBehaviorConfig Config => config;
-            public IWoWEventHandler EventHandler => objectManager.EventHandler;
-            public Microsoft.Extensions.Logging.ILoggerFactory? LoggerFactory => loggerFactory;
-            public void AddDiagnosticMessage(string message) => addDiagnosticMessage(message);
         }
     }
 }

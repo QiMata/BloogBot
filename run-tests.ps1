@@ -5,11 +5,15 @@
 #   .\run-tests.ps1 -Layer 1
 #   .\run-tests.ps1 -Layer 3 -SkipBuild
 #   .\run-tests.ps1 -TestTimeoutMinutes 3
+#   .\run-tests.ps1 -ListRepoScopedProcesses
+#   .\run-tests.ps1 -CleanupRepoScopedOnly
 
 param(
     [int]$Layer = 0,
     [switch]$SkipBuild,
-    [int]$TestTimeoutMinutes = 3
+    [int]$TestTimeoutMinutes = 3,
+    [switch]$ListRepoScopedProcesses,
+    [switch]$CleanupRepoScopedOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +29,114 @@ $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
 $env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = "0"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = "0"
+
+# Keep test artifacts/temp files on the repo drive instead of C:\Users\...\AppData\Local\Temp.
+$testRuntimeRoot = Join-Path $PSScriptRoot "tmp\test-runtime"
+$testResultsDir = Join-Path $testRuntimeRoot "results"
+$testTempDir = Join-Path $testRuntimeRoot "temp"
+foreach ($dir in @($testRuntimeRoot, $testResultsDir, $testTempDir)) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
+$env:VSTEST_RESULTS_DIRECTORY = $testResultsDir
+$env:TEMP = $testTempDir
+$env:TMP = $testTempDir
+$env:WWOW_REPO_ROOT = $PSScriptRoot
+$env:WWOW_TEST_RUNTIME_ROOT = $testRuntimeRoot
+
+function Get-RepoScopedProcesses {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $candidateNames = @(
+        "dotnet.exe",
+        "testhost.exe",
+        "testhost.x86.exe",
+        "BackgroundBotRunner.exe",
+        "WoWStateManager.exe",
+        "WoW.exe"
+    )
+
+    $repoToken = $RepoRoot.ToLowerInvariant()
+    $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $candidateNames -contains $_.Name }
+
+    $scoped = foreach ($proc in $processes) {
+        $cmd = $proc.CommandLine
+        $exe = $proc.ExecutablePath
+
+        $cmdHasRepo = -not [string]::IsNullOrWhiteSpace($cmd) -and $cmd.ToLowerInvariant().Contains($repoToken)
+        $exeHasRepo = -not [string]::IsNullOrWhiteSpace($exe) -and $exe.ToLowerInvariant().Contains($repoToken)
+        $hasRuntimeToken = -not [string]::IsNullOrWhiteSpace($cmd) -and $cmd.ToLowerInvariant().Contains("tmp\\test-runtime")
+        if (-not ($cmdHasRepo -or $exeHasRepo -or $hasRuntimeToken)) {
+            continue
+        }
+
+        $startTime = $null
+        try {
+            $running = Get-Process -Id $proc.ProcessId -ErrorAction Stop
+            $startTime = $running.StartTime
+        } catch {
+            # Process exited between CIM query and lookup.
+        }
+
+        [pscustomobject]@{
+            Id = [int]$proc.ProcessId
+            Name = $proc.Name
+            StartTime = $startTime
+            ExecutablePath = $exe
+            CommandLine = $cmd
+        }
+    }
+
+    $scoped | Sort-Object Name, StartTime, Id
+}
+
+if ($ListRepoScopedProcesses -or $CleanupRepoScopedOnly) {
+    $scopedProcesses = @(Get-RepoScopedProcesses -RepoRoot $PSScriptRoot)
+
+    if ($ListRepoScopedProcesses) {
+        if ($scopedProcesses.Count -eq 0) {
+            Write-Host "No repo-scoped processes found." -ForegroundColor Green
+        } else {
+            $scopedProcesses |
+                Select-Object Id, Name, StartTime, @{
+                    Name = "CommandLine";
+                    Expression = {
+                        if ([string]::IsNullOrWhiteSpace($_.CommandLine)) { return "" }
+                        if ($_.CommandLine.Length -le 160) { return $_.CommandLine }
+                        return $_.CommandLine.Substring(0, 157) + "..."
+                    }
+                } |
+                Format-Table -AutoSize
+        }
+    }
+
+    if ($CleanupRepoScopedOnly) {
+        if ($scopedProcesses.Count -eq 0) {
+            Write-Host "No repo-scoped processes to stop." -ForegroundColor Green
+        } else {
+            foreach ($proc in $scopedProcesses) {
+                try {
+                    Stop-Process -Id $proc.Id -Force -ErrorAction Stop
+                    Write-Host "Stopped repo-scoped process $($proc.Name) pid=$($proc.Id)" -ForegroundColor DarkYellow
+                } catch {
+                    Write-Host "Failed to stop pid=$($proc.Id) ($($proc.Name)): $($_.Exception.Message)" -ForegroundColor Red
+                    $script:failCount++
+                }
+            }
+        }
+    }
+
+    if ($script:failCount -gt 0) {
+        exit 1
+    }
+
+    exit 0
+}
 
 function Run-TestLayer {
     param(
@@ -44,6 +156,7 @@ function Run-TestLayer {
         "test",
         $Project,
         "--no-build",
+        "--results-directory", $testResultsDir,
         "--logger", "console;verbosity=normal",
         "--blame-hang",
         "--blame-hang-timeout", "$($TestTimeoutMinutes)m"

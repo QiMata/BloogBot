@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using GameData.Core.Enums;
+using Tests.Infrastructure;
 using WoWStateManager.Settings;
 using Xunit.Sdk;
 using WoWActivitySnapshot = Communication.WoWActivitySnapshot;
@@ -25,6 +26,8 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     private Task? _prepareTask;
     private const int InitialRaidInviteBatchSize = 4;
     private const int MaxGroupFormationAttempts = 3;
+    private const float StageMaxDistance2D = 15f;
+    private const float StageMaxVerticalDelta = 4.5f;
 
     public IReadOnlyList<CharacterSettings> CharacterSettings { get; private set; } = Array.Empty<CharacterSettings>();
 
@@ -38,9 +41,17 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     protected virtual bool PrepareDuringInitialization => true;
 
+    /// <summary>
+    /// When true, launch prep preserves existing characters as long as at least one
+    /// character on the account matches the configured race/class/gender.
+    /// </summary>
+    protected virtual bool PreserveExistingCharactersWhenAnyMatch => false;
+
     protected virtual TimeSpan EnterWorldMaxTimeout => TimeSpan.FromMinutes(3);
 
     protected virtual TimeSpan EnterWorldStaleTimeout => TimeSpan.FromSeconds(30);
+
+    protected override TimeSpan InitialWorldEntryTimeout => EnterWorldMaxTimeout;
 
     /// <summary>
     /// Minimum bots that must enter world. Defaults to all configured bots.
@@ -79,6 +90,12 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_Z", null);
     }
 
+    /// <summary>
+    /// Hook for fixture-specific offline data prep (for example DB rank updates)
+    /// before runners launch and characters enter world.
+    /// </summary>
+    protected virtual Task PrepareOfflineAccountStateAsync() => Task.CompletedTask;
+
     protected virtual Task PrepareBotsAsync() => Task.CompletedTask;
 
     public async Task EnsurePreparedAsync()
@@ -102,6 +119,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             throw new InvalidOperationException($"{GetType().Name} must define at least one character setting.");
 
         await EnsureAccountsAndCharactersReadyForLaunchAsync();
+        await PrepareOfflineAccountStateAsync();
         ConfigureCoordinatorEnvironment();
         SkipGroupCleanup = true;
         SetCustomSettingsPath(WriteSettingsFile(CharacterSettings, SettingsFileName));
@@ -133,6 +151,13 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             return false;
 
         return CharacterMatchesSettings(settings, existingCharacters[0]);
+    }
+
+    internal static bool HasAnyMatchingCharacter(
+        CharacterSettings settings,
+        IReadOnlyList<AccountCharacterRecord> existingCharacters)
+    {
+        return existingCharacters.Any(existingCharacter => CharacterMatchesSettings(settings, existingCharacter));
     }
 
     internal static CharacterSettings CreateCharacterSetting(
@@ -194,8 +219,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     internal static string WriteSettingsFile(IEnumerable<CharacterSettings> settings, string fileName)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "WWoW", "TestSettings");
-        Directory.CreateDirectory(directory);
+        var directory = TestRuntimePaths.GetOrCreateSubdirectory("settings", "WWoW", "TestSettings");
 
         var path = Path.Combine(directory, fileName);
         File.WriteAllText(path, SerializeSettings(settings));
@@ -268,6 +292,14 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             if (existingCharacters.Length == 0 || CanReuseExistingCharacters(settings, existingCharacters))
                 continue;
 
+            if (PreserveExistingCharactersWhenAnyMatch && HasAnyMatchingCharacter(settings, existingCharacters))
+            {
+                Console.WriteLine(
+                    $"[{FixtureLabel}:LaunchPrep] preserving account '{settings.AccountName}' " +
+                    $"with {existingCharacters.Length} existing character(s); at least one matches configured race/class/gender.");
+                continue;
+            }
+
             var summary = string.Join(", ", existingCharacters.Select(existingCharacter =>
                 $"{existingCharacter.Name}[race={existingCharacter.RaceId}, class={existingCharacter.ClassId}, gender={existingCharacter.GenderId}]"));
             Console.WriteLine($"[{FixtureLabel}:LaunchPrep] resetting account '{settings.AccountName}' before launch: {summary}");
@@ -284,6 +316,18 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     private async Task<string> DescribeMissingAccountsAsync()
     {
+        static string TrimDiagnostic(string? value, int maxLength = 120)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "-";
+
+            var compact = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (compact.Length <= maxLength)
+                return compact;
+
+            return compact[..maxLength] + "...";
+        }
+
         var snapshots = await QueryAllSnapshotsAsync();
         var snapshotsByAccount = snapshots
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.AccountName))
@@ -299,15 +343,21 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             .Where(accountName => !hydratedAccounts.Contains(accountName))
             .Select(accountName =>
             {
+                var expectedRunner = CharacterSettings
+                    .FirstOrDefault(settings => settings.AccountName.Equals(accountName, StringComparison.OrdinalIgnoreCase))
+                    ?.RunnerType.ToString() ?? "?";
+
                 if (!snapshotsByAccount.TryGetValue(accountName, out var snapshot))
-                    return $"{accountName}(no snapshot)";
+                    return $"{accountName}(runner={expectedRunner}, no snapshot)";
 
                 var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
                 var health = snapshot.Player?.Unit?.Health ?? 0;
                 var maxHealth = snapshot.Player?.Unit?.MaxHealth ?? 0;
                 var screenState = string.IsNullOrWhiteSpace(snapshot.ScreenState) ? "?" : snapshot.ScreenState;
                 var characterName = string.IsNullOrWhiteSpace(snapshot.CharacterName) ? "?" : snapshot.CharacterName;
-                return $"{accountName}(screen={screenState}, char={characterName}, objMgr={snapshot.IsObjectManagerValid}, map={mapId}, hp={health}/{maxHealth})";
+                var connectionState = snapshot.ConnectionState.ToString();
+                var recentError = TrimDiagnostic(snapshot.RecentErrors.LastOrDefault());
+                return $"{accountName}(runner={expectedRunner}, screen={screenState}, conn={connectionState}, char={characterName}, objMgr={snapshot.IsObjectManagerValid}, map={mapId}, hp={health}/{maxHealth}, err={recentError})";
             })
             .ToArray();
 
@@ -782,7 +832,8 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 return $"{account}(map={mapId}, pos=unknown)";
 
             var distance = DistanceToTarget(position.X, position.Y, target.X, target.Y);
-            return $"{account}(map={mapId}, dist={distance:F0})";
+            var zDelta = MathF.Abs(position.Z - target.Z);
+            return $"{account}(map={mapId}, dist={distance:F1}, z={position.Z:F1}, dz={zDelta:F1})";
         }));
     }
 
@@ -806,7 +857,9 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         if (position == null)
             return false;
 
-        return DistanceToTarget(position.X, position.Y, target.X, target.Y) <= 80f;
+        var distance2D = DistanceToTarget(position.X, position.Y, target.X, target.Y);
+        var zDelta = MathF.Abs(position.Z - target.Z);
+        return distance2D <= StageMaxDistance2D && zDelta <= StageMaxVerticalDelta;
     }
 
     protected async Task ReviveAndLevelBotsAsync(int targetLevel)
@@ -902,6 +955,7 @@ public abstract class BattlegroundCoordinatorFixtureBase : CoordinatorFixtureBas
 {
     protected override bool PrepareDuringInitialization => false;
     protected override bool DisableCoordinatorDuringPreparation => true;
+    protected override bool PreserveExistingCharactersWhenAnyMatch => true;
 
     // Freshly created battleground characters currently need to sit through their
     // intro cinematic before the first hydrated InWorld snapshot appears.

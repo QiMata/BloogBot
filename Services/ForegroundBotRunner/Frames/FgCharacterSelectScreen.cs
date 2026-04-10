@@ -14,10 +14,13 @@ namespace ForegroundBotRunner.Frames;
 public class FgCharacterSelectScreen(
     Func<WoWScreenState> getScreenState,
     Func<int> getMaxCharacterCount,
-    Action<string> luaCall) : ICharacterSelectScreen
+    Action<string> luaCall,
+    Action<string>? captureLuaErrors = null) : ICharacterSelectScreen
 {
     private DateTime? _charSelectFirstSeen;
     private static readonly TimeSpan CharListGracePeriod = TimeSpan.FromSeconds(2);
+    internal static TimeSpan CreateStepThrottle { get; set; } = TimeSpan.FromSeconds(1);
+    internal static TimeSpan CharacterCreateTransitionTimeout { get; set; } = TimeSpan.FromSeconds(5);
     private int _characterCreateAttempts;
 
     /// <summary>
@@ -58,7 +61,7 @@ public class FgCharacterSelectScreen(
             // After grace period, return true even with 0 characters.
             if (!_hasLoggedGracePeriod)
             {
-                Log.Information("[FG-CHARSEL] Grace period expired. charCount={Count} — reporting HasReceivedCharacterList=true", charCount);
+                Log.Information("[FG-CHARSEL] Grace period expired. charCount={Count} - reporting HasReceivedCharacterList=true", charCount);
                 _hasLoggedGracePeriod = true;
             }
             return true;
@@ -84,11 +87,11 @@ public class FgCharacterSelectScreen(
         {
             // Use the snapshot from HasReceivedCharacterList to prevent TOCTOU race.
             // If HasReceivedCharacterList returned true (charCount > 0), this must
-            // also see > 0 — otherwise BotRunnerService sees Count==0 and queues
+            // also see > 0 - otherwise BotRunnerService sees Count==0 and queues
             // CreateCharacter, crashing WoW with a Lua call to a nil function.
             if (_lastSnapshotCharCount <= 0) return [];
 
-            // FG doesn't have detailed character data from memory — return a minimal entry
+            // FG doesn't have detailed character data from memory - return a minimal entry
             // so BotRunnerService sees at least one character and proceeds to EnterWorld.
             // Populate race/gender from env vars so the mismatch check doesn't block entry.
             var race = Race.None;
@@ -114,6 +117,7 @@ public class FgCharacterSelectScreen(
         _charSelectFirstSeen = null;
         _hasLoggedGracePeriod = false;
         IsCharacterCreationPending = false;
+        ResetCreateFlow();
         if (_lastSnapshotCharCount > 0)
             _characterCreateAttempts = 0;
     }
@@ -123,6 +127,7 @@ public class FgCharacterSelectScreen(
         _charSelectFirstSeen = null;
         _hasLoggedGracePeriod = false;
         IsCharacterCreationPending = false;
+        ResetCreateFlow();
     }
 
     public bool ShouldRetryCharacterListRequest(TimeSpan retryAfter, DateTime utcNow)
@@ -133,6 +138,7 @@ public class FgCharacterSelectScreen(
 
     /// <summary>Tracks the current step in the multi-phase character creation flow.</summary>
     private int _createCharStep;
+    private DateTime _createStepEnteredAt = DateTime.MinValue;
     private DateTime _lastCreateStepTime;
     private string? _pendingCharName;
     private Race _pendingRace;
@@ -147,8 +153,8 @@ public class FgCharacterSelectScreen(
         if (state != WoWScreenState.CharacterSelect && state != WoWScreenState.CharacterCreate)
             return;
 
-        // Rate-limit steps to 1 second apart to allow UI transitions
-        if ((DateTime.UtcNow - _lastCreateStepTime).TotalMilliseconds < 1000)
+        // Rate-limit steps to allow UI transitions
+        if ((DateTime.UtcNow - _lastCreateStepTime) < CreateStepThrottle)
             return;
         _lastCreateStepTime = DateTime.UtcNow;
 
@@ -169,11 +175,12 @@ public class FgCharacterSelectScreen(
             case 0:
                 // Step 0: Dismiss any blocking GlueDialog only
                 Log.Information("[FG-CHARSEL] Step 0: Dismiss any blocking dialogs (state={State})", state);
-                luaCall("if GlueDialog and GlueDialog:IsVisible() then " +
+                ExecuteLua("if GlueDialog and GlueDialog:IsVisible() then " +
                     "if GlueDialogButton1 and GlueDialogButton1:IsVisible() then GlueDialogButton1:Click() end " +
                     "if GlueDialogButton2 and GlueDialogButton2:IsVisible() then GlueDialogButton2:Click() end " +
-                    "end");
-                _createCharStep++;
+                    "end",
+                    "charselect.create.step0.dismiss-dialogs");
+                AdvanceCreateStep(1);
                 break;
 
             case 1:
@@ -181,14 +188,15 @@ public class FgCharacterSelectScreen(
                 if (state == WoWScreenState.CharacterSelect)
                 {
                     Log.Information("[FG-CHARSEL] Step 1: Clicking 'Create New Character' button");
-                    luaCall("if CharacterSelect_CreateNewCharacter then CharacterSelect_CreateNewCharacter() " +
-                        "elseif CharSelectCreateCharacterButton then CharSelectCreateCharacterButton:Click() end");
-                    _createCharStep++;
+                    ExecuteLua("if CharacterSelect_CreateNewCharacter then CharacterSelect_CreateNewCharacter() " +
+                        "elseif CharSelectCreateCharacterButton then CharSelectCreateCharacterButton:Click() end",
+                        "charselect.create.step1.open-create-screen");
+                    AdvanceCreateStep(2);
                 }
                 else if (state == WoWScreenState.CharacterCreate)
                 {
                     Log.Information("[FG-CHARSEL] Step 1: Already on CharacterCreate screen, skipping button click");
-                    _createCharStep++;
+                    AdvanceCreateStep(2);
                 }
                 break;
 
@@ -196,13 +204,23 @@ public class FgCharacterSelectScreen(
             {
                 if (state != WoWScreenState.CharacterCreate)
                 {
+                    if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                    {
+                        Log.Warning(
+                            "[FG-CHARSEL] Step 2 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
+                            state);
+                        AdvanceCreateStep(1);
+                        break;
+                    }
+
                     Log.Warning("[FG-CHARSEL] Step 2: Not on CharacterCreate screen (state={State}), waiting", state);
-                    break; // Don't advance — wait for screen transition from step 1
+                    break;
                 }
                 var raceIndex = GetCharCreateRaceIndex(race);
                 Log.Information("[FG-CHARSEL] Step 2: Set race={Race} (index {Index})", race, raceIndex);
-                luaCall($"if CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click() end");
-                _createCharStep++;
+                ExecuteLua($"if CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click() end",
+                    "charselect.create.step2.select-race");
+                AdvanceCreateStep(3);
                 break;
             }
 
@@ -210,13 +228,23 @@ public class FgCharacterSelectScreen(
             {
                 if (state != WoWScreenState.CharacterCreate)
                 {
+                    if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                    {
+                        Log.Warning(
+                            "[FG-CHARSEL] Step 3 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
+                            state);
+                        AdvanceCreateStep(1);
+                        break;
+                    }
+
                     Log.Warning("[FG-CHARSEL] Step 3: Not on CharacterCreate screen (state={State}), waiting", state);
                     break;
                 }
                 var classIndex = GetCharCreateClassIndex(@class);
                 Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (index {Index})", @class, classIndex);
-                luaCall($"if CharacterCreateClassButton{classIndex} then CharacterCreateClassButton{classIndex}:Click() end");
-                _createCharStep++;
+                ExecuteLua($"if CharacterCreateClassButton{classIndex} then CharacterCreateClassButton{classIndex}:Click() end",
+                    "charselect.create.step3.select-class");
+                AdvanceCreateStep(4);
                 break;
             }
 
@@ -226,29 +254,53 @@ public class FgCharacterSelectScreen(
                 if (state != WoWScreenState.CharacterCreate)
                 {
                     Log.Warning("[FG-CHARSEL] Step 4: Not on CharacterCreate screen (state={State}), retrying step 1", state);
-                    _createCharStep = 1; // Go back to clicking "Create New Character"
+                    AdvanceCreateStep(1);
                     break;
                 }
                 Log.Information("[FG-CHARSEL] Step 4: Set gender={Gender}, create character '{Name}'", gender, name);
                 if (gender == Gender.Female)
-                    luaCall("if CharacterCreateGenderButtonFemale then CharacterCreateGenderButtonFemale:Click() end");
+                    ExecuteLua("if CharacterCreateGenderButtonFemale then CharacterCreateGenderButtonFemale:Click() end",
+                        "charselect.create.step4.select-gender-female");
                 else
-                    luaCall("if CharacterCreateGenderButtonMale then CharacterCreateGenderButtonMale:Click() end");
-                luaCall($"if CharacterCreateNameEdit then CharacterCreateNameEdit:SetText(\"{name}\") end");
-                luaCall($"if CreateCharacter then CreateCharacter(\"{name}\") end");
+                    ExecuteLua("if CharacterCreateGenderButtonMale then CharacterCreateGenderButtonMale:Click() end",
+                        "charselect.create.step4.select-gender-male");
+                ExecuteLua($"if CharacterCreateNameEdit then CharacterCreateNameEdit:SetText(\"{name}\") end",
+                    "charselect.create.step4.set-name");
+                ExecuteLua($"if CreateCharacter then CreateCharacter(\"{name}\") end",
+                    "charselect.create.step4.submit-create");
                 IsCharacterCreationPending = true;
                 _characterCreateAttempts++;
-                _createCharStep++;
+                AdvanceCreateStep(5);
                 break;
 
             default:
-                // Wait for character list to refresh — reset step counter for next attempt
+                // Wait for character list to refresh - reset step counter for next attempt
                 Log.Information("[FG-CHARSEL] Character creation submitted, waiting for response...");
-                _createCharStep = 0;
+                ResetCreateFlow();
                 _charSelectFirstSeen = null;
                 _hasLoggedGracePeriod = false;
                 break;
         }
+    }
+
+    private void AdvanceCreateStep(int nextStep)
+    {
+        _createCharStep = nextStep;
+        _createStepEnteredAt = DateTime.UtcNow;
+    }
+
+    private bool HasCurrentStepTimedOut(TimeSpan timeout)
+    {
+        if (_createStepEnteredAt == DateTime.MinValue)
+            return false;
+
+        return DateTime.UtcNow - _createStepEnteredAt >= timeout;
+    }
+
+    private void ResetCreateFlow()
+    {
+        _createCharStep = 0;
+        _createStepEnteredAt = DateTime.MinValue;
     }
 
     /// <summary>Maps Race enum to WoW character creation button index (1-based).</summary>
@@ -282,6 +334,33 @@ public class FgCharacterSelectScreen(
 
     public void DeleteCharacter(ulong characterGuid)
     {
-        // Deferred — not critical for unification
+        // Deferred - not critical for unification
+    }
+
+    private void ExecuteLua(string lua, string context)
+    {
+        try
+        {
+            luaCall(lua);
+        }
+        finally
+        {
+            CaptureLuaErrors(context);
+        }
+    }
+
+    private void CaptureLuaErrors(string context)
+    {
+        if (captureLuaErrors == null)
+            return;
+
+        try
+        {
+            captureLuaErrors(context);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[FG-CHARSEL] Lua error capture callback failed for context {Context}", context);
+        }
     }
 }

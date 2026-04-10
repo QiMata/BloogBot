@@ -1,37 +1,21 @@
-using BotRunner.Helpers;
-using BotRunner.Interfaces;
 using BotRunner.Movement;
-using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Serilog;
 using System;
 using System.Linq;
 using Xas.FluentBehaviourTree;
 
-namespace BotRunner.SequenceBuilders
+namespace BotRunner
 {
-    /// <summary>
-    /// Builds combat-related behavior tree sequences (melee, ranged, wand, spell cast, etc.).
-    /// Extracted from BotRunnerService.Sequences.Combat.cs partial.
-    /// </summary>
-    internal sealed class CombatSequenceBuilder
+    public partial class BotRunnerService
     {
-        private readonly IObjectManager _objectManager;
-        private readonly IDependencyContainer _container;
-
         // Stop inside the theoretical melee range to absorb packet/snapshot drift.
         // Previous value of 2.0 was too aggressive — with small creature combat reaches
         // the arrival distance bottomed out at NOMINAL_MELEE_RANGE (1.67y), which
         // pathfinding/navmesh can't reliably achieve.  0.5y buffer leaves the bot well
         // within melee range while still reachable via navigation.
         private const float MeleeChaseStickBuffer = 0.5f;
-
-        internal CombatSequenceBuilder(IObjectManager objectManager, IDependencyContainer container)
-        {
-            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _container = container ?? throw new ArgumentNullException(nameof(container));
-        }
 
         /// <summary>
         /// Melee combat sequence: select target -> chase to melee range -> auto-attack.
@@ -41,7 +25,7 @@ namespace BotRunner.SequenceBuilders
         /// Auto-attack in WoW does not move the character; the bot must explicitly
         /// chase via pathfinding to stay in melee range.
         /// </summary>
-        internal IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid)
+        private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid)
         {
             NavigationPath? navPath = null;
             bool targetSelected = false;
@@ -98,15 +82,26 @@ namespace BotRunner.SequenceBuilders
                             // gets back inside real melee range.
                             if (navPath == null)
                             {
-                                navPath = NavigationPathFactory.Create(_container.PathfindingClient, player, _objectManager);
+                                navPath = NavigationPathFactory.Create(
+                                    _container.PathfindingClient,
+                                    _objectManager,
+                                    NavigationRoutePolicy.Standard);
                             }
 
                             if (player.RunSpeed > 0)
                                 navPath.UpdateCharacterSpeed(player.RunSpeed);
 
-                            var physics = PhysicsStateHelper.GetPhysicsState(_objectManager);
+                            bool hitWall = false;
+                            float wnx = 0f, wny = 0f, bf = 1f;
+                            if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm2)
+                            {
+                                hitWall = wsOm2.PhysicsHitWall;
+                                var wn = wsOm2.PhysicsWallNormal2D;
+                                wnx = wn.X; wny = wn.Y;
+                                bf = wsOm2.PhysicsBlockedFraction;
+                            }
                             var waypoint = navPath.GetNextWaypoint(player.Position, target.Position,
-                                player.MapId, allowDirectFallback: true, physicsHitWall: physics.HitWall, wallNormalX: physics.NormalX, wallNormalY: physics.NormalY, blockedFraction: physics.BlockedFraction);
+                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
 
                             if (waypoint != null)
                             {
@@ -192,7 +187,7 @@ namespace BotRunner.SequenceBuilders
         /// Uses the same CMSG_ATTACKSWING opcode; the server determines melee vs ranged
         /// based on equipped weapon and distance.
         /// </summary>
-        internal IBehaviourTreeNode BuildStartRangedAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode BuildStartRangedAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Start Ranged Attack Sequence")
                 .Splice(CheckForTarget(targetGuid))
                 .Do("Start Ranged Attack", time =>
@@ -215,7 +210,7 @@ namespace BotRunner.SequenceBuilders
         /// Sequence to start wand auto-attack (Shoot) on a target.
         /// FG: CastSpellByName('Shoot'), BG: CMSG_CAST_SPELL with Shoot spell ID.
         /// </summary>
-        internal IBehaviourTreeNode BuildStartWandAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode BuildStartWandAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Start Wand Attack Sequence")
                 .Splice(CheckForTarget(targetGuid))
                 .Do("Start Wand Attack", time =>
@@ -234,7 +229,7 @@ namespace BotRunner.SequenceBuilders
             .End()
             .Build();
 
-        internal IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
                 .Condition("Is Any Auto-Attack Active", time => _objectManager.Player.IsAutoAttacking)
                 .Do("Stop All Auto-Attacks", time =>
@@ -249,7 +244,7 @@ namespace BotRunner.SequenceBuilders
         /// Sequence to cast a specific spell. This checks if the bot has sufficient resources,
         /// if the spell is off cooldown, and if the target is in range before casting the spell.
         /// </summary>
-        internal IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
+        private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
         {
             Log.Information("[BOT RUNNER] BuildCastSpellSequence: spell={SpellId}, target=0x{Target:X}", spellId, targetGuid);
             return new BehaviourTreeBuilder()
@@ -285,7 +280,7 @@ namespace BotRunner.SequenceBuilders
         /// <summary>
         /// Sequence to stop the current spell cast.
         /// </summary>
-        internal IBehaviourTreeNode StopCastSequence => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode StopCastSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Cast Sequence")
                 .Condition("Is Casting", time => _objectManager.Player.IsCasting || _objectManager.Player.IsChanneling)
                 .Do("Stop Spell Cast", time =>
@@ -299,34 +294,12 @@ namespace BotRunner.SequenceBuilders
         /// <summary>
         /// Sequence to resurrect the bot or another target.
         /// </summary>
-        internal IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
             .Sequence("Resurrect Sequence")
-                .Condition("Can Resurrect", time => DeathStateDetection.IsGhost(_objectManager.Player) && _objectManager.Player.CanResurrect)
+                .Condition("Can Resurrect", time => IsGhostState(_objectManager.Player) && _objectManager.Player.CanResurrect)
                 .Do("Resurrect", time =>
                 {
                     _objectManager.AcceptResurrect();
-                    return BehaviourTreeStatus.Success;
-                })
-            .End()
-            .Build();
-
-        /// <summary>
-        /// Property to check if the player has a target, and if not, sets the target to the specified GUID.
-        /// </summary>
-        /// <param name="guid">The GUID of the target to set.</param>
-        /// <returns>IBehaviourTreeNode that checks for and sets a target if needed.</returns>
-        internal IBehaviourTreeNode CheckForTarget(ulong guid) => new BehaviourTreeBuilder()
-            .Sequence("Check for Target")
-                .Condition("Player Exists", time => _objectManager.Player != null)
-                .Do("Set Target", time =>
-                {
-                    if (guid == 0)
-                        return BehaviourTreeStatus.Success;
-
-                    if (_objectManager.Player.TargetGuid != guid)
-                    {
-                        _objectManager.SetTarget(guid);
-                    }
                     return BehaviourTreeStatus.Success;
                 })
             .End()

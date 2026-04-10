@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -18,6 +19,8 @@ namespace BotRunner.Tests.LiveValidation;
 
 public partial class LiveBotFixture
 {
+    private readonly SemaphoreSlim _soapBootstrapSemaphore = new(1, 1);
+    private bool _soapBootstrapAttempted;
 
     private int TrackSoapCommand(string command)
     {
@@ -64,19 +67,30 @@ public partial class LiveBotFixture
         </soap:Envelope>";
 
         using var client = new HttpClient();
-        var byteArray = Encoding.ASCII.GetBytes("ADMINISTRATOR:PASSWORD");
+        var byteArray = Encoding.ASCII.GetBytes($"{Config.SoapUsername}:{Config.SoapPassword}");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
-
-        var content = new StringContent(xmlPayload, Encoding.UTF8, "text/xml");
 
         try
         {
-            var response = await client.PostAsync($"http://127.0.0.1:{Config.SoapPort}", content);
-            var responseContent = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
+            async Task<(HttpStatusCode StatusCode, string Body)> SendSoapRequestAsync()
             {
-                _logger.LogWarning("[GM] Command failed: {Status}", response.StatusCode);
+                using var content = new StringContent(xmlPayload, Encoding.UTF8, "text/xml");
+                using var response = await client.PostAsync($"http://127.0.0.1:{Config.SoapPort}", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return (response.StatusCode, responseContent);
+            }
+
+            var (statusCode, responseContent) = await SendSoapRequestAsync();
+
+            if (statusCode == HttpStatusCode.Unauthorized && await TryBootstrapSoapAdminAccountAsync())
+            {
+                _logger.LogInformation("[GM] SOAP unauthorized; retried after bootstrap.");
+                (statusCode, responseContent) = await SendSoapRequestAsync();
+            }
+
+            if ((int)statusCode < 200 || (int)statusCode > 299)
+            {
+                _logger.LogWarning("[GM] Command failed: {Status}", statusCode);
                 return string.Empty;
             }
 
@@ -109,6 +123,26 @@ public partial class LiveBotFixture
         {
             _logger.LogWarning("[GM] Error: {Error}", ex.Message);
             return string.Empty;
+        }
+    }
+
+    private async Task<bool> TryBootstrapSoapAdminAccountAsync()
+    {
+        if (_soapBootstrapAttempted)
+            return false;
+
+        await _soapBootstrapSemaphore.WaitAsync();
+        try
+        {
+            if (_soapBootstrapAttempted)
+                return false;
+
+            _soapBootstrapAttempted = true;
+            return await EnsureSoapAdminAccountAsync();
+        }
+        finally
+        {
+            _soapBootstrapSemaphore.Release();
         }
     }
 

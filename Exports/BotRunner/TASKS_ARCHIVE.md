@@ -2,6 +2,48 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-09) - BR-NAV-004 (Slice 2)
+
+- [x] `BR-NAV-004` slice 2: surfaced route affordance decisions to higher-level BotRunner task logic:
+  - Added `NavigationRouteDecision` to `NavigationTraceSnapshot` with explicit plan-level metadata (`HasPath`, support flag, max affordance, estimated cost, alternate compare/select, endpoint retarget).
+  - `NavigationPath` now records the selected route decision on each `CalculatePath(...)` call.
+  - `GoToTask` now emits per-plan route summaries (`[GOTO_ROUTE]`) to diagnostics and logs.
+  - `RetrieveCorpseTask` trace summary now includes the route-decision digest.
+  - Updated deterministic tests to assert route-decision fields and trace-summary output.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~RetrieveCorpseTaskTests.FormatNavigationTraceSummary_IncludesKeyFieldsAndTruncatesPathsAndSamples" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results"` -> `passed (69/69)`
+
+## Archived Snapshot (2026-04-09) - BR-NAV-004 (Slice 1)
+
+- [x] `BR-NAV-004` slice 1: movement/path consumer route affordance gating in `NavigationPath`:
+  - Reject unsupported route candidates (`CliffCount > 0`).
+  - Compare alternate path variant and prefer cheaper supported valid route when available.
+  - Deterministic coverage added: `NavigationPathTests.GetNextWaypoint_PrefersCheaperSupportedAlternateWhenPrimaryHasCliffSegment`.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results"` -> `passed (61/61)`
+
+## Archived Snapshot (2026-04-09) - BR-NAV-003
+
+- [x] `BR-NAV-003` dynamic-blocker replanning:
+  - Added explicit trace reason `dynamic_blocker_observed` in `NavigationTraceReason`.
+  - `NavigationPath` now carries dynamic-blocker evidence from segment validation and triggers forced planned replans on a bounded cooldown when no route is available (instead of waiting for stall-loop escalation).
+  - Added deterministic coverage in `NavigationPathTests.GetNextWaypoint_TraceRecordsDynamicBlockerDrivenReplanReason`.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~BotRunnerServiceGoToDispatchTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results"` -> `passed (73/73)`
+
+## Archived Snapshot (2026-04-09) - BR-NAV-001 and BR-NAV-002
+
+- [x] `BR-NAV-001` conservative object overlay filter:
+  - Nearby overlay now includes only collision/gameplay-relevant object types (`Door`, `Transport`, `MapObject*`, `DestructibleBuilding`, `TrapDoor`, `MeetingStone`, `FlagStand`, `FlagDrop`, `CapturePoint`).
+  - Deterministic allowlist coverage added in `PathfindingOverlayBuilderTests`.
+- [x] `BR-NAV-002` movement capability + route policy threading:
+  - Added `NavigationPathFactory` profiles (`Standard`, `CorpseRun`) so BotRunner call sites consistently thread `race/gender/capsule` and policy flags into `NavigationPath`.
+  - Updated BotRunner navigation call sites to consume shared factory/profile path.
+  - Added deterministic coverage in `NavigationPathFactoryTests` for standard smoothing, corpse-run unsmoothed routing, and null-player default capabilities.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results"` -> `passed (8/8)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~BotRunnerServiceGoToDispatchTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results"` -> `passed (66/66)`
+
 ## Archived Snapshot (2026-02-23 09:27:22) - Exports/BotRunner/TASKS.md
 
 # BotRunner Tasks

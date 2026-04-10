@@ -1,36 +1,19 @@
-using BotRunner.Helpers;
-using BotRunner.Interfaces;
 using BotRunner.Movement;
-using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Serilog;
 using System;
 using System.Linq;
 using Xas.FluentBehaviourTree;
 
-namespace BotRunner.SequenceBuilders
+namespace BotRunner
 {
-    /// <summary>
-    /// Builds movement-related behavior tree sequences (GoTo, Follow, Interact, Gather).
-    /// Extracted from BotRunnerService.Sequences.Movement.cs partial.
-    /// </summary>
-    internal sealed class MovementSequenceBuilder
+    public partial class BotRunnerService
     {
-        private readonly IObjectManager _objectManager;
-        private readonly IDependencyContainer _container;
-
-        internal MovementSequenceBuilder(IObjectManager objectManager, IDependencyContainer container)
-        {
-            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _container = container ?? throw new ArgumentNullException(nameof(container));
-        }
-
-        internal static IBehaviourTreeNode BuildWaitSequence(float duration) => new BehaviourTreeBuilder()
+        private static IBehaviourTreeNode BuildWaitSequence(float duration) => new BehaviourTreeBuilder()
                 .Sequence("Wait Sequence")
                     .Do("Wait", time => BehaviourTreeStatus.Success)
                 .End()
                 .Build();
-
         /// <summary>
         /// Sequence to move the bot to a specific location using given coordinates (x, y, z) and a range (f).
         /// </summary>
@@ -39,7 +22,7 @@ namespace BotRunner.SequenceBuilders
         /// <param name="z">The z-coordinate of the destination.</param>
         /// <param name="tolerance">How close to get before stopping (0 = default 3 yards).</param>
         /// <returns>IBehaviourTreeNode that manages moving the bot to the specified location.</returns>
-        internal IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float tolerance)
+        private IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float tolerance)
         {
             NavigationPath? navPath = null;
             DateTime? noPathSinceUtc = null;
@@ -54,7 +37,11 @@ namespace BotRunner.SequenceBuilders
 
                     if (navPath == null)
                     {
-                        navPath = NavigationPathFactory.Create(_container.PathfindingClient, _objectManager.Player, _objectManager);
+                        var pfClient = _container.PathfindingClient;
+                        navPath = NavigationPathFactory.Create(
+                            pfClient,
+                            _objectManager,
+                            NavigationRoutePolicy.Standard);
                     }
 
                     var target = new Position(x, y, z);
@@ -75,9 +62,17 @@ namespace BotRunner.SequenceBuilders
                     // long stuck-forward loops when direct steering has no valid route.
                     // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
                     // detection when the bot is genuinely blocked by geometry.
-                    var physics = PhysicsStateHelper.GetPhysicsState(_objectManager);
+                    bool hitWall = false;
+                    float wnx = 0f, wny = 0f, bf = 1f;
+                    if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
+                    {
+                        hitWall = wsOm.PhysicsHitWall;
+                        var wn = wsOm.PhysicsWallNormal2D;
+                        wnx = wn.X; wny = wn.Y;
+                        bf = wsOm.PhysicsBlockedFraction;
+                    }
                     try {
-                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: physics.HitWall, wallNormalX: physics.NormalX, wallNormalY: physics.NormalY, blockedFraction: physics.BlockedFraction);
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
                         if (waypoint == null)
                         {
                             _objectManager.StopAllMovement();
@@ -120,13 +115,12 @@ namespace BotRunner.SequenceBuilders
             // to chase a mismatched Z only makes the controller orbit and reverse near the goal.
             return currentPosition.DistanceTo2D(target) < tolerance;
         }
-
         /// <summary>
         /// Sequence to continuously follow another player by GUID, staying within followDistance.
         /// Used to make the FG bot shadow the BG bot during tests.
         /// Returns Running indefinitely — caller must cancel via new action dispatch.
         /// </summary>
-        internal IBehaviourTreeNode BuildFollowTargetSequence(ulong targetGuid, float followDistance)
+        private IBehaviourTreeNode BuildFollowTargetSequence(ulong targetGuid, float followDistance)
         {
             NavigationPath? navPath = null;
 
@@ -156,7 +150,11 @@ namespace BotRunner.SequenceBuilders
                     // Too far — move toward target
                     if (navPath == null)
                     {
-                        navPath = NavigationPathFactory.Create(_container.PathfindingClient, _objectManager.Player, _objectManager);
+                        var pfClient = _container.PathfindingClient;
+                        navPath = NavigationPathFactory.Create(
+                            pfClient,
+                            _objectManager,
+                            NavigationRoutePolicy.Standard);
                     }
 
                     if (_objectManager.Player.RunSpeed > 0)
@@ -193,9 +191,9 @@ namespace BotRunner.SequenceBuilders
         /// </summary>
         /// <param name="guid">The GUID of the target to interact with.</param>
         /// <returns>IBehaviourTreeNode that manages interacting with the specified target.</returns>
-        internal IBehaviourTreeNode BuildInteractWithSequence(ulong guid, IBehaviourTreeNode checkForTarget) => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode BuildInteractWithSequence(ulong guid) => new BehaviourTreeBuilder()
             .Sequence("Interact With Sequence")
-                .Splice(checkForTarget)
+                .Splice(CheckForTarget(guid))
                 // Ensure the target is valid for interaction
                 .Condition("Has Valid Target", time => _objectManager.Player.TargetGuid == guid)
 
@@ -207,19 +205,18 @@ namespace BotRunner.SequenceBuilders
                 })
             .End()
             .Build();
-
         /// <summary>
         /// Sequence to gather a resource node (herb/ore) by GUID.
         /// WoW 1.12.1 mining/herbalism flow:
         ///   1. CMSG_GAMEOBJ_USE (selects the node, triggers scripts)
-        ///   2. CMSG_CAST_SPELL with gathering spell (SPELL_EFFECT_OPEN_LOCK -> skill check -> loot)
+        ///   2. CMSG_CAST_SPELL with gathering spell (SPELL_EFFECT_OPEN_LOCK → skill check → loot)
         /// The native WoW client does both automatically via CGGameObject_C::OnRightClick.
         /// The headless client must replicate both steps explicitly.
         /// </summary>
         /// <param name="guid">Game object GUID of the node.</param>
         /// <param name="gatherSpellId">Gathering spell to cast (e.g. 2656 for Mining, 2366 for Herbalism).
         /// If 0, falls back to CMSG_GAMEOBJ_USE only (legacy behavior).</param>
-        internal IBehaviourTreeNode BuildGatherNodeSequence(ulong guid, int gatherSpellId = 0)
+        private IBehaviourTreeNode BuildGatherNodeSequence(ulong guid, int gatherSpellId = 0)
         {
             DateTime? interactedAt = null;
             bool looted = false;
@@ -256,7 +253,7 @@ namespace BotRunner.SequenceBuilders
 
                             // Send CMSG_GAMEOBJ_USE first, then CMSG_CAST_SPELL.
                             // MaNGOS mining flow: GAMEOBJ_USE on CHEST type runs scripts/triggers,
-                            // then CAST_SPELL with the gathering spell processes EffectOpenLock -> SendLoot.
+                            // then CAST_SPELL with the gathering spell processes EffectOpenLock → SendLoot.
                             // Both packets together match what the real WoW client sends.
                             Log.Information("[GATHER] Sending GAMEOBJ_USE + CAST_SPELL for node 0x{Guid:X}, spell={SpellId}", guid, gatherSpellId);
                             _objectManager.InteractWithGameObject(guid);
@@ -269,7 +266,7 @@ namespace BotRunner.SequenceBuilders
                             // Clear target immediately after the interaction/cast has been sent.
                             // For FG: CGGameObject_C::OnRightClick registers a game object interaction
                             // state machine that holds a pointer to the node. When the node despawns
-                            // (~3s after gather), the callback dereferences that pointer -> ERROR #132
+                            // (~3s after gather), the callback dereferences that pointer → ERROR #132
                             // (ACCESS_VIOLATION at 0x006F876A reading 0x0000001E).
                             // The gather spell is already in flight; clearing target does not cancel it.
                             _objectManager.SetTarget(0);
@@ -294,7 +291,7 @@ namespace BotRunner.SequenceBuilders
                         // Auto-loot all items then close, matching what WoW.exe does natively for right-click gather.
                         if (_objectManager.LootFrame?.IsOpen == true)
                         {
-                            Log.Information("[GATHER] Loot frame open with {Count} items -- auto-looting", _objectManager.LootFrame.LootCount);
+                            Log.Information("[GATHER] Loot frame open with {Count} items — auto-looting", _objectManager.LootFrame.LootCount);
                             _objectManager.LootFrame.LootAll();
                             _objectManager.LootFrame.Close();
                         }
@@ -330,5 +327,27 @@ namespace BotRunner.SequenceBuilders
                 .End()
                 .Build();
         }
+
+        /// <summary>
+        /// Property to check if the player has a target, and if not, sets the target to the specified GUID.
+        /// </summary>
+        /// <param name="guid">The GUID of the target to set.</param>
+        /// <returns>IBehaviourTreeNode that checks for and sets a target if needed.</returns>
+        private IBehaviourTreeNode CheckForTarget(ulong guid) => new BehaviourTreeBuilder()
+            .Sequence("Check for Target")
+                .Condition("Player Exists", time => _objectManager.Player != null)
+                .Do("Set Target", time =>
+                {
+                    if (guid == 0)
+                        return BehaviourTreeStatus.Success;
+
+                    if (_objectManager.Player.TargetGuid != guid)
+                    {
+                        _objectManager.SetTarget(guid);
+                    }
+                    return BehaviourTreeStatus.Success;
+                })
+            .End()
+            .Build();
     }
 }

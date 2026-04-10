@@ -1,12 +1,9 @@
 using BotRunner.Constants;
-using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
-using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 using System;
 using System.Collections.Generic;
 
@@ -18,15 +15,6 @@ namespace BotRunner.Tasks;
 public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 {
     protected readonly IBotContext BotContext = botContext;
-
-    /// <summary>
-    /// Structured logger for this task, created from the IBotContext's LoggerFactory.
-    /// Falls back to NullLogger when DI is not configured.
-    /// Uses the concrete task type name as the logger category.
-    /// </summary>
-    private ILogger? _logger;
-    protected ILogger Logger => _logger ??= (BotContext.LoggerFactory
-        ?? NullLoggerFactory.Instance).CreateLogger(GetType().Name);
 
     /// <summary>
     /// Access to the object manager for game state.
@@ -56,7 +44,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     /// <summary>
     /// Utility for tracking wait times.
     /// </summary>
-    protected WaitTracker Wait { get; } = new();
+    protected static WaitTracker Wait { get; } = new();
 
     private NavigationPath? _navPath;
 
@@ -80,44 +68,41 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     protected bool TryNavigateToward(Position destination, bool allowDirectFallback = false)
     {
         var player = ObjectManager.Player;
-        if (_navPath == null)
-        {
-            _navPath = NavigationPathFactory.Create(Container.PathfindingClient, player, ObjectManager);
-        }
         if (player?.Position == null)
         {
-            Logger.LogWarning("[NAV-DIAG] TryNavigateToward: player or position is null");
+            Log.Warning("[NAV-DIAG] TryNavigateToward: player or position is null");
             return false;
         }
 
-        var physics = PhysicsStateHelper.GetPhysicsState(ObjectManager);
+        if (_navPath == null)
+        {
+            _navPath = NavigationPathFactory.Create(
+                Container.PathfindingClient,
+                ObjectManager,
+                NavigationRoutePolicy.Standard);
+        }
+
+        var wallNormal = ObjectManager.PhysicsWallNormal2D;
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
             destination,
             player.MapId,
             allowDirectFallback: allowDirectFallback,
-            physicsHitWall: physics.HitWall,
-            wallNormalX: physics.NormalX,
-            wallNormalY: physics.NormalY,
-            blockedFraction: physics.BlockedFraction);
+            physicsHitWall: ObjectManager.PhysicsHitWall,
+            wallNormalX: wallNormal.X,
+            wallNormalY: wallNormal.Y,
+            blockedFraction: ObjectManager.PhysicsBlockedFraction);
 
         if (waypoint != null)
         {
-            // MoveToward first — sets facing + starts movement + calls SetTargetWaypoint
+            // BotRunner owns corridor/waypoint execution. MovementController only consumes
+            // the current steering target for physics/collision parity against WoW.exe.
             ObjectManager.MoveToward(waypoint);
-
-            // Then pass the remaining active corridor to the MovementController.
-            // This MUST come after MoveToward because MoveToward calls SetTargetWaypoint
-            // which overwrites _currentPath with a single-waypoint path. We need the full
-            // remaining corridor for XY dead-reckoning in dungeons without vmtile collision data.
-            var currentWaypoints = _navPath.CurrentWaypoints;
-            if (currentWaypoints.Length > 0)
-                ObjectManager.SetNavigationPath(currentWaypoints);
 
             return true;
         }
 
-        Logger.LogWarning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
+        Log.Warning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
             "pos=({PosX:F1},{PosY:F1},{PosZ:F1}), dest=({DestX:F1},{DestY:F1},{DestZ:F1}), map={Map}",
             player.Position.X, player.Position.Y, player.Position.Z,
             destination.X, destination.Y, destination.Z, player.MapId);
@@ -143,7 +128,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
         BotRunnerService.DiagLog($"[TASK-POP] task={top.GetType().Name} reason={reason} remaining={BotTasks.Count - 1}");
         BotTasks.Pop();
-        Logger.LogInformation("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
+        Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);
     }
 

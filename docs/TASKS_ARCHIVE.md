@@ -2,6 +2,42 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-09) - FG Realm Wizard Transition Stabilization
+
+- [x] Replaced runtime realm-wizard Lua fallback sweeps with state-based, named-control actions.
+- [x] Kept realm suggestion -> empty character-select transition detection state-driven (`charselect`) for new-account/new-character runs.
+- [x] Verified repeated focused live passes:
+  - `tmp/test-runtime/results-live/fg_new_account_flow_latest.trx` (`129.8s` in-world)
+  - `tmp/test-runtime/results-live/fg_new_account_flow_rerun1.trx` (`122.5s`)
+  - `tmp/test-runtime/results-live/fg_new_account_flow_rerun2.trx` (`121.7s`)
+  - `tmp/test-runtime/results-live/fg_new_account_flow_no_sweep.trx` (`116.9s`)
+
+## Archived Snapshot (2026-04-09) - AV P1.13/P1.14 Closeout
+
+- [x] `P1.13` Equip items systemic failure:
+  - `BuildEquipItemByIdSequence`/`BuildUseItemByIdSequence` fallback shipped for backpack + equipped bag probes.
+  - Live AV proof run (`tmp/test-runtime/results-live/av_iteration_20260409_objective_tolerance60.trx`) passed with no `[LOADOUT-WARN]` lines.
+- [x] `P1.14` AV stragglers:
+  - Battleground coordinator restage-before-join plus entry settle window closed the recurring `72-74/80` stall.
+  - Same live AV proof run recorded `BG-SETTLE bestOnBg=80` and `bg=80,off=0` before objective dispatch.
+- [x] `P1.15` stale-open cleanup:
+  - Removed from Open list after prior completion so `docs/TASKS.md` now tracks only unresolved work.
+- Validation:
+  - `rg -n "BG-SETTLE|AV:Mount|AV:HordeObjective|AV:AllianceObjective" tmp/test-runtime/results-live/av_iteration_20260409_objective_tolerance60.trx` -> `bestOnBg=80`, `bg=80,off=0`, `mounted=77/70`, objective thresholds met.
+  - `rg -n "\[LOADOUT-WARN\]" tmp/test-runtime/results-live/av_iteration_20260409_objective_tolerance60.trx` -> no matches.
+
+## Archived Snapshot (2026-04-08) - P1 Open-List Cleanup
+
+- [x] `P1.16` Goto action persistence:
+  - `CharacterAction.GoTo` now upserts a persistent `GoToTask` (push/retarget/duplicate-skip) instead of stacking a new task each poll cycle.
+  - Deterministic coverage added in `Tests/BotRunner.Tests/BotRunnerServiceGoToDispatchTests.cs` (`4/4` passing).
+- [x] Removed stale resolved duplicate from Open:
+  - `P1.6` FG bot CharacterSelect was already resolved by all-BG AV bring-up and is now tracked only under Completed.
+- Validation:
+  - `dotnet restore Tests/BotRunner.Tests/BotRunner.Tests.csproj --verbosity minimal` -> `succeeded`
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BotRunnerServiceGoToDispatchTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+
 ## Archived Snapshot (2026-04-03) - P30 Coordinator Refactor Complete
 
 - [x] `30.1` Extract Dungeoneering prep into `RfcBotFixture`.

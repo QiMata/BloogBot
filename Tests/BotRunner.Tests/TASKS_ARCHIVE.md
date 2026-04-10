@@ -2,6 +2,15 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-09) - FG New Account Realm Handoff Stability
+
+- [x] Stabilized `ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld` with state-based realm-wizard handoff to empty character select and no runtime Lua sweep actions.
+- [x] Confirmed repeated live pass evidence:
+  - `fg_new_account_flow_latest.trx` -> in-world after `129.8s`
+  - `fg_new_account_flow_rerun1.trx` -> in-world after `122.5s`
+  - `fg_new_account_flow_rerun2.trx` -> in-world after `121.7s`
+  - `fg_new_account_flow_no_sweep.trx` -> in-world after `116.9s`
+
 ## Archived Snapshot (2026-04-03) - RFC coordinator-only prep pattern
 
 - [x] Keep RFC fixture prep-owned and coordinator-owned responsibilities separate all the way through the test lifecycle.

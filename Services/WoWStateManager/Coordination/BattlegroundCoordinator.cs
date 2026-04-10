@@ -17,6 +17,11 @@ public class BattlegroundCoordinator
     public readonly record struct StagingTarget(uint MapId, float X, float Y, float Z);
 
     private const float QueueReadyRadius = 80f;
+    private const float QueueRestageStopDistance = 10f;
+    private static readonly TimeSpan InviteAcceptRetryStartDelay = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan InviteJoinRetryInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan InviteAcceptRetryInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan QueueRestageRetryInterval = TimeSpan.FromSeconds(8);
 
     public enum CoordState
     {
@@ -43,6 +48,9 @@ public class BattlegroundCoordinator
 
     private readonly ConcurrentDictionary<string, int> _queueSent = new();
     private readonly ConcurrentDictionary<string, int> _acceptSent = new();
+    private readonly ConcurrentDictionary<string, DateTime> _restageSentAt = new();
+    private readonly ConcurrentDictionary<string, DateTime> _joinRetrySentAt = new();
+    private readonly ConcurrentDictionary<string, DateTime> _acceptRetrySentAt = new();
 
     public BattlegroundCoordinator(
         string leaderAccount,
@@ -96,6 +104,17 @@ public class BattlegroundCoordinator
         _state = newState;
         _stateEnteredAt = DateTime.UtcNow;
         _tickCount = 0;
+        if (newState == CoordState.WaitForInvite)
+        {
+            _restageSentAt.Clear();
+            _joinRetrySentAt.Clear();
+            _acceptRetrySentAt.Clear();
+            _acceptSent.Clear();
+        }
+        else if (newState == CoordState.QueueForBattleground)
+        {
+            _restageSentAt.Clear();
+        }
     }
 
     private ActionMessage? HandleWaitingForBots(
@@ -179,6 +198,14 @@ public class BattlegroundCoordinator
             && snapshot.IsObjectManagerValid
             && (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) != _bgMapId)
         {
+            var restageAction = TryBuildRestageGotoAction(
+                requestingAccount,
+                snapshot,
+                phaseName: "QueueForBattleground",
+                elapsed: DateTime.UtcNow - _stateEnteredAt);
+            if (restageAction != null)
+                return restageAction;
+
             if (_queueSent.TryAdd(requestingAccount, 0))
             {
                 _logger.LogInformation(
@@ -218,16 +245,110 @@ public class BattlegroundCoordinator
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         var onBgMap = snapshots.Values.Count(snapshot =>
-            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
+            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId) == _bgMapId);
 
         var total = _memberAccounts.Count + 1;
         if (onBgMap >= total)
         {
             _logger.LogInformation("BG_COORD: {Count}/{Total} bots on BG map. BG is active.", onBgMap, total);
             TransitionTo(CoordState.InBattleground);
+            return null;
         }
 
-        return null;
+        var elapsed = DateTime.UtcNow - _stateEnteredAt;
+        if (elapsed < InviteAcceptRetryStartDelay)
+            return null;
+
+        if (!snapshots.TryGetValue(requestingAccount, out var snapshot))
+            return null;
+
+        if (!IsWorldReady(snapshot, _minimumLevel))
+            return null;
+
+        var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+        if (mapId == _bgMapId)
+            return null;
+
+        var restageGoto = TryBuildRestageGotoAction(
+            requestingAccount,
+            snapshot,
+            phaseName: "WaitForInvite",
+            elapsed: elapsed);
+        if (restageGoto != null)
+            return restageGoto;
+
+        var now = DateTime.UtcNow;
+        if (!_joinRetrySentAt.TryGetValue(requestingAccount, out var lastJoinSentAt)
+            || now - lastJoinSentAt >= InviteJoinRetryInterval)
+        {
+            _joinRetrySentAt[requestingAccount] = now;
+            _logger.LogInformation(
+                "BG_COORD: WaitForInvite retry JOIN_BATTLEGROUND for '{Account}' (elapsed={Elapsed:mm\\:ss}, map={Map})",
+                requestingAccount,
+                elapsed,
+                mapId);
+
+            var joinAction = new ActionMessage { ActionType = ActionType.JoinBattleground };
+            joinAction.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
+            joinAction.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
+            return joinAction;
+        }
+
+        if (_acceptRetrySentAt.TryGetValue(requestingAccount, out var lastSentAt)
+            && now - lastSentAt < InviteAcceptRetryInterval)
+        {
+            return null;
+        }
+
+        _acceptRetrySentAt[requestingAccount] = now;
+        _logger.LogInformation(
+            "BG_COORD: WaitForInvite retry ACCEPT_BATTLEGROUND for '{Account}' (elapsed={Elapsed:mm\\:ss}, map={Map})",
+            requestingAccount,
+            elapsed,
+            mapId);
+        return new ActionMessage { ActionType = ActionType.AcceptBattleground };
+    }
+
+    private ActionMessage? TryBuildRestageGotoAction(
+        string accountName,
+        WoWActivitySnapshot snapshot,
+        string phaseName,
+        TimeSpan elapsed)
+    {
+        if (IsQueuedAtStagingTarget(accountName, snapshot))
+            return null;
+
+        if (!_stagingTargets.TryGetValue(accountName, out var target))
+            return null;
+
+        var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+        if (mapId != target.MapId)
+            return null;
+
+        var now = DateTime.UtcNow;
+        if (_restageSentAt.TryGetValue(accountName, out var lastSentAt)
+            && now - lastSentAt < QueueRestageRetryInterval)
+        {
+            return null;
+        }
+
+        _restageSentAt[accountName] = now;
+        var position = snapshot.Player?.Unit?.GameObject?.Base?.Position;
+        var distance = position == null ? float.NaN : Distance2D(position.X, position.Y, target.X, target.Y);
+        _logger.LogInformation(
+            "BG_COORD: {Phase} restage GOTO for '{Account}' (elapsed={Elapsed:mm\\:ss}, map={Map}, dist={Distance})",
+            phaseName,
+            accountName,
+            elapsed,
+            mapId,
+            float.IsNaN(distance) ? "?" : distance.ToString("F0"));
+
+        var action = new ActionMessage { ActionType = ActionType.Goto };
+        action.Parameters.Add(new RequestParameter { FloatParam = target.X });
+        action.Parameters.Add(new RequestParameter { FloatParam = target.Y });
+        action.Parameters.Add(new RequestParameter { FloatParam = target.Z });
+        action.Parameters.Add(new RequestParameter { FloatParam = QueueRestageStopDistance });
+        return action;
     }
 
     private ActionMessage? HandleAcceptInvite(
@@ -246,7 +367,7 @@ public class BattlegroundCoordinator
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         var onBgMap = snapshots.Values.Count(snapshot =>
-            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0) == _bgMapId);
+            (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId) == _bgMapId);
 
         var total = _memberAccounts.Count + 1;
         if (onBgMap >= total)

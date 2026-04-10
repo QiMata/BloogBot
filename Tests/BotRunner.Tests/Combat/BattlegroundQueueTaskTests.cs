@@ -300,6 +300,166 @@ public class BattlegroundQueueTaskTests
         Assert.Equal("WaitForInvite", GetPrivateField<object>(task, "_state")?.ToString());
     }
 
+    [Fact]
+    public void Update_WaitForInvitePastRetryThreshold_ReacquiresBattlemasterBeforeRequeue()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1981f, -4788f, 56f));
+        player.Setup(p => p.MapId).Returns(1u);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_bmGuid", 0xDEADBEEFul);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Equal("FindBattlemaster", GetPrivateField<object>(task, "_state")?.ToString());
+        Assert.Equal(1, GetPrivateField<int>(task, "_inviteRetryAttempts"));
+        Assert.Equal(0UL, GetPrivateField<ulong>(task, "_bmGuid"));
+    }
+
+    [Fact]
+    public void Update_WaitForInviteAtRetryCap_DoesNotRequeueAgain()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1981f, -4788f, 56f));
+        player.Setup(p => p.MapId).Returns(1u);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
+        SetPrivateField(task, "_inviteRetryAttempts", 3);
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Equal("WaitForInvite", GetPrivateField<object>(task, "_state")?.ToString());
+        Assert.Equal(3, GetPrivateField<int>(task, "_inviteRetryAttempts"));
+    }
+
+    [Fact]
+    public void Update_WaitForInviteRetry_WithLargeVerticalOffset_TriggersReapproachNavigation()
+    {
+        var pathRequests = 0;
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pathfinding =>
+        {
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Callback(() => pathRequests++)
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    new Position(end.X, end.Y, end.Z)
+                ]);
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-8424.55f, 342.81f, 131.2f));
+        player.Setup(p => p.MapId).Returns(0u);
+        player.Setup(p => p.Race).Returns(Race.Human);
+        player.Setup(p => p.Gender).Returns(Gender.Female);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Equal("FindBattlemaster", GetPrivateField<object>(task, "_state")?.ToString());
+        Assert.Equal(1, GetPrivateField<int>(task, "_inviteRetryAttempts"));
+        Assert.True(pathRequests > 0, "Expected a re-approach navigation path request when bot is vertically offset near battlemaster.");
+    }
+
+    [Fact]
+    public void Update_WaitForInviteRetry_WithoutVerticalOffset_DoesNotTriggerReapproachNavigation()
+    {
+        var pathRequests = 0;
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pathfinding =>
+        {
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Callback(() => pathRequests++)
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    new Position(end.X, end.Y, end.Z)
+                ]);
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-8424.55f, 342.81f, 121.1f));
+        player.Setup(p => p.MapId).Returns(0u);
+        player.Setup(p => p.Race).Returns(Race.Human);
+        player.Setup(p => p.Gender).Returns(Gender.Female);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(50));
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Equal("FindBattlemaster", GetPrivateField<object>(task, "_state")?.ToString());
+        Assert.Equal(1, GetPrivateField<int>(task, "_inviteRetryAttempts"));
+        Assert.Equal(0, pathRequests);
+    }
+
+    [Fact]
+    public void Update_WaitForInvitePastInviteTimeout_RequeuesBeforePop()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1981f, -4788f, 56f));
+        player.Setup(p => p.MapId).Returns(1u);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_bmGuid", 0xDEADBEEFul);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(301));
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Equal("FindBattlemaster", GetPrivateField<object>(task, "_state")?.ToString());
+        Assert.Equal(1, GetPrivateField<int>(task, "_inviteTimeoutRequeues"));
+        Assert.Equal(0UL, GetPrivateField<ulong>(task, "_bmGuid"));
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WaitForInvitePastInviteTimeoutAtRequeueCap_PopsTask()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1981f, -4788f, 56f));
+        player.Setup(p => p.MapId).Returns(1u);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new BattlegroundQueueTask(ctx.Object, BattlemasterData.BattlegroundType.AlteracValley, 30);
+        SetPrivateField(task, "_state", Enum.Parse(GetPrivateField<object>(task, "_state")!.GetType(), "WaitForInvite"));
+        SetPrivateField(task, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(301));
+        SetPrivateField(task, "_inviteTimeoutRequeues", 2);
+        stack.Push(task);
+        ResetSharedWaits();
+
+        task.Update();
+
+        Assert.Empty(stack);
+    }
+
     private static Mock<IWoWUnit> CreateBattlemaster(
         ulong guid,
         uint entry,

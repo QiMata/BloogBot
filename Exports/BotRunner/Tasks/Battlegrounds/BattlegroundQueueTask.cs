@@ -3,7 +3,7 @@ using BotRunner.Travel;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using System;
 using System.Linq;
 using System.Threading;
@@ -38,6 +38,11 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     private int _actionAttempts;
     private const double StateTimeoutSec = 60.0;
     private const double InviteTimeoutSec = 300.0;
+    private const double InviteRetryAfterSec = 45.0;
+    private const int MaxInviteRetryAttempts = 3;
+    private const int MaxInviteTimeoutRequeues = 2;
+    private int _inviteRetryAttempts;
+    private int _inviteTimeoutRequeues;
 
     public BattlegroundQueueTask(
         IBotContext botContext,
@@ -49,8 +54,8 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         _bgType = bgType;
         _expectedBgMapId = expectedBgMapId;
         _bgClient = bgClient;
-        Logger.LogInformation("[BG-QUEUE] Task started: bgType={BgType}, expectedMap={MapId}, hasClient={HasClient}",
-            bgType, expectedBgMapId, bgClient != null);
+        Log.Information("[BG-QUEUE] Task started: bot={Bot}, bgType={BgType}, expectedMap={MapId}, hasClient={HasClient}",
+            GetBotLabel(), bgType, expectedBgMapId, bgClient != null);
     }
 
     public void Update()
@@ -65,14 +70,35 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         var timeout = _state == BgState.WaitForInvite ? InviteTimeoutSec : StateTimeoutSec;
         if ((DateTime.UtcNow - _stateEnteredAt).TotalSeconds > timeout)
         {
-            Logger.LogWarning("[BG-QUEUE] Timed out in {State} after {Sec}s", _state, timeout);
+            if (_state == BgState.WaitForInvite && _inviteTimeoutRequeues < MaxInviteTimeoutRequeues)
+            {
+                _inviteTimeoutRequeues++;
+                _inviteRetryAttempts = 0;
+                var diagnostics = BuildQueueDiagnostics();
+                Log.Warning(
+                    "[BG-QUEUE] bot={Bot} timed out in {State} after {Sec}s; forcing fresh queue cycle ({Retry}/{Max}); {Diagnostics}",
+                    GetBotLabel(),
+                    _state,
+                    timeout,
+                    _inviteTimeoutRequeues,
+                    MaxInviteTimeoutRequeues,
+                    diagnostics);
+                RestartQueueCycle("invite_timeout");
+                return;
+            }
+
+            Log.Warning("[BG-QUEUE] bot={Bot} timed out in {State} after {Sec}s; {Diagnostics}",
+                GetBotLabel(),
+                _state,
+                timeout,
+                BuildQueueDiagnostics());
             PopTask("timeout");
             return;
         }
 
         if (player.MapId == _expectedBgMapId)
         {
-            Logger.LogInformation("[BG-QUEUE] Already on BG map {MapId} - done!", _expectedBgMapId);
+            Log.Information("[BG-QUEUE] bot={Bot} already on BG map {MapId} - done!", GetBotLabel(), _expectedBgMapId);
             ObjectManager.StopAllMovement();
             PopTask("already_in_bg");
             return;
@@ -141,7 +167,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         }
         else
         {
-            Logger.LogWarning("[BG-QUEUE] No battlemaster data for bgType={BgType}, faction={Faction}; falling back to nearest battlemaster flag",
+            Log.Warning("[BG-QUEUE] No battlemaster data for bgType={BgType}, faction={Faction}; falling back to nearest battlemaster flag",
                 _bgType, faction);
         }
 
@@ -158,7 +184,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         if (_bmNpc == null && bmData != null && player.Position.DistanceTo(bmData.Position) < 15f)
         {
             _bmGuid = bmData.PackedGuid;
-            Logger.LogInformation("[BG-QUEUE] Using known packed GUID 0x{Guid:X} for {NpcName} ({NpcTitle}, entry={Entry})",
+            Log.Information("[BG-QUEUE] Using known packed GUID 0x{Guid:X} for {NpcName} ({NpcTitle}, entry={Entry})",
                 _bmGuid, bmData.NpcName, bmData.NpcTitle, bmData.NpcEntry);
             SetState(BgState.InteractAndQueue);
             return;
@@ -168,7 +194,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         {
             _bmGuid = _bmNpc.Guid;
             var source = ((uint)_bmNpc.NpcFlags & (uint)NPCFlags.UNIT_NPC_FLAG_BATTLEMASTER) != 0 ? "npc_flags" : "entry";
-            Logger.LogInformation("[BG-QUEUE] Found battlemaster: {Name} ({NpcTitle}, entry={Entry}, 0x{Guid:X}) at {Dist:F0}y via {Source} flags=0x{Flags:X}",
+            Log.Information("[BG-QUEUE] Found battlemaster: {Name} ({NpcTitle}, entry={Entry}, 0x{Guid:X}) at {Dist:F0}y via {Source} flags=0x{Flags:X}",
                 _bmNpc.Name,
                 bmData?.NpcTitle ?? "unknown title",
                 _bmNpc.Entry,
@@ -187,20 +213,20 @@ public class BattlegroundQueueTask : BotTask, IBotTask
             {
                 if (!Wait.For("bm_wait_nearby", 2000, true))
                     return;
-                Logger.LogDebug("[BG-QUEUE] Waiting for {NpcName} ({NpcTitle}) near {City} ({Dist:F0}y away)",
+                Log.Debug("[BG-QUEUE] Waiting for {NpcName} ({NpcTitle}) near {City} ({Dist:F0}y away)",
                     bmData.NpcName, bmData.NpcTitle, bmData.City, distToKnown);
                 return;
             }
 
             if (!Wait.For("bm_navigate", 3000, true))
                 return;
-            Logger.LogInformation("[BG-QUEUE] No battlemaster visible - navigating to {NpcName} ({NpcTitle}) in {City} ({X:F0},{Y:F0})",
+            Log.Information("[BG-QUEUE] No battlemaster visible - navigating to {NpcName} ({NpcTitle}) in {City} ({X:F0},{Y:F0})",
                 bmData.NpcName, bmData.NpcTitle, bmData.City, bmData.Position.X, bmData.Position.Y);
             TryNavigateToward(bmData.Position, allowDirectFallback: true);
         }
         else
         {
-            Logger.LogWarning("[BG-QUEUE] No battlemaster data for bgType={BgType}", _bgType);
+            Log.Warning("[BG-QUEUE] No battlemaster data for bgType={BgType}", _bgType);
         }
     }
 
@@ -231,7 +257,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
         if (ShouldWaitForLeaderGroupQueue())
         {
-            Logger.LogInformation("[BG-QUEUE] Grouped member detected - waiting for leader queue instead of interacting.");
+            Log.Information("[BG-QUEUE] Grouped member detected - waiting for leader queue instead of interacting.");
             SetState(BgState.WaitForInvite);
             return;
         }
@@ -239,7 +265,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         _actionAttempts++;
         if (_actionAttempts > 5)
         {
-            Logger.LogWarning("[BG-QUEUE] Too many queue attempts, aborting");
+            Log.Warning("[BG-QUEUE] bot={Bot} too many queue attempts, aborting", GetBotLabel());
             PopTask("queue_failed");
             return;
         }
@@ -254,14 +280,14 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         var gossipFrame = ObjectManager.GossipFrame;
         if (gossipFrame?.IsOpen == true)
         {
-            Logger.LogInformation("[BG-QUEUE] Selecting battlemaster gossip option on NPC 0x{Guid:X}", _bmGuid);
+            Log.Information("[BG-QUEUE] Selecting battlemaster gossip option on NPC 0x{Guid:X}", _bmGuid);
             gossipFrame.SelectFirstGossipOfType(DialogType.battlemaster);
             Thread.Sleep(500);
         }
 
         if (_bgClient != null)
         {
-            Logger.LogInformation("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN mapId={MapId} via NPC 0x{Guid:X} asGroup={AsGroup}",
+            Log.Information("[BG-QUEUE] Sending CMSG_BATTLEMASTER_JOIN mapId={MapId} via NPC 0x{Guid:X} asGroup={AsGroup}",
                 _expectedBgMapId, _bmGuid, joinAsGroup);
             _bgClient.JoinQueueAsync(_expectedBgMapId, 0, joinAsGroup, CancellationToken.None, battleMasterGuid: _bmGuid)
                 .GetAwaiter().GetResult();
@@ -269,7 +295,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         }
         else
         {
-            Logger.LogInformation("[BG-QUEUE] No BattlegroundNetworkClient - using foreground battlemaster UI path (asGroup={AsGroup})",
+            Log.Information("[BG-QUEUE] No BattlegroundNetworkClient - using foreground battlemaster UI path (asGroup={AsGroup})",
                 joinAsGroup);
             ObjectManager.JoinBattleGroundQueue();
             SetState(BgState.WaitForInvite);
@@ -278,19 +304,21 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
     private void HandleWaitForInvite()
     {
+        var elapsedSeconds = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds;
+
         if (_bgClient != null)
         {
             var bgState = _bgClient.CurrentState;
             if (bgState == WoWSharpClient.Networking.ClientComponents.BattlegroundState.Invited)
             {
-                Logger.LogInformation("[BG-QUEUE] BG invite received!");
+                Log.Information("[BG-QUEUE] bot={Bot} BG invite received", GetBotLabel());
                 SetState(BgState.AcceptInvite);
                 return;
             }
 
             if (bgState == WoWSharpClient.Networking.ClientComponents.BattlegroundState.InBattleground)
             {
-                Logger.LogInformation("[BG-QUEUE] Already in BG!");
+                Log.Information("[BG-QUEUE] bot={Bot} already in battleground", GetBotLabel());
                 SetState(BgState.Done);
                 return;
             }
@@ -301,7 +329,26 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         }
 
         if (ObjectManager.Player?.MapId == _expectedBgMapId)
+        {
             SetState(BgState.Done);
+            return;
+        }
+
+        if (elapsedSeconds >= InviteRetryAfterSec && _inviteRetryAttempts < MaxInviteRetryAttempts)
+        {
+            _inviteRetryAttempts++;
+            var bgState = _bgClient?.CurrentState.ToString() ?? "ForegroundUi";
+            var diagnostics = BuildQueueDiagnostics();
+            Log.Warning(
+                "[BG-QUEUE] bot={Bot} no invite after {Elapsed:F0}s (state={State}) - retrying queue ({Retry}/{Max}); {Diagnostics}",
+                GetBotLabel(),
+                elapsedSeconds,
+                bgState,
+                _inviteRetryAttempts,
+                MaxInviteRetryAttempts,
+                diagnostics);
+            RestartQueueCycle("invite_retry");
+        }
     }
 
     private void HandleAcceptInvite()
@@ -311,13 +358,13 @@ public class BattlegroundQueueTask : BotTask, IBotTask
 
         if (_bgClient != null)
         {
-            Logger.LogInformation("[BG-QUEUE] Accepting BG invite");
+            Log.Information("[BG-QUEUE] Accepting BG invite");
             _bgClient.AcceptInviteAsync(CancellationToken.None).GetAwaiter().GetResult();
             SetState(BgState.WaitForEntry);
         }
         else
         {
-            Logger.LogWarning("[BG-QUEUE] No BattlegroundNetworkClient for accept");
+            Log.Warning("[BG-QUEUE] No BattlegroundNetworkClient for accept");
             PopTask("no_bg_agent");
         }
     }
@@ -326,7 +373,7 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     {
         if (player.MapId == _expectedBgMapId)
         {
-            Logger.LogInformation("[BG-QUEUE] Entered BG map {MapId}!", _expectedBgMapId);
+            Log.Information("[BG-QUEUE] Entered BG map {MapId}!", _expectedBgMapId);
             SetState(BgState.Done);
         }
     }
@@ -335,11 +382,30 @@ public class BattlegroundQueueTask : BotTask, IBotTask
     {
         if (_state != newState)
         {
-            Logger.LogDebug("[BG-QUEUE] {Old} -> {New}", _state, newState);
+            Log.Debug("[BG-QUEUE] bot={Bot} {Old} -> {New}", GetBotLabel(), _state, newState);
             _state = newState;
             _stateEnteredAt = DateTime.UtcNow;
             _actionAttempts = 0;
         }
+    }
+
+    private void RestartQueueCycle(string reason)
+    {
+        TryRecoverFromVerticalQueueOffset(reason);
+        _bmNpc = null;
+        _bmGuid = 0;
+        Log.Debug("[BG-QUEUE] bot={Bot} restarting queue cycle ({Reason})", GetBotLabel(), reason);
+        SetState(BgState.FindBattlemaster);
+    }
+
+    private string GetBotLabel()
+    {
+        var player = ObjectManager.Player;
+        if (player == null)
+            return "unknown";
+
+        var name = string.IsNullOrWhiteSpace(player.Name) ? $"0x{player.Guid:X}" : player.Name;
+        return $"{name}@{player.MapId}";
     }
 
     private bool ShouldQueueAsGroup()
@@ -380,4 +446,70 @@ public class BattlegroundQueueTask : BotTask, IBotTask
         // Each AV participant needs to talk to the battlemaster and send their own queue request.
         return _bgType == BattlemasterData.BattlegroundType.AlteracValley;
     }
+
+    private string BuildQueueDiagnostics()
+    {
+        var player = ObjectManager.Player;
+        var position = player?.Position;
+        if (player == null || position == null)
+            return "diag=no_player_position";
+
+        var expectedBm = ResolveExpectedBattlemaster(player);
+        if (expectedBm == null)
+        {
+            return
+                $"diag=map={player.MapId},pos=({position.X:F1},{position.Y:F1},{position.Z:F1}),expectedBm=none,trackedBmGuid=0x{_bmGuid:X}";
+        }
+
+        var dist2D = Distance2D(position, expectedBm.Position);
+        var dist3D = position.DistanceTo(expectedBm.Position);
+        var dz = MathF.Abs(position.Z - expectedBm.Position.Z);
+
+        return
+            $"diag=map={player.MapId},pos=({position.X:F1},{position.Y:F1},{position.Z:F1}),expectedBm={expectedBm.NpcName}@{expectedBm.MapId},dist2d={dist2D:F1},dz={dz:F1},dist3d={dist3D:F1},trackedBmGuid=0x{_bmGuid:X}";
+    }
+
+    private void TryRecoverFromVerticalQueueOffset(string reason)
+    {
+        var player = ObjectManager.Player;
+        var position = player?.Position;
+        var expectedBm = player == null ? null : ResolveExpectedBattlemaster(player);
+        if (player == null || position == null || expectedBm == null)
+            return;
+
+        if (player.MapId != expectedBm.MapId)
+            return;
+
+        var dist2D = Distance2D(position, expectedBm.Position);
+        var dz = MathF.Abs(position.Z - expectedBm.Position.Z);
+        if (dist2D > 20f || dz < 6f)
+            return;
+
+        Log.Warning(
+            "[BG-QUEUE] bot={Bot} {Reason} with vertical offset near expected battlemaster; dist2d={Dist2D:F1}, dz={Dz:F1} - forcing re-approach",
+            GetBotLabel(),
+            reason,
+            dist2D,
+            dz);
+        TryNavigateToward(expectedBm.Position, allowDirectFallback: true);
+    }
+
+    private BattlemasterData.BattlemasterLocation? ResolveExpectedBattlemaster(IWoWPlayer player)
+    {
+        var faction = player.Race switch
+        {
+            Race.Orc or Race.Undead or Race.Tauren or Race.Troll => DungeonEntryData.DungeonFaction.Horde,
+            _ => DungeonEntryData.DungeonFaction.Alliance
+        };
+
+        return BattlemasterData.FindBattlemaster(_bgType, faction);
+    }
+
+    private static float Distance2D(Position a, Position b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
+    }
 }
+

@@ -37,9 +37,41 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-01 (session 230)`
-- Pass result: `recording artifacts and FG file-backed diagnostics are now explicit opt-in`
+- Last updated: `2026-04-09 (session 304)`
+- Pass result: `FG new-account realm wizard flow is stable with state-based no-sweep actions and repeated live passes`
 - Last delta:
+  - Session 304 removed runtime `_G` fallback sweeps from realm wizard action Lua (`select english`, `suggest realm`, `confirm suggestion`) and kept only state-driven named-control actions plus direct API fallback sequencing.
+  - Session 304 kept realm-wizard handoff detection state-based (`CURRENT_GLUE_SCREEN/loginState == charselect`) so empty character lists are treated as a valid post-realm transition without Lua frame sweeps.
+  - Added deterministic guard coverage that realm-wizard action Lua strings do not contain global frame iteration (`for _, frame in pairs`, `getglobals`).
+  - Validation:
+    - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~FgRealmSelectScreenTests|FullyQualifiedName~FgCharacterSelectScreenTests|FullyQualifiedName~ForegroundBotWorkerWorldEntryCinematicTests|FullyQualifiedName~LuaErrorDiagnosticsTests" --logger "console;verbosity=minimal"` -> `passed (21/21)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName=BotRunner.Tests.LiveValidation.ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=fg_new_account_flow_no_sweep.trx"` -> `passed (1/1); in-world after 116.9s`
+    - Repeated live passes: `fg_new_account_flow_latest.trx` (`129.8s`), `fg_new_account_flow_rerun1.trx` (`122.5s`), `fg_new_account_flow_rerun2.trx` (`121.7s`).
+  - Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs`
+  - `Tests/ForegroundBotRunner.Tests/FgRealmSelectScreenTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Services/ForegroundBotRunner/TASKS_ARCHIVE.md`
+  - Next command:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.BattlegroundEntryTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_fg_post_realm_stabilization.trx"`
+  - Session 231 added deterministic Lua error capture for FG login/realm/charselect diagnostics without full AV bring-up. `LuaErrorDiagnostics` now installs a ring-buffered `seterrorhandler` (`WWOW_LUA_ERROR_BUFFER`), `ForegroundBotWorker` ensures and drains capture during pre-world and world-entry loops, and `FgRealmSelectScreen`/`FgCharacterSelectScreen` invoke contextual error drains (`realmwizard.*`, `charselect.create.*`) after each critical Lua query/action.
+  - Added deterministic tests for the Lua diagnostics helper and screen-level callback wiring:
+    - `LuaErrorDiagnosticsTests` (4)
+    - `FgRealmSelectScreenTests` + callback assertion
+    - `FgCharacterSelectScreenTests` + callback assertion
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~FgCharacterSelectScreenTests|FullyQualifiedName~FgRealmSelectScreenTests|FullyQualifiedName~LuaErrorDiagnosticsTests" --logger "console;verbosity=minimal"` -> `14 passed`
+  - Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/LuaErrorDiagnostics.cs`
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
+  - `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs`
+  - `Services/ForegroundBotRunner/Frames/FgCharacterSelectScreen.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Tests/ForegroundBotRunner.Tests/FgRealmSelectScreenTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/FgCharacterSelectScreenTests.cs`
+  - `Tests/ForegroundBotRunner.Tests/LuaErrorDiagnosticsTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - Next command:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.BattlegroundEntryTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_fg_lua_capture_rerun.trx"`
   - Session 230 stopped the foreground runner from creating packet/snapshot sidecars and `WWoWLogs`/`Documents/BloogBot` diagnostics unless `WWOW_ENABLE_RECORDING_ARTIFACTS=1`. That gate now covers `MovementRecorder`, `ForegroundPacketTraceRecorder`, `ForegroundBotWorker` startup logs, loader/startup logs, `ThreadSynchronizer` crash traces, `SignalEventManager`, `PacketLogger`, `ConnectionStateMachine`, `NativeLibraryHelper`, `WoWEventHandler`, `LoginStateMonitor`, and the anti-AFK debug log.
   - The automated/live recording paths still work because the test/tool entry points now enable the env var intentionally before launching FG capture flows.
   - Removed the untracked repo output trees that had been inflating from repeated captures: `Bot/*/Recordings`, `Bot/*/WWoWLogs`, `Bot/*/botrunner_diag.log`, and `TestResults/*`. The canonical replay corpus stayed under `Tests/Navigation.Physics.Tests/Recordings`.

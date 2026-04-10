@@ -1,97 +1,80 @@
 using Communication;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Serilog;
 using System;
 using System.Linq;
-using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BotRunner
 {
-    /// <summary>
-    /// Builds WoWActivitySnapshot from IObjectManager state each tick.
-    /// Extracted from BotRunnerService.Snapshot.cs partial.
-    /// </summary>
-    internal sealed class SnapshotBuilder
+    public partial class BotRunnerService
     {
-        private readonly IObjectManager _objectManager;
-        private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
+        private static readonly bool EnableSnapshotPositionDiagnostics =
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ENABLE_SNAP_POS_DIAG"),
+                "1",
+                StringComparison.Ordinal);
 
-        private int _lastLoggedContainedItems = -1;
-        private int _lastLoggedItemObjects = -1;
-
-        internal SnapshotBuilder(
-            IObjectManager objectManager,
-            Func<IAgentFactory?>? agentFactoryAccessor)
+        private void PopulateSnapshotFromObjectManager()
         {
-            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _agentFactoryAccessor = agentFactoryAccessor;
-        }
-
-        internal void PopulateSnapshotFromObjectManager(
-            WoWActivitySnapshot activitySnapshot,
-            long tickCount,
-            Action flushMessageBuffers,
-            Action<IWoWLocalPlayer> updateLastKnownAlivePosition)
-        {
-            activitySnapshot.Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            _activitySnapshot.Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             // Clear any action from the previous response to prevent echo-back.
             // Without this, the old CurrentAction stays in the snapshot, gets sent
             // back to StateManager, and is returned again — causing infinite re-execution.
-            activitySnapshot.CurrentAction = null;
+            _activitySnapshot.CurrentAction = null;
 
             // Detect screen state
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
             if (playerWorldReady && _objectManager.Player != null)
             {
-                activitySnapshot.ScreenState = "InWorld";
-                activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;
+                _activitySnapshot.ScreenState = "InWorld";
+                _activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;
             }
             else if (_objectManager.CharacterSelectScreen?.IsOpen == true)
             {
-                activitySnapshot.ScreenState = "CharacterSelect";
+                _activitySnapshot.ScreenState = "CharacterSelect";
             }
             else if (_objectManager.LoginScreen?.IsLoggedIn == true)
             {
-                activitySnapshot.ScreenState = "RealmSelect";
+                _activitySnapshot.ScreenState = "RealmSelect";
             }
             else
             {
-                activitySnapshot.ScreenState = "LoginScreen";
+                _activitySnapshot.ScreenState = "LoginScreen";
             }
 
             // Connection state — deterministic, derived from existing IObjectManager properties.
             // Gives StateManager and tests a machine-readable lifecycle signal without Task.Delay guessing.
             var inMapTransition = _objectManager.IsInMapTransition;
-            activitySnapshot.IsMapTransition = inMapTransition;
+            _activitySnapshot.IsMapTransition = inMapTransition;
 
             if (!_objectManager.HasEnteredWorld)
             {
                 if (_objectManager.CharacterSelectScreen?.IsOpen == true)
-                    activitySnapshot.ConnectionState = BotConnectionState.BotCharSelect;
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotCharSelect;
                 else if (_objectManager.LoginScreen?.IsLoggedIn == true)
-                    activitySnapshot.ConnectionState = BotConnectionState.BotAuthenticating;
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotAuthenticating;
                 else
-                    activitySnapshot.ConnectionState = BotConnectionState.BotDisconnected;
+                    _activitySnapshot.ConnectionState = BotConnectionState.BotDisconnected;
             }
             else if (inMapTransition)
             {
-                activitySnapshot.ConnectionState = BotConnectionState.BotTransferring;
+                _activitySnapshot.ConnectionState = BotConnectionState.BotTransferring;
             }
             else if (playerWorldReady && _objectManager.Player != null)
             {
-                activitySnapshot.ConnectionState = BotConnectionState.BotInWorld;
+                _activitySnapshot.ConnectionState = BotConnectionState.BotInWorld;
             }
             else
             {
-                activitySnapshot.ConnectionState = BotConnectionState.BotEnteringWorld;
+                _activitySnapshot.ConnectionState = BotConnectionState.BotEnteringWorld;
             }
 
             // ObjectManager is valid only when fully in world, not transitioning, and player exists.
-            activitySnapshot.IsObjectManagerValid =
-                activitySnapshot.ConnectionState == BotConnectionState.BotInWorld
+            _activitySnapshot.IsObjectManagerValid =
+                _activitySnapshot.ConnectionState == BotConnectionState.BotInWorld
                 && _objectManager.Player != null
                 && !inMapTransition;
 
@@ -99,15 +82,15 @@ namespace BotRunner
             // This bypasses the deep nesting (Player.Unit.GameObject.Base.MapId)
             // that may be unreliable during protobuf serialization with nested sub-messages.
             if (_objectManager.Player is GameData.Core.Interfaces.IWoWPlayer mapPlayer)
-                activitySnapshot.CurrentMapId = (uint)mapPlayer.MapId;
+                _activitySnapshot.CurrentMapId = (uint)mapPlayer.MapId;
 
             // Always flush message buffers (even during login — captures GM command errors)
-            flushMessageBuffers();
+            FlushMessageBuffers();
 
             // Only populate game data when in world and not in a map transition.
             // During cross-map teleports, object pointers become invalid — reading them
             // causes ACCESS_VIOLATION that .NET 8 cannot catch (process termination).
-            if (activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null
+            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null
                 || inMapTransition)
                 return;
 
@@ -115,20 +98,20 @@ namespace BotRunner
 
             // Track the last known alive position to recover corpse navigation when corpse coordinates
             // are not populated immediately after release on some client/server combinations.
-            updateLastKnownAlivePosition(player);
+            UpdateLastKnownAlivePosition(player);
 
             // Movement data
             try
             {
                 var pos = player.Position;
-                // DIAG: log snapshot position to compare with heartbeat position
-                if (tickCount % 10 == 1 && (uint)player.MovementFlags != 0)
+                // Optional high-rate diagnostics for snapshot-vs-heartbeat movement comparisons.
+                if (EnableSnapshotPositionDiagnostics && _tickCount % 50 == 1 && (uint)player.MovementFlags != 0)
                 {
-                    Log.Warning("[SNAP_POS] tick={Tick} live=({X:F2},{Y:F2},{Z:F2}) flags=0x{Flags:X}",
-                        tickCount, pos?.X ?? -999, pos?.Y ?? -999, pos?.Z ?? -999,
+                    Log.Debug("[SNAP_POS] tick={Tick} live=({X:F2},{Y:F2},{Z:F2}) flags=0x{Flags:X}",
+                        _tickCount, pos?.X ?? -999, pos?.Y ?? -999, pos?.Z ?? -999,
                         (uint)player.MovementFlags);
                 }
-                activitySnapshot.MovementData = new Game.MovementData
+                _activitySnapshot.MovementData = new Game.MovementData
                 {
                     MovementFlags = (uint)player.MovementFlags,
                     FallTime = player.FallTime,
@@ -149,7 +132,7 @@ namespace BotRunner
                 };
                 if (pos != null)
                 {
-                    activitySnapshot.MovementData.Position = new Game.Position
+                    _activitySnapshot.MovementData.Position = new Game.Position
                     {
                         X = pos.X,
                         Y = pos.Y,
@@ -173,19 +156,19 @@ namespace BotRunner
                     var storedLeader = factory.PartyAgent.LeaderGuid;
                     if (storedLeader != 0)
                     {
-                        activitySnapshot.PartyLeaderGuid = storedLeader;
+                        _activitySnapshot.PartyLeaderGuid = storedLeader;
                     }
                     else
                     {
                         // Fallback: check group member IsLeader flags or self-leader state
                         var members = factory.PartyAgent.GetGroupMembers();
                         var leader = members.FirstOrDefault(m => m.IsLeader);
-                        activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
+                        _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
                     }
                 }
                 else
                 {
-                    activitySnapshot.PartyLeaderGuid = _objectManager.PartyLeaderGuid;
+                    _activitySnapshot.PartyLeaderGuid = _objectManager.PartyLeaderGuid;
                 }
             }
             catch (Exception ex)
@@ -196,7 +179,7 @@ namespace BotRunner
             // Player protobuf
             try
             {
-                activitySnapshot.Player = BuildPlayerProtobuf(player);
+                _activitySnapshot.Player = BuildPlayerProtobuf(player);
             }
             catch (Exception ex)
             {
@@ -206,11 +189,11 @@ namespace BotRunner
             // Spell list (known spell IDs for combat coordination)
             try
             {
-                if (activitySnapshot.Player != null)
+                if (_activitySnapshot.Player != null)
                 {
-                    activitySnapshot.Player.SpellList.Clear();
+                    _activitySnapshot.Player.SpellList.Clear();
                     foreach (var spellId in _objectManager.KnownSpellIds)
-                        activitySnapshot.Player.SpellList.Add(spellId);
+                        _activitySnapshot.Player.SpellList.Add(spellId);
                 }
             }
             catch (Exception ex)
@@ -218,13 +201,13 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating spell list: {ex.Message}");
             }
 
-            // Equipment slots (inventory map: slot 0-18 -> 64-bit GUID)
+            // Equipment slots (inventory map: slot 0-18 → 64-bit GUID)
             // WoWPlayer.Inventory stores GUID pairs: [slot*2]=LOW, [slot*2+1]=HIGH
             try
             {
-                if (activitySnapshot.Player != null && player is GameData.Core.Interfaces.IWoWPlayer wp)
+                if (_activitySnapshot.Player != null && player is GameData.Core.Interfaces.IWoWPlayer wp)
                 {
-                    activitySnapshot.Player.Inventory.Clear();
+                    _activitySnapshot.Player.Inventory.Clear();
                     int nonZeroCount = 0;
                     for (uint slot = 0; slot < 19; slot++)
                     {
@@ -235,7 +218,7 @@ namespace BotRunner
                             ulong guid = ((ulong)wp.Inventory[highIdx] << 32) | wp.Inventory[lowIdx];
                             if (guid != 0)
                             {
-                                activitySnapshot.Player.Inventory[slot] = guid;
+                                _activitySnapshot.Player.Inventory[slot] = guid;
                                 nonZeroCount++;
                             }
                         }
@@ -243,15 +226,15 @@ namespace BotRunner
                     if (nonZeroCount > 0)
                     {
                         Log.Debug("[BOT RUNNER] Equipment: {Count} slots occupied (Inventory[].Length={Len})", nonZeroCount, wp.Inventory.Length);
-                        foreach (var kvp in activitySnapshot.Player.Inventory)
+                        foreach (var kvp in _activitySnapshot.Player.Inventory)
                             Log.Debug("[BOT RUNNER] Equipment slot {Slot}: GUID=0x{Guid:X}", kvp.Key, kvp.Value);
-                        Log.Debug("[BOT RUNNER] Protobuf Inventory map count={Count}", activitySnapshot.Player.Inventory.Count);
+                        Log.Debug("[BOT RUNNER] Protobuf Inventory map count={Count}", _activitySnapshot.Player.Inventory.Count);
                     }
                 }
                 else
                 {
                     Log.Warning("[BOT RUNNER] Equipment skipped: Player={HasPlayer}, IsIWoWPlayer={IsType}",
-                        activitySnapshot.Player != null, player is GameData.Core.Interfaces.IWoWPlayer);
+                        _activitySnapshot.Player != null, player is GameData.Core.Interfaces.IWoWPlayer);
                 }
             }
             catch (Exception ex)
@@ -259,16 +242,16 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating equipment inventory: {ex.Message}");
             }
 
-            // Inventory items (bagContents map: sequential index -> itemId)
+            // Inventory items (bagContents map: sequential index → itemId)
             try
             {
-                if (activitySnapshot.Player != null)
+                if (_activitySnapshot.Player != null)
                 {
-                    activitySnapshot.Player.BagContents.Clear();
+                    _activitySnapshot.Player.BagContents.Clear();
                     uint slotIndex = 0;
                     foreach (var item in _objectManager.GetContainedItems())
                     {
-                        activitySnapshot.Player.BagContents[slotIndex++] = item.ItemId;
+                        _activitySnapshot.Player.BagContents[slotIndex++] = item.ItemId;
                     }
 
                     // Diagnostic: log item counts when they change
@@ -290,14 +273,14 @@ namespace BotRunner
             // Nearby units (within 40y)
             try
             {
-                activitySnapshot.NearbyUnits.Clear();
+                _activitySnapshot.NearbyUnits.Clear();
                 var playerPos = player.Position;
                 if (playerPos != null)
                 {
                     foreach (var unit in _objectManager.Units
                         .Where(u => u.Guid != player.Guid && u.Position != null && u.Position.DistanceTo(playerPos) < 40f))
                     {
-                        activitySnapshot.NearbyUnits.Add(BuildUnitProtobuf(unit));
+                        _activitySnapshot.NearbyUnits.Add(BuildUnitProtobuf(unit));
                     }
                 }
             }
@@ -309,14 +292,14 @@ namespace BotRunner
             // Nearby game objects (within 40y)
             try
             {
-                activitySnapshot.NearbyObjects.Clear();
+                _activitySnapshot.NearbyObjects.Clear();
                 var playerPos = player.Position;
                 if (playerPos != null)
                 {
                     foreach (var go in _objectManager.GameObjects
                         .Where(g => g.Position != null && g.Position.DistanceTo(playerPos) < 40f))
                     {
-                        activitySnapshot.NearbyObjects.Add(BuildGameObjectProtobuf(go));
+                        _activitySnapshot.NearbyObjects.Add(BuildGameObjectProtobuf(go));
                     }
                 }
             }
@@ -327,7 +310,7 @@ namespace BotRunner
 
         }
 
-        internal static Game.WoWPlayer BuildPlayerProtobuf(IWoWUnit unit)
+        private static Game.WoWPlayer BuildPlayerProtobuf(IWoWUnit unit)
         {
             var player = new Game.WoWPlayer
             {
@@ -412,7 +395,7 @@ namespace BotRunner
             return player;
         }
 
-        internal static Game.WoWUnit BuildUnitProtobuf(IWoWUnit unit)
+        private static Game.WoWUnit BuildUnitProtobuf(IWoWUnit unit)
         {
             // Core fields (Guid, Position, Health) — these work for both FG and BG.
             // Extended fields (FactionTemplate, Powers, Auras, etc.) may throw
@@ -483,7 +466,7 @@ namespace BotRunner
             return protoUnit;
         }
 
-        internal static Game.WoWGameObject BuildGameObjectProtobuf(IWoWGameObject go)
+        private static Game.WoWGameObject BuildGameObjectProtobuf(IWoWGameObject go)
         {
             var pos = go.Position;
             var protoGo = new Game.WoWGameObject

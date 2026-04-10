@@ -232,6 +232,15 @@ namespace WoWSharpClient
         }
 
         private int _movementStuckRecoveryGeneration;
+        private long _lastGlobalStuckRecoveryTick = long.MinValue;
+        private int _globalStuckRecoveryPulseCount;
+        private const int GlobalStuckRecoveryCooldownMs = 1200;
+        private const int GlobalStuckRecoveryPulseResetMs = 12000;
+        private const MovementFlags GlobalStuckIntentMask =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_BACKWARD |
+            MovementFlags.MOVEFLAG_STRAFE_LEFT |
+            MovementFlags.MOVEFLAG_STRAFE_RIGHT;
 
         public int MovementStuckRecoveryGeneration => Volatile.Read(ref _movementStuckRecoveryGeneration);
 
@@ -245,6 +254,78 @@ namespace WoWSharpClient
                 position.X,
                 position.Y,
                 position.Z);
+
+            TryApplyGlobalStuckRecoveryManeuver(level, generation, position);
+        }
+
+        private void TryApplyGlobalStuckRecoveryManeuver(int level, int generation, Position position)
+        {
+            if (level < 2)
+                return;
+
+            var player = Player as WoWLocalPlayer;
+            if (player == null || _movementController == null)
+                return;
+
+            if (_isBeingTeleported || !_isInControl)
+                return;
+
+            if (player.IsCasting || player.IsChanneling)
+                return;
+
+            var movementFlags = player.MovementFlags;
+            if ((movementFlags & GlobalStuckIntentMask) == MovementFlags.MOVEFLAG_NONE)
+                return;
+
+            if ((movementFlags & (MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_ONTRANSPORT)) != 0)
+                return;
+
+            var nowTick = Environment.TickCount64;
+            if (_lastGlobalStuckRecoveryTick != long.MinValue
+                && nowTick - _lastGlobalStuckRecoveryTick < GlobalStuckRecoveryCooldownMs)
+                return;
+
+            if (_lastGlobalStuckRecoveryTick == long.MinValue
+                || nowTick - _lastGlobalStuckRecoveryTick > GlobalStuckRecoveryPulseResetMs)
+            {
+                _globalStuckRecoveryPulseCount = 0;
+            }
+
+            _lastGlobalStuckRecoveryTick = nowTick;
+            _globalStuckRecoveryPulseCount++;
+
+            ((IObjectManager)this).ForceStopImmediate();
+
+            if (level == 2)
+            {
+                ((IObjectManager)this).Turn180();
+                StartMovement(ControlBits.Front | ControlBits.Jump);
+                Log.Warning(
+                    "[NAV-DIAG] Applied global stuck recovery maneuver=turn180_jump level={Level} generation={Generation} pulse={Pulse} pos=({X:F1},{Y:F1},{Z:F1})",
+                    level,
+                    generation,
+                    _globalStuckRecoveryPulseCount,
+                    position.X,
+                    position.Y,
+                    position.Z);
+            }
+            else
+            {
+                var strafeLeft = _globalStuckRecoveryPulseCount % 2 == 1;
+                var strafeBit = strafeLeft ? ControlBits.StrafeLeft : ControlBits.StrafeRight;
+                StartMovement(strafeBit | ControlBits.Jump);
+                Log.Warning(
+                    "[NAV-DIAG] Applied global stuck recovery maneuver={Maneuver} level={Level} generation={Generation} pulse={Pulse} pos=({X:F1},{Y:F1},{Z:F1})",
+                    strafeLeft ? "strafe_left_jump" : "strafe_right_jump",
+                    level,
+                    generation,
+                    _globalStuckRecoveryPulseCount,
+                    position.X,
+                    position.Y,
+                    position.Z);
+            }
+
+            _movementController.NotifyExternalStuckRecoveryApplied();
         }
 
 

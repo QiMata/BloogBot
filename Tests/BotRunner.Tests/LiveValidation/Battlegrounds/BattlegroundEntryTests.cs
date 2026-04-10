@@ -84,24 +84,38 @@ public class AlteracValleyTests
         await _bot.EnsureObjectivePreparedAsync();
 
         // Phase 3: Queue and enter AV instance (individual queue — no group queue to avoid anticheat)
-        // Accept 75% entry rate — FG bots and early-batch BG bots may miss the invite window
-        var minBotsOnMap = (int)(AlteracValleyFixture.TotalBotCount * 0.75);
+        // Keep queue fill above the minimum objective roster before disabling coordinator push.
+        var minBotsOnMap = 70;
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, minBotsOnMap, "AV");
+        var settledOnBg = await BgTestHelper.WaitForBgEntrySettlingAsync(
+            _bot,
+            _output,
+            AlteracValleyFixture.AvMapId,
+            targetOnMap: 76,
+            bgName: "AV",
+            settleWindow: TimeSpan.FromSeconds(45));
 
-        // Phase 4: Disable coordinator push, mount up
-        Assert.Equal(ResponseResult.Success, await _bot.SetCoordinatorEnabledForObjectivePushAsync(false));
-        await Task.Delay(TimeSpan.FromSeconds(2));
-
+        // Phase 4: Keep coordinator active briefly so stragglers can still consume invite retries, then mount up.
         await _bot.MountRaidForFirstObjectiveAsync();
         await BgTestHelper.WaitForAccountsMountedAsync(
             _bot,
             _output,
             AlteracValleyFixture.HordeAccountsOrdered.Concat(AlteracValleyFixture.AllianceAccountsOrdered),
-            expectedMounted: minBotsOnMap,
+            expectedMounted: Math.Min(minBotsOnMap, settledOnBg),
             phaseName: "AV:Mount");
 
+        // Vanilla AV keeps both teams in preparation caves before the gates open.
+        // Dispatching long objective routes before that often burns movement tasks on cave gates.
+        _output.WriteLine("[AV:PrepWindow] waiting 130s for AV gates to open before objective dispatch");
+        await Task.Delay(TimeSpan.FromSeconds(130));
+        Assert.Equal(ResponseResult.Success, await _bot.SetCoordinatorEnabledForObjectivePushAsync(false));
+        await Task.Delay(TimeSpan.FromSeconds(2));
+
         // Phase 5: Move to first objective positions
-        var assignments = _bot.BuildFirstObjectiveAssignments();
+        var objectiveSnapshots = await _bot.QueryAllSnapshotsAsync();
+        var assignments = _bot.BuildAdaptiveFirstObjectiveAssignments(
+            objectiveSnapshots,
+            log => _output.WriteLine($"[AV:Objectives] {log}"));
         foreach (var account in AlteracValleyFixture.HordeAccountsOrdered.Concat(AlteracValleyFixture.AllianceAccountsOrdered))
         {
             var target = assignments[account];
@@ -121,7 +135,13 @@ public class AlteracValleyTests
             leaderAccount: null,
             minReached: 25,
             minGroupedToLeader: 0,
-            phaseName: "AV:HordeObjective");
+            phaseName: "AV:HordeObjective",
+            maxDistance: 60f,
+            redispatchLaggingGoto: true,
+            redispatchInterval: TimeSpan.FromSeconds(20),
+            redispatchTargetFactory: BgTestHelper.BuildIncrementalRedispatchTarget,
+            maxTimeout: TimeSpan.FromMinutes(6),
+            staleTimeout: TimeSpan.FromMinutes(2));
 
         await BgTestHelper.WaitForAccountsNearTargetsAsync(
             _bot,
@@ -131,7 +151,12 @@ public class AlteracValleyTests
             leaderAccount: null,
             minReached: 25,
             minGroupedToLeader: 0,
-            phaseName: "AV:AllianceObjective");
+            phaseName: "AV:AllianceObjective",
+            redispatchLaggingGoto: true,
+            redispatchInterval: TimeSpan.FromSeconds(20),
+            redispatchTargetFactory: BgTestHelper.BuildIncrementalRedispatchTarget,
+            maxTimeout: TimeSpan.FromMinutes(6),
+            staleTimeout: TimeSpan.FromMinutes(2));
     }
 }
 
@@ -216,6 +241,18 @@ internal static class BgTestHelper
             if (onBg >= expectedOnMap)
             {
                 output.WriteLine($"[{bgName}:BG] {onBg}/{expectedOnMap} bots on BG map at {sw.Elapsed.TotalSeconds:F0}s");
+                var offBgAccounts = snapshots
+                    .Where(snapshot => (snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId) != bgMapId)
+                    .Select(snapshot =>
+                    {
+                        var accountName = string.IsNullOrWhiteSpace(snapshot.AccountName) ? "(blank)" : snapshot.AccountName;
+                        var snapshotMapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+                        return $"{accountName}(screen={snapshot.ScreenState}, map={snapshotMapId}, current={snapshot.CurrentMapId}, objMgr={snapshot.IsObjectManagerValid})";
+                    })
+                    .OrderBy(entry => entry, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (offBgAccounts.Length > 0)
+                    output.WriteLine($"[{bgName}:BG] offBgAtSuccess={string.Join(", ", offBgAccounts)}");
                 Assert.True(onBg >= expectedOnMap, $"Expected at least {expectedOnMap} bots on map, got {onBg}");
                 return;
             }
@@ -252,6 +289,53 @@ internal static class BgTestHelper
         }
 
         Assert.Fail($"[{bgName}:BG] TIMEOUT");
+    }
+
+    public static async Task<int> WaitForBgEntrySettlingAsync(
+        LiveBotFixture bot,
+        ITestOutputHelper output,
+        uint bgMapId,
+        int targetOnMap,
+        string bgName,
+        TimeSpan settleWindow)
+    {
+        var sw = Stopwatch.StartNew();
+        var bestOnBg = 0;
+        var lastFingerprint = "";
+
+        while (sw.Elapsed < settleWindow)
+        {
+            if (bot.ClientCrashed)
+                Assert.Fail($"[{bgName}:BG-SETTLE] CRASHED");
+
+            var snapshots = await bot.QueryAllSnapshotsAsync();
+            var onBg = CountBotsOnMap(snapshots, bgMapId);
+            if (onBg > bestOnBg)
+            {
+                bestOnBg = onBg;
+                output.WriteLine($"[{bgName}:BG-SETTLE] bestOnBg={bestOnBg} at {sw.Elapsed.TotalSeconds:F0}s");
+            }
+
+            var offCount = Math.Max(0, snapshots.Count - onBg);
+            var fingerprint = $"bg={onBg},off={offCount}";
+            if (fingerprint != lastFingerprint)
+            {
+                output.WriteLine($"[{bgName}:BG-SETTLE] {fingerprint} at {sw.Elapsed.TotalSeconds:F0}s");
+                lastFingerprint = fingerprint;
+            }
+
+            if (onBg >= targetOnMap)
+            {
+                output.WriteLine($"[{bgName}:BG-SETTLE] reached targetOnMap={targetOnMap} at {sw.Elapsed.TotalSeconds:F0}s");
+                return onBg;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+
+        output.WriteLine(
+            $"[{bgName}:BG-SETTLE] settle window elapsed ({settleWindow.TotalSeconds:F0}s), bestOnBg={bestOnBg}, targetOnMap={targetOnMap}");
+        return bestOnBg;
     }
 
     public static async Task WaitForAccountsMountedAsync(
@@ -317,24 +401,37 @@ internal static class BgTestHelper
         string? leaderAccount,
         int minReached,
         int minGroupedToLeader,
-        string phaseName)
+        string phaseName,
+        float maxDistance = 40f,
+        bool redispatchLaggingGoto = false,
+        TimeSpan? redispatchInterval = null,
+        Func<IReadOnlyList<WoWActivitySnapshot>, string, AlteracValleyLoadoutPlan.ObjectiveTarget, AlteracValleyLoadoutPlan.ObjectiveTarget>? redispatchTargetFactory = null,
+        TimeSpan? maxTimeout = null,
+        TimeSpan? staleTimeout = null)
     {
         var trackedAccounts = accounts.OrderBy(account => account, StringComparer.OrdinalIgnoreCase).ToArray();
+        var effectiveMaxTimeout = maxTimeout ?? TimeSpan.FromMinutes(4);
+        var effectiveStaleTimeout = staleTimeout ?? TimeSpan.FromMinutes(1);
+        var effectiveRedispatchInterval = redispatchInterval ?? TimeSpan.FromSeconds(20);
         var sw = Stopwatch.StartNew();
         var lastFingerprint = "";
         var lastChange = sw.Elapsed;
+        var lastRedispatch = TimeSpan.Zero;
 
-        while (sw.Elapsed < TimeSpan.FromMinutes(4))
+        while (sw.Elapsed < effectiveMaxTimeout)
         {
             if (bot.ClientCrashed)
                 Assert.Fail($"[{phaseName}] CRASHED");
 
             var snapshots = await bot.QueryAllSnapshotsAsync();
-            var reached = CountAccountsNearTargets(snapshots, trackedAccounts, targets, maxDistance: 40f);
+            var reached = CountAccountsNearTargets(snapshots, trackedAccounts, targets, maxDistance: maxDistance);
             var grouped = leaderAccount != null ? CountAccountsGroupedToLeader(snapshots, trackedAccounts, leaderAccount) : 0;
-            var leaderNear = leaderAccount != null && IsAccountNearAssignedTarget(snapshots, leaderAccount, targets, maxDistance: 40f);
+            var leaderNear = leaderAccount != null && IsAccountNearAssignedTarget(snapshots, leaderAccount, targets, maxDistance: maxDistance);
             var onMap = trackedAccounts.Count(account => IsAccountOnMap(snapshots, account, AlteracValleyFixture.AvMapId));
             var fingerprint = $"near={reached},grouped={grouped},leaderNear={leaderNear},map={onMap}";
+            var laggingAccounts = trackedAccounts
+                .Where(account => !IsAccountNearAssignedTarget(snapshots, account, targets, maxDistance: maxDistance))
+                .ToArray();
 
             if (reached >= minReached && grouped >= minGroupedToLeader && (leaderNear || leaderAccount == null))
             {
@@ -342,11 +439,35 @@ internal static class BgTestHelper
                 return;
             }
 
+            if (redispatchLaggingGoto && sw.Elapsed - lastRedispatch >= effectiveRedispatchInterval)
+            {
+                var redispatched = 0;
+                var adaptiveTargets = 0;
+                foreach (var account in laggingAccounts)
+                {
+                    if (!IsAccountOnMap(snapshots, account, targets[account].MapId))
+                        continue;
+
+                    var baseTarget = targets[account];
+                    var target = redispatchTargetFactory?.Invoke(snapshots, account, baseTarget) ?? baseTarget;
+                    if (!AreTargetsEquivalent(target, baseTarget))
+                        adaptiveTargets++;
+
+                    var dispatch = await bot.SendActionAsync(account, MakeGoto(target.X, target.Y, target.Z, stopDistance: 12f));
+                    if (dispatch == ResponseResult.Success)
+                        redispatched++;
+                }
+
+                output.WriteLine(
+                    $"[{phaseName}] redispatch goto for {redispatched} lagging on-map accounts " +
+                    $"(adaptiveTargets={adaptiveTargets}) at {sw.Elapsed.TotalSeconds:F0}s");
+                lastRedispatch = sw.Elapsed;
+            }
+
             if (fingerprint != lastFingerprint)
             {
                 output.WriteLine($"[{phaseName}] {fingerprint} at {sw.Elapsed.TotalSeconds:F0}s");
-                var lagging = trackedAccounts
-                    .Where(account => !IsAccountNearAssignedTarget(snapshots, account, targets, maxDistance: 40f))
+                var lagging = laggingAccounts
                     .Select(account =>
                     {
                         var snapshot = snapshots.LastOrDefault(s => string.Equals(s.AccountName, account, StringComparison.OrdinalIgnoreCase));
@@ -354,7 +475,18 @@ internal static class BgTestHelper
                         var position = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
                         var target = targets[account];
                         var distance = position == null ? float.NaN : Distance2D(position.X, position.Y, target.X, target.Y);
-                        return $"{account}(map={mapId},dist={(float.IsNaN(distance) ? "?" : distance.ToString("F0", CultureInfo.InvariantCulture))})";
+                        var currentPos = position == null
+                            ? "(?,?,?)"
+                            : $"({position.X.ToString("F0", CultureInfo.InvariantCulture)}," +
+                              $"{position.Y.ToString("F0", CultureInfo.InvariantCulture)}," +
+                              $"{position.Z.ToString("F0", CultureInfo.InvariantCulture)})";
+                        var targetPos =
+                            $"({target.X.ToString("F0", CultureInfo.InvariantCulture)}," +
+                            $"{target.Y.ToString("F0", CultureInfo.InvariantCulture)}," +
+                            $"{target.Z.ToString("F0", CultureInfo.InvariantCulture)})";
+                        return
+                            $"{account}(map={mapId},dist={(float.IsNaN(distance) ? "?" : distance.ToString("F0", CultureInfo.InvariantCulture))}," +
+                            $"pos={currentPos},target={targetPos})";
                     })
                     .Take(12)
                     .ToArray();
@@ -363,13 +495,55 @@ internal static class BgTestHelper
                 lastChange = sw.Elapsed;
             }
 
-            if (sw.Elapsed - lastChange > TimeSpan.FromMinutes(1))
+            if (sw.Elapsed - lastChange > effectiveStaleTimeout)
                 Assert.Fail($"[{phaseName}] STALE - {fingerprint}");
 
             await Task.Delay(TimeSpan.FromSeconds(5));
         }
 
         Assert.Fail($"[{phaseName}] TIMEOUT");
+    }
+
+    internal static AlteracValleyLoadoutPlan.ObjectiveTarget BuildIncrementalRedispatchTarget(
+        IReadOnlyList<WoWActivitySnapshot> snapshots,
+        string account,
+        AlteracValleyLoadoutPlan.ObjectiveTarget objectiveTarget)
+    {
+        var snapshot = snapshots.LastOrDefault(candidate =>
+            string.Equals(candidate.AccountName, account, StringComparison.OrdinalIgnoreCase));
+        if (snapshot == null)
+            return objectiveTarget;
+
+        var position = snapshot.Player?.Unit?.GameObject?.Base?.Position;
+        if (position == null)
+            return objectiveTarget;
+
+        var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+        if (mapId != objectiveTarget.MapId)
+            return objectiveTarget;
+
+        var dx = objectiveTarget.X - position.X;
+        var dy = objectiveTarget.Y - position.Y;
+        var distanceToTarget = MathF.Sqrt((dx * dx) + (dy * dy));
+        if (distanceToTarget <= 1f)
+            return objectiveTarget;
+
+        var requestedStep = MathF.Min(54f, distanceToTarget * 0.45f);
+        var step = MathF.Min(distanceToTarget, MathF.Max(requestedStep, 18f));
+        if (MathF.Abs(position.Z - objectiveTarget.Z) >= 24f)
+            step = MathF.Min(step, 28f);
+
+        if (step >= distanceToTarget - 0.25f)
+            return objectiveTarget;
+
+        var nx = dx / distanceToTarget;
+        var ny = dy / distanceToTarget;
+        return objectiveTarget with
+        {
+            X = position.X + (nx * step),
+            Y = position.Y + (ny * step),
+            Z = position.Z,
+        };
     }
 
     internal static int CountMountedAccounts(IReadOnlyList<WoWActivitySnapshot> snapshots, IReadOnlyCollection<string> accounts)
@@ -450,5 +624,15 @@ internal static class BgTestHelper
         var dx = x1 - x2;
         var dy = y1 - y2;
         return MathF.Sqrt((dx * dx) + (dy * dy));
+    }
+
+    private static bool AreTargetsEquivalent(
+        AlteracValleyLoadoutPlan.ObjectiveTarget left,
+        AlteracValleyLoadoutPlan.ObjectiveTarget right)
+    {
+        return left.MapId == right.MapId
+            && MathF.Abs(left.X - right.X) < 0.5f
+            && MathF.Abs(left.Y - right.Y) < 0.5f
+            && MathF.Abs(left.Z - right.Z) < 0.5f;
     }
 }

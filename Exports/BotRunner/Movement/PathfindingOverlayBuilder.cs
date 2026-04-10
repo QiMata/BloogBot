@@ -13,26 +13,22 @@ public static class PathfindingOverlayBuilder
     public const float DefaultNearbyObjectRadius = 40f;
     public const int MaxNearbyObjectCount = 64;
 
-    private static readonly GameObjectType[] CollidableTypes =
+    private static readonly GameObjectType[] CollisionRelevantTypes =
     [
         GameObjectType.Door,
-        GameObjectType.Button,
-        GameObjectType.Chest,
-        GameObjectType.Generic,
-        GameObjectType.Goober,
         GameObjectType.Transport,
         GameObjectType.MapObject,
         GameObjectType.MapObjectTransport,
-        GameObjectType.Mailbox,
-        GameObjectType.AuctionHouse,
-        GameObjectType.SpellCaster,
+        GameObjectType.DestructibleBuilding,
+        GameObjectType.TrapDoor
+    ];
+
+    private static readonly GameObjectType[] GameplayRelevantTypes =
+    [
         GameObjectType.MeetingStone,
         GameObjectType.FlagStand,
         GameObjectType.FlagDrop,
         GameObjectType.CapturePoint,
-        GameObjectType.DestructibleBuilding,
-        GameObjectType.GuildBank,
-        GameObjectType.TrapDoor
     ];
 
     public static DynamicObjectProto[] BuildNearbyObjects(
@@ -85,7 +81,7 @@ public static class PathfindingOverlayBuilder
             if (!IsFinitePosition(position))
                 return false;
 
-            if (gameObject.DisplayId == 0 || !IsCollidableType(gameObject.TypeId))
+            if (gameObject.DisplayId == 0 || !IsCollisionOrGameplayRelevantType(gameObject.TypeId))
                 return false;
 
             distance = MathF.Min(position!.DistanceTo(start), position.DistanceTo(end));
@@ -112,9 +108,10 @@ public static class PathfindingOverlayBuilder
         }
     }
 
-    private static bool IsCollidableType(uint typeId)
+    private static bool IsCollisionOrGameplayRelevantType(uint typeId)
         => Enum.IsDefined(typeof(GameObjectType), (int)typeId)
-            && Array.IndexOf(CollidableTypes, (GameObjectType)typeId) >= 0;
+            && (Array.IndexOf(CollisionRelevantTypes, (GameObjectType)typeId) >= 0
+                || Array.IndexOf(GameplayRelevantTypes, (GameObjectType)typeId) >= 0);
 
     private static bool IsFinitePosition(Position? position)
         => position != null

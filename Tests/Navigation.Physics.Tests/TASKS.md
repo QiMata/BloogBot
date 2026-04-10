@@ -34,9 +34,21 @@ Known remaining work in this owner: `6` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
-- Last updated: `2026-04-02 (session 293)`
+- Last updated: `2026-04-08 (session 300)`
 - Pass result: `delta shipped`
 - Last delta:
+  - Session 300 hardened scene-tile extraction for live AV diagnostics.
+  - `SceneTileSplitterTests` now discovers candidate tiles from `maps/*.map` when available (full ADT coverage), still falls back to bounded `.scene` headers for maps without ADTs, and supports explicit tile extraction through `WWOW_SCENE_TILE_KEYS`.
+  - Added focused extractor coverage in `ExtractExplicitSceneTiles` and generated the previously missing startup tiles in `D:\MaNGOS\data\scenes\tiles`:
+    - map 0: `0_47_31`, `0_47_32`, `0_47_33`, `0_48_31`, `0_48_32`, `0_48_33`, `0_49_31`, `0_49_32`, `0_49_33`
+    - map 1: `1_28_40`, `1_28_41`, `1_28_42`
+  - Attempted the same explicit extraction for AV `30_33_35`, `30_34_35`, `30_35_35`; extraction fails because source ADT files do not exist (`D:\MaNGOS\data\maps\0303335.map`, `0303435.map`, `0303535.map` are absent).
+  - Validation:
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_SCENE_TILE_KEYS='1_28_40,1_28_41,1_28_42'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -p:RunSettingsFilePath='C:\Users\lrhod\AppData\Local\Temp\wwow.scene-splitter.long.runsettings' --filter "FullyQualifiedName~SceneTileSplitterTests.ExtractExplicitSceneTiles" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_SCENE_TILE_KEYS='0_47_31,0_47_32,0_47_33,0_48_31,0_48_32,0_48_33,0_49_31,0_49_32,0_49_33'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -p:RunSettingsFilePath='C:\Users\lrhod\AppData\Local\Temp\wwow.scene-splitter.long.runsettings' --filter "FullyQualifiedName~SceneTileSplitterTests.ExtractExplicitSceneTiles" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_SCENE_TILE_KEYS='30_33_35,30_34_35,30_35_35'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -p:RunSettingsFilePath='C:\Users\lrhod\AppData\Local\Temp\wwow.scene-splitter.long.runsettings' --filter "FullyQualifiedName~SceneTileSplitterTests.ExtractExplicitSceneTiles" --logger "console;verbosity=minimal"` -> `failed (expected source ADT absence)`
+  - Practical implication: scene-data tile availability for the previously missing city-side startup regions is now deterministic and directly verifiable without full-map splitter reruns.
+  - Exact next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map0_48_32_TileExists|FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map1_28_41_TileExists" --logger "console;verbosity=minimal"`
   - Session 293 added `SceneSliceModeTests.cs` and extended `NavigationInterop.cs` with the native `SetSceneSliceMode(...)` export.
   - The new deterministic coverage pins the BG thin-scene-slice memory fix through the production DLL: `GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache` first proves the baseline autoload still resolves terrain, then unloads the scene cache, enables slice mode, and proves the same query no longer repopulates the full-map cache.
   - Validation:

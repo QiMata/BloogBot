@@ -182,7 +182,7 @@ public sealed class MovementControllerIpcParityTests : IDisposable
 
         // PathfindingService no longer handles PhysicsStep; it's path-only.
         var controller = new MovementController(mockClient.Object, player);
-        controller.SetPath([new Position(sx, sy, sz), new Position(tx, ty, sz)]);
+        controller.SetTargetWaypoint(new Position(sx, sy, sz));
 
         int airborne = 0;
         float totalDist = 0, prevX = sx, prevY = sy;

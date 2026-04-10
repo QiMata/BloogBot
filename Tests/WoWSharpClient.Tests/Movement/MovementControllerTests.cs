@@ -1427,61 +1427,100 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void SetPath_StartsAtFirstWaypoint()
+        public void SetTargetWaypoint_StoresSingleSteeringTarget()
         {
-            var path = new[]
-            {
-                new Position(110f, 210f, 51f),
-                new Position(120f, 220f, 52f),
-            };
+            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
+            var target = GetSteeringTarget(_controller);
 
-            _controller.SetPath(path);
-
-            var waypoint = _controller.CurrentWaypoint;
-            Assert.NotNull(waypoint);
-            Assert.Equal(110f, waypoint!.X);
-            Assert.Equal(210f, waypoint.Y);
-            Assert.Equal(51f, waypoint.Z);
+            Assert.NotNull(target);
+            Assert.Equal(130f, target!.X);
+            Assert.Equal(230f, target.Y);
+            Assert.Equal(70f, target.Z);
         }
 
         [Fact]
-        public void SetTargetWaypoint_SimilarTarget_DoesNotRebuildActiveSingleSegmentPath()
+        public void SetTargetWaypoint_ReplacesExistingSteeringTarget()
         {
             _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
-            var initialPath = GetCurrentPath(_controller);
-            Assert.NotNull(initialPath);
-            Assert.Equal(2, initialPath!.Length);
-
-            // Simulate movement since last tick; if path is rebuilt, this position becomes new segment start.
-            _player.Position = new Position(101f, 201f, 51f);
-            _controller.SetTargetWaypoint(new Position(130.2f, 230.1f, 70.4f));
-
-            var refreshedPath = GetCurrentPath(_controller);
-            Assert.Same(initialPath, refreshedPath);
-            Assert.Equal(100f, refreshedPath![0].X);
-            Assert.Equal(200f, refreshedPath[0].Y);
-            Assert.Equal(50f, refreshedPath[0].Z);
-        }
-
-        [Fact]
-        public void SetTargetWaypoint_DifferentTarget_RebuildsSingleSegmentPathFromCurrentPosition()
-        {
-            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
-            var initialPath = GetCurrentPath(_controller);
-            Assert.NotNull(initialPath);
-
-            _player.Position = new Position(101f, 201f, 51f);
             _controller.SetTargetWaypoint(new Position(140f, 240f, 72f));
 
-            var rebuiltPath = GetCurrentPath(_controller);
-            Assert.NotNull(rebuiltPath);
-            Assert.NotSame(initialPath, rebuiltPath);
-            Assert.Equal(101f, rebuiltPath![0].X);
-            Assert.Equal(201f, rebuiltPath[0].Y);
-            Assert.Equal(51f, rebuiltPath[0].Z);
-            Assert.Equal(140f, rebuiltPath[1].X);
-            Assert.Equal(240f, rebuiltPath[1].Y);
-            Assert.Equal(72f, rebuiltPath[1].Z);
+            var target = GetSteeringTarget(_controller);
+            Assert.NotNull(target);
+            Assert.Equal(140f, target!.X);
+            Assert.Equal(240f, target.Y);
+            Assert.Equal(72f, target.Z);
+        }
+
+        [Fact]
+        public void ObserveStaleForwardAndRecover_Level2_SignalsCallerWithoutMutatingMovementOrWaypoint()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            var steeringTarget = new Position(100f, 200f, 50f);
+            SetPrivateField(_controller, "_steeringTarget", steeringTarget);
+            SetPrivateField(_controller, "_consecutiveStuckLevels", 1);
+            SetPrivateField(_controller, "_staleForwardNoDisplacementTicks", 14);
+            SetPrivateField(_controller, "_staleForwardSuppressUntilMs", 0u);
+
+            int? signaledLevel = null;
+            Position? signaledPosition = null;
+            _controller.OnStuckRecoveryRequired += (level, position) =>
+            {
+                signaledLevel = level;
+                signaledPosition = position;
+            };
+
+            var method = typeof(MovementController).GetMethod(
+                "ObserveStaleForwardAndRecover",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            method!.Invoke(_controller, [0f, 5000u]);
+
+            var currentWaypoint = _controller.CurrentWaypoint;
+            Assert.NotNull(currentWaypoint);
+            Assert.Equal(steeringTarget.X, currentWaypoint!.X);
+            Assert.Equal(steeringTarget.Y, currentWaypoint.Y);
+            Assert.Equal(steeringTarget.Z, currentWaypoint.Z);
+            Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, _player.MovementFlags);
+            Assert.Equal(2, signaledLevel);
+            Assert.NotNull(signaledPosition);
+        }
+
+        [Fact]
+        public void ObserveStaleForwardAndRecover_Level3_SignalsCallerWithoutMutatingMovementOrWaypoint()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            var steeringTarget = new Position(20.0f, 0f, 0f);
+            SetPrivateField(_controller, "_steeringTarget", steeringTarget);
+            SetPrivateField(_controller, "_consecutiveStuckLevels", 2);
+            SetPrivateField(_controller, "_staleForwardNoDisplacementTicks", 14);
+            SetPrivateField(_controller, "_staleForwardSuppressUntilMs", 0u);
+            SetPrivateField(_controller, "_lastKnownGoodPosition", new Position(7f, 8f, 9f));
+
+            int? signaledLevel = null;
+            Position? signaledPosition = null;
+            _controller.OnStuckRecoveryRequired += (level, position) =>
+            {
+                signaledLevel = level;
+                signaledPosition = position;
+            };
+
+            var method = typeof(MovementController).GetMethod(
+                "ObserveStaleForwardAndRecover",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            method!.Invoke(_controller, [0f, 5000u]);
+
+            var currentWaypoint = _controller.CurrentWaypoint;
+            Assert.NotNull(currentWaypoint);
+            Assert.Equal(steeringTarget.X, currentWaypoint!.X);
+            Assert.Equal(steeringTarget.Y, currentWaypoint.Y);
+            Assert.Equal(steeringTarget.Z, currentWaypoint.Z);
+            Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, _player.MovementFlags);
+            Assert.Equal(3, signaledLevel);
+            Assert.NotNull(signaledPosition);
+            Assert.Equal(7f, signaledPosition!.X, 3);
+            Assert.Equal(8f, signaledPosition.Y, 3);
+            Assert.Equal(9f, signaledPosition.Z, 3);
         }
 
         // ======== COMPOUND TRANSITIONS ========
@@ -1526,11 +1565,11 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
         }
 
-        private static Position[]? GetCurrentPath(MovementController controller)
+        private static Position? GetSteeringTarget(MovementController controller)
         {
-            var field = typeof(MovementController).GetField("_currentPath", BindingFlags.Instance | BindingFlags.NonPublic);
+            var field = typeof(MovementController).GetField("_steeringTarget", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(field);
-            return field!.GetValue(controller) as Position[];
+            return field!.GetValue(controller) as Position;
         }
 
         private static void SetPendingKnockback(float vx, float vy, float vz)
@@ -1563,6 +1602,20 @@ namespace WoWSharpClient.Tests.Movement
 
             Assert.NotNull(field);
             field!.SetValue(target, value);
+        }
+
+        private static T GetPrivateField<T>(object target, string fieldName)
+        {
+            var type = target.GetType();
+            FieldInfo? field = null;
+            while (type != null && field == null)
+            {
+                field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+                type = type.BaseType;
+            }
+
+            Assert.NotNull(field);
+            return (T)field!.GetValue(target)!;
         }
 
         private static IReadOnlyList<WoWObject> ReplaceTrackedObjects(params WoWObject[] objects)

@@ -354,11 +354,42 @@ public class GatheringRouteTask(
             }
         }
 
+        ResequenceRemainingCandidatesIfNeeded(reason);
+
         _currentCandidate = _orderedRoute[_routeIndex++];
         BotContext.AddDiagnosticMessage(
             $"[TASK] GatheringRouteTask candidate_start index={_routeIndex}/{_orderedRoute.Count} reason={reason} pos=({_currentCandidate.X:F1},{_currentCandidate.Y:F1},{_currentCandidate.Z:F1})");
         SetState(GatheringState.MoveToCandidate);
     }
+
+    private void ResequenceRemainingCandidatesIfNeeded(string reason)
+    {
+        if (!ShouldResequenceCandidates(reason))
+            return;
+
+        var playerPosition = ObjectManager.Player?.Position;
+        if (playerPosition == null)
+            return;
+
+        if (_routeIndex < 0 || _routeIndex >= _orderedRoute.Count - 1)
+            return;
+
+        var remaining = _orderedRoute.Skip(_routeIndex).ToList();
+        if (remaining.Count < 2)
+            return;
+
+        var reordered = OptimizeRoute(playerPosition, remaining);
+        _orderedRoute.RemoveRange(_routeIndex, remaining.Count);
+        _orderedRoute.InsertRange(_routeIndex, reordered);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] GatheringRouteTask candidate_resequence reason={reason} remaining={remaining.Count}");
+    }
+
+    private static bool ShouldResequenceCandidates(string reason)
+        => reason == "candidate_timeout"
+            || reason == "candidate_no_path"
+            || reason == "node_no_path"
+            || reason == "node_lost";
 
     private void PauseForCombat()
     {

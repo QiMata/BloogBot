@@ -1,4 +1,6 @@
 using Game;
+using System;
+using System.IO;
 using WoWStateManager.Settings;
 using WoWActivitySnapshot = Communication.WoWActivitySnapshot;
 
@@ -78,6 +80,44 @@ public class CoordinatorFixtureBaseTests
         };
 
         Assert.False(CoordinatorFixtureBase.CanReuseExistingCharacters(settings, existingCharacters));
+    }
+
+    [Fact]
+    public void HasAnyMatchingCharacter_ReturnsTrue_WhenAnyCharacterMatches()
+    {
+        var settings = CoordinatorFixtureBase.CreateCharacterSetting(
+            accountName: "WSGBOTA9",
+            characterClass: "Warrior",
+            characterRace: "Dwarf",
+            characterGender: "Female",
+            runnerType: BotRunnerType.Background);
+
+        var existingCharacters = new[]
+        {
+            new AccountCharacterRecord("WrongRace", RaceId: 1, ClassId: 1, GenderId: 1),
+            new AccountCharacterRecord("ExpectedDwarf", RaceId: 3, ClassId: 1, GenderId: 1)
+        };
+
+        Assert.True(CoordinatorFixtureBase.HasAnyMatchingCharacter(settings, existingCharacters));
+    }
+
+    [Fact]
+    public void HasAnyMatchingCharacter_ReturnsFalse_WhenNoCharacterMatches()
+    {
+        var settings = CoordinatorFixtureBase.CreateCharacterSetting(
+            accountName: "WSGBOTA9",
+            characterClass: "Warrior",
+            characterRace: "Dwarf",
+            characterGender: "Female",
+            runnerType: BotRunnerType.Background);
+
+        var existingCharacters = new[]
+        {
+            new AccountCharacterRecord("WrongRace1", RaceId: 1, ClassId: 1, GenderId: 1),
+            new AccountCharacterRecord("WrongRace2", RaceId: 2, ClassId: 1, GenderId: 1)
+        };
+
+        Assert.False(CoordinatorFixtureBase.HasAnyMatchingCharacter(settings, existingCharacters));
     }
 
     [Fact]
@@ -165,6 +205,37 @@ public class CoordinatorFixtureBaseTests
 
         Assert.False(result);
         Assert.True(attempts > 0);
+    }
+
+    [Fact]
+    public void WriteSettingsFile_UsesConfiguredRuntimeRoot()
+    {
+        var runtimeRoot = Path.Combine(Path.GetTempPath(), $"wwow-runtime-{Guid.NewGuid():N}");
+        var previousRoot = Environment.GetEnvironmentVariable("WWOW_TEST_RUNTIME_ROOT");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_TEST_RUNTIME_ROOT", runtimeRoot);
+            var path = CoordinatorFixtureBase.WriteSettingsFile(
+            [
+                CoordinatorFixtureBase.CreateCharacterSetting(
+                    accountName: "RFCBOT1",
+                    characterClass: "Warrior",
+                    characterRace: "Orc",
+                    characterGender: "Female",
+                    runnerType: BotRunnerType.Foreground)
+            ],
+            "runtime-path-test.settings.json");
+
+            Assert.StartsWith(Path.GetFullPath(runtimeRoot), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(path));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_TEST_RUNTIME_ROOT", previousRoot);
+            if (Directory.Exists(runtimeRoot))
+                Directory.Delete(runtimeRoot, recursive: true);
+        }
     }
 
     private static WoWActivitySnapshot CreateSnapshot(

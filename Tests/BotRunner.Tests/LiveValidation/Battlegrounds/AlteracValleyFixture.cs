@@ -11,20 +11,43 @@ using BotRunnerType = WoWStateManager.Settings.BotRunnerType;
 namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 /// <summary>
-/// Fixture for Alterac Valley tests. Launches the full 80 bots: 40 Horde (1 FG + 39 BG) and
-/// 40 Alliance (1 FG + 39 BG).
+/// Fixture for Alterac Valley tests. Launches 80 bots: 2 FG leaders (one per faction)
+/// plus 78 BG clients so test runs keep an in-world visual reference while preserving scale.
 /// Fixture prep handles revive/level/teleport/GM-off; the coordinator handles queue and entry only.
 /// </summary>
 public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 {
     private readonly object _objectivePrepareLock = new();
     private Task? _objectivePrepareTask;
+    private static readonly uint[] EquipmentProficiencySpellIds =
+    [
+        750,   // Plate Mail
+        8737,  // Mail
+        9077,  // Cloth
+        9078,  // Leather
+        9116,  // Shield
+        196,   // One-Handed Axes
+        197,   // Two-Handed Axes
+        198,   // One-Handed Maces
+        199,   // Two-Handed Maces
+        200,   // Polearms
+        201,   // One-Handed Swords
+        202,   // Two-Handed Swords
+        227,   // Staves
+        264,   // Bows
+        266,   // Guns
+        1180,  // Daggers
+        2567,  // Thrown
+        5009,  // Wands
+        5011,  // Crossbows
+        15590, // Fist Weapons
+    ];
 
     public const int HordeBotCount = 40;
     public const int AllianceBotCount = 40;
     public const int TotalBotCount = HordeBotCount + AllianceBotCount;
     public const uint AvMapId = 30;
-    public const string HordeLeaderAccount = "TESTBOT1";
+    public const string HordeLeaderAccount = "AVBOT1";
     public const string AllianceLeaderAccount = "AVBOTA1";
     internal const int LoadoutPreparationBatchSize = 4;
 
@@ -58,8 +81,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(2);
 
-    // All bots are BG (headless) — FG bots removed due to persistent
-    // WoW.exe crashes and CharacterSelect failures. Accept all.
+    // AV requires all configured bots in-world before prep so both FG leaders and the full BG roster participate.
     protected override int MinimumBotCount => TotalBotCount;
 
     protected override uint BattlegroundTypeId => 1;
@@ -119,6 +141,13 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
         return bots;
     }
 
+    protected override async Task PrepareOfflineAccountStateAsync()
+    {
+        await EnsureHonorRankForAccountsAsync(
+            AccountNames,
+            AlteracValleyLoadoutPlan.PvPRankForLoadout);
+    }
+
     internal IReadOnlyDictionary<string, AlteracValleyLoadoutPlan.AlteracValleyLoadout> BuildLoadoutMap()
     {
         return CharacterSettings.ToDictionary(
@@ -129,6 +158,11 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     internal IReadOnlyDictionary<string, AlteracValleyLoadoutPlan.ObjectiveTarget> BuildFirstObjectiveAssignments()
         => AlteracValleyLoadoutPlan.BuildFirstObjectiveAssignments(CharacterSettings);
+
+    internal IReadOnlyDictionary<string, AlteracValleyLoadoutPlan.ObjectiveTarget> BuildAdaptiveFirstObjectiveAssignments(
+        IReadOnlyList<WoWActivitySnapshot> snapshots,
+        Action<string>? log = null)
+        => AlteracValleyLoadoutPlan.BuildAdaptiveFirstObjectiveAssignments(CharacterSettings, snapshots, log);
 
     internal static IReadOnlyList<uint> BuildSupplementalItemIds(AlteracValleyLoadoutPlan.AlteracValleyLoadout loadout)
     {
@@ -188,19 +222,28 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
     {
         await EnsurePreparedAsync();
 
-        var loadouts = BuildLoadoutMap();
-        foreach (var batch in CharacterSettings.Chunk(LoadoutPreparationBatchSize))
+        await SetCoordinatorEnabledForObjectivePushAsync(false);
+
+        try
         {
-            var batchTasks = batch.Select(async settings =>
+            var loadouts = BuildLoadoutMap();
+            foreach (var batch in CharacterSettings.Chunk(LoadoutPreparationBatchSize))
             {
-                if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
-                    throw new InvalidOperationException($"AV loadout missing for '{settings.AccountName}'.");
+                var batchTasks = batch.Select(async settings =>
+                {
+                    if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
+                        throw new InvalidOperationException($"AV loadout missing for '{settings.AccountName}'.");
 
-                await PrepareObjectiveReadyLoadoutAsync(settings.AccountName, loadout);
-            }).ToArray();
+                    await PrepareObjectiveReadyLoadoutAsync(settings.AccountName, loadout);
+                }).ToArray();
 
-            await Task.WhenAll(batchTasks);
-            await Task.Delay(300);
+                await Task.WhenAll(batchTasks);
+                await Task.Delay(300);
+            }
+        }
+        finally
+        {
+            await SetCoordinatorEnabledForObjectivePushAsync(true);
         }
     }
 
@@ -208,19 +251,53 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
     {
         // Mount via GM .cast command with explicit self-target.
         // 23509 = Frostwolf Howler (Horde), 23510 = Stormpike Battle Charger (Alliance)
-        foreach (var settings in CharacterSettings)
+        var toggledGmAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var pass = 1; pass <= 3; pass++)
         {
-            var isHorde = settings.CharacterRace != null && (
-                settings.CharacterRace.Equals("Orc", StringComparison.OrdinalIgnoreCase)
-                || settings.CharacterRace.Equals("Undead", StringComparison.OrdinalIgnoreCase)
-                || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
-                || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
-            var mountSpellId = isHorde ? 23509 : 23510;
-            await SendSilentGmChatCommandAsync(settings.AccountName, ".gm on");
-            await Task.Delay(50);
-            await SendSilentGmChatCommandAsync(settings.AccountName, ".targetself");
-            await Task.Delay(50);
-            await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
+            var snapshots = await QueryAllSnapshotsAsync();
+            var pendingAccounts = CharacterSettings
+                .Where(settings =>
+                {
+                    var snapshot = snapshots.LastOrDefault(candidate =>
+                        string.Equals(candidate.AccountName, settings.AccountName, StringComparison.OrdinalIgnoreCase));
+                    if (snapshot == null)
+                        return false;
+
+                    var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+                    if (mapId != AvMapId)
+                        return false;
+
+                    return (snapshot.Player?.Unit?.MountDisplayId ?? 0) == 0;
+                })
+                .ToArray();
+
+            if (pendingAccounts.Length == 0)
+                break;
+
+            foreach (var settings in pendingAccounts)
+            {
+                var isHorde = settings.CharacterRace != null && (
+                    settings.CharacterRace.Equals("Orc", StringComparison.OrdinalIgnoreCase)
+                    || settings.CharacterRace.Equals("Undead", StringComparison.OrdinalIgnoreCase)
+                    || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
+                    || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
+                var mountSpellId = isHorde ? 23509 : 23510;
+                await SendSilentGmChatCommandAsync(settings.AccountName, ".gm on");
+                toggledGmAccounts.Add(settings.AccountName);
+                await Task.Delay(75);
+                await SendSilentGmChatCommandAsync(settings.AccountName, ".targetself");
+                await Task.Delay(75);
+                await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
+                await Task.Delay(90);
+            }
+
+            await Task.Delay(800);
+        }
+
+        // Keep mounting reliability while ensuring movement starts with GM mode off.
+        foreach (var accountName in toggledGmAccounts)
+        {
+            await SendSilentGmChatCommandAsync(accountName, ".gm off");
             await Task.Delay(50);
         }
     }
@@ -237,6 +314,18 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
             snapshot => (snapshot.Player?.BagContents?.Count ?? 1) == 0,
             TimeSpan.FromSeconds(5),
             pollIntervalMs: 250);
+
+        // Characters boosted via .levelup can miss class trainer proficiencies.
+        // Teach class spellbooks before adding/equipping rank gear.
+        await SendSilentGmChatCommandAsync(accountName, ".learn all_myclass");
+        await Task.Delay(100);
+        await SendSilentGmChatCommandAsync(accountName, ".learn all_myspells");
+        await Task.Delay(100);
+        foreach (var spellId in EquipmentProficiencySpellIds)
+        {
+            await SendSilentGmChatCommandAsync(accountName, $".learn {spellId}");
+            await Task.Delay(30);
+        }
 
         // Learn riding + mount spell. Mount spells (23509/23510) are used directly
         // via CastSpell action since UseItem fails for GM-added items.
@@ -306,8 +395,19 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
             },
             TimeSpan.FromSeconds(8),
             pollIntervalMs: 250);
-        if (!loadoutApplied)
-            Console.WriteLine($"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' — some items may remain in bags. Continuing.");
+                if (!loadoutApplied)
+        {
+            var snapshot = await GetSnapshotAsync(accountName);
+            var bagItemIds = snapshot?.Player?.BagContents?.Values?.ToArray() ?? Array.Empty<uint>();
+            var remainingEquip = loadout.EquipItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
+            var remainingElixirs = loadout.ElixirItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
+            var bagPreview = bagItemIds.Take(12).ToArray();
+            Console.WriteLine(
+                $"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' - " +
+                $"remainingEquip=[{string.Join(",", remainingEquip)}], " +
+                $"remainingElixirs=[{string.Join(",", remainingElixirs)}], " +
+                $"bagCount={bagItemIds.Length}, bagPreview=[{string.Join(",", bagPreview)}]. Continuing.");
+        }
     }
 
 }
@@ -317,3 +417,4 @@ public class AlteracValleyCollection : ICollectionFixture<AlteracValleyFixture>
 {
     public const string Name = "AlteracValleyValidation";
 }
+

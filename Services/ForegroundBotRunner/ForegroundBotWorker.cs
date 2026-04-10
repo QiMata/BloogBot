@@ -58,6 +58,17 @@ namespace ForegroundBotRunner
         private readonly ConnectionStateMachine _connectionState = new();
         private uint _lastObservedContinentId = 0xFFFFFFFF;
         private static readonly ushort FishingCustomAnimOpcode = (ushort)Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM;
+        private static readonly TimeSpan WorldEntryCinematicGrace = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan WorldEntryCinematicRetry = TimeSpan.FromSeconds(2);
+        private DateTime _loadingWorldSinceUtc = DateTime.MinValue;
+        private DateTime _lastWorldEntryCinematicDismissAttemptUtc = DateTime.MinValue;
+        private bool _worldEntryHydrated;
+        private const string WorldEntryCinematicDismissLua =
+            "if StopCinematic then pcall(StopCinematic) end " +
+            "if CinematicFrame_CancelCinematic then pcall(CinematicFrame_CancelCinematic) end " +
+            "if StopMovie then pcall(StopMovie) end " +
+            "if MovieFrame and MovieFrame.CloseDialog and MovieFrame.CloseDialog:IsVisible() then MovieFrame.CloseDialog:Click() end " +
+            "if MovieFrameCloseDialog and MovieFrameCloseDialog:IsVisible() then MovieFrameCloseDialog:Click() end";
 
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
@@ -251,11 +262,12 @@ namespace ForegroundBotRunner
                     try
                     {
                         loopCount++;
+                        var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
+                        var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
+
                         // Log state every 10 iterations (every 5 seconds)
                         if (loopCount % 10 == 1)
                         {
-                            var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
-                            var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
                             var playerName = _objectManager?.Player?.Name ?? "(null)";
                             var connState = _connectionState.CurrentState;
                             var pktSend = PacketLogger.SendCount;
@@ -263,17 +275,65 @@ namespace ForegroundBotRunner
                             var rawLoginState = ForegroundBotRunner.Mem.MemoryManager.ReadString(ForegroundBotRunner.Mem.Offsets.CharacterScreen.LoginState) ?? "(null)";
                             var maxChars = ObjectManager.MaxCharacterCount;
                             DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, LoginState='{rawLoginState}', HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}, MaxChars={maxChars}");
+                            _logger.LogInformation(
+                                "[FG-STATE] account={Account} screen={ScreenState} loginState={LoginState} enteredWorld={HasEnteredWorld} maxChars={MaxChars} connState={ConnState} player={Player}",
+                                string.IsNullOrWhiteSpace(_accountName) ? "?" : _accountName,
+                                screenState,
+                                rawLoginState,
+                                hasEnteredWorld,
+                                maxChars,
+                                connState,
+                                playerName);
                         }
 
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too
                         _objectManager?.AntiAfk();
 
+                        // Ensure Lua error capture is active before world entry so realm/charselect
+                        // failures are visible in logs without full 80-bot bring-up.
+                        ObjectManager.EnsureLuaErrorCaptureInstalled("worker.loop");
+                        if (loopCount % 6 == 0)
+                        {
+                            ObjectManager.CaptureLuaErrors("worker.loop");
+                        }
+
+                        if (hasEnteredWorld && screenState == WoWScreenState.InWorld && _objectManager?.Player != null)
+                        {
+                            _worldEntryHydrated = true;
+                        }
+
+                        if (hasEnteredWorld && screenState == WoWScreenState.LoadingWorld)
+                        {
+                            if (_loadingWorldSinceUtc == DateTime.MinValue)
+                                _loadingWorldSinceUtc = DateTime.UtcNow;
+
+                            var loadingDuration = DateTime.UtcNow - _loadingWorldSinceUtc;
+                            var sinceLastAttempt = _lastWorldEntryCinematicDismissAttemptUtc == DateTime.MinValue
+                                ? TimeSpan.MaxValue
+                                : DateTime.UtcNow - _lastWorldEntryCinematicDismissAttemptUtc;
+
+                            if (ShouldAttemptWorldEntryCinematicDismiss(
+                                    screenState,
+                                    hasEnteredWorld,
+                                    _worldEntryHydrated,
+                                    loadingDuration,
+                                    sinceLastAttempt))
+                            {
+                                _lastWorldEntryCinematicDismissAttemptUtc = DateTime.UtcNow;
+                                TryDismissWorldEntryCinematic(loadingDuration);
+                            }
+                        }
+                        else
+                        {
+                            _loadingWorldSinceUtc = DateTime.MinValue;
+                        }
+
                         // At character select with characters present + not already entering world:
                         // click "Enter World" button directly via Lua.
                         // Do not skip the intro cinematic for freshly created characters.
                         if (!ObjectManager.PauseNativeCallsDuringWorldEntry
-                            && _objectManager?.HasEnteredWorld != true
-                            && _objectManager?.GetCurrentScreenState() == WoWScreenState.CharacterSelect
+                            && !hasEnteredWorld
+                            && screenState == WoWScreenState.CharacterSelect
                             && ObjectManager.MaxCharacterCount > 0
                             && loopCount % 6 == 3) // Every 3s, rate-limited
                         {
@@ -300,15 +360,16 @@ namespace ForegroundBotRunner
                             // 0x006CA22E causes ILLEGAL_INSTRUCTION crashes when enabled.
                             // Re-enable only when connecting to a Warden-enabled server.
 
-                            // Suppress Lua error popups — they block subsequent Lua calls
+                            // Ensure Lua error capture remains installed after world entry.
                             try
                             {
-                                Mem.Functions.LuaCall("seterrorhandler(function() end)");
-                                DiagLog("Lua error handler suppressed");
+                                ObjectManager.EnsureLuaErrorCaptureInstalled("world-entry");
+                                ObjectManager.CaptureLuaErrors("world-entry");
+                                DiagLog("Lua error capture ensured at world entry");
                             }
                             catch (Exception ex)
                             {
-                                DiagLog($"Failed to suppress Lua errors: {ex.Message}");
+                                DiagLog($"Failed to ensure Lua error capture at world entry: {ex.Message}");
                             }
 
                             // Set WWOW_DISABLE_PACKET_HOOKS=1 to skip ALL hook installation (crash diagnostics)
@@ -487,6 +548,35 @@ namespace ForegroundBotRunner
             return Task.CompletedTask;
         }
 
+        internal static bool ShouldAttemptWorldEntryCinematicDismiss(
+            WoWScreenState screenState,
+            bool hasEnteredWorld,
+            bool worldEntryHydrated,
+            TimeSpan loadingWorldDuration,
+            TimeSpan sinceLastAttempt)
+        {
+            return hasEnteredWorld
+                && !worldEntryHydrated
+                && screenState == WoWScreenState.LoadingWorld
+                && loadingWorldDuration >= WorldEntryCinematicGrace
+                && sinceLastAttempt >= WorldEntryCinematicRetry;
+        }
+
+        private void TryDismissWorldEntryCinematic(TimeSpan loadingDuration)
+        {
+            try
+            {
+                DiagLog($"[FG-CINEMATIC] Attempting world-entry cinematic dismiss (loading={loadingDuration.TotalSeconds:F1}s)");
+                ObjectManager.MainThreadLuaCall(WorldEntryCinematicDismissLua);
+                ObjectManager.CaptureLuaErrors("worker.world-entry-cinematic-dismiss");
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"[FG-CINEMATIC] Dismiss attempt failed: {ex.Message}");
+                _logger.LogDebug(ex, "World-entry cinematic dismiss attempt failed");
+            }
+        }
+
         private void HandleCapturedPacket(PacketDirection direction, ushort opcode, int size)
         {
             if (direction != PacketDirection.Recv || opcode != FishingCustomAnimOpcode)
@@ -528,6 +618,7 @@ namespace ForegroundBotRunner
                 ObjectManager.PauseNativeCallsDuringWorldEntry = false;
                 Mem.ThreadSynchronizer.ResetObjMgrValidState();
                 _hooksInitialized = false;
+                _worldEntryHydrated = false;
                 if (_objectManager != null)
                 {
                     _objectManager.HasEnteredWorld = false;
@@ -541,6 +632,7 @@ namespace ForegroundBotRunner
                 _logger.LogInformation("Player logout detected");
                 Mem.ThreadSynchronizer.ResetObjMgrValidState();
                 _hooksInitialized = false;
+                _worldEntryHydrated = false;
                 if (_objectManager != null)
                 {
                     _objectManager.HasEnteredWorld = false;

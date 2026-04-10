@@ -506,13 +506,8 @@ public class MovementControllerPhysicsTests
 
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
 
-        // Set a straight-line path ahead. In production the bot always has a navmesh path,
-        // which activates the false-freefall guard that suppresses transient FALLINGFAR
-        // on ADT gully terrain. Without a path, the guard doesn't engage.
-        controller.SetPath([
-            new Position(SpawnX, SpawnY, SpawnZ),
-            new Position(SpawnX + 30f, SpawnY, SpawnZ)
-        ]);
+        // Keep a steering target hint in sync with route execution ownership in BotRunner.
+        controller.SetTargetWaypoint(new Position(SpawnX, SpawnY, SpawnZ));
 
         // Walk forward for 3 seconds across Orgrimmar terrain
         var trace = RunFramesWithTrace(
@@ -606,17 +601,12 @@ public class MovementControllerPhysicsTests
         // Start 10y above ground — short fall, should land within 40 frames
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 10f, facing: 0f);
 
-        // Set a ground-level path so the false-freefall guard can engage after landing.
-        // Path Z must match actual terrain at each waypoint (not spawn Z) — the path-aware
-        // position guard clamps Z to path waypoint level, so using elevated Z causes bounce.
+        // Keep a steering target hint in sync with route execution ownership in BotRunner.
         float endGroundZ = ProbeGroundZ(MapId, SpawnX + 30f, SpawnY, SpawnZ + 40f);
         if (float.IsNaN(endGroundZ)) endGroundZ = SpawnZ - 5f;
         float startGroundZ = ProbeGroundZ(MapId, SpawnX, SpawnY, SpawnZ + 40f);
         if (float.IsNaN(startGroundZ)) startGroundZ = SpawnZ;
-        controller.SetPath([
-            new Position(SpawnX, SpawnY, startGroundZ),
-            new Position(SpawnX + 30f, SpawnY, endGroundZ)
-        ]);
+        controller.SetTargetWaypoint(new Position(SpawnX, SpawnY, startGroundZ));
 
         var trace = RunFramesWithTrace(
             controller,
@@ -725,16 +715,12 @@ public class MovementControllerPhysicsTests
         // Start 12y above ground — enough for a clear fall + landing within 60 frames
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 12f, facing: 0f);
 
-        // Set a ground-level path so the false-freefall guard activates after landing.
-        // Path Z must match actual terrain — path-aware position guard clamps to waypoint Z.
+        // Keep a steering target hint in sync with route execution ownership in BotRunner.
         float endGroundZ = ProbeGroundZ(MapId, SpawnX + 30f, SpawnY, SpawnZ + 40f);
         if (float.IsNaN(endGroundZ)) endGroundZ = SpawnZ - 5f;
         float startGroundZ = ProbeGroundZ(MapId, SpawnX, SpawnY, SpawnZ + 40f);
         if (float.IsNaN(startGroundZ)) startGroundZ = SpawnZ;
-        controller.SetPath([
-            new Position(SpawnX, SpawnY, startGroundZ),
-            new Position(SpawnX + 30f, SpawnY, endGroundZ)
-        ]);
+        controller.SetTargetWaypoint(new Position(SpawnX, SpawnY, startGroundZ));
 
         var trace = RunFramesWithTrace(
             controller,
@@ -1506,10 +1492,7 @@ public class MovementControllerPhysicsTests
         float facing = MathF.Atan2(targetY - startY, targetX - startX);
 
         var (controller, player, _) = CreateController(startX, startY, startZ, facing);
-        controller.SetPath([
-            new Position(startX, startY, startZ),
-            new Position(targetX, targetY, startZ)
-        ]);
+        controller.SetTargetWaypoint(new Position(startX, startY, startZ));
 
         var trace = RunFramesWithTrace(controller, player, frameCount: 120,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
@@ -1542,10 +1525,7 @@ public class MovementControllerPhysicsTests
         float facing = MathF.Atan2(targetY - startY, targetX - startX);
 
         var (controller, player, _) = CreateController(startX, startY, startZ, facing);
-        controller.SetPath([
-            new Position(startX, startY, startZ),
-            new Position(targetX, targetY, startZ - 10f)
-        ]);
+        controller.SetTargetWaypoint(new Position(startX, startY, startZ));
 
         var trace = RunFramesWithTrace(controller, player, frameCount: 120,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
@@ -1578,10 +1558,7 @@ public class MovementControllerPhysicsTests
         float facing = MathF.Atan2(targetY - startY, targetX - startX);
 
         var (controller, player, _) = CreateController(startX, startY, startZ, facing);
-        controller.SetPath([
-            new Position(startX, startY, startZ),
-            new Position(targetX, targetY, startZ)
-        ]);
+        controller.SetTargetWaypoint(new Position(startX, startY, startZ));
 
         var trace = RunFramesWithTrace(controller, player, frameCount: 120,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
@@ -1614,10 +1591,7 @@ public class MovementControllerPhysicsTests
         float facing = MathF.PI; // heading west
 
         var (controller, player, _) = CreateController(startX, startY, startZ, facing);
-        controller.SetPath([
-            new Position(startX, startY, startZ),
-            new Position(startX - 20f, startY, startZ)
-        ]);
+        controller.SetTargetWaypoint(new Position(startX, startY, startZ));
 
         var trace = RunFramesWithTrace(controller, player, frameCount: 60,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);

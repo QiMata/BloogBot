@@ -624,7 +624,7 @@ namespace WoWSharpClient
                     Log.Warning("[NAV-DIAG] MoveToward preserving airborne steering only (x{Count}): flags=0x{Flags:X}, pos=({X:F1},{Y:F1},{Z:F1}), map={Map}",
                         _moveTowardAirborneLogCount, (uint)player.MovementFlags,
                         player.Position.X, player.Position.Y, player.Position.Z, player.MapId);
-                UpdateAirborneSteering(player, pos, Player.GetFacingForPosition(pos));
+                UpdateAirborneSteering(pos);
                 return;
             }
             _moveTowardAirborneLogCount = 0;
@@ -637,8 +637,8 @@ namespace WoWSharpClient
             StopMovement(ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight);
             StartMovement(ControlBits.Front);
 
-            // Always refresh the waypoint so path-driven callers can steer every tick.
-            // A large refresh threshold can leave movement locked to an old heading into walls.
+            // Always refresh the steering target so movement parity runs against the latest
+            // BotRunner-selected waypoint.
             if (_movementController != null)
             {
                 _movementController.SetTargetWaypoint(pos);
@@ -653,7 +653,7 @@ namespace WoWSharpClient
 
             if (IsPlayerAirborne(player))
             {
-                UpdateAirborneSteering(player, position, facing);
+                UpdateAirborneSteering(position);
                 return;
             }
 
@@ -681,36 +681,21 @@ namespace WoWSharpClient
             player.MovementFlags &= ~(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
 
-            // Always refresh the waypoint so path-driven callers can steer every tick.
-            // A large refresh threshold can leave movement locked to an old heading into walls.
+            // Always refresh the steering target so movement parity runs against the latest
+            // BotRunner-selected waypoint.
             if (_movementController != null)
             {
                 _movementController.SetTargetWaypoint(position);
             }
         }
 
-        private void UpdateAirborneSteering(WoWLocalPlayer player, Position target, float desiredFacing)
+        private void UpdateAirborneSteering(Position target)
         {
             // Route-following movement must not rewrite facing while airborne.
             // The original client preserves the current airborne trajectory until landing
             // instead of re-steering every tick from waypoint churn. Explicit facing
             // updates still go through SetFacing when higher-level code genuinely needs them.
             _movementController?.SetTargetWaypoint(target);
-        }
-
-        /// <summary>
-        /// Sets a full navigation path on the movement controller for waypoint-based following.
-        /// The controller will interpolate Z from path waypoints and auto-advance through them.
-        /// </summary>
-
-
-        /// <summary>
-        /// Sets a full navigation path on the movement controller for waypoint-based following.
-        /// The controller will interpolate Z from path waypoints and auto-advance through them.
-        /// </summary>
-        public void SetNavigationPath(Position[] path)
-        {
-            _movementController?.SetPath(path);
         }
 
         /// <summary>

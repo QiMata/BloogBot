@@ -124,23 +124,32 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
     {
         await EnsurePreparedAsync();
 
-        var loadouts = CharacterSettings.ToDictionary(
-            s => s.AccountName,
-            AlteracValleyLoadoutPlan.ResolveLoadout,
-            StringComparer.OrdinalIgnoreCase);
+        await SetCoordinatorEnabledAsync(false);
 
-        // Batch 4 at a time to avoid overwhelming the server
-        foreach (var batch in CharacterSettings.Chunk(4))
+        try
         {
-            var batchTasks = batch.Select(async settings =>
-            {
-                if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
-                    throw new InvalidOperationException($"WSG loadout missing for '{settings.AccountName}'.");
-                await PrepareLoadoutAsync(settings.AccountName, loadout);
-            }).ToArray();
+            var loadouts = CharacterSettings.ToDictionary(
+                s => s.AccountName,
+                AlteracValleyLoadoutPlan.ResolveLoadout,
+                StringComparer.OrdinalIgnoreCase);
 
-            await Task.WhenAll(batchTasks);
-            await Task.Delay(300);
+            // Batch 4 at a time to avoid overwhelming the server
+            foreach (var batch in CharacterSettings.Chunk(4))
+            {
+                var batchTasks = batch.Select(async settings =>
+                {
+                    if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
+                        throw new InvalidOperationException($"WSG loadout missing for '{settings.AccountName}'.");
+                    await PrepareLoadoutAsync(settings.AccountName, loadout);
+                }).ToArray();
+
+                await Task.WhenAll(batchTasks);
+                await Task.Delay(300);
+            }
+        }
+        finally
+        {
+            await SetCoordinatorEnabledAsync(true);
         }
     }
 
@@ -212,8 +221,19 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
             },
             TimeSpan.FromSeconds(8),
             pollIntervalMs: 250);
-        if (!loadoutApplied)
-            Console.WriteLine($"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' — continuing.");
+                if (!loadoutApplied)
+        {
+            var snapshot = await GetSnapshotAsync(accountName);
+            var bagItemIds = snapshot?.Player?.BagContents?.Values?.ToArray() ?? Array.Empty<uint>();
+            var remainingEquip = loadout.EquipItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
+            var remainingElixirs = loadout.ElixirItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
+            var bagPreview = bagItemIds.Take(12).ToArray();
+            Console.WriteLine(
+                $"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' - " +
+                $"remainingEquip=[{string.Join(",", remainingEquip)}], " +
+                $"remainingElixirs=[{string.Join(",", remainingElixirs)}], " +
+                $"bagCount={bagItemIds.Length}, bagPreview=[{string.Join(",", bagPreview)}]. Continuing.");
+        }
     }
 
     internal async Task MountAllBotsAsync()
@@ -231,3 +251,4 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         }
     }
 }
+

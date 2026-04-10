@@ -76,16 +76,15 @@ public class MovementControllerIntegrationTests
     }
 
     [Fact]
-    public void SetPath_WithMultipleWaypoints()
+    public void SetTargetWaypoint_WithMultipleUpdates_KeepsLatestTarget()
     {
         var mc = Create(out _);
-        mc.SetPath(new[]
-        {
-            new Position(1630f, -4373f, 34f),
-            new Position(1635f, -4373f, 34f),
-            new Position(1639f, -4373f, 34f),
-        });
+        mc.SetTargetWaypoint(new Position(1630f, -4373f, 34f));
+        mc.SetTargetWaypoint(new Position(1635f, -4373f, 34f));
+        mc.SetTargetWaypoint(new Position(1639f, -4373f, 34f));
+
         Assert.NotNull(mc.CurrentWaypoint);
+        Assert.Equal(1639f, mc.CurrentWaypoint!.X, 3);
     }
 
     private static MovementController Create(out WoWLocalPlayer player)

@@ -54,7 +54,6 @@ public class FishingTask : BotTask, IBotTask
     private const int PoolAcquireTimeoutMs = 15000;
     private const int SearchWalkTimeoutMs = 180_000;
     private const int SearchWaypointStallTimeoutMs = 20_000;
-    private const int SearchWaypointStuckRecoveryGraceMs = 1500;
     private const float SearchWaypointArrivalRadius = 6f;
     private const float SearchWaypointProgressResetDistance = 2f;
     private const float SearchWaypointTravelStride = 8f;
@@ -113,7 +112,6 @@ public class FishingTask : BotTask, IBotTask
     private DateTime _searchStartedAt;
     private DateTime _searchWaypointEnteredAt;
     private float _searchWaypointResetDistance = float.MaxValue;
-    private int _searchWaypointObservedStuckRecoveryGeneration;
 
     public void Update()
     {
@@ -379,17 +377,6 @@ public class FishingTask : BotTask, IBotTask
         }
 
         var waypointElapsed = (int)(DateTime.UtcNow - _searchWaypointEnteredAt).TotalMilliseconds;
-        var stuckRecoveryGeneration = ObserveSearchWaypointMovementStuckRecovery(waypointElapsed);
-        if (stuckRecoveryGeneration != null)
-        {
-            ClearNavigation();
-            var stalledWaypoint = _searchWaypointIndex + 1;
-            AdvanceSearchWaypoint();
-            BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask search_walk_stalled waypoint={stalledWaypoint}/{_searchWaypoints.Count} distance={waypointDistance:F1} elapsed={waypointElapsed}ms reason=movement_stuck generation={stuckRecoveryGeneration.Value}");
-            return;
-        }
-
         if (waypointElapsed >= SearchWaypointStallTimeoutMs)
         {
             ClearNavigation();
@@ -1118,9 +1105,6 @@ public class FishingTask : BotTask, IBotTask
         ClearNavigation();
         ObjectManager.MoveToward(nextWaypoint);
 
-        if (path != null && path.Length > 1)
-            ObjectManager.SetNavigationPath(path[1..]);
-
         return true;
     }
 
@@ -1309,20 +1293,6 @@ public class FishingTask : BotTask, IBotTask
     {
         _searchWaypointEnteredAt = now ?? DateTime.UtcNow;
         _searchWaypointResetDistance = float.MaxValue;
-        _searchWaypointObservedStuckRecoveryGeneration = ObjectManager.MovementStuckRecoveryGeneration;
-    }
-
-    private int? ObserveSearchWaypointMovementStuckRecovery(int waypointElapsed)
-    {
-        if (waypointElapsed < SearchWaypointStuckRecoveryGraceMs)
-            return null;
-
-        var generation = ObjectManager.MovementStuckRecoveryGeneration;
-        if (generation <= _searchWaypointObservedStuckRecoveryGeneration)
-            return null;
-
-        _searchWaypointObservedStuckRecoveryGeneration = generation;
-        return generation;
     }
 
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)

@@ -165,9 +165,11 @@ namespace WoWStateManager.Listeners
             // Coordinate combat (group formation + combat support)
             InjectCoordinatedActions(accountName, response);
 
+            var prioritizeCoordinatorAction = ShouldPrioritizeCoordinatorAction(response.CurrentAction);
+
             // Inject pending test/external action (overrides coordinated action if present).
             // Use FIFO so rapid multi-step setup actions (target -> chat command, etc.) are not dropped.
-            if (_pendingActions.TryGetValue(accountName, out var pendingQueue))
+            if (!prioritizeCoordinatorAction && _pendingActions.TryGetValue(accountName, out var pendingQueue))
             {
                 while (pendingQueue.TryDequeue(out var timestampedAction))
                 {
@@ -208,6 +210,23 @@ namespace WoWStateManager.Listeners
             }
 
             return response;
+        }
+
+        private bool ShouldPrioritizeCoordinatorAction(ActionMessage? currentAction)
+        {
+            if (currentAction == null || _battlegroundCoordinator == null)
+                return false;
+
+            if (currentAction.ActionType != ActionType.JoinBattleground
+                && currentAction.ActionType != ActionType.AcceptBattleground)
+            {
+                return false;
+            }
+
+            return _battlegroundCoordinator.State is BattlegroundCoordinator.CoordState.QueueForBattleground
+                or BattlegroundCoordinator.CoordState.WaitForInvite
+                or BattlegroundCoordinator.CoordState.AcceptInvite
+                or BattlegroundCoordinator.CoordState.WaitForEntry;
         }
 
         /// <summary>

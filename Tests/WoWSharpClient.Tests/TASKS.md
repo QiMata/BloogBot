@@ -11,9 +11,15 @@
 3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
 
 ## Session Handoff
-- Last updated: `2026-04-03 (session 296)`
-- Pass result: `scene-data refresh failures now back off deterministically instead of retrying every frame`
+- Last updated: `2026-04-08 (session 300)`
+- Pass result: `scene-data tile presence checks added for previously missing city-side startup tiles`
 - Last delta:
+  - Session 300 added direct live tile assertions in `SceneDataClientIntegrationTests` for the previously missing startup keys:
+    - `LiveService_Map0_48_32_TileExists`
+    - `LiveService_Map1_28_41_TileExists`
+  - Both tests use `ProtobufSocketClient<SceneTileRequest, SceneTileResponse>` and verify `Success=true` with `TriangleCount>0` on the exact tile key, instead of relying on neighborhood refresh success alone.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map0_48_32_TileExists|FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map1_28_41_TileExists" --logger "console;verbosity=minimal"` -> `passed (2/2)`
   - Session 296 added direct deterministic coverage for the scene-slice client transport seam. `SceneDataClientTests.EnsureSceneDataAround_SuppressesImmediateRetryAfterFailure` and `EnsureSceneDataAround_RetriesAfterBackoffExpires` now prove the client applies a short retry backoff after a failed request instead of hammering the socket every frame.
   - Kept the controller-side slice assertions green in the same focused run: `MovementControllerTests.Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode` and `Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure`.
   - Validation:

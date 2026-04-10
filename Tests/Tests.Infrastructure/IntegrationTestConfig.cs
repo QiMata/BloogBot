@@ -91,6 +91,20 @@ public class IntegrationTestConfig
     public int SoapPort { get; init; } =
         int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_SOAP_PORT"), out var soapPort) ? soapPort : 7878;
 
+    /// <summary>
+    /// MaNGOS SOAP admin username.
+    /// Override: WWOW_TEST_SOAP_USERNAME
+    /// </summary>
+    public string SoapUsername { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_SOAP_USERNAME") ?? "ADMINISTRATOR";
+
+    /// <summary>
+    /// MaNGOS SOAP admin password.
+    /// Override: WWOW_TEST_SOAP_PASSWORD
+    /// </summary>
+    public string SoapPassword { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_SOAP_PASSWORD") ?? "PASSWORD";
+
     #endregion
 
     #region Test Account Settings

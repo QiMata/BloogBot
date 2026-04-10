@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,6 +23,12 @@ internal readonly record struct AccountCharacterRecord(string Name, byte RaceId,
 
 public partial class LiveBotFixture
 {
+    private static readonly BigInteger SrpPrime = new(
+        Convert.FromHexString("894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7"),
+        isUnsigned: true,
+        isBigEndian: true);
+
+    private static readonly BigInteger SrpGenerator = new(7);
 
     // ---- MySQL direct helpers (bypass disabled GM commands in some repacks) ----
 
@@ -33,6 +42,166 @@ public partial class LiveBotFixture
 
     private string MangosRealmDbConnectionString
         => $"Server=127.0.0.1;Port={Config.MySqlPort};Uid={Config.MySqlUser};Pwd={Config.MySqlPassword};Database=realmd;Connection Timeout=5;";
+
+    private async Task<bool> EnsureSoapAdminAccountAsync()
+    {
+        try
+        {
+            var username = (Config.SoapUsername ?? string.Empty).Trim().ToUpperInvariant();
+            var password = (Config.SoapPassword ?? string.Empty).Trim().ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                _logger.LogWarning("[SOAP-BOOTSTRAP] Skipped because SOAP username/password were empty.");
+                return false;
+            }
+
+            using var realmConn = new MySql.Data.MySqlClient.MySqlConnection(MangosRealmDbConnectionString);
+            await realmConn.OpenAsync();
+
+            uint accountId;
+            bool resetPassword = false;
+
+            using (var lookup = realmConn.CreateCommand())
+            {
+                lookup.CommandText = "SELECT id, s, v FROM account WHERE username = @username LIMIT 1";
+                lookup.Parameters.AddWithValue("@username", username);
+
+                using var reader = await lookup.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
+                {
+                    accountId = 0;
+                }
+                else
+                {
+                    accountId = Convert.ToUInt32(reader.GetValue(0));
+                    var saltHex = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                    var verifierHex = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                    resetPassword = !VerifierMatchesPassword(username, password, saltHex, verifierHex);
+                }
+            }
+
+            if (accountId == 0)
+            {
+                var (saltHex, verifierHex) = GenerateSaltAndVerifier(username, password);
+                using var insert = realmConn.CreateCommand();
+                insert.CommandText = @"
+                    INSERT INTO account (username, gmlevel, v, s, token_key, joindate)
+                    VALUES (@username, 6, @v, @s, '', NOW())";
+                insert.Parameters.AddWithValue("@username", username);
+                insert.Parameters.AddWithValue("@v", verifierHex);
+                insert.Parameters.AddWithValue("@s", saltHex);
+                await insert.ExecuteNonQueryAsync();
+                accountId = Convert.ToUInt32(insert.LastInsertedId);
+                _logger.LogInformation("[SOAP-BOOTSTRAP] Created missing SOAP account '{Account}' (id={Id}).", username, accountId);
+            }
+            else if (resetPassword)
+            {
+                var (saltHex, verifierHex) = GenerateSaltAndVerifier(username, password);
+                using var updatePassword = realmConn.CreateCommand();
+                updatePassword.CommandText = "UPDATE account SET v = @v, s = @s WHERE id = @id";
+                updatePassword.Parameters.AddWithValue("@v", verifierHex);
+                updatePassword.Parameters.AddWithValue("@s", saltHex);
+                updatePassword.Parameters.AddWithValue("@id", accountId);
+                await updatePassword.ExecuteNonQueryAsync();
+                _logger.LogInformation("[SOAP-BOOTSTRAP] Reset SRP verifier for SOAP account '{Account}' (id={Id}).", username, accountId);
+            }
+
+            using (var gmUpdate = realmConn.CreateCommand())
+            {
+                gmUpdate.CommandText = "UPDATE account SET gmlevel = 6 WHERE id = @id";
+                gmUpdate.Parameters.AddWithValue("@id", accountId);
+                await gmUpdate.ExecuteNonQueryAsync();
+            }
+
+            foreach (var realmId in new[] { 1, -1 })
+            {
+                using var access = realmConn.CreateCommand();
+                access.CommandText = @"
+                    INSERT INTO account_access (id, gmlevel, RealmID)
+                    VALUES (@id, 6, @realm)
+                    ON DUPLICATE KEY UPDATE gmlevel = VALUES(gmlevel)";
+                access.Parameters.AddWithValue("@id", accountId);
+                access.Parameters.AddWithValue("@realm", realmId);
+                await access.ExecuteNonQueryAsync();
+            }
+
+            try
+            {
+                using var realmChars = realmConn.CreateCommand();
+                realmChars.CommandText = @"
+                    REPLACE INTO realmcharacters (realmid, acctid, numchars)
+                    SELECT id, @acctid, 0 FROM realmlist";
+                realmChars.Parameters.AddWithValue("@acctid", accountId);
+                await realmChars.ExecuteNonQueryAsync();
+            }
+            catch (Exception ex)
+            {
+                // Not fatal for SOAP auth; some local schemas omit/shape this table differently.
+                _logger.LogDebug("[SOAP-BOOTSTRAP] realmcharacters sync skipped: {Error}", ex.Message);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[SOAP-BOOTSTRAP] Failed to create/repair SOAP admin account: {Error}", ex.Message);
+            return false;
+        }
+    }
+
+    private static bool VerifierMatchesPassword(string username, string password, string saltHex, string storedVerifierHex)
+    {
+        if (string.IsNullOrWhiteSpace(saltHex) || string.IsNullOrWhiteSpace(storedVerifierHex))
+            return false;
+
+        try
+        {
+            var computed = ComputeVerifierHex(username, password, saltHex);
+            return string.Equals(computed, storedVerifierHex.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static (string SaltHex, string VerifierHex) GenerateSaltAndVerifier(string username, string password)
+    {
+        Span<byte> saltBigEndian = stackalloc byte[32];
+        RandomNumberGenerator.Fill(saltBigEndian);
+        saltBigEndian[0] |= 0x80;
+        var saltHex = Convert.ToHexString(saltBigEndian);
+        var verifierHex = ComputeVerifierHex(username, password, saltHex);
+        return (saltHex, verifierHex);
+    }
+
+    private static string ComputeVerifierHex(string username, string password, string saltHex)
+    {
+        var normalizedUser = (username ?? string.Empty).Trim().ToUpperInvariant();
+        var normalizedPassword = (password ?? string.Empty).Trim().ToUpperInvariant();
+
+        var shaPass = SHA1.HashData(Encoding.ASCII.GetBytes($"{normalizedUser}:{normalizedPassword}"));
+        var salt = new BigInteger(Convert.FromHexString(saltHex), isUnsigned: true, isBigEndian: true);
+        var saltLittleEndian = ToLittleEndianMinimal(salt);
+
+        var verifierSeed = new byte[saltLittleEndian.Length + shaPass.Length];
+        Buffer.BlockCopy(saltLittleEndian, 0, verifierSeed, 0, saltLittleEndian.Length);
+        Buffer.BlockCopy(shaPass, 0, verifierSeed, saltLittleEndian.Length, shaPass.Length);
+
+        var xDigest = SHA1.HashData(verifierSeed);
+        var x = new BigInteger(xDigest, isUnsigned: true, isBigEndian: false);
+        var verifier = BigInteger.ModPow(SrpGenerator, x, SrpPrime);
+        return verifier.ToString("X", CultureInfo.InvariantCulture);
+    }
+
+    private static byte[] ToLittleEndianMinimal(BigInteger value)
+    {
+        if (value.IsZero)
+            return [];
+
+        return value.ToByteArray(isUnsigned: true, isBigEndian: false);
+    }
 
 
     private async Task SeedExpectedCharacterNamesFromDatabaseAsync()
@@ -129,6 +298,61 @@ public partial class LiveBotFixture
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Ensure live battleground accounts meet honor-rank requirements before launch.
+    /// This must run while characters are offline so rank fields hydrate on next login.
+    /// </summary>
+    protected async Task<int> EnsureHonorRankForAccountsAsync(
+        IReadOnlyCollection<string> accountNames,
+        int honorRank,
+        float honorRankPoints = 65000f)
+    {
+        if (accountNames == null || accountNames.Count == 0)
+            return 0;
+        if (honorRank < 0)
+            throw new ArgumentOutOfRangeException(nameof(honorRank), honorRank, "Honor rank must be non-negative.");
+
+        var normalizedAccounts = accountNames
+            .Where(account => !string.IsNullOrWhiteSpace(account))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedAccounts.Length == 0)
+            return 0;
+
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        var parameterNames = new List<string>(normalizedAccounts.Length);
+        for (var index = 0; index < normalizedAccounts.Length; index++)
+        {
+            var parameterName = $"@account{index}";
+            parameterNames.Add(parameterName);
+            cmd.Parameters.AddWithValue(parameterName, normalizedAccounts[index]);
+        }
+
+        cmd.Parameters.AddWithValue("@rank", honorRank);
+        cmd.Parameters.AddWithValue("@rankPoints", honorRankPoints);
+        cmd.CommandText = $@"
+            UPDATE characters c
+            INNER JOIN realmd.account a ON a.id = c.account
+            SET
+                c.honor_highest_rank = GREATEST(c.honor_highest_rank, @rank),
+                c.honor_rank_points = GREATEST(c.honor_rank_points, @rankPoints),
+                c.honor_standing = CASE WHEN c.honor_standing = 0 THEN 1 ELSE c.honor_standing END,
+                c.honor_last_week_hk = GREATEST(c.honor_last_week_hk, 500),
+                c.honor_last_week_cp = GREATEST(c.honor_last_week_cp, @rankPoints),
+                c.honor_stored_hk = GREATEST(c.honor_stored_hk, 500)
+            WHERE a.username IN ({string.Join(", ", parameterNames)})";
+
+        var updatedRows = await cmd.ExecuteNonQueryAsync();
+        _logger.LogInformation(
+            "[MySQL] Ensured honor rank {Rank} (points>={RankPoints}) for {Rows} character row(s) across {Accounts} account(s).",
+            honorRank, honorRankPoints, updatedRows, normalizedAccounts.Length);
+
+        return updatedRows;
     }
 
 

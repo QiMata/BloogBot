@@ -18,9 +18,40 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-05` `MSG_MOVE_SET_FACING` packet timing now matches WoW.exe send semantics: removed the synthetic pre-facing heartbeat from `MovementController.SendFacingUpdate(...)` and replaced the idle/mid-move dampening split with the binary-backed `0.1 rad` gate from `0x60E1EA` / `0x80C408` (session 188).
 
 ## Session Handoff
-- Last updated: `2026-04-03 (session 296)`
-- Pass result: `scene-backed BG physics can now connect lazily and back off cleanly instead of depending on a startup socket race`
+- Last updated: `2026-04-09 (session 308)`
+- Pass result: `MovementController no longer mutates movement/path state for stale-forward recovery; it now stays parity-focused and emits caller-owned stuck signals only`
 - Last delta:
+  - Session 308 tightened parity ownership per BG contract:
+    - Removed in-controller stale-forward forced recovery behavior (no movement-flag rewrites, no forced strafe arming, no steering-target clearing as recovery policy).
+    - `ObserveStaleForwardAndRecover(...)` now emits severity callbacks only; BotRunner/upper layers keep recovery ownership.
+  - Updated deterministic coverage to pin callback-only behavior:
+    - Replaced stale-forward tests that previously expected in-controller waypoint/flag mutation.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests|FullyQualifiedName~MovementControllerIntegrationTests|FullyQualifiedName~ObjectManagerWorldSessionTests" --logger "console;verbosity=minimal"` -> `passed (158/158)`.
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerPhysicsTests|FullyQualifiedName~MovementControllerIpcParityTests" --logger "console;verbosity=minimal"` -> `passed (40/40)`.
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~AtomicBotTaskTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (74/74)`.
+  - Session 307 removed remaining route-shaped movement APIs to enforce BotRunner ownership:
+    - Removed `SetPath(...)` from `MovementController` (single-target only via `SetTargetWaypoint(...)`).
+    - Removed `SetNavigationPath(...)` from `IObjectManager` and `WoWSharpObjectManager`.
+  - Updated deterministic suites for the API boundary:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests|FullyQualifiedName~ObjectManagerWorldSessionTests|FullyQualifiedName~MovementControllerIntegrationTests" --logger "console;verbosity=minimal"` -> `passed (164/164)`.
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerPhysicsTests|FullyQualifiedName~MovementControllerIpcParityTests" --logger "console;verbosity=minimal"` -> `passed (40/40)`.
+  - Session 306 removed the remaining in-controller route-policy behavior:
+    - `SetTargetWaypoint(...)` now stores exactly one steering target.
+    - `SetPath(...)` is a legacy compatibility shim that stores only the path head as a steering hint.
+    - Removed internal corridor/nearest/equivalence selection helpers.
+    - `ObserveStaleForwardAndRecover(...)` Level 2 now escalates to caller without mutating waypoint selection.
+  - Updated contract comments in `WoWSharpObjectManager.SetNavigationPath(...)` to reflect route ownership at BotRunner layer.
+  - Deterministic coverage remained green after contract update:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests|FullyQualifiedName~ObjectManagerWorldSessionTests"` -> `passed (159/159)`.
+    - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerPhysicsTests|FullyQualifiedName~MovementControllerIpcParityTests"` -> `passed (40/40)`.
+  - Session 305 removed remaining stuck-time path ownership from `MovementController`:
+    - `ObserveStaleForwardAndRecover(...)` Level 2 no longer selects alternate waypoints.
+    - Level 3 no longer redirects to internal escape waypoints; it now escalates to caller recovery with forced strafe.
+    - Local auto-advance waypoint execution was removed from `ApplyPhysicsResult(...)`.
+  - Deterministic movement coverage was updated for the ownership model and remains green:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> `passed (64/64)`.
+  - Session 296 hardened the scene-slice client contract rather than the controller math itself. `SceneDataClient` now defers its initial socket connect, uses a bounded connect budget on the first region request, and applies a short retry backoff after request failures so late `SceneDataService` bring-up does not permanently force BG runners off the intended thin-slice path.
   - Session 296 hardened the scene-slice client contract rather than the controller math itself. `SceneDataClient` now defers its initial socket connect, uses a bounded connect budget on the first region request, and applies a short retry backoff after request failures so late `SceneDataService` bring-up does not permanently force BG runners off the intended thin-slice path.
   - `MovementController` still pins the scene-backed local path to thin-scene-slice mode whenever a `SceneDataClient` is present, but the client can now exist before the service is listening instead of paying the old blocking startup connect.
   - Added deterministic coverage in `SceneDataClientTests` for the new failure/backoff behavior, and kept the earlier scene-slice controller assertions green (`Update_LocalNativePhysics_WithSceneDataClient_EnablesSceneSliceMode`, `Update_LocalNativePhysics_ContinuesOnSceneRefreshFailure`).

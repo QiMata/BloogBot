@@ -17,6 +17,8 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
     public const int AllianceBotCount = 15;
     public const int TotalBotCount = HordeBotCount + AllianceBotCount;
     public const uint AbMapId = 529;
+    public const string HordeLeaderAccount = "ABBOT1";
+    public const string AllianceLeaderAccount = "ABBOTA1";
 
     private static readonly string[] HordeClasses =
     [
@@ -54,7 +56,7 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 
     protected override IReadOnlyCollection<string> HordeAccounts
         => Enumerable.Range(0, HordeBotCount)
-            .Select(index => index == 0 ? "TESTBOT1" : $"ABBOT{index + 1}")
+            .Select(index => $"ABBOT{index + 1}")
             .ToArray();
 
     protected override IReadOnlyCollection<string> AllianceAccounts
@@ -81,7 +83,7 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
         for (var index = 0; index < HordeBotCount; index++)
         {
             bots.Add(CreateCharacterSetting(
-                accountName: index == 0 ? "TESTBOT1" : $"ABBOT{index + 1}",
+                accountName: $"ABBOT{index + 1}",
                 characterClass: HordeClasses[index],
                 characterRace: HordeRaces[index],
                 characterGender: index % 2 == 0 ? "Female" : "Male",

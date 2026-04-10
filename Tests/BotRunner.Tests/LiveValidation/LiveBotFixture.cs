@@ -125,6 +125,12 @@ public partial class LiveBotFixture : IAsyncLifetime
     public int ExpectedBotCount { get; private set; }
 
     /// <summary>
+    /// Timeout budget for the initial "wait for bots to enter world" loop.
+    /// Derived fixtures can extend this for first-login cinematic flows.
+    /// </summary>
+    protected virtual TimeSpan InitialWorldEntryTimeout => TimeSpan.FromSeconds(120);
+
+    /// <summary>
     /// Whether PathfindingService is listening on port 5001.
     /// Tests that require pathfinding (corpse run, movement, gathering) should
     /// check this via <c>Skip.IfNot(fixture.IsPathfindingReady, ...)</c>.
@@ -411,11 +417,21 @@ public partial class LiveBotFixture : IAsyncLifetime
             // Disable BotRunner auto-release so death setup remains deterministic.
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK", "1");
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK", "1");
+            // Native physics ERR logs can explode during mass live runs and exhaust test-host memory.
+            // Keep them masked unless explicitly enabled for focused diagnostics.
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_MASK")))
+                Environment.SetEnvironmentVariable("VMAP_PHYS_LOG_MASK", "0");
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_LEVEL")))
+                Environment.SetEnvironmentVariable("VMAP_PHYS_LOG_LEVEL", "0");
             // Only disable coordinator if not already set by a derived fixture (e.g. RfcBotFixture enables it)
             if (Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == null)
                 Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
-            _logger.LogInformation("[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, WWOW_TEST_DISABLE_COORDINATOR={CoordFlag} for live validation run.",
-                Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR"));
+            _logger.LogInformation(
+                "[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, " +
+                "WWOW_TEST_DISABLE_COORDINATOR={CoordFlag}, VMAP_PHYS_LOG_MASK={PhysMask}, VMAP_PHYS_LOG_LEVEL={PhysLevel} for live validation run.",
+                Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR"),
+                Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_MASK"),
+                Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_LEVEL"));
 
             // 1. Start StateManager (which launches all configured bots)
             _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager)...");
@@ -449,7 +465,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
             // 4. Wait for bots to enter world
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
-            using var worldCts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+            using var worldCts = new CancellationTokenSource(InitialWorldEntryTimeout + TimeSpan.FromSeconds(60));
 
             // Poll until we see at least one bot in-world.
             // BG bot snapshots can oscillate between InWorld and CharacterSelect due to
@@ -459,7 +475,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             var sw = Stopwatch.StartNew();
             var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
 
-            while (sw.Elapsed < TimeSpan.FromSeconds(120) && !worldCts.Token.IsCancellationRequested)
+            while (sw.Elapsed < InitialWorldEntryTimeout && !worldCts.Token.IsCancellationRequested)
             {
                 var snapshots = await _stateManagerClient.QuerySnapshotsAsync(null, worldCts.Token);
 
@@ -507,8 +523,14 @@ public partial class LiveBotFixture : IAsyncLifetime
 
             if (AllBots.Count == 0)
             {
-                FailureReason = "No bots entered world within 120s. Check StateManagerSettings.json CharacterSettings.";
-                _logger.LogError("[FIXTURE] {Reason}", FailureReason);
+                var timeoutSeconds = (int)Math.Round(InitialWorldEntryTimeout.TotalSeconds);
+                FailureReason = $"No bots entered world within {timeoutSeconds}s. Check StateManagerSettings.json CharacterSettings.";
+                var latestSnapshots = _stateManagerClient != null
+                    ? await _stateManagerClient.QuerySnapshotsAsync(null, CancellationToken.None)
+                    : [];
+                var snapshotDiagnostics = SummarizeLatestSnapshotStates(latestSnapshots);
+                _logger.LogError("[FIXTURE] {Reason} LatestSnapshots={Snapshots}", FailureReason, snapshotDiagnostics);
+                FailureReason = $"{FailureReason} LatestSnapshots={snapshotDiagnostics}";
                 return;
             }
 
@@ -542,6 +564,37 @@ public partial class LiveBotFixture : IAsyncLifetime
             FailureReason = $"Fixture init failed: {ex.Message}";
             _logger.LogError(ex, "[FIXTURE] Initialization failed");
         }
+    }
+
+    private static string SummarizeLatestSnapshotStates(IReadOnlyCollection<WoWActivitySnapshot> snapshots)
+    {
+        if (snapshots.Count == 0)
+            return "none";
+
+        static string TrimMessage(string? value, int max = 80)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "-";
+
+            var compact = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return compact.Length <= max ? compact : compact[..max] + "...";
+        }
+
+        var entries = snapshots
+            .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.AccountName))
+            .OrderBy(snapshot => snapshot.AccountName, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .Select(snapshot =>
+            {
+                var mapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot.CurrentMapId;
+                var lastError = TrimMessage(snapshot.RecentErrors.LastOrDefault());
+                var screen = string.IsNullOrWhiteSpace(snapshot.ScreenState) ? "?" : snapshot.ScreenState;
+                var characterName = string.IsNullOrWhiteSpace(snapshot.CharacterName) ? "?" : snapshot.CharacterName;
+                return $"{snapshot.AccountName}(screen={screen}, conn={snapshot.ConnectionState}, objMgr={snapshot.IsObjectManagerValid}, map={mapId}, char={characterName}, err={lastError})";
+            })
+            .ToArray();
+
+        return entries.Length == 0 ? "none" : string.Join(", ", entries);
     }
 
 
@@ -623,7 +676,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         _logger.LogInformation("[FIXTURE] Waiting for bots to enter world after restart...");
         var sw = Stopwatch.StartNew();
         var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
-        while (sw.Elapsed < TimeSpan.FromSeconds(120))
+        while (sw.Elapsed < InitialWorldEntryTimeout)
         {
             var snapshots = await _stateManagerClient.QuerySnapshotsAsync(null, CancellationToken.None);
             foreach (var snap in snapshots)

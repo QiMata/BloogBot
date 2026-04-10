@@ -36,12 +36,12 @@ public class PathfindingOverlayBuilderTests
     }
 
     [Fact]
-    public void BuildNearbyObjects_IncludesObjectsNearDestinationEvenWhenFarFromStart()
+    public void BuildNearbyObjects_IncludesCollisionRelevantObjectsNearDestinationEvenWhenFarFromStart()
     {
         var objectManager = new Mock<IObjectManager>();
         objectManager.SetupGet(x => x.GameObjects).Returns(
         [
-            CreateGameObject(0x2001, (uint)GameObjectType.Mailbox, 42, new Position(75f, 0f, 1f)).Object
+            CreateGameObject(0x2001, (uint)GameObjectType.Door, 42, new Position(75f, 0f, 1f)).Object
         ]);
 
         var nearby = PathfindingOverlayBuilder.BuildNearbyObjects(
@@ -52,6 +52,30 @@ public class PathfindingOverlayBuilderTests
         var result = Assert.Single(nearby);
         Assert.Equal(0x2001UL, result.Guid);
         Assert.Equal(75f, result.X);
+    }
+
+    [Fact]
+    public void BuildNearbyObjects_UsesConservativeCollisionAndGameplayTypeAllowlist()
+    {
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.SetupGet(x => x.GameObjects).Returns(
+        [
+            CreateGameObject(0x3001, (uint)GameObjectType.Generic, 101, new Position(4f, 0f, 0f)).Object,
+            CreateGameObject(0x3002, (uint)GameObjectType.Goober, 102, new Position(5f, 0f, 0f)).Object,
+            CreateGameObject(0x3003, (uint)GameObjectType.Chest, 103, new Position(6f, 0f, 0f)).Object,
+            CreateGameObject(0x3004, (uint)GameObjectType.Mailbox, 104, new Position(7f, 0f, 0f)).Object,
+            CreateGameObject(0x3005, (uint)GameObjectType.Door, 105, new Position(8f, 0f, 0f)).Object,
+            CreateGameObject(0x3006, (uint)GameObjectType.FlagStand, 106, new Position(9f, 0f, 0f)).Object
+        ]);
+
+        var nearby = PathfindingOverlayBuilder.BuildNearbyObjects(
+            objectManager.Object,
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f));
+
+        Assert.Equal(2, nearby.Length);
+        Assert.Contains(nearby, item => item.Guid == 0x3005UL);
+        Assert.Contains(nearby, item => item.Guid == 0x3006UL);
     }
 
     private static Mock<IWoWGameObject> CreateGameObject(

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Communication;
 using WoWStateManager;
 using WoWStateManager.Settings;
@@ -75,5 +76,23 @@ public class WoWStateManagerLaunchThrottleTests
             managedAccounts);
 
         Assert.Equal(1, pending);
+    }
+
+    [Fact]
+    public void OrderLaunchSettings_PrioritizesForeground_WhilePreservingRelativeOrder()
+    {
+        var configuredSettings = new[]
+        {
+            new CharacterSettings { AccountName = "BG_A", RunnerType = WoWStateManager.Settings.BotRunnerType.Background },
+            new CharacterSettings { AccountName = "FG_A", RunnerType = WoWStateManager.Settings.BotRunnerType.Foreground },
+            new CharacterSettings { AccountName = "BG_B", RunnerType = WoWStateManager.Settings.BotRunnerType.Background },
+            new CharacterSettings { AccountName = "FG_B", RunnerType = WoWStateManager.Settings.BotRunnerType.Foreground },
+        };
+
+        var ordered = StateManagerWorker.OrderLaunchSettings(configuredSettings)
+            .Select(settings => settings.AccountName)
+            .ToArray();
+
+        Assert.Equal(["FG_A", "FG_B", "BG_A", "BG_B"], ordered);
     }
 }

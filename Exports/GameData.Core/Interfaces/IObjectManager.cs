@@ -178,7 +178,6 @@ namespace GameData.Core.Interfaces
         void DoEmote(TextEmote emote);
         uint GetManaCost(string healingTouch);
         void MoveToward(Position position, float facing);
-        void SetNavigationPath(Position[] path) { } // default no-op for foreground
         void RefreshSkills();
         void RefreshSpells();
         void ReleaseSpirit();

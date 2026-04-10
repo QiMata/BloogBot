@@ -21,6 +21,9 @@ public enum LoginStates
     /// <summary>Playing a cinematic/movie</summary>
     movie,
 
+    /// <summary>Realm suggestion wizard shown before character selection</summary>
+    realmwizard,
+
     /// <summary>Unknown state (fallback)</summary>
     unknown
 }

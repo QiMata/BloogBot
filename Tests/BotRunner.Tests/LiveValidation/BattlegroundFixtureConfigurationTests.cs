@@ -2,23 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Communication;
 using BotRunner.Tests.LiveValidation.Battlegrounds;
 using BotRunner.Travel;
+using Game;
 using WoWStateManager.Settings;
+using SettingsBotRunnerType = WoWStateManager.Settings.BotRunnerType;
 
 namespace BotRunner.Tests.LiveValidation;
 
 public sealed class BattlegroundFixtureConfigurationTests
 {
     [Fact]
-    public void WarsongGulchFixture_UsesForegroundLeadersForBothFactions()
+    public void WarsongGulchFixture_UsesBackgroundRunnersForAllBots()
     {
         var fixture = new WarsongGulchFixture();
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        AssertForegroundLeaders(settings, "WSGBOT1", "WSGBOTA1");
+        Assert.All(settings, setting => Assert.Equal(SettingsBotRunnerType.Background, setting.RunnerType));
     }
 
     [Fact]
@@ -29,7 +32,7 @@ public sealed class BattlegroundFixtureConfigurationTests
 
         Assert.Equal(ArathiBasinFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        AssertForegroundLeaders(settings, "TESTBOT1", "ABBOTA1");
+        AssertForegroundLeaders(settings, ArathiBasinFixture.HordeLeaderAccount, ArathiBasinFixture.AllianceLeaderAccount);
     }
 
     [Fact]
@@ -40,7 +43,33 @@ public sealed class BattlegroundFixtureConfigurationTests
 
         Assert.Equal(AlteracValleyFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        AssertForegroundLeaders(settings, "TESTBOT1", "AVBOTA1");
+        AssertForegroundLeaders(settings, AlteracValleyFixture.HordeLeaderAccount, AlteracValleyFixture.AllianceLeaderAccount);
+    }
+
+    [Fact]
+    public void BattlegroundFixtures_PreserveExistingCharacters_WhenAnyConfiguredCharacterMatches()
+    {
+        Assert.True(GetPreserveExistingCharactersWhenAnyMatch(new WarsongGulchFixture()));
+        Assert.True(GetPreserveExistingCharactersWhenAnyMatch(new ArathiBasinFixture()));
+        Assert.True(GetPreserveExistingCharactersWhenAnyMatch(new AlteracValleyFixture()));
+    }
+
+    [Fact]
+    public void BattlegroundFixtures_UseDedicatedNonOverlappingAccountPools()
+    {
+        var avAccounts = GetCharacterSettings(new AlteracValleyFixture())
+            .Select(setting => setting.AccountName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wsgAccounts = GetCharacterSettings(new WarsongGulchFixture())
+            .Select(setting => setting.AccountName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var abAccounts = GetCharacterSettings(new ArathiBasinFixture())
+            .Select(setting => setting.AccountName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Empty(avAccounts.Intersect(wsgAccounts, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(avAccounts.Intersect(abAccounts, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(wsgAccounts.Intersect(abAccounts, StringComparer.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -54,12 +83,12 @@ public sealed class BattlegroundFixtureConfigurationTests
         var hordeLeader = Assert.Single(settings.Where(setting => setting.AccountName == AlteracValleyFixture.HordeLeaderAccount));
         Assert.Equal("Warrior", hordeLeader.CharacterClass);
         Assert.Equal("Tauren", hordeLeader.CharacterRace);
-        Assert.Equal(BotRunnerType.Foreground, hordeLeader.RunnerType);
+        Assert.Equal(SettingsBotRunnerType.Foreground, hordeLeader.RunnerType);
 
         var allianceLeader = Assert.Single(settings.Where(setting => setting.AccountName == AlteracValleyFixture.AllianceLeaderAccount));
         Assert.Equal("Paladin", allianceLeader.CharacterClass);
         Assert.Equal("Human", allianceLeader.CharacterRace);
-        Assert.Equal(BotRunnerType.Foreground, allianceLeader.RunnerType);
+        Assert.Equal(SettingsBotRunnerType.Foreground, allianceLeader.RunnerType);
     }
 
     [Fact]
@@ -138,6 +167,26 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     [Fact]
+    public void AlteracValleyLoadoutPlan_BuildAdaptiveAssignments_UsesLiveFactionCenters()
+    {
+        var fixture = new AlteracValleyFixture();
+        var settings = GetCharacterSettings(fixture);
+
+        var snapshots = new List<WoWActivitySnapshot>();
+        foreach (var account in AlteracValleyFixture.HordeAccountsOrdered.Take(12))
+            snapshots.Add(BuildSnapshot(account, mapId: AlteracValleyFixture.AvMapId, x: 620f, y: -95f, z: 62f));
+        foreach (var account in AlteracValleyFixture.AllianceAccountsOrdered.Take(12))
+            snapshots.Add(BuildSnapshot(account, mapId: AlteracValleyFixture.AvMapId, x: -620f, y: -255f, z: 88f));
+
+        var assignments = AlteracValleyLoadoutPlan.BuildAdaptiveFirstObjectiveAssignments(settings, snapshots);
+
+        var hordeLeader = assignments[AlteracValleyFixture.HordeLeaderAccount];
+        var allianceLeader = assignments[AlteracValleyFixture.AllianceLeaderAccount];
+        Assert.True(hordeLeader.X < 620f);
+        Assert.True(allianceLeader.X > -620f);
+    }
+
+    [Fact]
     public void BattlegroundFixtures_DisableForegroundPacketHooks_ForCrossMapTransfers()
     {
         var originalInjectionDisablePacketHooks = Environment.GetEnvironmentVariable("Injection__DisablePacketHooks");
@@ -165,6 +214,7 @@ public sealed class BattlegroundFixtureConfigurationTests
         var fixture = new WarsongGulchFixture();
 
         Assert.Equal(TimeSpan.FromMinutes(5), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(5), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
         Assert.Equal(TimeSpan.FromSeconds(90), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
     }
 
@@ -174,6 +224,7 @@ public sealed class BattlegroundFixtureConfigurationTests
         var fixture = new AlteracValleyFixture();
 
         Assert.Equal(TimeSpan.FromMinutes(10), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(10), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
         Assert.Equal(TimeSpan.FromMinutes(2), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
     }
 
@@ -181,7 +232,7 @@ public sealed class BattlegroundFixtureConfigurationTests
     public void BattlegroundFixtures_UseBattlegroundSpecificMinimumLevels()
     {
         Assert.Equal(
-            BattlemasterData.GetMinimumLevel(BattlemasterData.BattlegroundType.WarsongGulch),
+            60,
             GetProtectedIntProperty(new WarsongGulchFixture(), "TargetLevel"));
         Assert.Equal(
             BattlemasterData.GetMinimumLevel(BattlemasterData.BattlegroundType.ArathiBasin),
@@ -217,6 +268,14 @@ public sealed class BattlegroundFixtureConfigurationTests
         return Assert.IsType<TimeSpan>(property!.GetValue(fixture));
     }
 
+    private static TimeSpan GetBaseFixtureTimeSpanProperty(CoordinatorFixtureBase fixture, string propertyName)
+    {
+        var property = typeof(LiveBotFixture).GetProperty(propertyName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(property);
+
+        return Assert.IsType<TimeSpan>(property!.GetValue(fixture));
+    }
+
     private static int GetProtectedIntProperty(CoordinatorFixtureBase fixture, string propertyName)
     {
         var property = fixture.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -225,13 +284,21 @@ public sealed class BattlegroundFixtureConfigurationTests
         return Assert.IsType<int>(property!.GetValue(fixture));
     }
 
+    private static bool GetPreserveExistingCharactersWhenAnyMatch(CoordinatorFixtureBase fixture)
+    {
+        var property = typeof(CoordinatorFixtureBase).GetProperty("PreserveExistingCharactersWhenAnyMatch", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(property);
+
+        return Assert.IsType<bool>(property!.GetValue(fixture));
+    }
+
     private static void AssertForegroundLeaders(
         IReadOnlyList<CharacterSettings> settings,
         string hordeLeaderAccount,
         string allianceLeaderAccount)
     {
         var foregroundAccounts = settings
-            .Where(setting => setting.RunnerType == BotRunnerType.Foreground)
+            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
             .Select(setting => setting.AccountName)
             .OrderBy(account => account)
             .ToArray();
@@ -244,5 +311,29 @@ public sealed class BattlegroundFixtureConfigurationTests
     private sealed class TestableWarsongGulchFixture : WarsongGulchFixture
     {
         public void ApplyCoordinatorEnvironment() => ConfigureCoordinatorEnvironment();
+    }
+
+    private static WoWActivitySnapshot BuildSnapshot(string accountName, uint mapId, float x, float y, float z)
+    {
+        return new WoWActivitySnapshot
+        {
+            AccountName = accountName,
+            CurrentMapId = mapId,
+            ScreenState = "InWorld",
+            Player = new WoWPlayer
+            {
+                Unit = new WoWUnit
+                {
+                    GameObject = new WoWGameObject
+                    {
+                        Base = new WoWObject
+                        {
+                            MapId = mapId,
+                            Position = new Position { X = x, Y = y, Z = z }
+                        }
+                    }
+                }
+            }
+        };
     }
 }

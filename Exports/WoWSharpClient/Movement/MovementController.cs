@@ -37,16 +37,9 @@ namespace WoWSharpClient.Movement
         private float _stepUpBaseZ = -200000f;
         private uint _stepUpAge = 0;
 
-        // Path-following state
-        private Position[]? _currentPath;
-        private int _currentWaypointIndex;
-        private const float WAYPOINT_ARRIVE_DIST = 2.0f;
-        // Callers (behavior tree) set a new target waypoint every tick. Only rebuild
-        // the internal 2-waypoint path when the target shifts more than this threshold.
-        // Too small (0.35y) → constant rebuilds as NavigationPath advances index → jitter.
-        // Too large → slow reactions when the destination genuinely changes.
-        private const float TARGET_WAYPOINT_REFRESH_DIST_2D = 3.0f;
-        private const float TARGET_WAYPOINT_REFRESH_Z = 1.0f;
+        // Steering target hint only (no corridor execution here).
+        // BotRunner owns waypoint/corridor progression and replans.
+        private Position? _steeringTarget;
 
         // Post-teleport ground snap: when true, forces at least one physics step
         // even when the character is idle (MOVEFLAG_NONE), so gravity applies and
@@ -76,11 +69,6 @@ namespace WoWSharpClient.Movement
         // Once vertical/horizontal ratio exceeds this over accumulated travel, reject ground.
         private const float MAX_SLOPE_RATIO = 2.0f; // tan(63 degrees) - generous for stairs
         private const float SLOPE_CHECK_MIN_HORIZONTAL = 3.0f; // Minimum horizontal travel before checking
-
-        // Path-aware ground validation: reject physics ground Z that is more than this many
-        // units below the current path waypoint Z. Prevents gradual sinking into cave/gully
-        // geometry below the navmesh walking surface.
-        private const float PATH_GROUND_Z_TOLERANCE = 3.0f;
 
         // Removed: _teleportClampFrames, TELEPORT_CLAMP_MAX_FRAMES, _teleportZGraceFrames,
         // _noGroundFrameCount — workarounds that broke binary parity. Restored original
@@ -130,19 +118,18 @@ namespace WoWSharpClient.Movement
         public Vector3 LastWallNormal { get; private set; } = new Vector3(0, 0, 1);
         public float LastBlockedFraction { get; private set; } = 1.0f;
 
-        // Escalating stuck recovery (Phase 6)
-        // Level 1: clear path + callback (15 frames, 0.05y)
-        // Level 2: nearest-waypoint index warp (no full replan) — fires if stuck again in <30 frames
-        // Level 3: request perpendicular strafe via callback — fires if still stuck
+        // Escalating stuck signal (diagnostic only).
+        // MovementController remains parity-focused and does not mutate route policy.
+        // Callers can consume level changes to trigger BotRunner-owned recovery.
         private int _consecutiveStuckLevels = 0;
         private Position _lastKnownGoodPosition = new(player.Position.X, player.Position.Y, player.Position.Z);
         private const uint STALE_FORWARD_SUPPRESS_L2_MS = 800;  // shorter grace before L2 triggers
         private const uint STALE_FORWARD_SUPPRESS_L3_MS = 600;  // even shorter for L3
 
         /// <summary>
-        /// Fired when a stuck condition is escalated. Level 1=path cleared, Level 2=corridor reset,
-        /// Level 3=recovery strafe requested. Callers (BotRunner/StateManager) can use this to
-        /// trigger higher-level recovery (unstuck, respawn, GM fallback).
+        /// Fired when a stuck condition is escalated.
+        /// Level 1/2/3 indicate increasing severity, but no MovementController movement-route
+        /// mutation is performed. Callers (BotRunner/StateManager) own all recovery policy.
         /// </summary>
         public event Action<int /*level*/, Position /*position*/>? OnStuckRecoveryRequired;
 
@@ -721,8 +708,6 @@ namespace WoWSharpClient.Movement
                 _player.TransportOrientation = 0f;
             }
 
-            // Advance waypoint if arrived
-            AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);
         }
 
         private void CapturePhysicsFrameRecord(PhysicsOutput? output, float deltaSec, uint gameTimeMs)
@@ -739,13 +724,7 @@ namespace WoWSharpClient.Movement
             float posZ = _player.Position.Z;
             float prevPosZ = _recordedFrames.Count > 0 ? _recordedFrames[^1].PosZ : posZ;
             bool isFalling = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
-            float currentWaypointZ = float.NaN;
-            if (_currentPath != null &&
-                _currentWaypointIndex >= 0 &&
-                _currentWaypointIndex < _currentPath.Length)
-            {
-                currentWaypointZ = _currentPath[_currentWaypointIndex].Z;
-            }
+            float currentWaypointZ = _steeringTarget?.Z ?? float.NaN;
 
             uint packetOpcode = _frameSentPending ? _frameSentOpcode : 0;
             uint packetFlags = _frameSentPending ? _frameSentFlags : 0;
@@ -779,7 +758,7 @@ namespace WoWSharpClient.Movement
                 WallNormalY = LastWallNormal.Y,
                 BlockedFraction = LastBlockedFraction,
                 PathWaypointZ = currentWaypointZ,
-                PathWaypointIndex = _currentWaypointIndex,
+                PathWaypointIndex = _steeringTarget != null ? 0 : -1,
                 ZDeltaFromPrev = posZ - prevPosZ,
                 PrevGroundNx = _prevGroundNormal.X,
                 PrevGroundNy = _prevGroundNormal.Y,
@@ -896,6 +875,19 @@ namespace WoWSharpClient.Movement
         private static uint AddMs(uint nowMs, uint durationMs)
             => unchecked(nowMs + durationMs);
 
+        /// <summary>
+        /// Called by higher-level movement integrations after they apply a global
+        /// stuck-recovery maneuver (for example stop+jump/strafe pulse).
+        /// Resets stale-forward counters and adds a short suppression window so the
+        /// same stuck signal is not re-fired immediately on the next physics frame.
+        /// </summary>
+        public void NotifyExternalStuckRecoveryApplied(uint suppressMs = STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS)
+        {
+            _staleForwardNoDisplacementTicks = 0;
+            _consecutiveStuckLevels = 0;
+            _staleForwardSuppressUntilMs = AddMs(_latestGameTimeMs, suppressMs);
+        }
+
         private void ObserveStaleForwardAndRecover(float frameDelta, uint gameTimeMs)
         {
             if (IsBefore(gameTimeMs, _staleForwardSuppressUntilMs))
@@ -936,68 +928,33 @@ namespace WoWSharpClient.Movement
             // Stuck threshold reached — escalate recovery level
             _consecutiveStuckLevels++;
             var stuckLevel = Math.Min(_consecutiveStuckLevels, 3);
-            var stuckFlags = flags;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardRecoveryCount++;
 
             switch (stuckLevel)
             {
                 case 1:
-                    // Level 1: Clear path and stop movement. Caller should replan.
-                    Log.Warning("[MovementController][STUCK-L1] Stale forward: clearing path, stopping (recoveries={Count}, frameDelta={Delta:F3})",
+                    // Level 1: notify caller. Route/movement policy stays outside MovementController.
+                    Log.Warning("[MovementController][STUCK-L1] Stale forward: signaling caller (recoveries={Count}, frameDelta={Delta:F3})",
                         _staleForwardRecoveryCount, frameDelta);
-                    _velocity = Vector3.Zero;
-                    _fallTimeMs = 0;
-                    _pendingDepen = Vector3.Zero;
-                    _standingOnInstanceId = 0;
-                    _standingOnLocal = Vector3.Zero;
-                    _currentPath = null;
-                    _currentWaypointIndex = 0;
-                    _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-                    _lastSentFlags = stuckFlags;
-                    _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
-                    _lastPacketTime = 0;
                     _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
                     OnStuckRecoveryRequired?.Invoke(1, new Position(_player.Position.X, _player.Position.Y, _player.Position.Z));
                     break;
 
                 case 2:
-                    // Level 2: Corridor reset — warp waypoint index to nearest waypoint without
-                    // clearing the entire path. Gives the bot a fresh waypoint target without a
-                    // full replan, which can resolve minor path-tracking divergence near walls.
-                    Log.Warning("[MovementController][STUCK-L2] Stale forward: corridor reset (path len={Len}, index={Idx})",
-                        _currentPath?.Length ?? 0, _currentWaypointIndex);
-                    if (_currentPath != null && _currentPath.Length > 0)
-                    {
-                        // Find nearest waypoint ahead of current index (don't go backward)
-                        var nearestIdx = _currentWaypointIndex;
-                        var nearestDist = float.MaxValue;
-                        for (int idx = _currentWaypointIndex; idx < _currentPath.Length; idx++)
-                        {
-                            var wp = _currentPath[idx];
-                            var d = HorizontalDistance(_player.Position.X, _player.Position.Y, wp.X, wp.Y);
-                            if (d < nearestDist) { nearestDist = d; nearestIdx = idx; }
-                        }
-                        _currentWaypointIndex = nearestIdx;
-                        Log.Warning("[MovementController][STUCK-L2] Reset waypoint index to {Idx} (dist={Dist:F1}y)", nearestIdx, nearestDist);
-                    }
+                    // Level 2: callback-only escalation. MovementController remains parity-focused
+                    // and does not perform waypoint/corridor selection.
+                    Log.Warning("[MovementController][STUCK-L2] Stale forward: escalating to caller (hasTarget={HasTarget})",
+                        _steeringTarget != null);
                     _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_L2_MS);
                     OnStuckRecoveryRequired?.Invoke(2, new Position(_player.Position.X, _player.Position.Y, _player.Position.Z));
                     break;
 
                 default:
-                    // Level 3+: Signal caller to perform higher-level recovery (strafe, respawn, GM unstuck).
+                    // Level 3+: Signal caller to perform higher-level recovery.
                     Log.Warning("[MovementController][STUCK-L3] Stale forward: escalated to caller (level={Level}). LastGoodPos=({X:F1},{Y:F1},{Z:F1})",
                         stuckLevel, _lastKnownGoodPosition.X, _lastKnownGoodPosition.Y, _lastKnownGoodPosition.Z);
-                    _velocity = Vector3.Zero;
-                    _pendingDepen = Vector3.Zero;
-                    _currentPath = null;
-                    _currentWaypointIndex = 0;
-                    _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-                    _lastSentFlags = stuckFlags;
-                    _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
-                    _lastPacketTime = 0;
-                    _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
+                    _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_L3_MS);
                     OnStuckRecoveryRequired?.Invoke(stuckLevel, _lastKnownGoodPosition);
                     break;
             }
@@ -1115,138 +1072,35 @@ namespace WoWSharpClient.Movement
             _stopWhenGrounded = true;
         }
 
-        // ======== PATH FOLLOWING ========
+        // ======== STEERING TARGET ========
 
         /// <summary>
-        /// Sets a navigation path for the controller to follow.
-        /// The controller will interpolate Z from waypoint heights and auto-advance waypoints.
-        /// </summary>
-        public void SetPath(Position[] path)
-        {
-            if (path == null || path.Length == 0)
-            {
-                _currentPath = null;
-                _currentWaypointIndex = 0;
-                return;
-            }
-            _currentPath = path;
-            // Always start from waypoint 0; callers may provide paths that do not include current position.
-            _currentWaypointIndex = 0;
-            Log.Debug("[MovementController] Path set: {Count} waypoints, starting at index {Idx}", path.Length, _currentWaypointIndex);
-        }
-
-        /// <summary>
-        /// Sets a single target waypoint (convenience for MoveToward calls).
+        /// Sets the current steering target consumed by physics/collision updates.
+        /// Route execution remains owned by BotRunner.
         /// </summary>
         public void SetTargetWaypoint(Position target)
         {
             if (target == null)
             {
-                _currentPath = null;
-                _currentWaypointIndex = 0;
+                ClearPath();
                 return;
             }
 
-            // Corpse-run and nav-driven loops call this every tick.
-            // Skip rebuilding a one-segment path when the target is effectively unchanged.
-            if (_currentPath != null
-                && _currentPath.Length == 2
-                && _currentWaypointIndex == 1)
-            {
-                var existingTarget = _currentPath[1];
-                var targetDistance2D = HorizontalDistance(existingTarget.X, existingTarget.Y, target.X, target.Y);
-                var targetDeltaZ = MathF.Abs(existingTarget.Z - target.Z);
-                if (targetDistance2D <= TARGET_WAYPOINT_REFRESH_DIST_2D
-                    && targetDeltaZ <= TARGET_WAYPOINT_REFRESH_Z)
-                {
-                    return;
-                }
-            }
-
-            _currentPath = [new Position(_player.Position.X, _player.Position.Y, _player.Position.Z), target];
-            _currentWaypointIndex = 1;
+            _steeringTarget = target;
         }
 
         /// <summary>
-        /// Clears the current path.
+        /// Clears the current steering target.
         /// </summary>
         public void ClearPath()
         {
-            _currentPath = null;
-            _currentWaypointIndex = 0;
+            _steeringTarget = null;
         }
 
         /// <summary>
-        /// Returns the current target waypoint, or null if no path is set.
+        /// Returns the current steering target, or null when unset.
         /// </summary>
-        public Position? CurrentWaypoint =>
-            _currentPath != null && _currentWaypointIndex < _currentPath.Length
-                ? _currentPath[_currentWaypointIndex]
-                : null;
-
-        /// <summary>
-        /// Interpolates Z height based on progress between the previous waypoint and current target.
-        /// Uses the path waypoint Z values which come from the navmesh (correct ground height).
-        /// </summary>
-        private float InterpolatePathZ(float newX, float newY, float currentZ)
-        {
-            if (_currentPath == null || _currentWaypointIndex >= _currentPath.Length)
-                return currentZ;
-
-            var target = _currentPath[_currentWaypointIndex];
-
-            // Get the previous waypoint (or use current path start)
-            var prev = _currentWaypointIndex > 0
-                ? _currentPath[_currentWaypointIndex - 1]
-                : new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
-
-            float totalDistXY = HorizontalDistance(prev.X, prev.Y, target.X, target.Y);
-            if (totalDistXY < 0.5f)
-                return target.Z; // Very close waypoints, just snap Z
-
-            float currentDistXY = HorizontalDistance(newX, newY, target.X, target.Y);
-            float t = 1.0f - MathF.Min(currentDistXY / totalDistXY, 1.0f);
-            t = MathF.Max(0, t);
-
-            return prev.Z + t * (target.Z - prev.Z);
-        }
-
-        /// <summary>
-        /// Checks if we've arrived at the current waypoint and advances to the next one.
-        /// Also updates facing toward the next waypoint.
-        /// </summary>
-        private void AdvanceWaypointIfNeeded(float posX, float posY)
-        {
-            if (_currentPath == null || _currentWaypointIndex >= _currentPath.Length)
-                return;
-
-            var wp = _currentPath[_currentWaypointIndex];
-            float dist = HorizontalDistance(posX, posY, wp.X, wp.Y);
-
-            if (dist <= WAYPOINT_ARRIVE_DIST)
-            {
-                _currentWaypointIndex++;
-                if (_currentWaypointIndex < _currentPath.Length)
-                {
-                    // Update facing toward next waypoint
-                    var next = _currentPath[_currentWaypointIndex];
-                    _player.Facing = MathF.Atan2(next.Y - posY, next.X - posX);
-                    Log.Debug("[MovementController] Advanced to waypoint {Idx}/{Total} ({X:F0},{Y:F0},{Z:F0})",
-                        _currentWaypointIndex, _currentPath.Length, next.X, next.Y, next.Z);
-                }
-                else
-                {
-                    Log.Debug("[MovementController] Reached end of path");
-                }
-            }
-        }
-
-        private static float HorizontalDistance(float x1, float y1, float x2, float y2)
-        {
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            return MathF.Sqrt(dx * dx + dy * dy);
-        }
+        public Position? CurrentWaypoint => _steeringTarget;
 
         // ======== STATE MANAGEMENT ========
         public void Reset(float teleportDestZ = float.NaN)
@@ -1260,6 +1114,7 @@ namespace WoWSharpClient.Movement
 
             _velocity = Vector3.Zero;
             _fallTimeMs = 0;
+            _steeringTarget = null;
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _lastSentFlags = hadMovementToClear ? stopSeedFlags : MovementFlags.MOVEFLAG_NONE;
             _forceStopAfterReset = hadMovementToClear;
@@ -1295,8 +1150,7 @@ namespace WoWSharpClient.Movement
             _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
             // Ground snap state reset on new teleport
 
-            _currentPath = null;
-            _currentWaypointIndex = 0;
+            _steeringTarget = null;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(_latestGameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RESET_MS);
             _stopWhenGrounded = false;

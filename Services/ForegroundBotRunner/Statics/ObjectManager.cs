@@ -27,6 +27,10 @@ namespace ForegroundBotRunner.Statics
 
 
         private static readonly object DiagnosticLogLock = new();
+        private static readonly object LuaErrorCaptureLock = new();
+        private static bool _luaErrorCaptureInstalled;
+        private static DateTime _lastLuaErrorInstallAttemptUtc = DateTime.MinValue;
+        private static readonly TimeSpan LuaErrorInstallRetryInterval = TimeSpan.FromSeconds(2);
 
         static ObjectManager()
         {
@@ -117,6 +121,67 @@ namespace ForegroundBotRunner.Statics
         private static string[] MainThreadLuaCallWithResult(string lua) =>
             ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCallWithResult(lua));
 
+        internal static void EnsureLuaErrorCaptureInstalled(string context)
+        {
+            if (_luaErrorCaptureInstalled)
+                return;
+
+            lock (LuaErrorCaptureLock)
+            {
+                if (_luaErrorCaptureInstalled)
+                    return;
+
+                if (_lastLuaErrorInstallAttemptUtc != DateTime.MinValue
+                    && DateTime.UtcNow - _lastLuaErrorInstallAttemptUtc < LuaErrorInstallRetryInterval)
+                    return;
+
+                _lastLuaErrorInstallAttemptUtc = DateTime.UtcNow;
+            }
+
+            try
+            {
+                LuaErrorDiagnostics.InstallCaptureHandler(MainThreadLuaCall);
+                _luaErrorCaptureInstalled = true;
+                Log.Information("[FG-LUAERR] Installed Lua error capture handler (context={Context})", context);
+                DiagLog($"[FG-LUAERR] Installed Lua error capture handler (context={context})");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[FG-LUAERR] Failed to install Lua error capture handler (context={Context})", context);
+                DiagLog($"[FG-LUAERR] Failed to install Lua error capture handler (context={context}): {ex.Message}");
+            }
+        }
+
+        internal static void CaptureLuaErrors(string context)
+        {
+            EnsureLuaErrorCaptureInstalled(context);
+            if (!_luaErrorCaptureInstalled)
+                return;
+
+            IReadOnlyList<string> errors;
+            try
+            {
+                errors = LuaErrorDiagnostics.DrainCapturedErrors(MainThreadLuaCallWithResult);
+            }
+            catch (Exception ex)
+            {
+                // Lua VM can reset across transitions; force re-install on the next attempt.
+                _luaErrorCaptureInstalled = false;
+                Log.Debug(ex, "[FG-LUAERR] Failed to drain captured Lua errors (context={Context})", context);
+                DiagLog($"[FG-LUAERR] Failed to drain captured Lua errors (context={context}): {ex.Message}");
+                return;
+            }
+
+            if (errors.Count == 0)
+                return;
+
+            foreach (var error in errors)
+            {
+                Log.Warning("[FG-LUAERR] context={Context} error={LuaError}", context, error);
+                DiagLog($"[FG-LUAERR] context={context} error={error}");
+            }
+        }
+
         // Login screen implementations for BotRunnerService integration
 
 
@@ -170,11 +235,16 @@ namespace ForegroundBotRunner.Statics
             _fgRealmSelectScreen = new FgRealmSelectScreen(
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
-                lua => MainThreadLuaCall(lua));
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua),
+                () => MemoryManager.ReadString(Offsets.CharacterScreen.LoginState),
+                context => CaptureLuaErrors(context),
+                traceLog: message => DiagLog(message));
             _fgCharacterSelectScreen = new FgCharacterSelectScreen(
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
-                lua => MainThreadLuaCall(lua));
+                lua => MainThreadLuaCall(lua),
+                context => CaptureLuaErrors(context));
             _fgGossipFrame = new FgGossipFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua),

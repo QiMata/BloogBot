@@ -21,9 +21,12 @@
 - [ ] Re-check any remaining assumptions that local `C:\Mangos\server` processes are always host-launched once the docker path becomes the default path.
 
 ## Session Handoff
-- Last updated: 2026-04-03 (session 299)
+- Last updated: 2026-04-09 (session 300)
 - Active task: `WSM-BOOT-001`
 - Last delta:
+  - Session 300 tightened `BattlegroundCoordinator` queue/invite behavior for AV stragglers: queue and invite phases now restage off-position accounts with throttled `Goto` actions before issuing join/accept retries.
+  - Added queue-settle orchestration in AV live validation so the coordinator remains active through delayed invite pops, then objective push starts from a settled in-map roster.
+  - Live AV proof now reaches `BG-SETTLE bg=80,off=0` and passes `AV_FullMatch_EnterPrepQueueMountAndReachObjective`.
   - Session 299 validated the current ownership split end-to-end on the live Linux service stack: `pathfinding-service` and `scene-data-service` are running separately, reachable on `5001`/`5003`, and `WoWStateManager` remains host-side and process-scope-limited to WoW client workers.
   - Confirmed there is no remaining StateManager lifecycle ownership over `PathfindingService`/`SceneDataService`; startup and worker loops only probe/report dependency availability while continuing launch orchestration.
   - Current test status on this branch: `run-tests.ps1 -Layer 4 -SkipBuild` passed; a full `BotRunner.Tests` `LiveValidation` sweep was started and then interrupted by user request before completion, so the live matrix remains in-progress.
@@ -64,8 +67,10 @@
   - `WoWStateManager` is now treated as host-side by design because it must launch local `WoW.exe` clients; the Windows compose stack should no longer include a `wow-state-manager` container.
   - Kept the idle host-side `WoWStateManager` path in place with `MangosServer__AutoLaunch=false` and `WWOW_SETTINGS_OVERRIDE=StateManagerSettings.Idle.json`.
   - Updated the stack docs so the containerized pieces stay `vmangos-server` / `pathfinding-service`, while `WoWStateManager` remains outside Docker.
-- Pass result: `StateManager remains host-side and only manages WoW client workers while split Pathfinding/SceneData services run externally`
+- Pass result: `BattlegroundCoordinator restage + retry flow closes AV stragglers; live AV now settles to full 80/80 map entry before objectives`
 - Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_WaitForInvite_RetriesJoinThenAcceptForOffMapAccountsAfterDelay|FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_QueuePhase_RestagesUnstagedMembersBeforeJoin|FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_DoesNotAdvanceToInBattleground_UntilEveryBotEntered" --logger "console;verbosity=minimal"` -> `passed`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_iteration_20260409_objective_tolerance60.trx"` -> `passed (1/1)`.
   - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` -> confirms split external services are online
   - `docker logs --tail 80 pathfinding-service` -> confirms pathfinding preload activity
   - `docker logs --tail 80 scene-data-service` -> confirms scene-data ready state
@@ -74,8 +79,12 @@
   - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateManagerTestClientTimeoutTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
 - Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CoordinatorStrictCountTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`
   - `Services/WoWStateManager/TASKS.md`
   - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
   - `docs/DOCKER_STACK.md`
   - `Services/README.md`
   - `Services/WoWStateManager/StateManagerWorker.cs`
@@ -87,5 +96,5 @@
   - `Services/SceneDataService/Dockerfile`
   - `docker-compose.windows.yml`
   - `docs/DOCKER_STACK.md`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=minimal"`
-- Blockers: full `LiveValidation` completion now depends on uninterrupted long-running execution time, not split-service bring-up.
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_iteration_rerun.trx"`
+- Blockers: no remaining AV queue-straggler blocker in this owner; remaining work is outside battleground coordinator flow.
