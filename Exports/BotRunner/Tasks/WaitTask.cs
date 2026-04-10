@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace BotRunner.Tasks;
@@ -18,7 +18,7 @@ public class WaitTask(IBotContext botContext, int durationMs) : BotTask(botConte
 
         if ((DateTime.Now - _startTime.Value).TotalMilliseconds >= _durationMs)
         {
-            Log.Information($"[WAIT] Wait completed ({_durationMs}ms)");
+            Logger.LogInformation($"[WAIT] Wait completed ({_durationMs}ms)");
             BotTasks.Pop();
         }
     }

@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 
 namespace BotRunner.Tasks.Social;
@@ -51,7 +51,7 @@ public class ChannelAutoJoinTask : BotTask, IBotTask
                 }
 
                 var channel = _channels[_joinIndex];
-                Log.Information("[CHANNEL] Joining channel: {Channel}", channel);
+                Logger.LogInformation("[CHANNEL] Joining channel: {Channel}", channel);
                 // Actual join via ChannelNetworkClientComponent.JoinChannel()
                 _joinIndex++;
                 break;

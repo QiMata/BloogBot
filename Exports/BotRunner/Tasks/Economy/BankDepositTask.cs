@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -55,7 +55,7 @@ public class BankDepositTask : BotTask, IBotTask
                     .First();
                 _bankerPosition = nearest.Value;
                 _state = BankState.MoveToBank;
-                Log.Information("[BANK] Heading to {City} bank", nearest.Key);
+                Logger.LogInformation("[BANK] Heading to {City} bank", nearest.Key);
                 break;
 
             case BankState.MoveToBank:
@@ -76,7 +76,7 @@ public class BankDepositTask : BotTask, IBotTask
 
                 if (banker != null)
                 {
-                    Log.Information("[BANK] Interacting with banker");
+                    Logger.LogInformation("[BANK] Interacting with banker");
                 }
                 _state = BankState.DepositItems;
                 break;
@@ -84,7 +84,7 @@ public class BankDepositTask : BotTask, IBotTask
             case BankState.DepositItems:
                 // Bank frame interaction is handled via the bank frame interface
                 // This task orchestrates the deposit decision logic
-                Log.Information("[BANK] Deposited {Count} items", _depositedCount);
+                Logger.LogInformation("[BANK] Deposited {Count} items", _depositedCount);
                 _state = BankState.Complete;
                 break;
 

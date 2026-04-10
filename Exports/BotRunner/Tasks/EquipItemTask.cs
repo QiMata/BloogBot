@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -13,7 +13,7 @@ public class EquipItemTask(IBotContext botContext, int bagId, int slotId) : BotT
     public void Update()
     {
         ObjectManager.UseContainerItem(bagId, slotId);
-        Log.Information("[EQUIP_ITEM] Equipped item from bag={Bag} slot={Slot}", bagId, slotId);
+        Logger.LogInformation("[EQUIP_ITEM] Equipped item from bag={Bag} slot={Slot}", bagId, slotId);
         BotTasks.Pop();
     }
 }

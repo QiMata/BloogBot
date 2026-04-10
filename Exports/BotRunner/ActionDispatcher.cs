@@ -1264,13 +1264,15 @@ namespace BotRunner
             Stack<IBotTask> tasks,
             IDependencyContainer container,
             Constants.BotBehaviorConfig config,
-            Action<string> addDiagnosticMessage) : IBotContext
+            Action<string> addDiagnosticMessage,
+            Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null) : IBotContext
         {
             public IObjectManager ObjectManager => objectManager;
             public Stack<IBotTask> BotTasks => tasks;
             public IDependencyContainer Container => container;
             public Constants.BotBehaviorConfig Config => config;
             public IWoWEventHandler EventHandler => objectManager.EventHandler;
+            public Microsoft.Extensions.Logging.ILoggerFactory? LoggerFactory => loggerFactory;
             public void AddDiagnosticMessage(string message) => addDiagnosticMessage(message);
         }
     }

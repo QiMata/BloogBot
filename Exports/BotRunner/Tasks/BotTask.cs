@@ -5,7 +5,8 @@ using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger<T> when IBotContext exposes ILoggerFactory
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
 
@@ -17,6 +18,15 @@ namespace BotRunner.Tasks;
 public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 {
     protected readonly IBotContext BotContext = botContext;
+
+    /// <summary>
+    /// Structured logger for this task, created from the IBotContext's LoggerFactory.
+    /// Falls back to NullLogger when DI is not configured.
+    /// Uses the concrete task type name as the logger category.
+    /// </summary>
+    private ILogger? _logger;
+    protected ILogger Logger => _logger ??= (BotContext.LoggerFactory
+        ?? NullLoggerFactory.Instance).CreateLogger(GetType().Name);
 
     /// <summary>
     /// Access to the object manager for game state.
@@ -76,7 +86,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         }
         if (player?.Position == null)
         {
-            Log.Warning("[NAV-DIAG] TryNavigateToward: player or position is null");
+            Logger.LogWarning("[NAV-DIAG] TryNavigateToward: player or position is null");
             return false;
         }
 
@@ -107,7 +117,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             return true;
         }
 
-        Log.Warning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
+        Logger.LogWarning("[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. " +
             "pos=({PosX:F1},{PosY:F1},{PosZ:F1}), dest=({DestX:F1},{DestY:F1},{DestZ:F1}), map={Map}",
             player.Position.X, player.Position.Y, player.Position.Z,
             destination.X, destination.Y, destination.Z, player.MapId);
@@ -133,7 +143,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
         BotRunnerService.DiagLog($"[TASK-POP] task={top.GetType().Name} reason={reason} remaining={BotTasks.Count - 1}");
         BotTasks.Pop();
-        Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
+        Logger.LogInformation("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);
     }
 

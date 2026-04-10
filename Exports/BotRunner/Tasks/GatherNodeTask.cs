@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -29,7 +29,7 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
         // Timeout after 30 seconds
         if ((DateTime.Now - _startTime).TotalSeconds > 30)
         {
-            Log.Warning("[GATHER] Timed out trying to reach node {Guid:X}", nodeGuid);
+            Logger.LogWarning("[GATHER] Timed out trying to reach node {Guid:X}", nodeGuid);
             ObjectManager.StopAllMovement();
             BotTasks.Pop();
             return;
@@ -46,7 +46,7 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
         // Swimming means pathfinding routed us into water — abort and let coordinator retry
         if (player.IsSwimming)
         {
-            Log.Warning("[GATHER] Entered water while approaching node {Guid:X}; aborting", nodeGuid);
+            Logger.LogWarning("[GATHER] Entered water while approaching node {Guid:X}; aborting", nodeGuid);
             ObjectManager.StopAllMovement();
             BotTasks.Pop();
             return;
@@ -58,7 +58,7 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
 
         if (node == null)
         {
-            Log.Warning("[GATHER] Node {Guid:X} not found", nodeGuid);
+            Logger.LogWarning("[GATHER] Node {Guid:X} not found", nodeGuid);
             BotTasks.Pop();
             return;
         }
@@ -76,7 +76,7 @@ public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(bo
             ObjectManager.StopAllMovement();
             ObjectManager.SetTarget(nodeGuid);
             _interacted = true;
-            Log.Information("[GATHER] Gathering node {Name} ({Guid:X})", node.Name, nodeGuid);
+            Logger.LogInformation("[GATHER] Gathering node {Name} ({Guid:X})", node.Name, nodeGuid);
             return;
         }
 

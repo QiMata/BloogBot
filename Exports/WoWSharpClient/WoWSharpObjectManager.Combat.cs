@@ -1,457 +1,70 @@
-using BotRunner.Clients;
 using GameData.Core.Enums;
-using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Microsoft.Extensions.Logging;
-using Serilog;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
-using System.Globalization;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Timers;
-using WoWSharpClient.Client;
-using WoWSharpClient.Models;
-using WoWSharpClient.Movement;
-using WoWSharpClient.Networking.ClientComponents.I;
-using WoWSharpClient.Parsers;
-using WoWSharpClient.Screens;
-using WoWSharpClient.Utils;
-using static GameData.Core.Enums.UpdateFields;
-using Enum = System.Enum;
-using Timer = System.Timers.Timer;
 
 namespace WoWSharpClient
 {
+    /// <summary>
+    /// Partial class that delegates spell casting, melee/ranged attack, target selection,
+    /// and cooldown tracking to <see cref="SpellcastingManager"/>.
+    /// All public IObjectManager method signatures are preserved; implementation lives in the extracted class.
+    /// </summary>
     public partial class WoWSharpObjectManager
     {
-        private ulong _currentTargetGuid;
-        private const long RecentMeleeRejectWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
-        private const long PendingMeleeAttackConfirmWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
-        private long _recentMeleeRangeRejectUntilTicks;
-        private ulong _recentMeleeRangeRejectTargetGuid;
-        private long _recentMeleeFacingRejectUntilTicks;
-        private ulong _recentMeleeFacingRejectTargetGuid;
-        private long _pendingMeleeAttackConfirmUntilTicks;
-        private ulong _pendingMeleeAttackTargetGuid;
-
-        // Temporary diagnostic: log all opcodes received after GAMEOBJ_USE
-
-
-        // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
-        private Func<uint, bool> _spellCooldownChecker;
-
-        /// <summary>
-        /// Set a delegate that checks if a spell ID is off cooldown (returns true if ready).
-        /// Wire this to SpellCastingNetworkClientComponent.CanCastSpell().
-        /// </summary>
-
-
-        /// <summary>
-        /// Set a delegate that checks if a spell ID is off cooldown (returns true if ready).
-        /// Wire this to SpellCastingNetworkClientComponent.CanCastSpell().
-        /// </summary>
-        public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellCooldownChecker = checker;
-
-        internal void NoteMeleeRangeRejected()
-        {
-            var targetGuid = _currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0;
-            if (targetGuid == 0)
-                return;
-
-            ClearPendingMeleeAttackStart(targetGuid);
-            _recentMeleeRangeRejectTargetGuid = targetGuid;
-            Interlocked.Exchange(ref _recentMeleeRangeRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
-            Log.Warning("[COMBAT] Marked recent melee range rejection for 0x{Target:X}", targetGuid);
-        }
-
-        internal void NoteMeleeFacingRejected()
-        {
-            var targetGuid = _currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0;
-            if (targetGuid == 0)
-                return;
-
-            ClearPendingMeleeAttackStart(targetGuid);
-            _recentMeleeFacingRejectTargetGuid = targetGuid;
-            Interlocked.Exchange(ref _recentMeleeFacingRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
-            Log.Warning("[COMBAT] Marked recent melee facing rejection for 0x{Target:X}", targetGuid);
-        }
-
-        internal void ClearRecentMeleeRejections(ulong targetGuid = 0)
-        {
-            if (targetGuid == 0 || _recentMeleeRangeRejectTargetGuid == targetGuid)
-            {
-                _recentMeleeRangeRejectTargetGuid = 0;
-                Interlocked.Exchange(ref _recentMeleeRangeRejectUntilTicks, 0);
-            }
-
-            if (targetGuid == 0 || _recentMeleeFacingRejectTargetGuid == targetGuid)
-            {
-                _recentMeleeFacingRejectTargetGuid = 0;
-                Interlocked.Exchange(ref _recentMeleeFacingRejectUntilTicks, 0);
-            }
-        }
-
-        public bool HadRecentMeleeRangeRejection(ulong targetGuid)
-            => targetGuid != 0
-                && _recentMeleeRangeRejectTargetGuid == targetGuid
-                && DateTime.UtcNow.Ticks < Interlocked.Read(ref _recentMeleeRangeRejectUntilTicks);
-
-        public bool HadRecentMeleeFacingRejection(ulong targetGuid)
-            => targetGuid != 0
-                && _recentMeleeFacingRejectTargetGuid == targetGuid
-                && DateTime.UtcNow.Ticks < Interlocked.Read(ref _recentMeleeFacingRejectUntilTicks);
-
-        // Optional agent factory accessor — set by BackgroundBotWorker for LootTargetAsync
-
-
-        internal void NotePendingMeleeAttackStart(ulong targetGuid)
-        {
-            if (targetGuid == 0)
-                return;
-
-            _pendingMeleeAttackTargetGuid = targetGuid;
-            Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, DateTime.UtcNow.Ticks + PendingMeleeAttackConfirmWindowTicks);
-        }
-
-        internal bool HasPendingMeleeAttackStart(ulong targetGuid)
-        {
-            if (targetGuid == 0 || _pendingMeleeAttackTargetGuid != targetGuid)
-                return false;
-
-            if (DateTime.UtcNow.Ticks < Interlocked.Read(ref _pendingMeleeAttackConfirmUntilTicks))
-                return true;
-
-            ClearPendingMeleeAttackStart(targetGuid);
-            return false;
-        }
-
-        internal void ClearPendingMeleeAttackStart(ulong targetGuid = 0)
-        {
-            if (targetGuid != 0 && _pendingMeleeAttackTargetGuid != targetGuid)
-                return;
-
-            _pendingMeleeAttackTargetGuid = 0;
-            Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, 0);
-        }
-
-        internal void ConfirmMeleeAttackStarted(ulong targetGuid = 0)
-        {
-            var confirmedTargetGuid = targetGuid != 0
-                ? targetGuid
-                : (_currentTargetGuid != 0 ? _currentTargetGuid : Player?.TargetGuid ?? 0);
-            if (confirmedTargetGuid == 0)
-                return;
-
-            ClearPendingMeleeAttackStart(confirmedTargetGuid);
-            ClearRecentMeleeRejections(confirmedTargetGuid);
-        }
-
-        public bool IsSpellReady(string spellName)
-        {
-            // Resolve spell name to highest-rank ID the player knows
-            var knownIds = Spells.Select(s => s.Id);
-            var spellId = GameData.Core.Constants.SpellData.GetHighestKnownRank(spellName, knownIds);
-
-            // Spell not known
-            if (spellId == 0) return false;
-
-            // Check cooldown via delegate if wired, otherwise assume ready (server validates)
-            if (_spellCooldownChecker != null)
-                return _spellCooldownChecker(spellId);
-
-            return true;
-        }
-
-
-        public void StopCasting()
-        {
-            if (_woWClient == null) return;
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CANCEL_CAST, []);
-        }
-
-
-        public void CastSpell(string spellName, int rank = -1, bool castOnSelf = false)
-        {
-            // Resolve spell name to highest-rank ID the player knows
-            var knownIds = Spells.Select(s => s.Id);
-            var spellId = GameData.Core.Constants.SpellData.GetHighestKnownRank(spellName, knownIds);
-
-            if (spellId == 0)
-            {
-                Log.Warning("[CastSpell] Spell '{SpellName}' not found in known spells or SpellData lookup", spellName);
-                return;
-            }
-
-            CastSpell((int)spellId, rank, castOnSelf);
-        }
-
-
-        // Vanilla fishing casts do not carry an explicit unit or destination payload.
-        // Fishing casts a bobber at a location in front of the player — self-targeting causes NOT_FISHABLE.
-        // The foreground client emits spellId + targetFlags(0) and derives bobber placement from facing.
-        // Mirror that shape here so BG fishing matches the authenticated client packet flow.
-        private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
-        private const float FishingBobberDistance = 14f;
-
-        public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
-        {
-            if (_woWClient == null) return;
-
-            // Fishing spells need location-based targeting — calculate bobber position from facing
-            if (false && !castOnSelf && _fishingSpellIds.Contains(spellId) && Player?.Position != null)
-            {
-                var facing = Player.Facing;
-                var pos = Player.Position;
-                float targetX = pos.X + (float)(FishingBobberDistance * Math.Cos(facing));
-                float targetY = pos.Y + (float)(FishingBobberDistance * Math.Sin(facing));
-                float targetZ = pos.Z; // bobber lands at water surface; server adjusts Z
-                Log.Information("[CastSpell] Fishing spell {SpellId} — using location target ({X:F1}, {Y:F1}, {Z:F1}) from facing {Facing:F2}",
-                    spellId, targetX, targetY, targetZ, facing);
-                CastSpellAtLocation(spellId, targetX, targetY, targetZ);
-                return;
-            }
-
-            var forceNoTarget = _fishingSpellIds.Contains(spellId);
-            using var ms = new MemoryStream();
-            using var w = new BinaryWriter(ms);
-            w.Write((uint)spellId);
-
-            if (castOnSelf || forceNoTarget || _currentTargetGuid == 0 || _currentTargetGuid == PlayerGuid.FullGuid)
-            {
-                // targetFlags = 0 means "no explicit target payload".
-                // This is the packet shape used by self-only spells and vanilla fishing casts.
-                w.Write((ushort)0x0000);
-                Log.Information("[CastSpell] spell={SpellId} targetFlags=0x0000 currentTarget=0x{Guid:X} fishing={IsFishing}",
-                    spellId, _currentTargetGuid, forceNoTarget);
-            }
-            else
-            {
-                // TARGET_FLAG_UNIT = 0x0002 - target a specific unit
-                w.Write((ushort)0x0002);
-                ReaderUtils.WritePackedGuid(w, _currentTargetGuid);
-                Log.Information("[CastSpell] spell={SpellId} targetUnit=0x{Guid:X} packetHex={Hex}",
-                    spellId, _currentTargetGuid, BitConverter.ToString(ms.ToArray()));
-            }
-
-            var payload = ms.ToArray();
-            Log.Information("[CastSpell] Sending CMSG_CAST_SPELL ({Len} bytes): {Hex}",
-                payload.Length, BitConverter.ToString(payload));
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload)
-                .ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                        Log.Error(t.Exception, "[CastSpell] SEND FAILED for spell {SpellId}", spellId);
-                    else
-                        Log.Information("[CastSpell] SEND OK for spell {SpellId}", spellId);
-                }, TaskScheduler.Default);
-        }
-
-        public void CastSpellAtLocation(int spellId, float x, float y, float z)
-        {
-            if (_woWClient == null) return;
-
-            using var ms = new MemoryStream();
-            using var w = new BinaryWriter(ms);
-            w.Write((uint)spellId);
-            w.Write((ushort)0x0040); // TARGET_FLAG_DEST_LOCATION
-            w.Write(x);
-            w.Write(y);
-            w.Write(z);
-
-            var payload = ms.ToArray();
-            Log.Information("[CastSpellAtLocation] spell={SpellId} loc=({X:F1},{Y:F1},{Z:F1}) ({Len} bytes): {Hex}",
-                spellId, x, y, z, payload.Length, BitConverter.ToString(payload));
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload)
-                .ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                        Log.Error(t.Exception, "[CastSpellAtLocation] SEND FAILED for spell {SpellId}", spellId);
-                    else
-                        Log.Information("[CastSpellAtLocation] SEND OK for spell {SpellId}", spellId);
-                }, TaskScheduler.Default);
-        }
-
-
-        public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)
-        {
-            if (_woWClient == null) return;
-
-            using var ms = new MemoryStream();
-            using var w = new BinaryWriter(ms);
-            w.Write((uint)spellId);
-            // TARGET_FLAG_OBJECT = 0x0800 — MaNGOS reads packed GO GUID for this flag
-            w.Write((ushort)0x0800);
-            ReaderUtils.WritePackedGuid(w, gameObjectGuid);
-
-            var payload = ms.ToArray();
-            Log.Information("[CastSpellOnGameObject] spell={SpellId} target=0x{Guid:X} ({Len} bytes): {Hex}",
-                spellId, gameObjectGuid, payload.Length, BitConverter.ToString(payload));
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload);
-        }
-
-
-        public bool CanCastSpell(int spellId, ulong targetGuid)
-        {
-            lock (SpellLock)
-                return Spells.Any(s => s.Id == (uint)spellId);
-        }
-
-        public IReadOnlyCollection<uint> KnownSpellIds
-        {
-            get { lock (SpellLock) return Spells.Select(s => s.Id).ToArray(); }
-        }
-
-
-        public void StartWandAttack()
-        {
-            // BG bot: cast "Shoot" spell (wand auto-attack)
-            CastSpell("Shoot");
-        }
-
-
-        public void StopWandAttack()
-        {
-            // BG bot: stop casting to cancel wand auto-attack
-            StopCasting();
-        }
-
-
-        public sbyte GetTalentRank(uint tabIndex, uint talentIndex)
-        {
-            var factory = _agentFactoryAccessor?.Invoke();
-            var tree = factory?.TalentAgent?.GetTalentTreeInfo(tabIndex);
-            if (tree?.Talents == null) return -1;
-            var talent = tree.Talents.FirstOrDefault(t => t.TalentIndex == talentIndex);
-            if (talent == null) return -1;
-            return (sbyte)talent.CurrentRank;
-        }
-
-
-        public uint GetManaCost(string spellName)
-        {
-            // Spell cost data not available from server packets in vanilla 1.12.1
-            // Return 0 to indicate "can always attempt" — the server will reject if insufficient mana
-            return 0;
-        }
-
-
-        public void CancelAura(uint spellId)
-        {
-            if (_woWClient == null) return;
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CANCEL_AURA, BitConverter.GetBytes(spellId));
-        }
-
-
-        public void SetTarget(ulong guid)
-        {
-            if (_woWClient == null) return;
-            if (guid != _currentTargetGuid)
-            {
-                ClearRecentMeleeRejections();
-                ClearPendingMeleeAttackStart();
-            }
-            _currentTargetGuid = guid;
-            if (Player is Models.WoWLocalPlayer localPlayer)
-            {
-                localPlayer.TargetGuid = guid;
-                // Also update TargetHighGuid so incoming SMSG_UPDATE_OBJECT (UNIT_FIELD_TARGET)
-                // doesn't clobber the locally-set TargetGuid back to the old value.
-                localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(guid & 0xFFFFFFFF));
-                localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(guid >> 32));
-            }
-            else if (Player is Models.WoWUnit unit)
-            {
-                // Fallback: set TargetGuid on the model directly so snapshots reflect
-                // the target immediately (before the server echoes via SMSG_UPDATE_OBJECT).
-                unit.TargetGuid = guid;
-            }
-            var payload = BitConverter.GetBytes(guid);
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_SET_SELECTION, payload);
-        }
-
-
-        public void StopAttack()
-        {
-            if (_woWClient == null) return;
-            if (Player is Models.WoWLocalPlayer lp)
-                lp.IsAutoAttacking = false;
-            ClearRecentMeleeRejections();
-            ClearPendingMeleeAttackStart();
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSTOP, []);
-        }
-
-
-        public void StartMeleeAttack()
-        {
-            if (_woWClient == null) return;
-
-            if (_currentTargetGuid != 0)
-            {
-                if (Player is Models.WoWLocalPlayer localPlayer)
-                {
-                    var previousTargetGuid = localPlayer.TargetGuid;
-                    bool switchingTargets = previousTargetGuid != 0 && previousTargetGuid != _currentTargetGuid;
-
-                    localPlayer.TargetGuid = _currentTargetGuid;
-                    localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid & 0xFFFFFFFF));
-                    localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid >> 32));
-
-                    // Only send CMSG_ATTACKSWING once per engagement.
-                    // Spamming it resets the server's swing timer (each call triggers
-                    // Unit::Attack → AttackStop → AttackStart), preventing any
-                    // actual melee swing from completing. SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT
-                    // clears IsAutoAttacking, allowing re-engagement on the next call.
-                    if (localPlayer.IsAutoAttacking && !switchingTargets)
-                    {
-                        if (HasPendingMeleeAttackStart(_currentTargetGuid))
-                            return;
-
-                        Log.Warning("[StartMeleeAttack] Retrying CMSG_ATTACKSWING on 0x{Target:X} after missing server confirmation",
-                            _currentTargetGuid);
-                    }
-
-                    Log.Information("[StartMeleeAttack] Sending CMSG_ATTACKSWING on 0x{Target:X} (re-engage={ReEngage}, switchingTargets={SwitchingTargets})",
-                        _currentTargetGuid, previousTargetGuid != 0, switchingTargets);
-
-                    // Send a position heartbeat to sync with the server BEFORE
-                    // the attack swing. Without this, the server may have a stale
-                    // player position from the last movement packet, causing it to
-                    // think the player is out of melee range even when the client
-                    // shows them right next to the mob.
-                    // CRITICAL: Await the heartbeat send before issuing the attack.
-                    // Fire-and-forget heartbeat caused CMSG_ATTACKSWING to arrive at
-                    // the server before the position update, resulting in stale position
-                    // → SMSG_ATTACKSWING_NOTINRANGE → no damage dealt.
-                    var gameTimeMs = (uint)_worldTimeTracker.NowMS.TotalMilliseconds;
-                    var heartbeat = Parsers.MovementPacketHandler.BuildMovementInfoBuffer(localPlayer, gameTimeMs, 0);
-                    _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat).GetAwaiter().GetResult();
-
-                    localPlayer.IsAutoAttacking = true;
-                    NotePendingMeleeAttackStart(_currentTargetGuid);
-                }
-                else if (Player is Models.WoWUnit unit)
-                {
-                    unit.TargetGuid = _currentTargetGuid;
-                }
-            }
-
-            var payload = BitConverter.GetBytes(_currentTargetGuid);
-            _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSWING, payload).GetAwaiter().GetResult();
-        }
-
-
-        public void StartRangedAttack()
-        {
-            // Ranged attack uses the same CMSG_ATTACKSWING opcode as melee
-            StartMeleeAttack();
-        }
+        // ---- Cooldown checker wiring ----
 
+        public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellcasting.SetSpellCooldownChecker(checker);
+
+        // ---- Melee rejection tracking (internal — called by SpellHandler, WorldClient) ----
+
+        internal void NoteMeleeRangeRejected() => _spellcasting.NoteMeleeRangeRejected();
+        internal void NoteMeleeFacingRejected() => _spellcasting.NoteMeleeFacingRejected();
+        internal void ClearRecentMeleeRejections(ulong targetGuid = 0) => _spellcasting.ClearRecentMeleeRejections(targetGuid);
+        public bool HadRecentMeleeRangeRejection(ulong targetGuid) => _spellcasting.HadRecentMeleeRangeRejection(targetGuid);
+        public bool HadRecentMeleeFacingRejection(ulong targetGuid) => _spellcasting.HadRecentMeleeFacingRejection(targetGuid);
+        internal void NotePendingMeleeAttackStart(ulong targetGuid) => _spellcasting.NotePendingMeleeAttackStart(targetGuid);
+        internal bool HasPendingMeleeAttackStart(ulong targetGuid) => _spellcasting.HasPendingMeleeAttackStart(targetGuid);
+        internal void ClearPendingMeleeAttackStart(ulong targetGuid = 0) => _spellcasting.ClearPendingMeleeAttackStart(targetGuid);
+        internal void ConfirmMeleeAttackStarted(ulong targetGuid = 0) => _spellcasting.ConfirmMeleeAttackStarted(targetGuid);
+
+        // ---- Spell readiness ----
+
+        public bool IsSpellReady(string spellName) => _spellcasting.IsSpellReady(spellName);
+
+        // ---- Casting ----
+
+        public void StopCasting() => _spellcasting.StopCasting();
+        public void CastSpell(string spellName, int rank = -1, bool castOnSelf = false) => _spellcasting.CastSpell(spellName, rank, castOnSelf);
+        public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false) => _spellcasting.CastSpell(spellId, rank, castOnSelf);
+        public void CastSpellAtLocation(int spellId, float x, float y, float z) => _spellcasting.CastSpellAtLocation(spellId, x, y, z);
+        public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid) => _spellcasting.CastSpellOnGameObject(spellId, gameObjectGuid);
+        public bool CanCastSpell(int spellId, ulong targetGuid) => _spellcasting.CanCastSpell(spellId, targetGuid);
+        public IReadOnlyCollection<uint> KnownSpellIds => _spellcasting.KnownSpellIds;
+        public void CancelAura(uint spellId) => _spellcasting.CancelAura(spellId);
+
+        // ---- Wand ----
+
+        public void StartWandAttack() => _spellcasting.StartWandAttack();
+        public void StopWandAttack() => _spellcasting.StopWandAttack();
+
+        // ---- Target ----
+
+        public void SetTarget(ulong guid) => _spellcasting.SetTarget(guid);
+
+        // ---- Attack ----
+
+        public void StopAttack() => _spellcasting.StopAttack();
+        public void StartMeleeAttack() => _spellcasting.StartMeleeAttack();
+        public void StartRangedAttack() => _spellcasting.StartRangedAttack();
+
+        // ---- Talent / Mana ----
+
+        public sbyte GetTalentRank(uint tabIndex, uint talentIndex) => _spellcasting.GetTalentRank(tabIndex, talentIndex);
+        public uint GetManaCost(string spellName) => _spellcasting.GetManaCost(spellName);
+
+        // ---- ObjectUpdateOperation enum stays here (used by Network.cs ProcessUpdatesAsync) ----
 
         public enum ObjectUpdateOperation
         {

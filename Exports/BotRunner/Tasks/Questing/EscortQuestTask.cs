@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Linq;
 
 namespace BotRunner.Tasks.Questing;
@@ -46,7 +46,7 @@ public class EscortQuestTask : BotTask, IBotTask
                 {
                     _npcGuid = npc.Guid;
                     _state = EscortState.FollowNpc;
-                    Log.Information("[ESCORT] Found NPC {Entry} at ({X:F0},{Y:F0})",
+                    Logger.LogInformation("[ESCORT] Found NPC {Entry} at ({X:F0},{Y:F0})",
                         _npcEntry, npc.Position.X, npc.Position.Y);
                 }
                 break;
@@ -55,7 +55,7 @@ public class EscortQuestTask : BotTask, IBotTask
                 var escortNpc = ObjectManager.Units.FirstOrDefault(u => u.Guid == _npcGuid);
                 if (escortNpc == null || escortNpc.Health <= 0)
                 {
-                    Log.Warning("[ESCORT] NPC lost or dead — escort failed");
+                    Logger.LogWarning("[ESCORT] NPC lost or dead — escort failed");
                     _state = EscortState.Complete;
                     return;
                 }
@@ -76,7 +76,7 @@ public class EscortQuestTask : BotTask, IBotTask
                 {
                     if (dist > MaxFollowDistance)
                     {
-                        Log.Warning("[ESCORT] Too far from NPC ({Dist:F0}y) — rushing to catch up", dist);
+                        Logger.LogWarning("[ESCORT] Too far from NPC ({Dist:F0}y) — rushing to catch up", dist);
                     }
                     ObjectManager.MoveToward(escortNpc.Position);
                 }

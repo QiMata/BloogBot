@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Linq;
 
 namespace BotRunner.Tasks.Pet;
@@ -70,14 +70,14 @@ public class PetManagementTask : BotTask, IBotTask
 
             case PetState.Feed:
                 // Find appropriate food in inventory
-                Log.Information("[PET] Pet needs feeding");
+                Logger.LogInformation("[PET] Pet needs feeding");
                 // Feeding is handled by CMSG_PET_ACTION with feed command
                 // The actual food selection depends on pet diet
                 _state = PetState.Idle;
                 break;
 
             case PetState.SetStance:
-                Log.Debug("[PET] Setting stance to {Stance}", _desiredStance);
+                Logger.LogDebug("[PET] Setting stance to {Stance}", _desiredStance);
                 _state = PetState.Idle;
                 break;
 

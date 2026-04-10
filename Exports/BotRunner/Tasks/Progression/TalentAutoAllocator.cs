@@ -1,5 +1,5 @@
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -12,6 +12,7 @@ namespace BotRunner.Tasks.Progression;
 /// </summary>
 public static class TalentAutoAllocator
 {
+    private static readonly ILogger Logger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger(nameof(TalentAutoAllocator));
     /// <summary>
     /// Get the next talent to learn for a given class, spec, and current level.
     /// Returns null if all talents for current level are allocated.
@@ -25,7 +26,7 @@ public static class TalentAutoAllocator
         var buildKey = $"{className}_{specName}";
         if (!TalentBuilds.TryGetValue(buildKey, out var build))
         {
-            Log.Warning("[TALENT] No build defined for {Class}_{Spec}", className, specName);
+            Logger.LogWarning("[TALENT] No build defined for {Class}_{Spec}", className, specName);
             return null;
         }
 

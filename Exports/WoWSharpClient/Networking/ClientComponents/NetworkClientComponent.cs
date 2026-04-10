@@ -1,4 +1,5 @@
 using System;
+using System.Reactive.Disposables;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace WoWSharpClient.Networking.ClientComponents
@@ -7,12 +8,32 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Abstract base class for network client components providing common
     /// operation state tracking and lifetime management.
     /// </summary>
+    /// <remarks>
+    /// Subscription tracking pattern for derived classes:
+    /// All IDisposable subscriptions (e.g. from .Subscribe() on opcode streams)
+    /// should be added to <see cref="Disposables"/> so they are automatically
+    /// cleaned up when the component is disposed. Example:
+    /// <code>
+    ///   var sub = opcodeStream.Subscribe(payload => Handle(payload));
+    ///   Disposables.Add(sub);
+    /// </code>
+    /// This prevents subscription leaks when components are torn down.
+    /// Subjects owned by the component should still be completed and disposed
+    /// explicitly in the overridden Dispose() method before calling base.Dispose().
+    /// </remarks>
     public abstract class NetworkClientComponent : INetworkClientComponent
     {
         private readonly object _stateLock = new();
         private bool _isOperationInProgress;
         private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        /// <summary>
+        /// Composite disposable for tracking subscriptions. Derived classes should
+        /// add their IDisposable subscriptions here instead of tracking them manually.
+        /// All tracked subscriptions are disposed automatically in <see cref="Dispose"/>.
+        /// </summary>
+        protected readonly CompositeDisposable Disposables = new();
 
         /// <summary>
         /// Gets a value indicating whether an operation is currently in progress.
@@ -66,6 +87,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+            Disposables.Dispose();
             GC.SuppressFinalize(this);
         }
     }

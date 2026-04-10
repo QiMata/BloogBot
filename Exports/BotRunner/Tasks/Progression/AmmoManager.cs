@@ -1,6 +1,6 @@
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 
 namespace BotRunner.Tasks.Progression;

@@ -33,12 +33,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<BattlegroundList> _listReceived;
         private readonly IObservable<PvPLogData> _scoreboardReceived;
 
-        // Self-subscriptions to keep .Do() side effects active
-        private readonly IDisposable _statusChangedSub;
-        private readonly IDisposable _groupJoinedSub;
-        private readonly IDisposable _playerJoinedSub;
-        private readonly IDisposable _playerLeftSub;
-        private readonly IDisposable _instanceOwnershipUpdatedSub;
         private uint? _lastRequestedBgMapId;
 
         public BattlegroundNetworkClientComponent(IWorldClient worldClient, ILogger<BattlegroundNetworkClientComponent> logger)
@@ -130,12 +124,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish().RefCount();
 
-            // Self-subscribe to keep state tracking active
-            _statusChangedSub = _statusChanged.Subscribe(_ => { });
-            _groupJoinedSub = _groupJoined.Subscribe(_ => { });
-            _playerJoinedSub = _playerJoined.Subscribe(_ => { });
-            _playerLeftSub = _playerLeft.Subscribe(_ => { });
-            _instanceOwnershipUpdatedSub = _instanceOwnershipUpdated.Subscribe(_ => { });
+            // Self-subscribe to keep state tracking active; tracked via base Disposables
+            Disposables.Add(_statusChanged.Subscribe(_ => { }));
+            Disposables.Add(_groupJoined.Subscribe(_ => { }));
+            Disposables.Add(_playerJoined.Subscribe(_ => { }));
+            Disposables.Add(_playerLeft.Subscribe(_ => { }));
+            Disposables.Add(_instanceOwnershipUpdated.Subscribe(_ => { }));
         }
 
         #region State
@@ -623,14 +617,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
             _disposed = true;
 
-            _statusChangedSub?.Dispose();
-            _groupJoinedSub?.Dispose();
-            _playerJoinedSub?.Dispose();
-            _playerLeftSub?.Dispose();
-            _instanceOwnershipUpdatedSub?.Dispose();
-
             _logger.LogDebug("Disposing BattlegroundNetworkClientComponent");
-            base.Dispose();
+            base.Dispose(); // disposes all tracked subscriptions via Disposables
         }
 
         #endregion

@@ -1,7 +1,7 @@
 using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace BotRunner.Tasks;
@@ -31,7 +31,7 @@ public class TeleportTask(IBotContext botContext, string destination) : BotTask(
         // Server rejects chat when dead and it pollutes corpse-run tests with UI errors.
         if (IsDeadOrGhost(player))
         {
-            Log.Information("[TELEPORT] Skipping teleport while player is dead/ghost.");
+            Logger.LogInformation("[TELEPORT] Skipping teleport while player is dead/ghost.");
             PopTask("DeadOrGhost");
             return;
         }
@@ -43,12 +43,12 @@ public class TeleportTask(IBotContext botContext, string destination) : BotTask(
 
             if (string.IsNullOrEmpty(characterName))
             {
-                Log.Warning("[TELEPORT] Player name not available yet, waiting...");
+                Logger.LogWarning("[TELEPORT] Player name not available yet, waiting...");
                 return;
             }
 
             var command = $".tele name {characterName} {_destination}";
-            Log.Information($"[TELEPORT] Sending: {command}");
+            Logger.LogInformation($"[TELEPORT] Sending: {command}");
             ObjectManager.SendChatMessage(command);
 
             _commandSent = true;
@@ -59,7 +59,7 @@ public class TeleportTask(IBotContext botContext, string destination) : BotTask(
         // Check if position changed (teleport completed)
         if (_startPosition != null && player.Position.DistanceTo(_startPosition) > 10.0f)
         {
-            Log.Information($"[TELEPORT] Teleport to '{_destination}' completed. New position: ({player.Position.X:F1}, {player.Position.Y:F1}, {player.Position.Z:F1})");
+            Logger.LogInformation($"[TELEPORT] Teleport to '{_destination}' completed. New position: ({player.Position.X:F1}, {player.Position.Y:F1}, {player.Position.Z:F1})");
             PopTask("TeleportCompleted");
             return;
         }
@@ -67,7 +67,7 @@ public class TeleportTask(IBotContext botContext, string destination) : BotTask(
         // Timeout check
         if ((DateTime.Now - _commandSentTime).TotalMilliseconds > TELEPORT_TIMEOUT_MS)
         {
-            Log.Warning($"[TELEPORT] Teleport to '{_destination}' timed out after {TELEPORT_TIMEOUT_MS}ms. Proceeding anyway.");
+            Logger.LogWarning($"[TELEPORT] Teleport to '{_destination}' timed out after {TELEPORT_TIMEOUT_MS}ms. Proceeding anyway.");
             PopTask("TeleportTimeout");
         }
     }

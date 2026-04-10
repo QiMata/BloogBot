@@ -39,13 +39,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<Unit> _readyCheckResponses;
         private readonly IObservable<Unit> _readyCheckFinished;
 
-        // Self-subscriptions that keep state-tracking .Do() side effects active
-        // even when no external code subscribes to the public observables.
-        private readonly IDisposable _partyInviteSub;
-        private readonly IDisposable _groupUpdateSub;
-        private readonly IDisposable _groupLeaveSub;
-        private readonly IDisposable _leaderChangeSub;
-        private readonly IDisposable _commandResultSub;
+        // Self-subscriptions tracked via base class Disposables
 
         public PartyNetworkClientComponent(IWorldClient worldClient, ILogger<PartyNetworkClientComponent> logger)
         {
@@ -137,12 +131,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Publish().RefCount();
 
             // Self-subscribe so that the .Do() side effects (HasPendingInvite, IsInGroup, etc.)
-            // always fire when packets arrive, even if no external code subscribes.
-            _partyInviteSub = _partyInvites.Subscribe(_ => { });
-            _groupUpdateSub = _groupUpdates.Subscribe(_ => { });
-            _groupLeaveSub = _groupLeaves.Subscribe(_ => { });
-            _leaderChangeSub = _leadershipChanges.Subscribe(_ => { });
-            _commandResultSub = _partyCommandResults.Subscribe(_ => { });
+            // always fire when packets arrive; tracked via base Disposables.
+            Disposables.Add(_partyInvites.Subscribe(_ => { }));
+            Disposables.Add(_groupUpdates.Subscribe(_ => { }));
+            Disposables.Add(_groupLeaves.Subscribe(_ => { }));
+            Disposables.Add(_leadershipChanges.Subscribe(_ => { }));
+            Disposables.Add(_partyCommandResults.Subscribe(_ => { }));
         }
 
         #region INetworkClientComponent Implementation
@@ -847,18 +841,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region IDisposable Implementation
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
 
-            _partyInviteSub?.Dispose();
-            _groupUpdateSub?.Dispose();
-            _groupLeaveSub?.Dispose();
-            _leaderChangeSub?.Dispose();
-            _commandResultSub?.Dispose();
-
             _logger.LogDebug("Disposing PartyNetworkClientComponent");
+            base.Dispose(); // disposes all tracked subscriptions via Disposables
         }
         #endregion
     }

@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,7 +42,7 @@ public class FlightMasterVisitTask : BotTask, IBotTask
         // Abort if in combat
         if (ObjectManager.Aggressors.Any())
         {
-            Log.Information("[FLIGHTMASTER] Combat detected, aborting flight master visit");
+            Logger.LogInformation("[FLIGHTMASTER] Combat detected, aborting flight master visit");
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -51,7 +51,7 @@ public class FlightMasterVisitTask : BotTask, IBotTask
         // Timeout
         if ((DateTime.Now - _stateEnteredAt).TotalMilliseconds > Config.StuckTimeoutMs)
         {
-            Log.Warning("[FLIGHTMASTER] Timed out in {State}, aborting", _state);
+            Logger.LogWarning("[FLIGHTMASTER] Timed out in {State}, aborting", _state);
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -86,14 +86,14 @@ public class FlightMasterVisitTask : BotTask, IBotTask
 
         if (_fmUnit == null)
         {
-            Log.Debug("[FLIGHTMASTER] No unvisited flight master found nearby");
+            Logger.LogDebug("[FLIGHTMASTER] No unvisited flight master found nearby");
             Pop();
             return;
         }
 
         _fmGuid = _fmUnit.Guid;
         var dist = player.Position.DistanceTo(_fmUnit.Position);
-        Log.Information("[FLIGHTMASTER] Found flight master: {Name} ({Dist:F0}y away)", _fmUnit.Name, dist);
+        Logger.LogInformation("[FLIGHTMASTER] Found flight master: {Name} ({Dist:F0}y away)", _fmUnit.Name, dist);
         SetState(FMState.MoveToFlightMaster);
     }
 
@@ -125,7 +125,7 @@ public class FlightMasterVisitTask : BotTask, IBotTask
         _actionAttempts++;
         if (_actionAttempts > 3)
         {
-            Log.Warning("[FLIGHTMASTER] Too many discover attempts, marking as visited and aborting");
+            Logger.LogWarning("[FLIGHTMASTER] Too many discover attempts, marking as visited and aborting");
             _visitedFlightMasters.Add(_fmGuid);
             SetState(FMState.Done);
             return;
@@ -140,14 +140,14 @@ public class FlightMasterVisitTask : BotTask, IBotTask
 
             _visitedFlightMasters.Add(_fmGuid);
 
-            Log.Information("[FLIGHTMASTER] Discovered {Count} flight paths from {Name}",
+            Logger.LogInformation("[FLIGHTMASTER] Discovered {Count} flight paths from {Name}",
                 nodes.Count, _fmUnit?.Name ?? "unknown");
 
             SetState(FMState.Done);
         }
         catch (Exception ex)
         {
-            Log.Warning("[FLIGHTMASTER] Discovery failed: {Error}", ex.Message);
+            Logger.LogWarning("[FLIGHTMASTER] Discovery failed: {Error}", ex.Message);
         }
     }
 

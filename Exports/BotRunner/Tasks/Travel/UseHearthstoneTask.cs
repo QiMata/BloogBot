@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -42,7 +42,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
         // Cancel if in combat
         if (player.IsInCombat)
         {
-            Log.Warning("[UseHearthstone] Cancelled — entered combat.");
+            Logger.LogWarning("[UseHearthstone] Cancelled — entered combat.");
             BotContext.BotTasks.Pop();
             return;
         }
@@ -56,7 +56,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
 
                 if (!hasHearthstone)
                 {
-                    Log.Warning("[UseHearthstone] No hearthstone found in inventory.");
+                    Logger.LogWarning("[UseHearthstone] No hearthstone found in inventory.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -73,7 +73,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
                 ObjectManager.CastSpell("Hearthstone");
                 _castStartMs = Environment.TickCount64;
                 _state = HearthState.WaitForCast;
-                Log.Information("[UseHearthstone] Casting Hearthstone...");
+                Logger.LogInformation("[UseHearthstone] Casting Hearthstone...");
                 break;
 
             case HearthState.WaitForCast:
@@ -87,7 +87,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
                 if (!player.IsChanneling && !player.IsCasting
                     && Environment.TickCount64 - _castStartMs > 2000)
                 {
-                    Log.Warning("[UseHearthstone] Cast interrupted.");
+                    Logger.LogWarning("[UseHearthstone] Cast interrupted.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -105,7 +105,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
 
                 if (dist > TeleportDistanceThreshold || mapChanged)
                 {
-                    Log.Information("[UseHearthstone] Teleported! Distance={Dist:F0}y, mapChanged={MapChanged}",
+                    Logger.LogInformation("[UseHearthstone] Teleported! Distance={Dist:F0}y, mapChanged={MapChanged}",
                         dist, mapChanged);
                     _state = HearthState.Complete;
                     return;
@@ -113,7 +113,7 @@ public class UseHearthstoneTask : BotTask, IBotTask
 
                 if (Environment.TickCount64 - _castStartMs > TeleportDetectTimeoutMs)
                 {
-                    Log.Warning("[UseHearthstone] Teleport detection timeout after {Timeout}ms.", TeleportDetectTimeoutMs);
+                    Logger.LogWarning("[UseHearthstone] Teleport detection timeout after {Timeout}ms.", TeleportDetectTimeoutMs);
                     _state = HearthState.Complete;
                 }
                 break;

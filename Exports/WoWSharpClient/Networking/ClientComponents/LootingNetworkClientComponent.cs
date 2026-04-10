@@ -50,7 +50,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<IObserver<MasterLootData>> _masterLootObservers = new();
 
         private bool _disposed;
-        private readonly IDisposable _lootWindowChangesSub;
 
         /// <summary>
         /// Initializes a new instance of the LootingNetworkClientComponent class.
@@ -104,17 +103,17 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _groupLootNotifications = Observable.Never<GroupLootNotificationData>();
 
-            // Subscribe to real SMSG loot opcodes and route to Handle* methods
-            _lootWindowChangesSub = _lootWindowChanges.Subscribe(_ => { });
+            // Subscribe to real SMSG loot opcodes and route to Handle* methods; tracked via base Disposables
+            Disposables.Add(_lootWindowChanges.Subscribe(_ => { }));
 
-            SafeOpcodeStream(Opcode.SMSG_LOOT_RESPONSE).Subscribe(OnLootResponseReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_RELEASE_RESPONSE).Subscribe(OnLootReleaseReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_REMOVED).Subscribe(OnLootRemovedReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_MONEY_NOTIFY).Subscribe(OnMoneyNotifyReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_CLEAR_MONEY).Subscribe(OnClearMoneyReceived);
-            SafeOpcodeStream(Opcode.SMSG_ITEM_PUSH_RESULT).Subscribe(OnItemPushResultReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_START_ROLL).Subscribe(OnLootStartRollReceived);
-            SafeOpcodeStream(Opcode.SMSG_LOOT_ROLL).Subscribe(OnLootRollReceived);
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_RESPONSE).Subscribe(OnLootResponseReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_RELEASE_RESPONSE).Subscribe(OnLootReleaseReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_REMOVED).Subscribe(OnLootRemovedReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_MONEY_NOTIFY).Subscribe(OnMoneyNotifyReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_CLEAR_MONEY).Subscribe(OnClearMoneyReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_ITEM_PUSH_RESULT).Subscribe(OnItemPushResultReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_START_ROLL).Subscribe(OnLootStartRollReceived));
+            Disposables.Add(SafeOpcodeStream(Opcode.SMSG_LOOT_ROLL).Subscribe(OnLootRollReceived));
         }
 
         #region Properties
@@ -818,14 +817,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region IDisposable
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
-            _lootWindowChangesSub?.Dispose();
             _disposed = true;
             _availableLoot.Clear();
             _pendingRolls.Clear();
-            GC.SuppressFinalize(this);
+            base.Dispose(); // disposes all tracked subscriptions via Disposables
         }
         #endregion
 

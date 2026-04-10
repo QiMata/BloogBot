@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -48,9 +48,9 @@ public class DungeoneeringTask : BotTask, IBotTask
         _targetMapId = targetMapId;
 
         if (_isLeader && _waypoints.Count == 0)
-            Log.Warning("[DUNGEONEERING] Leader created with NO waypoints — will not navigate!");
+            Logger.LogWarning("[DUNGEONEERING] Leader created with NO waypoints — will not navigate!");
 
-        Log.Information("[DUNGEONEERING] Task started: leader={IsLeader}, waypoints={Count}, targetMap={MapId}",
+        Logger.LogInformation("[DUNGEONEERING] Task started: leader={IsLeader}, waypoints={Count}, targetMap={MapId}",
             _isLeader, _waypoints.Count, _targetMapId);
     }
 
@@ -62,7 +62,7 @@ public class DungeoneeringTask : BotTask, IBotTask
         _updateCount++;
         if (_updateCount % 50 == 1)
         {
-            Log.Information("[DUNGEONEERING] Tick #{Count}: leader={IsLeader}, wp={WpIdx}/{WpCount}, " +
+            Logger.LogInformation("[DUNGEONEERING] Tick #{Count}: leader={IsLeader}, wp={WpIdx}/{WpCount}, " +
                 "pos=({X:F0},{Y:F0},{Z:F0}), hp={HP}%, hostiles={Hostiles}, aggressors={Aggressors}, map={Map}",
                 _updateCount, _isLeader, _waypointIndex, _waypoints.Count,
                 player.Position.X, player.Position.Y, player.Position.Z,
@@ -74,7 +74,7 @@ public class DungeoneeringTask : BotTask, IBotTask
         {
             ObjectManager.StopAllMovement();
             if (_updateCount % 50 == 1)
-                Log.Warning("[DUNGEONEERING] On wrong map {Map} (expected {Expected}), waiting for teleport",
+                Logger.LogWarning("[DUNGEONEERING] On wrong map {Map} (expected {Expected}), waiting for teleport",
                     player.MapId, _targetMapId);
             return;
         }
@@ -138,7 +138,7 @@ public class DungeoneeringTask : BotTask, IBotTask
                     ObjectManager.SetTarget(hostileInRange.Guid);
                     ObjectManager.SetRaidTarget(hostileInRange, TargetMarker.Skull);
 
-                    Log.Information("[DUNGEONEERING] Leader pulling: {Name} (0x{Guid:X}) at {Dist:F0}y",
+                    Logger.LogInformation("[DUNGEONEERING] Leader pulling: {Name} (0x{Guid:X}) at {Dist:F0}y",
                         hostileInRange.Name, hostileInRange.Guid, player.Position.DistanceTo(hostileInRange.Position));
 
                     _lastCombatPush = DateTime.UtcNow;
@@ -150,7 +150,7 @@ public class DungeoneeringTask : BotTask, IBotTask
             // No hostiles — advance to next waypoint
             if (_waypointIndex >= _waypoints.Count)
             {
-                Log.Information("[DUNGEONEERING] Dungeon clear! All waypoints visited.");
+                Logger.LogInformation("[DUNGEONEERING] Dungeon clear! All waypoints visited.");
                 ObjectManager.StopAllMovement();
                 PopTask("dungeon_clear");
                 return;
@@ -161,7 +161,7 @@ public class DungeoneeringTask : BotTask, IBotTask
             {
                 _waypointIndex++;
                 ClearNavigation();
-                Log.Information("[DUNGEONEERING] Reached waypoint {Index}/{Total}",
+                Logger.LogInformation("[DUNGEONEERING] Reached waypoint {Index}/{Total}",
                     _waypointIndex, _waypoints.Count);
                 return;
             }
@@ -171,7 +171,7 @@ public class DungeoneeringTask : BotTask, IBotTask
             {
                 if ((DateTime.UtcNow - _lastMoveTime).TotalMilliseconds > StuckTimeoutMs)
                 {
-                    Log.Warning("[DUNGEONEERING] Stuck at waypoint {Index}, skipping.", _waypointIndex);
+                    Logger.LogWarning("[DUNGEONEERING] Stuck at waypoint {Index}, skipping.", _waypointIndex);
                     _waypointIndex++;
                     ClearNavigation();
                     _lastMoveTime = DateTime.UtcNow;

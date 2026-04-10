@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading;
@@ -38,7 +38,7 @@ public class TrainerVisitTask : BotTask, IBotTask
         // Abort if in combat
         if (ObjectManager.Aggressors.Any())
         {
-            Log.Information("[TRAINER] Combat detected, aborting trainer visit");
+            Logger.LogInformation("[TRAINER] Combat detected, aborting trainer visit");
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -47,7 +47,7 @@ public class TrainerVisitTask : BotTask, IBotTask
         // Timeout
         if ((DateTime.Now - _stateEnteredAt).TotalMilliseconds > Config.StuckTimeoutMs)
         {
-            Log.Warning("[TRAINER] Timed out in {State}, aborting", _state);
+            Logger.LogWarning("[TRAINER] Timed out in {State}, aborting", _state);
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -90,14 +90,14 @@ public class TrainerVisitTask : BotTask, IBotTask
 
         if (_trainerUnit == null)
         {
-            Log.Warning("[TRAINER] No suitable class trainer found nearby for {Class}, aborting", playerClass);
+            Logger.LogWarning("[TRAINER] No suitable class trainer found nearby for {Class}, aborting", playerClass);
             Pop();
             return;
         }
 
         _trainerGuid = _trainerUnit.Guid;
         var dist = player.Position.DistanceTo(_trainerUnit.Position);
-        Log.Information("[TRAINER] Found trainer: {Name} ({Dist:F0}y away, class: {Class})", _trainerUnit.Name, dist, playerClass);
+        Logger.LogInformation("[TRAINER] Found trainer: {Name} ({Dist:F0}y away, class: {Class})", _trainerUnit.Name, dist, playerClass);
         SetState(TrainerState.MoveToTrainer);
     }
 
@@ -199,7 +199,7 @@ public class TrainerVisitTask : BotTask, IBotTask
         _actionAttempts++;
         if (_actionAttempts > 3)
         {
-            Log.Warning("[TRAINER] Too many learn attempts, aborting");
+            Logger.LogWarning("[TRAINER] Too many learn attempts, aborting");
             SetState(TrainerState.Done);
             return;
         }
@@ -211,7 +211,7 @@ public class TrainerVisitTask : BotTask, IBotTask
             var learned = ObjectManager.LearnAllAvailableSpellsAsync(_trainerGuid, CancellationToken.None)
                 .GetAwaiter().GetResult();
 
-            Log.Information("[TRAINER] Learned {Count} spells from trainer", learned);
+            Logger.LogInformation("[TRAINER] Learned {Count} spells from trainer", learned);
 
             // Refresh spell list
             ObjectManager.RefreshSpells();
@@ -220,7 +220,7 @@ public class TrainerVisitTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Warning("[TRAINER] Learn failed: {Error}", ex.Message);
+            Logger.LogWarning("[TRAINER] Learn failed: {Error}", ex.Message);
         }
     }
 

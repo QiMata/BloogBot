@@ -28,6 +28,14 @@ using Timer = System.Timers.Timer;
 
 namespace WoWSharpClient
 {
+    /// <summary>
+    /// Object creation, field parsing, and movement data application.
+    /// KEPT AS PARTIAL: These methods are too tightly coupled with the main class's state
+    /// (_objects, _objectsLock, PlayerGuid, Player, ObjectManager back-references) to extract
+    /// cleanly. The field-mapping switch statements (ApplyUnitFieldDiffs, ApplyPlayerFieldDiffs, etc.)
+    /// reference internal object lists and cross-reference other objects during updates.
+    /// ~1500 lines but low complexity (mostly mechanical field mapping).
+    /// </summary>
     public partial class WoWSharpObjectManager
     {
 

@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -14,14 +14,14 @@ public class StartAttackTask(IBotContext botContext, ulong targetGuid) : BotTask
     {
         if (targetGuid == 0)
         {
-            Log.Warning("[START_ATTACK] No target GUID provided");
+            Logger.LogWarning("[START_ATTACK] No target GUID provided");
             BotTasks.Pop();
             return;
         }
 
         ObjectManager.SetTarget(targetGuid);
         ObjectManager.StartMeleeAttack();
-        Log.Information("[START_ATTACK] Started melee attack on {Guid:X}", targetGuid);
+        Logger.LogInformation("[START_ATTACK] Started melee attack on {Guid:X}", targetGuid);
         BotTasks.Pop();
     }
 }

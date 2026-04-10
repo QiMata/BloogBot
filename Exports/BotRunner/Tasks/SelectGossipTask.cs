@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -15,13 +15,13 @@ public class SelectGossipTask(IBotContext botContext, int optionIndex) : BotTask
         var gossipFrame = ObjectManager.GossipFrame;
         if (gossipFrame == null)
         {
-            Log.Warning("[SELECT_GOSSIP] No gossip frame open");
+            Logger.LogWarning("[SELECT_GOSSIP] No gossip frame open");
             BotTasks.Pop();
             return;
         }
 
         gossipFrame.SelectGossipOption(optionIndex);
-        Log.Information("[SELECT_GOSSIP] Selected gossip option {Index}", optionIndex);
+        Logger.LogInformation("[SELECT_GOSSIP] Selected gossip option {Index}", optionIndex);
         BotTasks.Pop();
     }
 }

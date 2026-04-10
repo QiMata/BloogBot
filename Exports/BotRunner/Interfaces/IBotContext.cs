@@ -1,5 +1,6 @@
 using BotRunner.Constants;
 using GameData.Core.Interfaces;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 
 namespace BotRunner.Interfaces;
@@ -9,6 +10,12 @@ namespace BotRunner.Interfaces;
 /// </summary>
 public interface IBotContext
 {
+    /// <summary>
+    /// Logger factory for creating typed loggers in bot tasks.
+    /// Returns null when DI is not configured; tasks fall back to NullLoggerFactory.
+    /// </summary>
+    ILoggerFactory? LoggerFactory { get; }
+
     /// <summary>
     /// Access to game objects and player state.
     /// </summary>

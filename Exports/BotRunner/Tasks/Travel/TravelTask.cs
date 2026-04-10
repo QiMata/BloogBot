@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using BotRunner.Movement;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using BotRunner.Combat;
@@ -52,7 +52,7 @@ public class TravelTask : BotTask, IBotTask
             var dist = player.Position.DistanceTo(_targetPosition);
             if (dist <= _arrivalRadius)
             {
-                Log.Information("[TravelTask] Arrived at destination ({X:F0},{Y:F0},{Z:F0}) — distance {Dist:F1}y",
+                Logger.LogInformation("[TravelTask] Arrived at destination ({X:F0},{Y:F0},{Z:F0}) — distance {Dist:F1}y",
                     _targetPosition.X, _targetPosition.Y, _targetPosition.Z, dist);
                 BotContext.BotTasks.Pop();
                 return;
@@ -80,7 +80,7 @@ public class TravelTask : BotTask, IBotTask
             }
             else
             {
-                Log.Warning("[TravelTask] Failed to reach target after {Replans} replans. Giving up.", MaxReplans);
+                Logger.LogWarning("[TravelTask] Failed to reach target after {Replans} replans. Giving up.", MaxReplans);
                 BotContext.BotTasks.Pop();
             }
             return;
@@ -161,19 +161,19 @@ public class TravelTask : BotTask, IBotTask
 
             if (_route.Count == 0)
             {
-                Log.Warning("[TravelTask] No route found from map {FromMap} to map {ToMap}",
+                Logger.LogWarning("[TravelTask] No route found from map {FromMap} to map {ToMap}",
                     player.MapId, _targetMapId);
             }
             else
             {
-                Log.Information("[TravelTask] Planned {LegCount} legs from ({X:F0},{Y:F0}) to ({TX:F0},{TY:F0})",
+                Logger.LogInformation("[TravelTask] Planned {LegCount} legs from ({X:F0},{Y:F0}) to ({TX:F0},{TY:F0})",
                     _route.Count, player.Position.X, player.Position.Y,
                     _targetPosition.X, _targetPosition.Y);
             }
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "[TravelTask] Route planning failed");
+            Logger.LogError(ex, "[TravelTask] Route planning failed");
             _route = null;
         }
     }

@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 
@@ -17,11 +17,11 @@ public class LootCorpseTask(IBotContext botContext, ulong corpseGuid) : BotTask(
         {
             ObjectManager.LootTargetAsync(corpseGuid, CancellationToken.None)
                 .GetAwaiter().GetResult();
-            Log.Information("[LOOT] Looted {Guid:X}", corpseGuid);
+            Logger.LogInformation("[LOOT] Looted {Guid:X}", corpseGuid);
         }
         catch (Exception ex)
         {
-            Log.Warning("[LOOT] Loot {Guid:X} failed: {Error}", corpseGuid, ex.Message);
+            Logger.LogWarning("[LOOT] Loot {Guid:X} failed: {Error}", corpseGuid, ex.Message);
         }
 
         BotTasks.Pop();

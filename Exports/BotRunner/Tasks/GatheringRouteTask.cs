@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -230,7 +230,7 @@ public class GatheringRouteTask(
         if (_gatherSpellId > 0)
             ObjectManager.CastSpellOnGameObject(_gatherSpellId, _activeNodeGuid);
         ObjectManager.SetTarget(0);
-        Log.Information("[GATHER-ROUTE] Gathering node 0x{Guid:X} entry={Entry} spell={SpellId}",
+        Logger.LogInformation("[GATHER-ROUTE] Gathering node 0x{Guid:X} entry={Entry} spell={SpellId}",
             _activeNodeGuid, node.Entry, _gatherSpellId);
         BotContext.AddDiagnosticMessage(
             $"[TASK] GatheringRouteTask gather_started guid=0x{_activeNodeGuid:X} entry={node.Entry} spell={_gatherSpellId}");

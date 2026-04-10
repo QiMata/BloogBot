@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -58,7 +58,7 @@ public class WsgObjectiveTask : BotTask, IBotTask
                 if (_targetFlag != null)
                 {
                     _state = WsgState.MoveToFlag;
-                    Log.Information("[WSG] Found enemy flag at ({X:F0},{Y:F0},{Z:F0})",
+                    Logger.LogInformation("[WSG] Found enemy flag at ({X:F0},{Y:F0},{Z:F0})",
                         _targetFlag.Position.X, _targetFlag.Position.Y, _targetFlag.Position.Z);
                 }
                 else
@@ -82,7 +82,7 @@ public class WsgObjectiveTask : BotTask, IBotTask
                 if (_targetFlag == null) { _state = WsgState.FindObjective; return; }
                 _targetFlag.Interact(); // CMSG_GAMEOBJ_USE
                 _state = WsgState.CarryFlagToBase;
-                Log.Information("[WSG] Picking up flag!");
+                Logger.LogInformation("[WSG] Picking up flag!");
                 break;
 
             case WsgState.CarryFlagToBase:
@@ -103,7 +103,7 @@ public class WsgObjectiveTask : BotTask, IBotTask
                     .FirstOrDefault(go => go.Entry == ownFlagEntry);
                 if (ownFlag != null)
                     ownFlag.Interact();
-                Log.Information("[WSG] Flag captured!");
+                Logger.LogInformation("[WSG] Flag captured!");
                 _state = WsgState.FindObjective; // Loop for next flag
                 break;
 

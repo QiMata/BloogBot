@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -15,13 +15,13 @@ public class TrainSpellTask(IBotContext botContext, int spellIndex) : BotTask(bo
         var trainerFrame = ObjectManager.TrainerFrame;
         if (trainerFrame == null)
         {
-            Log.Warning("[TRAIN_SPELL] No trainer frame open");
+            Logger.LogWarning("[TRAIN_SPELL] No trainer frame open");
             BotTasks.Pop();
             return;
         }
 
         trainerFrame.TrainSpell(spellIndex);
-        Log.Information("[TRAIN_SPELL] Trained spell at index {Index}", spellIndex);
+        Logger.LogInformation("[TRAIN_SPELL] Trained spell at index {Index}", spellIndex);
         BotTasks.Pop();
     }
 }

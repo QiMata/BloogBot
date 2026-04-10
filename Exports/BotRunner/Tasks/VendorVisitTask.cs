@@ -3,7 +3,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -46,7 +46,7 @@ public class VendorVisitTask : BotTask, IBotTask
         // Abort if in combat
         if (ObjectManager.Aggressors.Any())
         {
-            Log.Information("[VENDOR] Combat detected, aborting vendor visit");
+            Logger.LogInformation("[VENDOR] Combat detected, aborting vendor visit");
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -55,7 +55,7 @@ public class VendorVisitTask : BotTask, IBotTask
         // Timeout protection
         if ((DateTime.Now - _stateEnteredAt).TotalMilliseconds > Config.StuckTimeoutMs)
         {
-            Log.Warning("[VENDOR] Timed out in {State}, aborting", _state);
+            Logger.LogWarning("[VENDOR] Timed out in {State}, aborting", _state);
             ObjectManager.StopAllMovement();
             Pop();
             return;
@@ -105,14 +105,14 @@ public class VendorVisitTask : BotTask, IBotTask
 
         if (_vendorUnit == null)
         {
-            Log.Warning("[VENDOR] No vendor found nearby, aborting");
+            Logger.LogWarning("[VENDOR] No vendor found nearby, aborting");
             Pop();
             return;
         }
 
         _vendorGuid = _vendorUnit.Guid;
         var dist = player.Position.DistanceTo(_vendorUnit.Position);
-        Log.Information("[VENDOR] Found vendor: {Name} ({Dist:F0}y away, Repair: {HasRepair})",
+        Logger.LogInformation("[VENDOR] Found vendor: {Name} ({Dist:F0}y away, Repair: {HasRepair})",
             _vendorUnit.Name, dist,
             (_vendorUnit.NpcFlags & NPCFlags.UNIT_NPC_FLAG_REPAIR) != 0);
 
@@ -148,7 +148,7 @@ public class VendorVisitTask : BotTask, IBotTask
         _actionAttempts++;
         if (_actionAttempts > 5)
         {
-            Log.Warning("[VENDOR] Failed to interact with vendor after {Attempts} attempts", _actionAttempts);
+            Logger.LogWarning("[VENDOR] Failed to interact with vendor after {Attempts} attempts", _actionAttempts);
             Pop();
             return;
         }
@@ -177,7 +177,7 @@ public class VendorVisitTask : BotTask, IBotTask
                 if (itemsToBuy.Count > 0)
                 {
                     foreach (var kvp in itemsToBuy)
-                        Log.Information("[VENDOR] Will buy {Qty}x item {ItemId}", kvp.Value, kvp.Key);
+                        Logger.LogInformation("[VENDOR] Will buy {Qty}x item {ItemId}", kvp.Value, kvp.Key);
                 }
             }
 
@@ -185,16 +185,16 @@ public class VendorVisitTask : BotTask, IBotTask
             ObjectManager.QuickVendorVisitAsync(_vendorGuid, itemsToBuy, CancellationToken.None)
                 .GetAwaiter().GetResult();
 
-            Log.Information("[VENDOR] Vendor visit complete");
+            Logger.LogInformation("[VENDOR] Vendor visit complete");
             SetState(VendorState.Done);
         }
         catch (Exception ex)
         {
-            Log.Warning("[VENDOR] Vendor action failed: {Error}", ex.Message);
+            Logger.LogWarning("[VENDOR] Vendor action failed: {Error}", ex.Message);
             _actionAttempts++;
             if (_actionAttempts > 3)
             {
-                Log.Warning("[VENDOR] Too many failures, aborting");
+                Logger.LogWarning("[VENDOR] Too many failures, aborting");
                 SetState(VendorState.Done);
             }
         }

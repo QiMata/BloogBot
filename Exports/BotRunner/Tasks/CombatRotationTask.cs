@@ -1,6 +1,7 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
+using Microsoft.Extensions.Logging;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System;
@@ -362,7 +363,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         _combatDurationTicks++;
         if (_combatDurationTicks > 150) // ~15s at 100ms tick rate
         {
-            Serilog.Log.Debug("[COMBAT] Combat timeout after {Ticks} ticks, disengaging", _combatDurationTicks);
+            Logger.LogDebug("[COMBAT] Combat timeout after {Ticks} ticks, disengaging", _combatDurationTicks);
             _combatDurationTicks = 0;
             BotTasks.Pop();
             return false;

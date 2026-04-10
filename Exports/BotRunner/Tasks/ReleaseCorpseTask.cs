@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -13,7 +13,7 @@ public class ReleaseCorpseTask(IBotContext botContext) : BotTask(botContext), IB
     public void Update()
     {
         ObjectManager.ReleaseSpirit();
-        Log.Information("[RELEASE] Released spirit");
+        Logger.LogInformation("[RELEASE] Released spirit");
         PopTask("ReleaseSent");
     }
 }

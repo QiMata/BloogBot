@@ -4,7 +4,7 @@ using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -188,14 +188,14 @@ public class FishingTask : BotTask, IBotTask
         var poleLocation = FishingData.FindFishingPoleInBags(ObjectManager);
         if (poleLocation == null)
         {
-            Log.Warning("[FISH] No fishing pole found in bags.");
+            Logger.LogWarning("[FISH] No fishing pole found in bags.");
             PopTask("no_fishing_pole");
             return;
         }
 
         _equipAttempts++;
         ObjectManager.EquipItem(poleLocation.Value.bag, poleLocation.Value.slot);
-        Log.Information("[FISH] Equipping fishing pole from bag={Bag} slot={Slot} (attempt {Attempt}).",
+        Logger.LogInformation("[FISH] Equipping fishing pole from bag={Bag} slot={Slot} (attempt {Attempt}).",
             poleLocation.Value.bag, poleLocation.Value.slot, _equipAttempts);
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask equipping_pole bag={poleLocation.Value.bag} slot={poleLocation.Value.slot} attempt={_equipAttempts}");
@@ -206,7 +206,7 @@ public class FishingTask : BotTask, IBotTask
     {
         if (FishingData.HasFishingPoleEquipped(ObjectManager))
         {
-            Log.Information("[FISH] Fishing pole equipped.");
+            Logger.LogInformation("[FISH] Fishing pole equipped.");
             BotContext.AddDiagnosticMessage("[TASK] FishingTask pole_equipped");
             SetState(FishingState.EnsureLureApplied);
             return;
@@ -221,7 +221,7 @@ public class FishingTask : BotTask, IBotTask
             return;
         }
 
-        Log.Warning("[FISH] Fishing pole equip timed out.");
+        Logger.LogWarning("[FISH] Fishing pole equip timed out.");
         PopTask("pole_equip_timeout");
     }
 
@@ -247,7 +247,7 @@ public class FishingTask : BotTask, IBotTask
         _activeLureStartingCount = CountContainedItem(_activeLureItemId);
         var equippedPoleGuid = GetEquippedPoleGuid();
         ObjectManager.UseItem(lureLocation.Value.bag, lureLocation.Value.slot, equippedPoleGuid);
-        Log.Information("[FISH] Applying lure item={ItemId} from bag={Bag} slot={Slot} (attempt {Attempt}).",
+        Logger.LogInformation("[FISH] Applying lure item={ItemId} from bag={Bag} slot={Slot} (attempt {Attempt}).",
             _activeLureItemId,
             lureLocation.Value.bag,
             lureLocation.Value.slot,
@@ -262,7 +262,7 @@ public class FishingTask : BotTask, IBotTask
         var lureCountDropped = _activeLureItemId != 0 && CountContainedItem(_activeLureItemId) < _activeLureStartingCount;
         if (player.MainhandIsEnchanted || lureCountDropped)
         {
-            Log.Information("[FISH] Lure application confirmed. item={ItemId} countDropped={CountDropped} mainhandEnchanted={MainhandEnchanted}",
+            Logger.LogInformation("[FISH] Lure application confirmed. item={ItemId} countDropped={CountDropped} mainhandEnchanted={MainhandEnchanted}",
                 _activeLureItemId,
                 lureCountDropped,
                 player.MainhandIsEnchanted);
@@ -281,7 +281,7 @@ public class FishingTask : BotTask, IBotTask
             return;
         }
 
-        Log.Warning("[FISH] Fishing lure application timed out for item {ItemId}.", _activeLureItemId);
+        Logger.LogWarning("[FISH] Fishing lure application timed out for item {ItemId}.", _activeLureItemId);
         PopTask("lure_apply_timeout");
     }
 
@@ -295,7 +295,7 @@ public class FishingTask : BotTask, IBotTask
             {
                 if (_searchWaypoints.Count > 0 && _searchWaypointIndex < _searchWaypoints.Count)
                 {
-                    Log.Information("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} waypoints.",
+                    Logger.LogInformation("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} waypoints.",
                         PoolAcquireTimeoutMs, _searchWaypoints.Count);
                     BotContext.AddDiagnosticMessage(
                         $"[TASK] FishingTask search_walk_start waypoints={_searchWaypoints.Count}");
@@ -305,7 +305,7 @@ public class FishingTask : BotTask, IBotTask
                 }
                 else
                 {
-                    Log.Warning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
+                    Logger.LogWarning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
                     PopTask("no_fishing_pool");
                 }
             }
@@ -331,7 +331,7 @@ public class FishingTask : BotTask, IBotTask
             TrackActivePool(pool.Guid);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask search_walk_found_pool guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
-            Log.Information("[FISH] Pool found during search walk at {Distance:F1}y.", poolDistance);
+            Logger.LogInformation("[FISH] Pool found during search walk at {Distance:F1}y.", poolDistance);
             ClearNavigation();
             // Always move to pier sweep position first, even if already in range.
             SetState(FishingState.MoveToFishingPool);
@@ -341,7 +341,7 @@ public class FishingTask : BotTask, IBotTask
         var searchElapsed = (int)(DateTime.UtcNow - _searchStartedAt).TotalMilliseconds;
         if (searchElapsed >= SearchWalkTimeoutMs)
         {
-            Log.Warning("[FISH] Search walk timed out after {Elapsed}ms.", searchElapsed);
+            Logger.LogWarning("[FISH] Search walk timed out after {Elapsed}ms.", searchElapsed);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask search_walk_timeout elapsed={searchElapsed}ms waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
             PopTask("search_timeout");
@@ -350,7 +350,7 @@ public class FishingTask : BotTask, IBotTask
 
         if (_searchWaypointIndex >= _searchWaypoints.Count)
         {
-            Log.Warning("[FISH] Search walk exhausted all {Count} waypoints without finding a pool.", _searchWaypoints.Count);
+            Logger.LogWarning("[FISH] Search walk exhausted all {Count} waypoints without finding a pool.", _searchWaypoints.Count);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask search_walk_exhausted waypoints={_searchWaypoints.Count} elapsed={searchElapsed}ms");
             PopTask("search_exhausted");
@@ -442,7 +442,7 @@ public class FishingTask : BotTask, IBotTask
         if (player.IsSwimming)
         {
             ObjectManager.ForceStopImmediate();
-            Log.Warning("[FISH] Entered water while approaching pool; aborting.");
+            Logger.LogWarning("[FISH] Entered water while approaching pool; aborting.");
             BotContext.AddDiagnosticMessage("[TASK] FishingTask retry reason=player_swimming_approach");
             PopTask("player_swimming");
             return;
@@ -453,7 +453,7 @@ public class FishingTask : BotTask, IBotTask
         {
             if (ElapsedMs >= PoolAcquireTimeoutMs)
             {
-                Log.Warning("[FISH] Lost fishing pool while approaching (trackedGuid=0x{Guid:X}).", _activePoolGuid);
+                Logger.LogWarning("[FISH] Lost fishing pool while approaching (trackedGuid=0x{Guid:X}).", _activePoolGuid);
                 BotContext.AddDiagnosticMessage(
                     $"[TASK] FishingTask lost_fishing_pool trackedGuid=0x{_activePoolGuid:X} playerZ={player.Position.Z:F1} pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
                 PopTask("lost_fishing_pool");
@@ -473,7 +473,7 @@ public class FishingTask : BotTask, IBotTask
         {
             ObjectManager.ForceStopImmediate();
             ObjectManager.Face(pool.Position);
-            Log.Information("[FISH] Pool already castable from current position at {Distance:F1}y (pool=0x{Guid:X}), playerZ={PlayerZ:F1}.",
+            Logger.LogInformation("[FISH] Pool already castable from current position at {Distance:F1}y (pool=0x{Guid:X}), playerZ={PlayerZ:F1}.",
                 poolDistance, pool.Guid, player.Position.Z);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask in_cast_range_current guid=0x{pool.Guid:X} distance={poolDistance:F1} playerZ={player.Position.Z:F1}");
@@ -496,7 +496,7 @@ public class FishingTask : BotTask, IBotTask
         if (approachPosition.Z - player.Position.Z > 3f)
         {
             ObjectManager.ForceStopImmediate();
-            Log.Warning("[FISH] Player Z ({PlayerZ:F1}) dropped far below approach Z ({ApproachZ:F1}) — fell off pier.",
+            Logger.LogWarning("[FISH] Player Z ({PlayerZ:F1}) dropped far below approach Z ({ApproachZ:F1}) — fell off pier.",
                 player.Position.Z, approachPosition.Z);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask fell_off_pier playerZ={player.Position.Z:F1} approachZ={approachPosition.Z:F1}");
@@ -510,7 +510,7 @@ public class FishingTask : BotTask, IBotTask
         {
             ObjectManager.ForceStopImmediate();
             ObjectManager.Face(pool.Position);
-            Log.Information("[FISH] Reached approach position at {Distance:F1}y from pool (pool=0x{Guid:X}), playerZ={PlayerZ:F1}.",
+            Logger.LogInformation("[FISH] Reached approach position at {Distance:F1}y from pool (pool=0x{Guid:X}), playerZ={PlayerZ:F1}.",
                 poolDistance, pool.Guid, player.Position.Z);
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask in_cast_range guid=0x{pool.Guid:X} distance={poolDistance:F1} playerZ={player.Position.Z:F1}");
@@ -546,14 +546,14 @@ public class FishingTask : BotTask, IBotTask
 
         if (_castsAttempted >= Config.MaxFishingCasts)
         {
-            Log.Warning("[FISH] Max cast attempts reached without a catch.");
+            Logger.LogWarning("[FISH] Max cast attempts reached without a catch.");
             PopTask("max_casts_reached");
             return;
         }
 
         if (player.IsSwimming)
         {
-            Log.Warning("[FISH] Player entered water before cast; aborting fishing attempt.");
+            Logger.LogWarning("[FISH] Player entered water before cast; aborting fishing attempt.");
             BotContext.AddDiagnosticMessage("[TASK] FishingTask retry reason=player_swimming");
             PopTask("player_swimming");
             return;
@@ -589,14 +589,14 @@ public class FishingTask : BotTask, IBotTask
         _fishingSpellId = FishingData.ResolveCastableFishingSpellId(ObjectManager.KnownSpellIds, GetFishingSkill(player));
         if (_fishingSpellId == 0)
         {
-            Log.Warning("[FISH] No castable fishing spell found in known spells or skill data.");
+            Logger.LogWarning("[FISH] No castable fishing spell found in known spells or skill data.");
             PopTask("no_fishing_spell");
             return;
         }
 
         if (!ObjectManager.CanCastSpell((int)_fishingSpellId, 0))
         {
-            Log.Warning("[FISH] Cannot cast fishing spell {SpellId}.", _fishingSpellId);
+            Logger.LogWarning("[FISH] Cannot cast fishing spell {SpellId}.", _fishingSpellId);
             PopTask("cannot_cast");
             return;
         }
@@ -610,7 +610,7 @@ public class FishingTask : BotTask, IBotTask
         // packets here. FG uses the native client spell pipeline and BG mirrors that
         // zero-target cast shape through WoWSharpObjectManager.
         ObjectManager.CastSpell((int)_fishingSpellId);
-        Log.Information(
+        Logger.LogInformation(
             "[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId} distance={Distance:F1}.",
             _castsAttempted,
             Config.MaxFishingCasts,
@@ -630,7 +630,7 @@ public class FishingTask : BotTask, IBotTask
         if (HasFishingState(player))
         {
             _sawFishingState = true;
-            Log.Information("[FISH] Fishing cast confirmed. channel={ChannelingId} bobber={HasBobber}",
+            Logger.LogInformation("[FISH] Fishing cast confirmed. channel={ChannelingId} bobber={HasBobber}",
                 player.ChannelingId, _sawBobber);
             SetState(FishingState.AwaitCatchResolution);
             return;
@@ -750,7 +750,7 @@ public class FishingTask : BotTask, IBotTask
 
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask loot_window_open count={lootFrame.LootCount} coins={lootFrame.Coins} items=[{string.Join(", ", lootItemIds)}]");
-        Log.Information("[FISH] Loot window open. guid=0x{Guid:X} count={Count} items=[{Items}] coins={Coins}",
+        Logger.LogInformation("[FISH] Loot window open. guid=0x{Guid:X} count={Count} items=[{Items}] coins={Coins}",
             lootFrame.LootGuid,
             lootFrame.LootCount,
             string.Join(", ", lootItemIds),
@@ -810,7 +810,7 @@ public class FishingTask : BotTask, IBotTask
 
     private void RetryFromPool(string reason, Position? rejectedApproachPosition = null)
     {
-        Log.Warning("[FISH] {Reason}; resetting fishing state for another cast.", reason);
+        Logger.LogWarning("[FISH] {Reason}; resetting fishing state for another cast.", reason);
         if (rejectedApproachPosition != null)
             RememberRejectedApproachPosition(rejectedApproachPosition, reason);
         else
@@ -835,13 +835,13 @@ public class FishingTask : BotTask, IBotTask
             _cachedApproachPosition = result;
             _cachedApproachPoolGuid = _activePoolGuid;
             var dist = poolPosition.DistanceTo(result);
-            Log.Information("[FISH] Pier sweep found approach at ({X:F1}, {Y:F1}, {Z:F1}) — {Dist:F1}y from pool.",
+            Logger.LogInformation("[FISH] Pier sweep found approach at ({X:F1}, {Y:F1}, {Z:F1}) — {Dist:F1}y from pool.",
                 result.X, result.Y, result.Z, dist);
             return result;
         }
 
         // Fallback: direct approach toward pool from player position (pathfinding keeps bot on dock).
-        Log.Warning("[FISH] Pier sweep found no solid ground near pool; using direct approach.");
+        Logger.LogWarning("[FISH] Pier sweep found no solid ground near pool; using direct approach.");
         var fallback = FishingData.GetPoolApproachPosition(player.Position, poolPosition, DesiredPoolDistance);
         _cachedApproachPosition = fallback;
         _cachedApproachPoolGuid = _activePoolGuid;
@@ -967,7 +967,7 @@ public class FishingTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[FISH] Fishing approach walkable snap failed; using raw shoreline candidate.");
+            Logger.LogDebug(ex, "[FISH] Fishing approach walkable snap failed; using raw shoreline candidate.");
             return rawCandidate;
         }
     }
@@ -1104,7 +1104,7 @@ public class FishingTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[FISH] Search waypoint reachability probe failed; treating candidate as usable.");
+            Logger.LogDebug(ex, "[FISH] Search waypoint reachability probe failed; treating candidate as usable.");
             return [playerPosition, candidate];
         }
     }
@@ -1188,7 +1188,7 @@ public class FishingTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[FISH] Search waypoint probe refinement failed; falling back to direct walkable snap.");
+            Logger.LogDebug(ex, "[FISH] Search waypoint probe refinement failed; falling back to direct walkable snap.");
             return null;
         }
 
@@ -1256,7 +1256,7 @@ public class FishingTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[FISH] Search waypoint snap failed; using raw probe target.");
+            Logger.LogDebug(ex, "[FISH] Search waypoint snap failed; using raw probe target.");
             return rawCandidate;
         }
     }
@@ -1352,7 +1352,7 @@ public class FishingTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Debug(ex, "[FISH] LOS probe failed; treating pathfinding LOS as unavailable.");
+            Logger.LogDebug(ex, "[FISH] LOS probe failed; treating pathfinding LOS as unavailable.");
             return true;
         }
     }
@@ -1366,7 +1366,7 @@ public class FishingTask : BotTask, IBotTask
         var castTarget = FishingData.GetPoolCastTarget(player.Position, poolPosition, CastTargetInsetFromPool);
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask los_blocked phase={phase} castTarget=({castTarget.X:F1},{castTarget.Y:F1},{castTarget.Z:F1}) poolZ={poolPosition.Z:F1} playerZ={player.Position.Z:F1}");
-        Log.Information("[FISH] LOS blocked for fishing {Phase}. castTarget=({X:F1}, {Y:F1}, {Z:F1}) poolZ={PoolZ:F1} playerZ={PlayerZ:F1}",
+        Logger.LogInformation("[FISH] LOS blocked for fishing {Phase}. castTarget=({X:F1}, {Y:F1}, {Z:F1}) poolZ={PoolZ:F1} playerZ={PlayerZ:F1}",
             phase, castTarget.X, castTarget.Y, castTarget.Z, poolPosition.Z, player.Position.Z);
     }
 
@@ -1375,7 +1375,7 @@ public class FishingTask : BotTask, IBotTask
         var lootItems = _lootItemIds.Count > 0 ? string.Join(", ", _lootItemIds.OrderBy(id => id)) : "none";
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask fishing_loot_success lootWindowSeen={_sawLootWindow} lootItemSeen={_sawLootItem} bobberSeen={_sawBobber} lootItems=[{lootItems}]");
-        Log.Information("[FISH] Fishing catch completed. lootWindowSeen={LootWindowSeen} lootItemSeen={LootItemSeen} bobberSeen={BobberSeen} lootItems=[{LootItems}]",
+        Logger.LogInformation("[FISH] Fishing catch completed. lootWindowSeen={LootWindowSeen} lootItemSeen={LootItemSeen} bobberSeen={BobberSeen} lootItems=[{LootItems}]",
             _sawLootWindow, _sawLootItem, _sawBobber, lootItems);
         PopTask("fishing_loot_success");
     }

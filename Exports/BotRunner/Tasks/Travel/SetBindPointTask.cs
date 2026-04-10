@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -47,12 +47,12 @@ public class SetBindPointTask : BotTask, IBotTask
 
                 if (_innkeeper == null)
                 {
-                    Log.Warning("[SetBindPoint] No innkeeper found nearby.");
+                    Logger.LogWarning("[SetBindPoint] No innkeeper found nearby.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
 
-                Log.Information("[SetBindPoint] Found innkeeper '{Name}' at ({X:F0},{Y:F0},{Z:F0}), distance {Dist:F0}y",
+                Logger.LogInformation("[SetBindPoint] Found innkeeper '{Name}' at ({X:F0},{Y:F0},{Z:F0}), distance {Dist:F0}y",
                     _innkeeper.Name, _innkeeper.Position.X, _innkeeper.Position.Y, _innkeeper.Position.Z,
                     _innkeeper.Position.DistanceTo(player.Position));
                 _state = BindState.NavigateToInnkeeper;
@@ -82,7 +82,7 @@ public class SetBindPointTask : BotTask, IBotTask
                 _innkeeper.Interact();
                 _interactTimeMs = Environment.TickCount64;
                 _state = BindState.WaitForBind;
-                Log.Information("[SetBindPoint] Interacting with innkeeper to set bind point.");
+                Logger.LogInformation("[SetBindPoint] Interacting with innkeeper to set bind point.");
                 break;
 
             case BindState.WaitForBind:
@@ -91,7 +91,7 @@ public class SetBindPointTask : BotTask, IBotTask
                 // triggers the bind point update after CMSG_BINDER_ACTIVATE.
                 if (Environment.TickCount64 - _interactTimeMs > BindTimeoutMs)
                 {
-                    Log.Warning("[SetBindPoint] Bind point timeout after {Timeout}ms.", BindTimeoutMs);
+                    Logger.LogWarning("[SetBindPoint] Bind point timeout after {Timeout}ms.", BindTimeoutMs);
                     _state = BindState.Complete;
                     return;
                 }
@@ -103,7 +103,7 @@ public class SetBindPointTask : BotTask, IBotTask
                     // GossipTypes.Binder = 5
                     gossipFrame.SelectGossipOption(5);
                     _state = BindState.Complete;
-                    Log.Information("[SetBindPoint] Selected binder gossip option. Bind point should be updated.");
+                    Logger.LogInformation("[SetBindPoint] Selected binder gossip option. Bind point should be updated.");
                     return;
                 }
                 break;

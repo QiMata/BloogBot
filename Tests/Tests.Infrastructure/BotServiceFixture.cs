@@ -36,6 +36,8 @@ namespace Tests.Infrastructure;
 /// </summary>
 public class BotServiceFixture : IAsyncLifetime
 {
+    #region Fields and Properties — Core State
+
     private const string RepoMarker = "Westworld of Warcraft";
     private readonly MangosServerFixture _mangosFixture = new();
     private ITestOutputHelper? _output;
@@ -150,6 +152,10 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    #endregion
+
+    #region Test Output and Logging Configuration
+
     /// <summary>
     /// Sets the test output helper for logging. Call from your test constructor.
     /// </summary>
@@ -164,6 +170,10 @@ public class BotServiceFixture : IAsyncLifetime
         ServiceLogs?.Dispose();
         ServiceLogs = new ServiceLogManager(testName);
     }
+
+    #endregion
+
+    #region Initialization and Teardown — IAsyncLifetime
 
     public async Task InitializeAsync()
     {
@@ -277,6 +287,10 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    #endregion
+
+    #region Crash Monitoring — Background Process Health Checks
+
     /// <summary>
     /// Starts a background task that polls StateManager and WoW.exe processes for crashes.
     /// When a crash is detected, sets <see cref="ClientCrashed"/> and <see cref="CrashMessage"/>
@@ -388,6 +402,10 @@ public class BotServiceFixture : IAsyncLifetime
         Assert.Fail($"Client crashed and did not recover within 30s: {crashMsg}");
     }
 
+    #endregion
+
+    #region Port and Network Utilities
+
     /// <summary>Check if a TCP port is currently in use.</summary>
     private static bool IsPortInUse(int port)
     {
@@ -403,6 +421,10 @@ public class BotServiceFixture : IAsyncLifetime
             return true; // Port in use
         }
     }
+
+    #endregion
+
+    #region FastCall.dll Verification
 
     /// <summary>
     /// Verifies that FastCall.dll in Bot output is the correct version (13KB, 25 exports
@@ -470,6 +492,10 @@ public class BotServiceFixture : IAsyncLifetime
         }
         return null;
     }
+
+    #endregion
+
+    #region Settings Management — EnsureSettings / RestartWithSettings
 
     /// <summary>
     /// Ensures StateManager is running with the given settings. If already running
@@ -541,6 +567,10 @@ public class BotServiceFixture : IAsyncLifetime
             // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
         }
     }
+
+    #endregion
+
+    #region Process Lifecycle — Teardown, Stale Cleanup, Force Kill
 
     private async Task TeardownProcessesAsync()
     {
@@ -735,6 +765,10 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    #endregion
+
+    #region External Service Readiness — Pathfinding and SceneData
+
     /// <summary>
     /// Waits for PathfindingService to become available on port 5001.
     /// The service is treated as an external dependency and must be launched separately.
@@ -806,6 +840,10 @@ public class BotServiceFixture : IAsyncLifetime
         Log($"  [SceneDataService] Did not become ready within {maxWaitSeconds}s.");
         return false;
     }
+
+    #endregion
+
+    #region StateManager Launch — Process Start, Output Capture, Ready Wait
 
     private async Task<bool> TryStartStateManagerAsync()
     {
@@ -1157,6 +1195,10 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    #endregion
+
+    #region Logging and Output Filtering
+
     /// <summary>
     /// Filters out high-frequency StateManager output lines that flood test output.
     /// These lines are emitted every ~350ms per bot and accumulate thousands of entries
@@ -1229,4 +1271,6 @@ public class BotServiceFixture : IAsyncLifetime
 
         Console.WriteLine($"[BotServiceFixture] {message}");
     }
+
+    #endregion
 }

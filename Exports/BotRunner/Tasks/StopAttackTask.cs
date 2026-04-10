@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -13,7 +13,7 @@ public class StopAttackTask(IBotContext botContext) : BotTask(botContext), IBotT
     public void Update()
     {
         ObjectManager.StopAttack();
-        Log.Information("[STOP_ATTACK] Stopped attack");
+        Logger.LogInformation("[STOP_ATTACK] Stopped attack");
         BotTasks.Pop();
     }
 }

@@ -38,11 +38,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<GossipErrorData> _gossipErrors;
         private readonly IObservable<GossipServiceData> _serviceDiscovered;
 
-        // Self-subscriptions that keep state-tracking .Do() side effects active
-        // even when no external code subscribes to the public observables.
-        private readonly IDisposable _gossipMenuSub;
-        private readonly IDisposable _completionSub;
-        private readonly IDisposable _textUpdateSub;
+        // Self-subscriptions tracked via base class Disposables
 
         public GossipNetworkClientComponent(IWorldClient worldClient, ILogger<GossipNetworkClientComponent> logger)
         {
@@ -136,11 +132,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Publish()
                 .RefCount();
 
-            // Self-subscribe so that the .Do() side effects (_currentMenu, _isGossipWindowOpen, etc.)
-            // always fire when packets arrive, even if no external code subscribes.
-            _gossipMenuSub = gossipMenuBase.Subscribe(_ => { });
-            _completionSub = completion.Subscribe(_ => { });
-            _textUpdateSub = textUpdates.Subscribe(_ => { });
+            // Self-subscribe so that the .Do() side effects always fire; tracked via base Disposables.
+            Disposables.Add(gossipMenuBase.Subscribe(_ => { }));
+            Disposables.Add(completion.Subscribe(_ => { }));
+            Disposables.Add(textUpdates.Subscribe(_ => { }));
         }
 
         #region IGossipNetworkClientComponent Properties
@@ -520,16 +515,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region IDisposable
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-
-            _gossipMenuSub?.Dispose();
-            _completionSub?.Dispose();
-            _textUpdateSub?.Dispose();
-
-            GC.SuppressFinalize(this);
+            base.Dispose(); // disposes all tracked subscriptions via Disposables
         }
         #endregion
     }

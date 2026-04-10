@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -71,7 +71,7 @@ public class BgRewardCollectionTask : BotTask, IBotTask
 
                 if (wsgMarks < 3 && abMarks < 3 && avMarks < 3)
                 {
-                    Log.Information("[BG-REWARD] No marks to turn in (WSG:{Wsg}, AB:{Ab}, AV:{Av})",
+                    Logger.LogInformation("[BG-REWARD] No marks to turn in (WSG:{Wsg}, AB:{Ab}, AV:{Av})",
                         wsgMarks, abMarks, avMarks);
                     _state = RewardState.Complete;
                     return;
@@ -82,7 +82,7 @@ public class BgRewardCollectionTask : BotTask, IBotTask
                 string bgType = wsgMarks >= 3 ? "WSG" : abMarks >= 3 ? "AB" : "AV";
                 _battlemasterPosition = battlemasters[bgType];
                 _state = RewardState.MoveToBattlemaster;
-                Log.Information("[BG-REWARD] Turning in {BG} marks", bgType);
+                Logger.LogInformation("[BG-REWARD] Turning in {BG} marks", bgType);
                 break;
 
             case RewardState.MoveToBattlemaster:
@@ -103,7 +103,7 @@ public class BgRewardCollectionTask : BotTask, IBotTask
 
                 if (bm != null)
                 {
-                    Log.Information("[BG-REWARD] Interacting with battlemaster for turn-in");
+                    Logger.LogInformation("[BG-REWARD] Interacting with battlemaster for turn-in");
                     // Quest turn-in handled by quest frame interaction
                 }
                 _state = RewardState.Complete;

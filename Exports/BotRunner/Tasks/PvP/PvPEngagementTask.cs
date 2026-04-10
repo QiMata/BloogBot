@@ -2,7 +2,7 @@ using BotRunner.Combat;
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Linq;
 
 namespace BotRunner.Tasks.PvP;
@@ -53,14 +53,14 @@ public class PvPEngagementTask : BotTask, IBotTask
                 if (primary.Threat == HostilePlayerDetector.ThreatLevel.Overwhelming
                     || hostiles.Count >= 3)
                 {
-                    Log.Information("[PVP] Fleeing from {Count} hostiles (threat: {Threat})",
+                    Logger.LogInformation("[PVP] Fleeing from {Count} hostiles (threat: {Threat})",
                         hostiles.Count, primary.Threat);
                     _state = PvPState.Flee;
                     return;
                 }
 
                 // Engage winnable fights
-                Log.Information("[PVP] Engaging {Target} (L{Level}, {Health}% HP, threat: {Threat})",
+                Logger.LogInformation("[PVP] Engaging {Target} (L{Level}, {Health}% HP, threat: {Threat})",
                     primary.Player.Name, primary.Player.Level,
                     primary.Player.HealthPercent, primary.Threat);
                 _state = PvPState.Engage;
@@ -96,7 +96,7 @@ public class PvPEngagementTask : BotTask, IBotTask
 
                 if (guardDist <= FleeSuccessRange)
                 {
-                    Log.Information("[PVP] Reached safety near guards");
+                    Logger.LogInformation("[PVP] Reached safety near guards");
                     _state = PvPState.Complete;
                     return;
                 }

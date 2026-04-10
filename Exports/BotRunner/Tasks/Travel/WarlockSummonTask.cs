@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace BotRunner.Tasks.Travel;
@@ -41,7 +41,7 @@ public class WarlockSummonTask : BotTask, IBotTask
             case SummonState.CheckPrereqs:
                 if (player.Class != Class.Warlock)
                 {
-                    Log.Warning("[WarlockSummon] Not a Warlock.");
+                    Logger.LogWarning("[WarlockSummon] Not a Warlock.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -59,7 +59,7 @@ public class WarlockSummonTask : BotTask, IBotTask
 
                 if (!hasSoulShard)
                 {
-                    Log.Warning("[WarlockSummon] No Soul Shard in inventory.");
+                    Logger.LogWarning("[WarlockSummon] No Soul Shard in inventory.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -72,14 +72,14 @@ public class WarlockSummonTask : BotTask, IBotTask
                 ObjectManager.CastSpell("Ritual of Summoning");
                 _castStartMs = Environment.TickCount64;
                 _state = SummonState.WaitForHelpers;
-                Log.Information("[WarlockSummon] Casting Ritual of Summoning for target {Guid:X}.", _targetPlayerGuid);
+                Logger.LogInformation("[WarlockSummon] Casting Ritual of Summoning for target {Guid:X}.", _targetPlayerGuid);
                 break;
 
             case SummonState.WaitForHelpers:
                 // Wait for 2 helpers to click the portal
                 if (Environment.TickCount64 - _castStartMs > RitualTimeoutMs)
                 {
-                    Log.Warning("[WarlockSummon] Ritual timed out waiting for helpers.");
+                    Logger.LogWarning("[WarlockSummon] Ritual timed out waiting for helpers.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -95,7 +95,7 @@ public class WarlockSummonTask : BotTask, IBotTask
                 // Wait for target to accept the summon
                 if (Environment.TickCount64 - _castStartMs > RitualTimeoutMs)
                 {
-                    Log.Warning("[WarlockSummon] Summon timed out waiting for accept.");
+                    Logger.LogWarning("[WarlockSummon] Summon timed out waiting for accept.");
                     _state = SummonState.Complete;
                     return;
                 }

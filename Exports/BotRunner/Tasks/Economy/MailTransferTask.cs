@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -57,7 +57,7 @@ public class MailTransferTask : BotTask, IBotTask
                     .First();
                 _mailboxPosition = nearest.Value;
                 _state = MailState.MoveToMailbox;
-                Log.Information("[MAIL] Heading to mailbox at {Location}", nearest.Key);
+                Logger.LogInformation("[MAIL] Heading to mailbox at {Location}", nearest.Key);
                 break;
 
             case MailState.MoveToMailbox:
@@ -72,13 +72,13 @@ public class MailTransferTask : BotTask, IBotTask
 
             case MailState.SendMail:
                 // Mail sending uses CMSG_SEND_MAIL via MailNetworkClientComponent
-                Log.Information("[MAIL] Sending {ItemCount} items + {Gold}c to {Recipient}",
+                Logger.LogInformation("[MAIL] Sending {ItemCount} items + {Gold}c to {Recipient}",
                     _itemIdsToSend.Count, _goldToSend, _recipientName);
                 _state = MailState.Complete;
                 break;
 
             case MailState.Complete:
-                Log.Information("[MAIL] Transfer complete — {Sent} mails sent", _sentCount);
+                Logger.LogInformation("[MAIL] Transfer complete — {Sent} mails sent", _sentCount);
                 BotContext.BotTasks.Pop();
                 break;
         }

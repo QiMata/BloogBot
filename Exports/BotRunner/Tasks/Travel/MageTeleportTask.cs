@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using BotRunner.Travel;
 using GameData.Core.Enums;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -57,7 +57,7 @@ public class MageTeleportTask : BotTask, IBotTask
 
         if (player.IsInCombat)
         {
-            Log.Warning("[MageTeleport] Cancelled — in combat.");
+            Logger.LogWarning("[MageTeleport] Cancelled — in combat.");
             BotContext.BotTasks.Pop();
             return;
         }
@@ -67,14 +67,14 @@ public class MageTeleportTask : BotTask, IBotTask
             case TeleState.Check:
                 if (player.Class != Class.Mage)
                 {
-                    Log.Warning("[MageTeleport] Character is not a Mage.");
+                    Logger.LogWarning("[MageTeleport] Character is not a Mage.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
 
                 if (!ObjectManager.IsSpellReady(_spellName))
                 {
-                    Log.Warning("[MageTeleport] Spell '{Name}' (id={SpellId}) not ready or not known.", _spellName, _spellId);
+                    Logger.LogWarning("[MageTeleport] Spell '{Name}' (id={SpellId}) not ready or not known.", _spellName, _spellId);
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -89,7 +89,7 @@ public class MageTeleportTask : BotTask, IBotTask
                 ObjectManager.CastSpell(_spellName);
                 _castStartMs = Environment.TickCount64;
                 _state = TeleState.WaitForCast;
-                Log.Information("[MageTeleport] Casting {SpellName}...", _spellName);
+                Logger.LogInformation("[MageTeleport] Casting {SpellName}...", _spellName);
                 break;
 
             case TeleState.WaitForCast:
@@ -99,7 +99,7 @@ public class MageTeleportTask : BotTask, IBotTask
                 if (!player.IsChanneling && !player.IsCasting
                     && Environment.TickCount64 - _castStartMs > 2000)
                 {
-                    Log.Warning("[MageTeleport] Cast interrupted.");
+                    Logger.LogWarning("[MageTeleport] Cast interrupted.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -111,7 +111,7 @@ public class MageTeleportTask : BotTask, IBotTask
                 var dist = player.Position.DistanceTo(_startPosition);
                 if (dist > TeleportDistanceThreshold || player.MapId != _startMapId)
                 {
-                    Log.Information("[MageTeleport] Teleported! Distance={Dist:F0}y, mapChanged={Changed}",
+                    Logger.LogInformation("[MageTeleport] Teleported! Distance={Dist:F0}y, mapChanged={Changed}",
                         dist, player.MapId != _startMapId);
                     _state = TeleState.Complete;
                     return;
@@ -119,7 +119,7 @@ public class MageTeleportTask : BotTask, IBotTask
 
                 if (Environment.TickCount64 - _castStartMs > TeleportDetectTimeoutMs)
                 {
-                    Log.Warning("[MageTeleport] Teleport detection timeout.");
+                    Logger.LogWarning("[MageTeleport] Teleport detection timeout.");
                     _state = TeleState.Complete;
                 }
                 break;

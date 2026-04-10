@@ -1,7 +1,6 @@
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -54,102 +53,56 @@ namespace BotCommLayer
 
         private void ConnectWithRetry(string ipAddress, int port, int? reconnectBudgetMs = null)
         {
+            var parsedAddress = IPAddress.Parse(ipAddress);
+
             if (!reconnectBudgetMs.HasValue)
             {
-                const int maxRetries = 10;
-                const int baseDelayMs = 500;
-
-                for (int attempt = 1; attempt <= maxRetries; attempt++)
-                {
-                    try
+                RetryPolicy.Execute(
+                    operation: () =>
                     {
-                        _logger?.LogInformation($"Attempting to connect to {ipAddress}:{port} (attempt {attempt}/{maxRetries})...");
-                        _client?.Connect(IPAddress.Parse(ipAddress), port);
+                        _logger?.LogInformation($"Attempting to connect to {ipAddress}:{port}...");
+                        _client?.Connect(parsedAddress, port);
                         _logger?.LogInformation($"Successfully connected to {ipAddress}:{port}");
-                        return;
-                    }
-                    catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
+                    },
+                    maxRetries: 10,
+                    baseDelayMs: 500,
+                    shouldRetry: (attempt, ex) =>
+                        ex is SocketException sockEx && sockEx.SocketErrorCode == SocketError.ConnectionRefused,
+                    onRetry: (attempt, delay, ex) =>
+                        _logger?.LogWarning($"Connection attempt {attempt} failed: {ex.Message}. Retrying in {delay}ms..."),
+                    onFinalFailure: (attempts, ex) =>
                     {
-                        if (attempt == maxRetries)
-                        {
-                            _logger?.LogError($"Failed to connect to {ipAddress}:{port} after {maxRetries} attempts. Service may not be running.");
-                            throw new InvalidOperationException(
-                                $"Unable to connect to service at {ipAddress}:{port}. " +
-                                $"Please ensure the service is running and accessible. " +
-                                $"Last error: {ex.Message}", ex);
-                        }
-
-                        int delay = baseDelayMs * (int)Math.Pow(2, attempt - 1); // Exponential backoff
-                        _logger?.LogWarning($"Connection attempt {attempt} failed: {ex.Message}. Retrying in {delay}ms...");
-                        Thread.Sleep(delay);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.LogError($"Unexpected error connecting to {ipAddress}:{port}: {ex.Message}");
-                        throw;
-                    }
-                }
-
+                        _logger?.LogError($"Failed to connect to {ipAddress}:{port} after {attempts} attempts. Service may not be running.");
+                        return new InvalidOperationException(
+                            $"Unable to connect to service at {ipAddress}:{port}. " +
+                            $"Please ensure the service is running and accessible. " +
+                            $"Last error: {ex.Message}", ex);
+                    });
                 return;
             }
 
-            const int reconnectBaseDelayMs = 100;
-            const int reconnectMaxDelayMs = 1000;
-            var attemptCount = 0;
-            var stopwatch = Stopwatch.StartNew();
-            Exception? lastConnectionException = null;
-
-            while (true)
-            {
-                attemptCount++;
-                try
+            RetryPolicy.ExecuteWithBudget(
+                operation: () =>
                 {
                     _logger?.LogInformation(
-                        "Attempting reconnect to {IpAddress}:{Port} (attempt {Attempt}, budget {Budget}ms)...",
-                        ipAddress,
-                        port,
-                        attemptCount,
-                        reconnectBudgetMs.Value);
-                    _client?.Connect(IPAddress.Parse(ipAddress), port);
+                        "Attempting reconnect to {IpAddress}:{Port} (budget {Budget}ms)...",
+                        ipAddress, port, reconnectBudgetMs.Value);
+                    _client?.Connect(parsedAddress, port);
                     _logger?.LogInformation($"Successfully connected to {ipAddress}:{port}");
-                    return;
-                }
-                catch (SocketException ex)
-                {
-                    lastConnectionException = ex;
-                }
-                catch (Exception ex)
-                {
-                    lastConnectionException = ex;
-                }
-
-                var remainingBudgetMs = reconnectBudgetMs.Value - (int)stopwatch.ElapsedMilliseconds;
-                if (remainingBudgetMs <= 0)
-                    break;
-
-                var delay = Math.Min(reconnectBaseDelayMs * (1 << Math.Min(attemptCount - 1, 3)), reconnectMaxDelayMs);
-                delay = Math.Min(delay, remainingBudgetMs);
-                _logger?.LogWarning(
-                    "Reconnect attempt {Attempt} to {IpAddress}:{Port} failed: {Message}. Retrying in {Delay}ms (remaining budget {Remaining}ms)...",
-                    attemptCount,
-                    ipAddress,
-                    port,
-                    lastConnectionException?.Message,
-                    delay,
-                    remainingBudgetMs);
-                if (delay > 0)
-                    Thread.Sleep(delay);
-            }
-
-            if (lastConnectionException != null)
-            {
-                throw new TimeoutException(
-                    $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attemptCount} attempt(s).",
-                    lastConnectionException);
-            }
-
-            throw new TimeoutException(
-                $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attemptCount} attempt(s).");
+                },
+                budgetMs: reconnectBudgetMs.Value,
+                baseDelayMs: 100,
+                maxDelayMs: 1000,
+                onRetry: (attempt, delay, ex, remainingMs) =>
+                    _logger?.LogWarning(
+                        "Reconnect attempt {Attempt} to {IpAddress}:{Port} failed: {Message}. Retrying in {Delay}ms (remaining budget {Remaining}ms)...",
+                        attempt, ipAddress, port, ex?.Message, delay, remainingMs),
+                onTimeout: (attempts, ex) =>
+                    ex != null
+                        ? new TimeoutException(
+                            $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attempts} attempt(s).", ex)
+                        : new TimeoutException(
+                            $"Reconnect to {ipAddress}:{port} exceeded {reconnectBudgetMs.Value}ms budget after {attempts} attempt(s)."));
         }
 
         public TResponse SendMessage(TRequest request)
@@ -430,28 +383,22 @@ namespace BotCommLayer
             _client?.Dispose();
             _client = new TcpClient();
 
-            const int maxRetries = 8;
-            const int baseDelayMs = 200;
-
-            for (int attempt = 1; attempt <= maxRetries; attempt++)
-            {
-                try
+            var parsedAddress = IPAddress.Parse(_ipAddress!);
+            await RetryPolicy.ExecuteAsync(
+                operation: async () =>
                 {
-                    await _client.ConnectAsync(IPAddress.Parse(_ipAddress!), _port, ct);
+                    await _client.ConnectAsync(parsedAddress, _port, ct);
                     _stream = _client.GetStream();
                     _stream.ReadTimeout = 5000;
                     _stream.WriteTimeout = 5000;
-                    return;
-                }
-                catch (SocketException) when (attempt < maxRetries)
-                {
-                    // Add jitter to prevent thundering herd from 20+ bots reconnecting simultaneously
-                    var jitter = Random.Shared.Next(0, baseDelayMs);
-                    await Task.Delay(baseDelayMs * (1 << (attempt - 1)) + jitter, ct);
-                }
-            }
-
-            throw new InvalidOperationException($"Failed to connect to {_ipAddress}:{_port} after {maxRetries} attempts.");
+                },
+                maxRetries: 8,
+                baseDelayMs: 200,
+                shouldRetry: (attempt, ex) => ex is SocketException,
+                jitterMs: 200, // Prevent thundering herd from 20+ bots reconnecting simultaneously
+                ct: ct,
+                onFinalFailure: (attempts, ex) =>
+                    new InvalidOperationException($"Failed to connect to {_ipAddress}:{_port} after {attempts} attempts.", ex));
         }
 
         public void Close()

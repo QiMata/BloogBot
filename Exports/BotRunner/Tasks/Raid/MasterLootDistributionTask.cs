@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -40,7 +40,7 @@ public class MasterLootDistributionTask : BotTask, IBotTask
                 if (lootFrame is { IsOpen: true, LootCount: > 0 })
                 {
                     _state = LootState.DistributeItems;
-                    Log.Information("[MASTERLOOT] Loot window open with {Count} items", lootFrame.LootCount);
+                    Logger.LogInformation("[MASTERLOOT] Loot window open with {Count} items", lootFrame.LootCount);
                 }
                 break;
 
@@ -65,7 +65,7 @@ public class MasterLootDistributionTask : BotTask, IBotTask
                 if (recipient != null)
                 {
                     ObjectManager.AssignLoot(item.ItemId, recipient.Value);
-                    Log.Information("[MASTERLOOT] Assigning item {ItemId} to {Recipient:X}",
+                    Logger.LogInformation("[MASTERLOOT] Assigning item {ItemId} to {Recipient:X}",
                         item.ItemId, recipient.Value);
                     _distributedCount++;
                 }
@@ -76,7 +76,7 @@ public class MasterLootDistributionTask : BotTask, IBotTask
                 break;
 
             case LootState.Complete:
-                Log.Information("[MASTERLOOT] Distribution complete — {Count} items assigned", _distributedCount);
+                Logger.LogInformation("[MASTERLOOT] Distribution complete — {Count} items assigned", _distributedCount);
                 BotContext.BotTasks.Pop();
                 break;
         }

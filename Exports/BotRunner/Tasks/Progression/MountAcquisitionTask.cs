@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 
@@ -41,7 +41,7 @@ public class MountAcquisitionTask : BotTask, IBotTask
             case MountState.Evaluate:
                 if (player.Level < _requiredLevel)
                 {
-                    Log.Information("[MountAcquisition] Level {Level} < {Required}. Need to level up first.",
+                    Logger.LogInformation("[MountAcquisition] Level {Level} < {Required}. Need to level up first.",
                         player.Level, _requiredLevel);
                     BotContext.BotTasks.Pop();
                     return;
@@ -68,20 +68,20 @@ public class MountAcquisitionTask : BotTask, IBotTask
                 break;
 
             case MountState.NeedSkill:
-                Log.Information("[MountAcquisition] Riding skill not learned. Need to visit riding trainer.");
+                Logger.LogInformation("[MountAcquisition] Riding skill not learned. Need to visit riding trainer.");
                 // TODO: Push TravelTo riding trainer + TrainSkill
                 BotContext.BotTasks.Pop();
                 break;
 
             case MountState.NeedGold:
-                Log.Information("[MountAcquisition] Need {Required} copper but only have {Have}. Need to farm gold.",
+                Logger.LogInformation("[MountAcquisition] Need {Required} copper but only have {Have}. Need to farm gold.",
                     _goldCostCopper, ObjectManager.Player?.Copper ?? 0);
                 // TODO: Push gold farming activity
                 BotContext.BotTasks.Pop();
                 break;
 
             case MountState.ReadyToBuy:
-                Log.Information("[MountAcquisition] All prerequisites met! Travel to mount vendor and buy.");
+                Logger.LogInformation("[MountAcquisition] All prerequisites met! Travel to mount vendor and buy.");
                 // TODO: Push TravelTo mount vendor + BuyItem sequence
                 BotContext.BotTasks.Pop();
                 break;

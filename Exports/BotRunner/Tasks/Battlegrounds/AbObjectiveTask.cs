@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -54,7 +54,7 @@ public class AbObjectiveTask : BotTask, IBotTask
                 _targetNode = nearest.Value;
                 _targetNodeName = nearest.Key;
                 _state = AbState.MoveToNode;
-                Log.Information("[AB] Targeting {Node} at ({X:F0},{Y:F0})",
+                Logger.LogInformation("[AB] Targeting {Node} at ({X:F0},{Y:F0})",
                     _targetNodeName, _targetNode.X, _targetNode.Y);
                 break;
 
@@ -78,7 +78,7 @@ public class AbObjectiveTask : BotTask, IBotTask
                 if (banner != null)
                 {
                     banner.Interact();
-                    Log.Information("[AB] Assaulting {Node}!", _targetNodeName);
+                    Logger.LogInformation("[AB] Assaulting {Node}!", _targetNodeName);
                 }
                 _state = AbState.DefendNode;
                 break;

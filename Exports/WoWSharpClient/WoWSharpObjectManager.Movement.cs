@@ -28,6 +28,13 @@ using Timer = System.Timers.Timer;
 
 namespace WoWSharpClient
 {
+    /// <summary>
+    /// Movement input handling, facing, speed ACKs, teleport ACKs, knockback, and physics recording.
+    /// KEPT AS PARTIAL: Deeply coupled with the main class's movement state (_isInControl,
+    /// _isBeingTeleported, _movementController, _worldTimeTracker, _woWClient). Every method
+    /// reads and writes multiple fields atomically. Extracting would require exposing 10+
+    /// mutable fields or creating a movement-state struct — high risk for a ~780-line file.
+    /// </summary>
     public partial class WoWSharpObjectManager
     {
         public bool IsPlayerMoving => !Player.MovementFlags.Equals(MovementFlags.MOVEFLAG_NONE);

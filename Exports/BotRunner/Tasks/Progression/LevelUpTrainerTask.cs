@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -66,14 +66,14 @@ public class LevelUpTrainerTask : BotTask, IBotTask
                 var trainers = _isHorde ? OrgrimmarTrainers : StormwindTrainers;
                 if (!trainers.TryGetValue(_className, out var trainerInfo))
                 {
-                    Log.Warning("[TRAINER] No trainer data for class {Class}", _className);
+                    Logger.LogWarning("[TRAINER] No trainer data for class {Class}", _className);
                     _state = TrainerState.Complete;
                     return;
                 }
 
                 _trainerPosition = trainerInfo.Position;
                 _state = TrainerState.MoveToTrainer;
-                Log.Information("[TRAINER] Heading to {Class} trainer", _className);
+                Logger.LogInformation("[TRAINER] Heading to {Class} trainer", _className);
                 break;
 
             case TrainerState.MoveToTrainer:
@@ -96,7 +96,7 @@ public class LevelUpTrainerTask : BotTask, IBotTask
                 if (trainer != null)
                 {
                     _trainerGuid = trainer.Guid;
-                    Log.Information("[TRAINER] Interacting with trainer");
+                    Logger.LogInformation("[TRAINER] Interacting with trainer");
                 }
                 _state = TrainerState.TrainSpells;
                 break;
@@ -104,7 +104,7 @@ public class LevelUpTrainerTask : BotTask, IBotTask
             case TrainerState.TrainSpells:
                 // Training is handled by the TrainSkill sequence via trainer frame
                 // This task just ensures we get to the trainer
-                Log.Information("[TRAINER] Training available spells");
+                Logger.LogInformation("[TRAINER] Training available spells");
                 _state = TrainerState.Complete;
                 break;
 

@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace BotRunner.Tasks.Progression;
@@ -43,7 +43,7 @@ public class FarmBossTask : BotTask, IBotTask
         {
             case FarmState.TravelToDungeon:
                 // TODO: Push TravelTask to dungeon entrance
-                Log.Information("[FarmBoss] Attempt #{Attempt}: Travel to dungeon map {MapId} for {Item}",
+                Logger.LogInformation("[FarmBoss] Attempt #{Attempt}: Travel to dungeon map {MapId} for {Item}",
                     _attemptCount + 1, _dungeonMapId, _targetItemName);
                 _state = FarmState.EnterDungeon;
                 break;
@@ -78,19 +78,19 @@ public class FarmBossTask : BotTask, IBotTask
 
                 if (hasItem)
                 {
-                    Log.Information("[FarmBoss] Got {Item} after {Attempts} attempts!",
+                    Logger.LogInformation("[FarmBoss] Got {Item} after {Attempts} attempts!",
                         _targetItemName, _attemptCount);
                     _state = FarmState.Complete;
                 }
                 else if (_attemptCount >= MaxAttempts)
                 {
-                    Log.Warning("[FarmBoss] Gave up after {Attempts} attempts for {Item}.",
+                    Logger.LogWarning("[FarmBoss] Gave up after {Attempts} attempts for {Item}.",
                         _attemptCount, _targetItemName);
                     _state = FarmState.Complete;
                 }
                 else
                 {
-                    Log.Information("[FarmBoss] Attempt #{Attempt}: {Item} not found. Resetting.",
+                    Logger.LogInformation("[FarmBoss] Attempt #{Attempt}: {Item} not found. Resetting.",
                         _attemptCount, _targetItemName);
                     _state = FarmState.ResetAndRepeat;
                 }

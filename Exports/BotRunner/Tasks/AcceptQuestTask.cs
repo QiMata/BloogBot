@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -15,13 +15,13 @@ public class AcceptQuestTask(IBotContext botContext) : BotTask(botContext), IBot
         var questFrame = ObjectManager.QuestFrame;
         if (questFrame == null)
         {
-            Log.Warning("[ACCEPT_QUEST] No quest frame open");
+            Logger.LogWarning("[ACCEPT_QUEST] No quest frame open");
             BotTasks.Pop();
             return;
         }
 
         questFrame.AcceptQuest();
-        Log.Information("[ACCEPT_QUEST] Accepted quest");
+        Logger.LogInformation("[ACCEPT_QUEST] Accepted quest");
         BotTasks.Pop();
     }
 }

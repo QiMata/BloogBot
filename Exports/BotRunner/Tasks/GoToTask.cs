@@ -4,7 +4,7 @@ using BotRunner.Interfaces;
 using BotRunner.Movement;
 using GameData.Core.Constants;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace BotRunner.Tasks;
@@ -42,13 +42,13 @@ public class GoToTask : BotTask, IBotTask
         var player = ObjectManager.Player;
         if (player?.Position == null)
         {
-            if (_updateCount % 50 == 1) Log.Warning("[GOTO-TASK] Update #{Count}: player/position null", _updateCount);
+            if (_updateCount % 50 == 1) Logger.LogWarning("[GOTO-TASK] Update #{Count}: player/position null", _updateCount);
             return;
         }
 
         if (_updateCount <= 3 || _updateCount % 100 == 0)
         {
-            Log.Warning("[GOTO-TASK] Update #{Count}: pos=({X:F0},{Y:F0},{Z:F0}) target=({TX:F0},{TY:F0},{TZ:F0}) dist2D={D:F0} map={Map}",
+            Logger.LogWarning("[GOTO-TASK] Update #{Count}: pos=({X:F0},{Y:F0},{Z:F0}) target=({TX:F0},{TY:F0},{TZ:F0}) dist2D={D:F0} map={Map}",
                 _updateCount, player.Position.X, player.Position.Y, player.Position.Z,
                 _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target),
                 (player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0);
@@ -59,7 +59,7 @@ public class GoToTask : BotTask, IBotTask
         {
             ObjectManager.StopAllMovement();
             _navPath?.Clear();
-            Log.Warning("[GOTO-TASK] Arrived at ({X:F0},{Y:F0},{Z:F0}) dist2D={Dist:F1}",
+            Logger.LogWarning("[GOTO-TASK] Arrived at ({X:F0},{Y:F0},{Z:F0}) dist2D={Dist:F1}",
                 _target.X, _target.Y, _target.Z, player.Position.DistanceTo2D(_target));
             PopTask("arrived");
             return;
@@ -93,7 +93,7 @@ public class GoToTask : BotTask, IBotTask
 
                 if (DateTime.UtcNow - _lastNoPathLogUtc > TimeSpan.FromSeconds(5))
                 {
-                    Log.Warning("[GOTO-TASK] No path to ({X:F0},{Y:F0},{Z:F0}) for {Sec:F0}s",
+                    Logger.LogWarning("[GOTO-TASK] No path to ({X:F0},{Y:F0},{Z:F0}) for {Sec:F0}s",
                         _target.X, _target.Y, _target.Z,
                         (DateTime.UtcNow - _noPathSinceUtc.Value).TotalSeconds);
                     _lastNoPathLogUtc = DateTime.UtcNow;
@@ -101,7 +101,7 @@ public class GoToTask : BotTask, IBotTask
 
                 if ((DateTime.UtcNow - _noPathSinceUtc.Value).TotalSeconds > NoPathTimeoutSec)
                 {
-                    Log.Warning("[GOTO-TASK] No path timeout ({Sec}s) — giving up", NoPathTimeoutSec);
+                    Logger.LogWarning("[GOTO-TASK] No path timeout ({Sec}s) — giving up", NoPathTimeoutSec);
                     PopTask("no_path_timeout");
                 }
                 return;
@@ -117,13 +117,13 @@ public class GoToTask : BotTask, IBotTask
         }
         catch (Exception ex)
         {
-            Log.Warning("[GOTO-TASK] Navigation error: {Msg}", ex.Message);
+            Logger.LogWarning("[GOTO-TASK] Navigation error: {Msg}", ex.Message);
         }
     }
 
     private void PopTask(string reason)
     {
-        Log.Debug("[GOTO-TASK] Popping: {Reason}", reason);
+        Logger.LogDebug("[GOTO-TASK] Popping: {Reason}", reason);
         BotTasks.Pop();
     }
 }

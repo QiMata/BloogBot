@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -21,7 +21,7 @@ public class CastSpellTask(IBotContext botContext, int spellId, ulong targetGuid
 
             ObjectManager.CastSpell(spellId, castOnSelf: castOnSelf);
             _castInitiated = true;
-            Log.Information("[CAST_SPELL] Cast spell {SpellId} on {Target:X}", spellId, targetGuid);
+            Logger.LogInformation("[CAST_SPELL] Cast spell {SpellId} on {Target:X}", spellId, targetGuid);
             BotTasks.Pop();
             return;
         }

@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading;
@@ -58,7 +58,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
 
                 if (_flightMaster == null)
                 {
-                    Log.Warning("[TakeFlightPath] No flight master found nearby.");
+                    Logger.LogWarning("[TakeFlightPath] No flight master found nearby.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
@@ -90,7 +90,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
                 // Wait for SMSG_SHOWTAXINODES — the FlightMaster gossip opens taxi map
                 if (Environment.TickCount64 - _stateStartMs > 5000)
                 {
-                    Log.Warning("[TakeFlightPath] Taxi window timeout. Retrying interaction.");
+                    Logger.LogWarning("[TakeFlightPath] Taxi window timeout. Retrying interaction.");
                     _state = FlightState.InteractWithFM;
                     return;
                 }
@@ -104,7 +104,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
 
             case FlightState.ActivateFlight:
                 if (_flightMaster == null) { Pop(); return; }
-                Log.Information("[TakeFlightPath] Activating flight from node {Src} to node {Dst}",
+                Logger.LogInformation("[TakeFlightPath] Activating flight from node {Src} to node {Dst}",
                     _sourceNodeId, _destinationNodeId);
 
                 // Activate flight via FlightMasterNetworkClientComponent
@@ -118,7 +118,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
                 }
                 else
                 {
-                    Log.Warning("[TakeFlightPath] No TaxiFrame available — need FlightMasterAgent for BG path.");
+                    Logger.LogWarning("[TakeFlightPath] No TaxiFrame available — need FlightMasterAgent for BG path.");
                 }
 
                 _state = FlightState.InFlight;
@@ -130,7 +130,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
             case FlightState.InFlight:
                 if (Environment.TickCount64 - _stateStartMs > FlightTimeoutMs)
                 {
-                    Log.Warning("[TakeFlightPath] Flight timeout after {Timeout}ms.", FlightTimeoutMs);
+                    Logger.LogWarning("[TakeFlightPath] Flight timeout after {Timeout}ms.", FlightTimeoutMs);
                     Pop();
                     return;
                 }
@@ -149,7 +149,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
                 if (_stationaryTicks >= StationaryTicksForLanding
                     && Environment.TickCount64 - _stateStartMs > 5000) // Min 5s in flight
                 {
-                    Log.Information("[TakeFlightPath] Landed at ({X:F0},{Y:F0},{Z:F0}).",
+                    Logger.LogInformation("[TakeFlightPath] Landed at ({X:F0},{Y:F0},{Z:F0}).",
                         player.Position.X, player.Position.Y, player.Position.Z);
                     Pop();
                 }

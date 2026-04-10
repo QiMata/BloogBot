@@ -1,7 +1,7 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -31,7 +31,7 @@ public class InteractWithUnitTask(IBotContext botContext, ulong targetGuid) : Bo
         // Timeout after configured duration
         if ((DateTime.Now - _startTime).TotalSeconds > BotTaskTimeouts.InteractWithUnitSec)
         {
-            Log.Warning("[INTERACT] Timed out trying to reach {Guid:X}", targetGuid);
+            Logger.LogWarning("[INTERACT] Timed out trying to reach {Guid:X}", targetGuid);
             ObjectManager.StopAllMovement();
             BotTasks.Pop();
             return;
@@ -43,7 +43,7 @@ public class InteractWithUnitTask(IBotContext botContext, ulong targetGuid) : Bo
 
         if (target == null)
         {
-            Log.Warning("[INTERACT] Target {Guid:X} not found in visible units", targetGuid);
+            Logger.LogWarning("[INTERACT] Target {Guid:X} not found in visible units", targetGuid);
             BotTasks.Pop();
             return;
         }
@@ -63,7 +63,7 @@ public class InteractWithUnitTask(IBotContext botContext, ulong targetGuid) : Bo
             ObjectManager.StopAllMovement();
             ObjectManager.SetTarget(targetGuid);
             _interacted = true;
-            Log.Information("[INTERACT] Interacting with {Name} ({Guid:X})", target.Name, targetGuid);
+            Logger.LogInformation("[INTERACT] Interacting with {Name} ({Guid:X})", target.Name, targetGuid);
             return;
         }
 

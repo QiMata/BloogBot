@@ -1,5 +1,5 @@
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -13,6 +13,7 @@ namespace BotRunner.Tasks.Economy;
 /// </summary>
 public class AuctionPostingService
 {
+    private static readonly ILogger Logger = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger(nameof(AuctionPostingService));
     /// <summary>Price memory for market tracking.</summary>
     public record MarketPrice(uint ItemId, uint BuyoutCopper, DateTime LastSeen);
 
@@ -63,7 +64,7 @@ public class AuctionPostingService
         // Don't post if undercut price is less than vendor sell price
         if (buyout <= vendorSellPrice)
         {
-            Log.Debug("[AH] Item {ItemId} not worth posting — undercut ({Buyout}c) <= vendor ({Vendor}c)",
+            Logger.LogDebug("[AH] Item {ItemId} not worth posting — undercut ({Buyout}c) <= vendor ({Vendor}c)",
                 itemId, buyout, vendorSellPrice);
             return null;
         }

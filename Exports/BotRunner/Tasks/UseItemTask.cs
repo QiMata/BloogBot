@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -16,7 +16,7 @@ public class UseItemTask(IBotContext botContext, int bagId, int slotId, ulong ta
             ObjectManager.SetTarget(targetGuid);
 
         ObjectManager.UseItem(bagId, slotId, targetGuid);
-        Log.Information("[USE_ITEM] Used item at bag={Bag} slot={Slot}", bagId, slotId);
+        Logger.LogInformation("[USE_ITEM] Used item at bag={Bag} slot={Slot}", bagId, slotId);
         BotTasks.Pop();
     }
 }

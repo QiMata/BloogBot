@@ -2,7 +2,7 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -47,12 +47,12 @@ public class MeetingStoneSummonTask : BotTask, IBotTask
 
                 if (_meetingStone == null)
                 {
-                    Log.Warning("[MeetingStone] No meeting stone found nearby.");
+                    Logger.LogWarning("[MeetingStone] No meeting stone found nearby.");
                     BotContext.BotTasks.Pop();
                     return;
                 }
 
-                Log.Information("[MeetingStone] Found stone at ({X:F0},{Y:F0},{Z:F0}), dist {Dist:F0}y",
+                Logger.LogInformation("[MeetingStone] Found stone at ({X:F0},{Y:F0},{Z:F0}), dist {Dist:F0}y",
                     _meetingStone.Position.X, _meetingStone.Position.Y, _meetingStone.Position.Z,
                     _meetingStone.Position.DistanceTo(player.Position));
                 _state = StoneState.NavigateToStone;
@@ -75,13 +75,13 @@ public class MeetingStoneSummonTask : BotTask, IBotTask
                 _meetingStone.Interact();
                 _stateStartMs = Environment.TickCount64;
                 _state = StoneState.WaitForQueue;
-                Log.Information("[MeetingStone] Interacting with meeting stone (CMSG_MEETINGSTONE_JOIN).");
+                Logger.LogInformation("[MeetingStone] Interacting with meeting stone (CMSG_MEETINGSTONE_JOIN).");
                 break;
 
             case StoneState.WaitForQueue:
                 if (Environment.TickCount64 - _stateStartMs > QueueTimeoutMs)
                 {
-                    Log.Warning("[MeetingStone] Queue timeout after {Timeout}ms.", QueueTimeoutMs);
+                    Logger.LogWarning("[MeetingStone] Queue timeout after {Timeout}ms.", QueueTimeoutMs);
                     Pop();
                     return;
                 }
@@ -97,7 +97,7 @@ public class MeetingStoneSummonTask : BotTask, IBotTask
             case StoneState.SummonMembers:
                 // TODO: Iterate absent party members and summon each
                 // Each summon: target member → CMSG_SUMMON_RESPONSE → wait for arrive
-                Log.Information("[MeetingStone] Summoning members (TODO: iterate absent members).");
+                Logger.LogInformation("[MeetingStone] Summoning members (TODO: iterate absent members).");
                 _state = StoneState.Complete;
                 break;
 

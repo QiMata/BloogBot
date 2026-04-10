@@ -1,7 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -80,7 +80,7 @@ public class AvObjectiveTask : BotTask, IBotTask
                     _state = AvState.MoveToObjective;
                 }
 
-                Log.Information("[AV] Targeting {Objective} at ({X:F0},{Y:F0})",
+                Logger.LogInformation("[AV] Targeting {Objective} at ({X:F0},{Y:F0})",
                     _targetName, _targetPosition.X, _targetPosition.Y);
                 break;
 
@@ -104,7 +104,7 @@ public class AvObjectiveTask : BotTask, IBotTask
                 if (banner != null)
                 {
                     banner.Interact();
-                    Log.Information("[AV] Assaulting {Objective}!", _targetName);
+                    Logger.LogInformation("[AV] Assaulting {Objective}!", _targetName);
                 }
                 _state = AvState.DefendObjective;
                 break;
@@ -123,7 +123,7 @@ public class AvObjectiveTask : BotTask, IBotTask
                 if (generalDist <= GeneralRange)
                 {
                     // In range of general — engage in combat (handled by combat rotation)
-                    Log.Information("[AV] Engaging {General}!", _targetName);
+                    Logger.LogInformation("[AV] Engaging {General}!", _targetName);
                     _state = AvState.Complete;
                     return;
                 }

@@ -28,6 +28,14 @@ using Timer = System.Timers.Timer;
 
 namespace WoWSharpClient
 {
+    /// <summary>
+    /// Network event handling: ProcessUpdatesAsync loop, chat messages, teleport/death events,
+    /// character select, GM commands, NPC interaction, flight, quest operations, spline activation.
+    /// KEPT AS PARTIAL: ProcessUpdatesAsync is the core update loop that touches _objects, _objectsLock,
+    /// _activePet, _isInControl, _isBeingTeleported, _movementController, PlayerGuid, and Player.
+    /// Event handlers manage teleport state transitions that are interleaved with Movement.cs state.
+    /// ~686 lines; extraction would require splitting the update loop's state machine across classes.
+    /// </summary>
     public partial class WoWSharpObjectManager
     {
 

@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks.Crafting;
 
@@ -44,7 +44,7 @@ public class BatchCraftTask : BotTask, IBotTask
                 ObjectManager.CastSpell(_spellId);
                 _ticksSinceCast = 0;
                 _state = CraftState.WaitForResult;
-                Log.Debug("[CRAFT] Casting spell {SpellId} ({Current}/{Target})",
+                Logger.LogDebug("[CRAFT] Casting spell {SpellId} ({Current}/{Target})",
                     _spellId, _craftedCount + 1, _targetCount);
                 break;
 
@@ -59,7 +59,7 @@ public class BatchCraftTask : BotTask, IBotTask
                 break;
 
             case CraftState.Complete:
-                Log.Information("[CRAFT] Batch complete: {Crafted}/{Target} crafted, {Failed} failed",
+                Logger.LogInformation("[CRAFT] Batch complete: {Crafted}/{Target} crafted, {Failed} failed",
                     _craftedCount, _targetCount, _failedCount);
                 BotContext.BotTasks.Pop();
                 break;
@@ -70,7 +70,7 @@ public class BatchCraftTask : BotTask, IBotTask
     public void OnCastFailed()
     {
         _failedCount++;
-        Log.Warning("[CRAFT] Cast failed (missing reagents?) — {Failed} failures", _failedCount);
+        Logger.LogWarning("[CRAFT] Cast failed (missing reagents?) — {Failed} failures", _failedCount);
 
         // Stop after 3 consecutive failures (out of materials)
         if (_failedCount >= 3)

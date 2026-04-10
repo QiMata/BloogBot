@@ -6,7 +6,7 @@ using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 
@@ -367,7 +367,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             ObjectManager.Turn180();
             ObjectManager.StartMovement(ControlBits.Front | ControlBits.Jump);
             _runbackRecoveryHoldUntilUtc = now + TimeSpan.FromMilliseconds(2500);
-            Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: jump+backward to break collision deadlock", _runbackRecoveryCount);
+            Logger.LogInformation("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: jump+backward to break collision deadlock", _runbackRecoveryCount);
         }
         else if (_runbackRecoveryCount >= 3)
         {
@@ -376,18 +376,18 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             var strafeBit = strafeLeft ? ControlBits.StrafeLeft : ControlBits.StrafeRight;
             ObjectManager.StartMovement(strafeBit | ControlBits.Jump);
             _runbackRecoveryHoldUntilUtc = now + TimeSpan.FromMilliseconds(2000);
-            Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: {Direction}+jump to escape terrain snag",
+            Logger.LogInformation("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: {Direction}+jump to escape terrain snag",
                 _runbackRecoveryCount, strafeLeft ? "strafe-left" : "strafe-right");
         }
 
-        Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}) trace={Trace}. Cleared movement and rebuilding path.",
+        Logger.LogWarning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}) trace={Trace}. Cleared movement and rebuilding path.",
             _runbackRecoveryCount, reason, corpseHorizontalDistance, GetNavigationTraceSummary());
         BotRunnerService.DiagLog(
             $"[RETRIEVE_CORPSE] stall_recovery attempt={_runbackRecoveryCount} reason={reason} distance2D={corpseHorizontalDistance:F1} trace={GetNavigationTraceSummary()}");
 
         if (_runbackRecoveryCount > MaxRunbackRecoveryAttempts)
         {
-            Log.Warning("[RETRIEVE_CORPSE] Runback remained stalled after {Attempts} recoveries; aborting task.",
+            Logger.LogWarning("[RETRIEVE_CORPSE] Runback remained stalled after {Attempts} recoveries; aborting task.",
                 _runbackRecoveryCount);
             BotRunnerService.DiagLog(
                 $"[RETRIEVE_CORPSE] stall_recovery_exceeded attempts={_runbackRecoveryCount} trace={GetNavigationTraceSummary()}");
@@ -410,7 +410,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         if (DateTime.UtcNow - _startTime > TaskTimeout)
         {
-            Log.Warning("[RETRIEVE_CORPSE] Timed out navigating to corpse");
+            Logger.LogWarning("[RETRIEVE_CORPSE] Timed out navigating to corpse");
             BotRunnerService.DiagLog(
                 $"[RETRIEVE_CORPSE] timeout corpse=({corpsePosition.X:F1},{corpsePosition.Y:F1},{corpsePosition.Z:F1}) trace={GetNavigationTraceSummary()}");
             ObjectManager.StopAllMovement();
@@ -431,7 +431,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
             if (spiritHealer != null)
             {
-                Log.Information("[RETRIEVE_CORPSE] Corpse is {Dist:F0}y away. Using nearby spirit healer instead.",
+                Logger.LogInformation("[RETRIEVE_CORPSE] Corpse is {Dist:F0}y away. Using nearby spirit healer instead.",
                     corpseHorizontalDistance);
                 spiritHealer.Interact(); // CMSG_SPIRIT_HEALER_ACTIVATE
                 _triedSpiritHealer = true;
@@ -464,7 +464,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             _stoppedForRetrieval = false;
             if (!_loggedPathfindingMode)
             {
-                Log.Information("[RETRIEVE_CORPSE] Using pathfinding toward corpse at ({X:F0}, {Y:F0}, {Z:F0})",
+                Logger.LogInformation("[RETRIEVE_CORPSE] Using pathfinding toward corpse at ({X:F0}, {Y:F0}, {Z:F0})",
                     corpsePosition.X, corpsePosition.Y, corpsePosition.Z);
                 _loggedPathfindingMode = true;
             }
@@ -490,7 +490,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                 if (now - _lastCooldownLog >= CooldownLogInterval)
                 {
                     var stalledSeconds = (int)(now - _noPathSinceUtc.Value).TotalSeconds;
-                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1} trace={Trace}",
+                    Logger.LogWarning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1} trace={Trace}",
                         corpseNavTarget.X, corpseNavTarget.Y, corpseNavTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ, GetNavigationTraceSummary());
                     BotRunnerService.DiagLog(
                         $"[RETRIEVE_CORPSE] no_path corpse=({corpseNavTarget.X:F1},{corpseNavTarget.Y:F1},{corpseNavTarget.Z:F1}) stalledFor={stalledSeconds}s distance2D={corpseHorizontalDistance:F1} zDelta={corpseDeltaZ:F1} trace={GetNavigationTraceSummary()}");
@@ -499,7 +499,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
                 if (now - _noPathSinceUtc.Value > NoPathTimeout)
                 {
-                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task. trace={Trace}",
+                    Logger.LogWarning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task. trace={Trace}",
                         (int)NoPathTimeout.TotalSeconds, GetNavigationTraceSummary());
                     BotRunnerService.DiagLog(
                         $"[RETRIEVE_CORPSE] no_path_timeout seconds={(int)NoPathTimeout.TotalSeconds} trace={GetNavigationTraceSummary()}");
@@ -532,7 +532,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             {
                 var waypointDistance = player.Position.DistanceTo(waypoint);
                 var trace = _navPath.TraceSnapshot;
-                Log.Information("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1} plan={Plan} idx={Index} reason={Reason}",
+                Logger.LogInformation("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1} plan={Plan} idx={Index} reason={Reason}",
                     waypoint.X, waypoint.Y, waypoint.Z, waypointDistance, corpseHorizontalDistance, trace.PlanVersion, trace.CurrentWaypointIndex, trace.LastReplanReason ?? "none");
                 BotRunnerService.DiagLog(
                     $"[RETRIEVE_CORPSE] waypoint=({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F1}) wpDist={waypointDistance:F1} corpse2D={corpseHorizontalDistance:F1} plan={trace.PlanVersion} idx={trace.CurrentWaypointIndex} facing={player.Facing:F3} reason={trace.LastReplanReason ?? "none"}");
@@ -574,7 +574,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         if (IsStrictAlive(player))
         {
-            Log.Information("[RETRIEVE_CORPSE] Player no longer in ghost form; retrieval complete.");
+            Logger.LogInformation("[RETRIEVE_CORPSE] Player no longer in ghost form; retrieval complete.");
             PopTask("AliveAfterRetrieve");
             return;
         }
@@ -586,7 +586,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             if (DateTime.UtcNow - _nonGhostSinceUtc.Value > TimeSpan.FromSeconds(2))
             {
                 var isDeadOrGhost = IsDeadOrGhostState(player);
-                Log.Information("[RETRIEVE_CORPSE] Ghost state unavailable (deadOrGhost={DeadOrGhost}, health={Health}); yielding.",
+                Logger.LogInformation("[RETRIEVE_CORPSE] Ghost state unavailable (deadOrGhost={DeadOrGhost}, health={Health}); yielding.",
                     isDeadOrGhost, player.Health);
                 PopTask(isDeadOrGhost ? "GhostStateUnavailable" : "NoLongerDeadOrGhost");
             }
@@ -600,7 +600,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         {
             if (DateTime.UtcNow - _lastCooldownLog >= CooldownLogInterval)
             {
-                Log.Information("[RETRIEVE_CORPSE] Waiting for corpse reclaim cooldown: {Seconds}s remaining", reclaimDelay);
+                Logger.LogInformation("[RETRIEVE_CORPSE] Waiting for corpse reclaim cooldown: {Seconds}s remaining", reclaimDelay);
                 _lastCooldownLog = DateTime.UtcNow;
             }
             return;
@@ -612,7 +612,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         _lastReclaimAttempt = DateTime.UtcNow;
         ObjectManager.RetrieveCorpse();
         var dist3D = MathF.Sqrt(corpseHorizontalDistance * corpseHorizontalDistance + corpseDeltaZ * corpseDeltaZ);
-        Log.Information("[RETRIEVE_CORPSE] Sent reclaim request dist2D={Distance2D:F1} zDelta={ZDelta:F1} dist3D={Dist3D:F1} retrieveRange={Range:F1}",
+        Logger.LogInformation("[RETRIEVE_CORPSE] Sent reclaim request dist2D={Distance2D:F1} zDelta={ZDelta:F1} dist3D={Dist3D:F1} retrieveRange={Range:F1}",
             corpseHorizontalDistance, corpseDeltaZ, dist3D, retrieveRange);
     }
 }

@@ -90,6 +90,36 @@ namespace WoWSharpClient
         /// </summary>
         public SplineController SplineCtrl { get; set; } = new SplineController();
 
+        // ---- Extracted component instances ----
+        private SpellcastingManager _spellcasting;
+        private InventoryManager _inventory;
+
+        // ---- Internal accessors for extracted components ----
+        internal WoWClient WoWClientInternal => _woWClient;
+        internal double WorldTimeNowMs => _worldTimeTracker?.NowMS.TotalMilliseconds ?? 0;
+        internal Func<IAgentFactory> AgentFactoryAccessor => _agentFactoryAccessor;
+        internal bool IsInControlInternal => _isInControl;
+
+        // Expose sniffing state for InventoryManager (InteractWithGameObject diagnostics)
+        internal bool SniffingGameObjUse { get => _sniffingGameObjUse; set => _sniffingGameObjUse = value; }
+        internal DateTime SniffStartTime { get => _sniffStartTime; set => _sniffStartTime = value; }
+
+        /// <summary>Find a WoWItem by GUID. Used by InventoryManager.</summary>
+        internal WoWItem FindItemByGuidInternal(ulong guid)
+        {
+            if (guid == 0) return null;
+            lock (_objectsLock)
+                return _objects.FirstOrDefault(o => o.Guid == guid) as WoWItem;
+        }
+
+        /// <summary>Find a WoWContainer by GUID. Used by InventoryManager.</summary>
+        internal WoWContainer GetContainerByGuid(ulong guid)
+        {
+            if (guid == 0) return null;
+            lock (_objectsLock)
+                return _objects.FirstOrDefault(o => o.Guid == guid) as WoWContainer;
+        }
+
         /// <summary>
         /// P9.2: Public constructor for per-bot instances.
         /// Each BotContext creates its own WoWSharpObjectManager.
@@ -101,6 +131,8 @@ namespace WoWSharpClient
         /// </summary>
         public WoWSharpObjectManager()
         {
+            _spellcasting = new SpellcastingManager(this);
+            _inventory = new InventoryManager(this);
         }
 
 
@@ -881,10 +913,10 @@ namespace WoWSharpClient
         public void DeleteCursorItem()
         {
             // Delete whatever is currently on the cursor
-            if (_cursorItem != null)
+            var cursorItem = _inventory.TryConsumeCursorItem();
+            if (cursorItem != null)
             {
-                var src = _cursorItem.Value;
-                _cursorItem = null;
+                var src = cursorItem.Value;
                 var factory = _agentFactoryAccessor?.Invoke();
                 _ = factory?.InventoryAgent?.DestroyItemAsync(src.Bag, src.Slot, (uint)src.Quantity);
             }
@@ -901,10 +933,10 @@ namespace WoWSharpClient
         public void EquipCursorItem()
         {
             // Equip whatever is on the cursor from a bag slot
-            if (_cursorItem != null)
+            var cursorItem = _inventory.TryConsumeCursorItemForEquip();
+            if (cursorItem != null)
             {
-                var src = _cursorItem.Value;
-                _cursorItem = null;
+                var src = cursorItem.Value;
                 if (_woWClient != null)
                     _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [src.Bag, src.Slot]);
             }

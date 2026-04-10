@@ -1,6 +1,6 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -52,7 +52,7 @@ public class PetFeedingTask : BotTask, IBotTask
             case FeedState.CheckInventory:
                 if (!DietFoods.TryGetValue(_petDiet, out var foodIds))
                 {
-                    Log.Warning("[PET-FEED] Unknown diet: {Diet}", _petDiet);
+                    Logger.LogWarning("[PET-FEED] Unknown diet: {Diet}", _petDiet);
                     _state = FeedState.Complete;
                     return;
                 }
@@ -61,7 +61,7 @@ public class PetFeedingTask : BotTask, IBotTask
                 var hasFood = foodIds.Any(id => ObjectManager.GetItemCount(id) > 0);
                 if (!hasFood)
                 {
-                    Log.Information("[PET-FEED] No {Diet} food in inventory", _petDiet);
+                    Logger.LogInformation("[PET-FEED] No {Diet} food in inventory", _petDiet);
                     _state = FeedState.Complete;
                     return;
                 }
@@ -70,7 +70,7 @@ public class PetFeedingTask : BotTask, IBotTask
                 break;
 
             case FeedState.Feed:
-                Log.Information("[PET-FEED] Feeding pet ({Diet})", _petDiet);
+                Logger.LogInformation("[PET-FEED] Feeding pet ({Diet})", _petDiet);
                 // Actual feeding is done via CMSG_PET_ACTION with feed command
                 // followed by CMSG_USE_ITEM for the food
                 _state = FeedState.Complete;

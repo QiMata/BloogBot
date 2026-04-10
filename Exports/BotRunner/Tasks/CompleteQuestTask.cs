@@ -1,5 +1,5 @@
 using BotRunner.Interfaces;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tasks;
 
@@ -15,13 +15,13 @@ public class CompleteQuestTask(IBotContext botContext, int rewardIndex = 0) : Bo
         var questFrame = ObjectManager.QuestFrame;
         if (questFrame == null)
         {
-            Log.Warning("[COMPLETE_QUEST] No quest frame open");
+            Logger.LogWarning("[COMPLETE_QUEST] No quest frame open");
             BotTasks.Pop();
             return;
         }
 
         questFrame.CompleteQuest(rewardIndex);
-        Log.Information("[COMPLETE_QUEST] Completed quest (reward index {Index})", rewardIndex);
+        Logger.LogInformation("[COMPLETE_QUEST] Completed quest (reward index {Index})", rewardIndex);
         BotTasks.Pop();
     }
 }

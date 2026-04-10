@@ -2,7 +2,7 @@ using BotRunner.Combat;
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Serilog; // TODO: migrate to ILogger when DI is available
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -93,27 +93,27 @@ public class EncounterMechanicsTask : BotTask, IBotTask
                         player.Position.Y + MathF.Sin(awayAngle) * mechanic.TriggerDistanceYd,
                         player.Position.Z);
                     ObjectManager.MoveToward(spreadPos);
-                    Log.Debug("[ENCOUNTER] Spreading from ally");
+                    Logger.LogDebug("[ENCOUNTER] Spreading from ally");
                 }
                 break;
 
             case MechanicType.Stack:
                 ObjectManager.MoveToward(mechanic.StackPoint);
-                Log.Debug("[ENCOUNTER] Stacking at ({X:F0},{Y:F0})",
+                Logger.LogDebug("[ENCOUNTER] Stacking at ({X:F0},{Y:F0})",
                     mechanic.StackPoint.X, mechanic.StackPoint.Y);
                 break;
 
             case MechanicType.Interrupt:
                 // Cast interrupt — handled by combat rotation priority
-                Log.Information("[ENCOUNTER] Interrupt needed on boss cast (channeling={ChannelId})", boss.ChannelingId);
+                Logger.LogInformation("[ENCOUNTER] Interrupt needed on boss cast (channeling={ChannelId})", boss.ChannelingId);
                 break;
 
             case MechanicType.Dispel:
-                Log.Information("[ENCOUNTER] Dispel needed");
+                Logger.LogInformation("[ENCOUNTER] Dispel needed");
                 break;
 
             case MechanicType.TauntSwap:
-                Log.Information("[ENCOUNTER] Taunt swap needed");
+                Logger.LogInformation("[ENCOUNTER] Taunt swap needed");
                 break;
         }
     }

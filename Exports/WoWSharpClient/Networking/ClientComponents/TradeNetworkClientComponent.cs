@@ -52,14 +52,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Operation, string Error)> _tradeErrors;
         private readonly IObservable<TradeWindowData> _tradeWindowUpdates;
 
-        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
-        private readonly IDisposable _tradeRequestsSub;
-        private readonly IDisposable _tradesOpenedSub;
-        private readonly IDisposable _tradesClosedSub;
-        private readonly IDisposable _offeredMoneyChangesSub;
-        private readonly IDisposable _tradeWindowUpdatesSub;
-        private readonly IDisposable _tradeItemSlotsChangedSub;
-        private readonly IDisposable _tradeErrorsSub;
+        // Self-subscriptions tracked via base class Disposables
 
         public TradeNetworkClientComponent(IWorldClient worldClient, ILogger<TradeNetworkClientComponent> logger)
         {
@@ -148,14 +141,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Publish()
                 .RefCount();
 
-            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
-            _tradeRequestsSub = _tradeRequests.Subscribe(_ => { });
-            _tradesOpenedSub = _tradesOpened.Subscribe(_ => { });
-            _tradesClosedSub = _tradesClosed.Subscribe(_ => { });
-            _offeredMoneyChangesSub = _offeredMoneyChanges.Subscribe(_ => { });
-            _tradeWindowUpdatesSub = _tradeWindowUpdates.Subscribe(_ => { });
-            _tradeItemSlotsChangedSub = _tradeItemSlotsChanged.Subscribe(_ => { });
-            _tradeErrorsSub = _tradeErrors.Subscribe(_ => { });
+            // Self-subscribe to activate .Do() side-effects; tracked via base Disposables
+            Disposables.Add(_tradeRequests.Subscribe(_ => { }));
+            Disposables.Add(_tradesOpened.Subscribe(_ => { }));
+            Disposables.Add(_tradesClosed.Subscribe(_ => { }));
+            Disposables.Add(_offeredMoneyChanges.Subscribe(_ => { }));
+            Disposables.Add(_tradeWindowUpdates.Subscribe(_ => { }));
+            Disposables.Add(_tradeItemSlotsChanged.Subscribe(_ => { }));
+            Disposables.Add(_tradeErrors.Subscribe(_ => { }));
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
@@ -579,14 +572,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
 
-            _tradeRequestsSub?.Dispose();
-            _tradesOpenedSub?.Dispose();
-            _tradesClosedSub?.Dispose();
-            _offeredMoneyChangesSub?.Dispose();
-            _tradeWindowUpdatesSub?.Dispose();
-            _tradeItemSlotsChangedSub?.Dispose();
-            _tradeErrorsSub?.Dispose();
-
             _localTradeItemSlotChanged.OnCompleted();
             _localMoneyOfferedChanged.OnCompleted();
             _localTradeErrors.OnCompleted();
@@ -600,7 +585,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             TradeWindowUpdated = null;
 
             _disposed = true;
-            base.Dispose();
+            base.Dispose(); // disposes all tracked subscriptions via Disposables
         }
     }
 }
