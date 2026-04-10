@@ -84,13 +84,11 @@ namespace BotRunner
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
         private Position? _lastKnownAlivePosition;
+        private int _lastLoggedContainedItems = -1;
+        private int _lastLoggedItemObjects = -1;
 
         // Extracted components
-        private readonly SnapshotBuilder _snapshotBuilder;
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
-        private readonly ActionDispatcher _actionDispatcher;
-        private readonly CombatSequenceBuilder _combatSequences;
-        private readonly MovementSequenceBuilder _movementSequences;
         private readonly InteractionSequenceBuilder _interactionSequences;
 
         // Binary compatibility shim for already-built service binaries that still bind to the
@@ -146,31 +144,10 @@ namespace BotRunner
             _autoRetrieveCorpseTaskEnabled = !GetEnvironmentFlag("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK");
 
             // Initialize extracted components
-            _snapshotBuilder = new SnapshotBuilder(objectManager, agentFactoryAccessor);
             _diagnosticsRecorder = new DiagnosticsRecorder(objectManager, diagnosticPacketTraceRecorder);
             _diagnosticsRecorder.AccountNameAccessor = () => _activitySnapshot?.AccountName ?? "unknown";
 
-            _combatSequences = new CombatSequenceBuilder(objectManager, container);
-            _movementSequences = new MovementSequenceBuilder(objectManager, container);
             _interactionSequences = new InteractionSequenceBuilder(objectManager, agentFactoryAccessor);
-
-            _actionDispatcher = new ActionDispatcher(
-                objectManager,
-                container,
-                agentFactoryAccessor,
-                _behaviorConfig,
-                _combatSequences,
-                _movementSequences,
-                _interactionSequences,
-                () => _botTasks,
-                EnqueueDiagnosticMessage,
-                msg => DiagLog(msg),
-                player => IsDeadOrGhostState(player),
-                player => IsGhostState(player),
-                player => IsCorpseState(player),
-                () => _lastReleaseSpiritCommandUtc,
-                value => _lastReleaseSpiritCommandUtc = value,
-                () => _lastKnownAlivePosition);
 
             // Subscribe to chat/error events for test observability
             SubscribeToMessageEvents();
@@ -227,11 +204,7 @@ namespace BotRunner
                         continue;
                     }
 
-                    _snapshotBuilder.PopulateSnapshotFromObjectManager(
-                        _activitySnapshot,
-                        Interlocked.Read(ref _tickCount),
-                        FlushMessageBuffers,
-                        UpdateLastKnownAlivePosition);
+                    PopulateSnapshotFromObjectManager();
                     _diagnosticsRecorder.CaptureTransformFrame(_botTasks, Interlocked.Read(ref _tickCount), _activitySnapshot);
 
                     // DIAG: log MapId in snapshot for BG transfer debugging
@@ -351,7 +324,7 @@ namespace BotRunner
                 if (_diagnosticsRecorder.HandleDiagnosticAction(action))
                     return;
 
-                var actionList = ActionDispatcher.ConvertActionMessageToCharacterActions(action);
+                var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
                     if (action.ActionType == Communication.ActionType.CastSpell
@@ -361,7 +334,7 @@ namespace BotRunner
                     }
 
                     Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1} [{_currentActionCorrelationId}]");
-                    _behaviorTree = _actionDispatcher.BuildBehaviorTreeFromActions(actionList);
+                    _behaviorTree = BuildBehaviorTreeFromActions(actionList);
                     _behaviorTreeStatus = BehaviourTreeStatus.Running;
                     _activitySnapshot.PreviousAction = action;
                     return;
@@ -536,7 +509,7 @@ namespace BotRunner
             if ((DateTime.UtcNow - _lastDeathRecoveryPush).TotalSeconds < 5)
                 return;
 
-            var context = new ActionDispatcher.BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
             if (isCorpse)
             {
@@ -623,7 +596,7 @@ namespace BotRunner
                 return;
             }
 
-            var context = new ActionDispatcher.BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
             try
             {

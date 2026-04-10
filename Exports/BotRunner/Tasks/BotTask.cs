@@ -3,6 +3,8 @@ using BotRunner.Interfaces;
 using BotRunner.Movement;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -15,6 +17,12 @@ namespace BotRunner.Tasks;
 public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 {
     protected readonly IBotContext BotContext = botContext;
+
+    private Microsoft.Extensions.Logging.ILogger? _logger;
+    /// <summary>
+    /// Per-task logger created from IBotContext.LoggerFactory. Falls back to NullLogger.
+    /// </summary>
+    protected Microsoft.Extensions.Logging.ILogger Logger => _logger ??= (BotContext.LoggerFactory ?? NullLoggerFactory.Instance).CreateLogger(GetType().Name);
 
     /// <summary>
     /// Access to the object manager for game state.

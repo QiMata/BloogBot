@@ -740,7 +740,7 @@ public class ObjectManagerWorldSessionTests
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
-        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
 
         if (expectRooted)
             Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
@@ -794,7 +794,7 @@ public class ObjectManagerWorldSessionTests
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
-        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
 
         if (apply)
             Assert.True(player.MovementFlags.HasFlag(flag));
@@ -851,7 +851,7 @@ public class ObjectManagerWorldSessionTests
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildCounterAndFloatPayload(movementCounter, newValue)));
-        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
 
         switch (serverOpcode)
         {
@@ -1020,7 +1020,7 @@ public class ObjectManagerWorldSessionTests
         var unit = Assert.IsType<WoWUnit>(objectManager.GetObjectByGuid(remoteGuid));
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, remoteGuid, BuildSingleFloatPayload(newValue)));
-        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
 
         switch (serverOpcode)
         {
@@ -1085,7 +1085,7 @@ public class ObjectManagerWorldSessionTests
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, remoteGuid));
-        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload);
+        MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
 
         if (apply)
             Assert.True(unit.MovementFlags.HasFlag(flag));

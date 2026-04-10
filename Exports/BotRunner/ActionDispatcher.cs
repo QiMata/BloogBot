@@ -116,7 +116,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildSelectGossipSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
@@ -143,7 +143,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
@@ -173,11 +173,11 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(AcceptQuestSequence);
+                            builder.Splice(_interactionSequences.AcceptQuestSequence);
                         }
                         break;
                     case CharacterAction.DeclineQuest:
-                        builder.Splice(DeclineQuestSequence);
+                        builder.Splice(_interactionSequences.DeclineQuestSequence);
                         break;
                     case CharacterAction.AbandonQuest:
                         // Params: [0]=questLogSlot (byte index in quest log)
@@ -197,7 +197,7 @@ namespace BotRunner
                         }
                         break;
                     case CharacterAction.SelectReward:
-                        builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.CompleteQuest:
                         // With params: [0]=npcGuid, [1]=questId, optional [2]=rewardIndex
@@ -216,7 +216,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(CompleteQuestSequence);
+                            builder.Splice(_interactionSequences.CompleteQuestSequence);
                         }
                         break;
 
@@ -242,7 +242,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildTrainSkillSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildTrainSkillSequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.TrainTalent:
@@ -268,7 +268,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildLearnTalentSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
@@ -305,7 +305,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildOfferMoneySequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildOfferMoneySequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.OfferItem:
@@ -324,7 +324,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildOfferItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3]));
+                            builder.Splice(_interactionSequences.BuildOfferItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3]));
                         }
                         break;
                     case CharacterAction.AcceptTrade:
@@ -340,7 +340,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(AcceptTradeSequence);
+                            builder.Splice(_interactionSequences.AcceptTradeSequence);
                         }
                         break;
                     case CharacterAction.DeclineTrade:
@@ -356,62 +356,62 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(DeclineTradeSequence);
+                            builder.Splice(_interactionSequences.DeclineTradeSequence);
                         }
                         break;
                     case CharacterAction.EnchantTrade:
-                        builder.Splice(BuildOfferEnchantSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildOfferEnchantSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LockpickTrade:
-                        builder.Splice(OfferLockpickSequence);
+                        builder.Splice(_interactionSequences.OfferLockpickSequence);
                         break;
 
                     case CharacterAction.PromoteLeader:
-                        builder.Splice(BuildPromoteLeaderSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(_interactionSequences.BuildPromoteLeaderSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteAssistant:
-                        builder.Splice(BuildPromoteAssistantSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(_interactionSequences.BuildPromoteAssistantSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteLootManager:
-                        builder.Splice(BuildPromoteLootManagerSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(_interactionSequences.BuildPromoteLootManagerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.SetGroupLoot:
-                        builder.Splice(BuildSetGroupLootSequence((GroupLootSetting)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildSetGroupLootSequence((GroupLootSetting)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.AssignLoot:
-                        builder.Splice(BuildAssignLootSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
+                        builder.Splice(_interactionSequences.BuildAssignLootSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
                         break;
 
                     case CharacterAction.LootRollNeed:
-                        builder.Splice(BuildLootRollNeedSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildLootRollNeedSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LootRollGreed:
-                        builder.Splice(BuildLootRollGreedSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildLootRollGreedSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.LootPass:
-                        builder.Splice(BuildLootPassSequence((int)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildLootPassSequence((int)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.SendGroupInvite:
                         if (actionEntry.Item2[0] is string playerName)
-                            builder.Splice(BuildSendGroupInviteByNameSequence(playerName));
+                            builder.Splice(_interactionSequences.BuildSendGroupInviteByNameSequence(playerName));
                         else
-                            builder.Splice(BuildSendGroupInviteSequence(UnboxGuid(actionEntry.Item2[0])));
+                            builder.Splice(_interactionSequences.BuildSendGroupInviteSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.AcceptGroupInvite:
-                        builder.Splice(AcceptGroupInviteSequence);
+                        builder.Splice(_interactionSequences.AcceptGroupInviteSequence);
                         break;
                     case CharacterAction.DeclineGroupInvite:
-                        builder.Splice(DeclineGroupInviteSequence);
+                        builder.Splice(_interactionSequences.DeclineGroupInviteSequence);
                         break;
                     case CharacterAction.KickPlayer:
-                        builder.Splice(BuildKickPlayerSequence(UnboxGuid(actionEntry.Item2[0])));
+                        builder.Splice(_interactionSequences.BuildKickPlayerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.LeaveGroup:
-                        builder.Splice(LeaveGroupSequence);
+                        builder.Splice(_interactionSequences.LeaveGroupSequence);
                         break;
                     case CharacterAction.DisbandGroup:
-                        builder.Splice(DisbandGroupSequence);
+                        builder.Splice(_interactionSequences.DisbandGroupSequence);
                         break;
                     case CharacterAction.StartMeleeAttack:
                         builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
@@ -475,29 +475,29 @@ namespace BotRunner
 
                     case CharacterAction.UseItem:
                         if (actionEntry.Item2.Count >= 3)
-                            builder.Splice(BuildUseItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (ulong)actionEntry.Item2[2]));
+                            builder.Splice(_interactionSequences.BuildUseItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (ulong)actionEntry.Item2[2]));
                         else
-                            builder.Splice(BuildUseItemByIdSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildUseItemByIdSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.EquipItem:
                         if (actionEntry.Item2.Count >= 3)
-                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
+                            builder.Splice(_interactionSequences.BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
                         else if (actionEntry.Item2.Count >= 2)
-                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(_interactionSequences.BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         else
-                            builder.Splice(BuildEquipItemByIdSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildEquipItemByIdSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.UnequipItem:
-                        builder.Splice(BuildUnequipItemSequence((EquipSlot)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildUnequipItemSequence((EquipSlot)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.DestroyItem:
-                        builder.Splice(BuildDestroyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                        builder.Splice(_interactionSequences.BuildDestroyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
                         break;
                     case CharacterAction.MoveItem:
-                        builder.Splice(BuildMoveItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3], (int)actionEntry.Item2[4]));
+                        builder.Splice(_interactionSequences.BuildMoveItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3], (int)actionEntry.Item2[4]));
                         break;
                     case CharacterAction.SplitStack:
-                        builder.Splice(BuildSplitStackSequence((int)actionEntry.Item2[0],
+                        builder.Splice(_interactionSequences.BuildSplitStackSequence((int)actionEntry.Item2[0],
                             (int)actionEntry.Item2[1],
                             (int)actionEntry.Item2[2],
                             (int)actionEntry.Item2[3],
@@ -521,7 +521,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(_interactionSequences.BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         }
                         break;
                     case CharacterAction.BuybackItem:
@@ -546,7 +546,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                            builder.Splice(_interactionSequences.BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         }
                         break;
                     case CharacterAction.SellItem:
@@ -567,7 +567,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                            builder.Splice(_interactionSequences.BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
                         }
                         break;
                     case CharacterAction.RepairItem:
@@ -588,7 +588,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildRepairItemSequence((int)actionEntry.Item2[0]));
                         }
                         break;
                     case CharacterAction.RepairAllItems:
@@ -606,7 +606,7 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(RepairAllItemsSequence);
+                            builder.Splice(_interactionSequences.RepairAllItemsSequence);
                         }
                         break;
 
@@ -620,7 +620,7 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.DismissBuff:
-                        builder.Splice(BuildDismissBuffSequence((string)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildDismissBuffSequence((string)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.Resurrect:
@@ -647,24 +647,24 @@ namespace BotRunner
                         }
                         else
                         {
-                            builder.Splice(BuildCraftSequence((int)actionEntry.Item2[0]));
+                            builder.Splice(_interactionSequences.BuildCraftSequence((int)actionEntry.Item2[0]));
                         }
                         break;
 
                     case CharacterAction.Login:
-                        builder.Splice(BuildLoginSequence((string)actionEntry.Item2[0], (string)actionEntry.Item2[1]));
+                        builder.Splice(_interactionSequences.BuildLoginSequence((string)actionEntry.Item2[0], (string)actionEntry.Item2[1]));
                         break;
                     case CharacterAction.Logout:
-                        builder.Splice(LogoutSequence);
+                        builder.Splice(_interactionSequences.LogoutSequence);
                         break;
                     case CharacterAction.CreateCharacter:
-                        builder.Splice(BuildCreateCharacterSequence(actionEntry.Item2));
+                        builder.Splice(_interactionSequences.BuildCreateCharacterSequence(actionEntry.Item2));
                         break;
                     case CharacterAction.DeleteCharacter:
-                        builder.Splice(BuildDeleteCharacterSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildDeleteCharacterSequence((ulong)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.EnterWorld:
-                        builder.Splice(BuildEnterWorldSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(_interactionSequences.BuildEnterWorldSequence((ulong)actionEntry.Item2[0]));
                         break;
 
                     case CharacterAction.GatherNode:

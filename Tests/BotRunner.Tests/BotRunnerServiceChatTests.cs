@@ -14,7 +14,7 @@ public class BotRunnerServiceChatTests
         objectManager.Setup(x => x.SendGmCommandAsync(".pool spawns 2618", 3000))
             .ReturnsAsync(["spawn-row-1"]);
 
-        var responses = ActionDispatcher.SendChatThroughBestAvailablePath(objectManager.Object, ".pool spawns 2618");
+        var responses = BotRunnerService.SendChatThroughBestAvailablePath(objectManager.Object, ".pool spawns 2618");
 
         Assert.Equal(["spawn-row-1"], responses);
         objectManager.Verify(x => x.SendGmCommandAsync(".pool spawns 2618", 3000), Times.Once);
@@ -29,7 +29,7 @@ public class BotRunnerServiceChatTests
         objectManager.Setup(x => x.SendGmCommandAsync(".learn 7731", 2000))
             .ReturnsAsync(["learned"]);
 
-        var responses = ActionDispatcher.SendChatThroughBestAvailablePath(objectManager.Object, ".learn 7731");
+        var responses = BotRunnerService.SendChatThroughBestAvailablePath(objectManager.Object, ".learn 7731");
 
         Assert.Equal(["learned"], responses);
         objectManager.Verify(x => x.SendGmCommandAsync(".learn 7731", 2000), Times.Once);
@@ -43,7 +43,7 @@ public class BotRunnerServiceChatTests
         objectManager.SetupGet(x => x.SupportsDirectGmCommandCapture).Returns(false);
         objectManager.Setup(x => x.SendChatMessage(".pool spawns 2618"));
 
-        var responses = ActionDispatcher.SendChatThroughBestAvailablePath(objectManager.Object, ".pool spawns 2618");
+        var responses = BotRunnerService.SendChatThroughBestAvailablePath(objectManager.Object, ".pool spawns 2618");
 
         Assert.Empty(responses);
         objectManager.Verify(x => x.SendChatMessage(".pool spawns 2618"), Times.Once);
@@ -57,7 +57,7 @@ public class BotRunnerServiceChatTests
         objectManager.SetupGet(x => x.SupportsDirectGmCommandCapture).Returns(true);
         objectManager.Setup(x => x.SendChatMessage("hello world"));
 
-        var responses = ActionDispatcher.SendChatThroughBestAvailablePath(objectManager.Object, "hello world");
+        var responses = BotRunnerService.SendChatThroughBestAvailablePath(objectManager.Object, "hello world");
 
         Assert.Empty(responses);
         objectManager.Verify(x => x.SendChatMessage("hello world"), Times.Once);

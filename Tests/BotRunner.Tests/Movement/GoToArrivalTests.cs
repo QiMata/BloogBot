@@ -14,7 +14,7 @@ public class GoToArrivalTests
         var current = new Position(-461.793f, -4761.793f, 32.411f);
         var target = new Position(-460f, -4760f, 38f);
 
-        var reached = BotRunner.SequenceBuilders.MovementSequenceBuilder.HasReachedGoToTarget(current, target, tolerance: 3f);
+        var reached = BotRunnerService.HasReachedGoToTarget(current, target, tolerance: 3f);
 
         Assert.True(reached);
     }
@@ -25,7 +25,7 @@ public class GoToArrivalTests
         var current = new Position(-464.5f, -4764.5f, 32.411f);
         var target = new Position(-460f, -4760f, 38f);
 
-        var reached = BotRunner.SequenceBuilders.MovementSequenceBuilder.HasReachedGoToTarget(current, target, tolerance: 3f);
+        var reached = BotRunnerService.HasReachedGoToTarget(current, target, tolerance: 3f);
 
         Assert.False(reached);
     }
