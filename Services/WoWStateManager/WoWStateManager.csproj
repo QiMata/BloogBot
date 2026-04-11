@@ -41,12 +41,4 @@
 
 		<ProjectReference Include="..\PromptHandlingService\PromptHandlingService.csproj" />
 	</ItemGroup>
-  <!-- Copy x86 Navigation.dll to output. StateManager targets x86. -->
-  <Target Name="CopyX86NavigationDll" AfterTargets="Build">
-    <PropertyGroup>
-      <X86NavDll>$(OutputPath)x86\Navigation.dll</X86NavDll>
-    </PropertyGroup>
-    <Copy SourceFiles="$(X86NavDll)" DestinationFolder="$(OutputPath)"
-          Condition="Exists('$(X86NavDll)')" SkipUnchangedFiles="true" />
-  </Target>
 </Project>

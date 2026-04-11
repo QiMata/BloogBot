@@ -1058,6 +1058,231 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void Update_TeleportWithGroundSnap_DuringMapTransition_DefersPhysicsUntilTransitionClears()
+        {
+            var objectManager = new WoWSharpObjectManager();
+            SetPrivateField(objectManager, "_isBeingTeleported", true);
+
+            var stepCallCount = 0;
+            var controller = new MovementController(_mockClient.Object, _player, objectManager: objectManager);
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                stepCallCount++;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z - 1.5f,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = -5f,
+                    GroundZ = -50001f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50,
+                };
+            };
+
+            _player.Position = new Position(100f, 200f, 53f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            controller.Reset(teleportDestZ: 53f);
+
+            controller.Update(0.05f, 1500);
+
+            Assert.Equal(0, stepCallCount);
+            Assert.Equal(53f, _player.Position.Z, 3);
+            Assert.True(controller.NeedsGroundSnap);
+
+            SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+            controller.Update(0.05f, 1550);
+
+            Assert.Equal(1, stepCallCount);
+            Assert.Equal(51.5f, _player.Position.Z, 3);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+        }
+
+        [Fact]
+        public void Update_TeleportWithGroundSnap_DiscardStalePhysicsResult_WhenWorldStateChangesMidStep()
+        {
+            var stepCallCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                stepCallCount++;
+
+                // Simulate a cross-map teleport landing while local physics is still
+                // processing the old world-space state.
+                _player.MapId = 389;
+                _player.Position = new Position(3f, -11f, -18f);
+                _player.TransportGuid = 0;
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = 0f,
+                    GroundZ = input.Z,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                };
+            };
+
+            _player.MapId = 1;
+            _player.Position = new Position(-618.518f, -4251.67f, 38.718f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Reset(teleportDestZ: -18f);
+            _sentPackets.Clear();
+
+            _controller.Update(0.05f, 1500);
+
+            Assert.Equal(1, stepCallCount);
+            Assert.Equal(389u, _player.MapId);
+            Assert.Equal(3f, _player.Position.X, 3);
+            Assert.Equal(-11f, _player.Position.Y, 3);
+            Assert.Equal(-18f, _player.Position.Z, 3);
+            Assert.True(_controller.NeedsGroundSnap);
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Update_IdleAuthoritativeRelocation_PrimesGroundSnapAndRefreshesEnvironment()
+        {
+            var stepCallCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                stepCallCount++;
+                if (input.MapId == 389u)
+                {
+                    Assert.Equal(3f, input.X, 3);
+                    Assert.Equal(-11f, input.Y, 3);
+                    Assert.Equal(-18f, input.Z, 3);
+                }
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = 0f,
+                    GroundZ = input.Z,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                    EnvironmentFlags = input.MapId == 389u
+                        ? (uint)SceneEnvironmentFlags.Indoors
+                        : 0u,
+                };
+            };
+
+            _player.MapId = 1;
+            _player.Position = new Position(-618.518f, -4251.67f, 38.718f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Update(0.05f, 1000);
+
+            _sentPackets.Clear();
+            _player.MapId = 389;
+            _player.Position = new Position(3f, -11f, -18f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            _controller.Update(0.05f, 1500);
+
+            Assert.Equal(2, stepCallCount);
+            Assert.Equal(389u, _player.MapId);
+            Assert.Equal(3f, _player.Position.X, 3);
+            Assert.Equal(-11f, _player.Position.Y, 3);
+            Assert.Equal(-18f, _player.Position.Z, 3);
+            Assert.True(_controller.LastEnvironmentFlags.IsIndoors());
+            Assert.False(_controller.NeedsGroundSnap);
+        }
+
+        [Fact]
+        public void Update_FirstIdleFrame_SeedsEnvironmentFlags_WhenStateUnresolved()
+        {
+            var stepCallCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                stepCallCount++;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = 0f,
+                    GroundZ = input.Z,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                    EnvironmentFlags = (uint)SceneEnvironmentFlags.Indoors,
+                };
+            };
+
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            _controller.Update(0.05f, 1000);
+            _controller.Update(0.05f, 1050);
+
+            Assert.Equal(1, stepCallCount);
+            Assert.True(_controller.LastEnvironmentFlags.IsIndoors());
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
+        public void Reset_SameMap_PreservesLastResolvedEnvironmentUntilNextPhysics()
+        {
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = 0f,
+                GroundZ = input.Z,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+                EnvironmentFlags = (uint)SceneEnvironmentFlags.Indoors,
+            };
+
+            _player.MapId = 389;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            _controller.Update(0.05f, 1000);
+            _controller.Reset(teleportDestZ: _player.Position.Z);
+
+            Assert.Equal(SceneEnvironmentFlags.None, _controller.LastEnvironmentFlags);
+            Assert.True(_controller.EffectiveEnvironmentFlags.IsIndoors());
+        }
+
+        [Fact]
         public void Update_PostTeleport_NoGroundBelow_AllowsGraceFall()
         {
             NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput

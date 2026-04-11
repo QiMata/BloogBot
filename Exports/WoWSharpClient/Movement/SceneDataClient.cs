@@ -282,15 +282,18 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         int count = (int)response.TriangleCount;
         if (count == 0) return [];
 
+        var metadata = UnpackTriangleMetadata(response, count);
+
         // Prefer compressed data (gzip'd raw float bytes)
         if (response.TriangleDataCompressed != null && response.TriangleDataCompressed.Length > 0)
-            return UnpackCompressedTriangles(response.TriangleDataCompressed, count);
+            return UnpackCompressedTriangles(response.TriangleDataCompressed, metadata, count);
 
         // Fallback: uncompressed repeated float
         var triangles = new NativePhysics.InjectedTriangle[count];
         for (int i = 0; i < count; i++)
         {
             int tBase = i * 9;
+            var triangleMetadata = metadata != null ? metadata[i] : default;
             triangles[i] = new NativePhysics.InjectedTriangle
             {
                 V0X = response.TriangleData[tBase + 0],
@@ -302,13 +305,18 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
                 V2X = response.TriangleData[tBase + 6],
                 V2Y = response.TriangleData[tBase + 7],
                 V2Z = response.TriangleData[tBase + 8],
+                SourceType = metadata != null ? triangleMetadata.SourceType : 1u,
+                InstanceId = metadata != null ? triangleMetadata.InstanceId : 0u,
+                GroupFlags = metadata != null ? triangleMetadata.GroupFlags : 0u,
             };
         }
         return triangles;
     }
 
     private static NativePhysics.InjectedTriangle[] UnpackCompressedTriangles(
-        Google.Protobuf.ByteString compressed, int triangleCount)
+        Google.Protobuf.ByteString compressed,
+        TriangleMetadata[]? metadata,
+        int triangleCount)
     {
         int floatCount = triangleCount * 9;
         var rawBytes = new byte[floatCount * 4];
@@ -329,6 +337,7 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         for (int i = 0; i < triangleCount; i++)
         {
             int bBase = i * 9 * 4;
+            var triangleMetadata = metadata != null ? metadata[i] : default;
             triangles[i] = new NativePhysics.InjectedTriangle
             {
                 V0X = BitConverter.ToSingle(rawBytes, bBase + 0),
@@ -340,9 +349,45 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
                 V2X = BitConverter.ToSingle(rawBytes, bBase + 24),
                 V2Y = BitConverter.ToSingle(rawBytes, bBase + 28),
                 V2Z = BitConverter.ToSingle(rawBytes, bBase + 32),
+                SourceType = metadata != null ? triangleMetadata.SourceType : 1u,
+                InstanceId = metadata != null ? triangleMetadata.InstanceId : 0u,
+                GroupFlags = metadata != null ? triangleMetadata.GroupFlags : 0u,
             };
         }
         return triangles;
+    }
+
+    private static TriangleMetadata[]? UnpackTriangleMetadata(SceneTileResponse response, int triangleCount)
+    {
+        if (response.TriangleMetadataCompressed == null || response.TriangleMetadataCompressed.Length == 0)
+            return null;
+
+        int wordCount = checked(triangleCount * 3);
+        var rawBytes = new byte[wordCount * sizeof(uint)];
+
+        using var compressedStream = new System.IO.MemoryStream(response.TriangleMetadataCompressed.ToByteArray());
+        using var gzip = new System.IO.Compression.GZipStream(
+            compressedStream, System.IO.Compression.CompressionMode.Decompress);
+
+        int totalRead = 0;
+        while (totalRead < rawBytes.Length)
+        {
+            int read = gzip.Read(rawBytes, totalRead, rawBytes.Length - totalRead);
+            if (read == 0) break;
+            totalRead += read;
+        }
+
+        var metadata = new TriangleMetadata[triangleCount];
+        for (int i = 0; i < triangleCount; i++)
+        {
+            int bBase = i * 3 * sizeof(uint);
+            metadata[i] = new TriangleMetadata(
+                BitConverter.ToUInt32(rawBytes, bBase + 0),
+                BitConverter.ToUInt32(rawBytes, bBase + 4),
+                BitConverter.ToUInt32(rawBytes, bBase + 8));
+        }
+
+        return metadata;
     }
 
     private void MarkRetryAfterFailure(DateTime now)
@@ -358,4 +403,6 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         uint MapId, uint TileX, uint TileY,
         NativePhysics.InjectedTriangle[] Triangles,
         float MinX, float MinY, float MaxX, float MaxY);
+
+    private readonly record struct TriangleMetadata(uint SourceType, uint InstanceId, uint GroupFlags);
 }

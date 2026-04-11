@@ -52,7 +52,7 @@ namespace SceneData {
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridRequest), global::SceneData.SceneGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneGridResponse), global::SceneData.SceneGridResponse.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY", "TriangleData", "Walkable", "NormalData", "TriangleCount", "Success", "ErrorMessage" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileRequest), global::SceneData.SceneTileRequest.Parser, new[]{ "MapId", "TileX", "TileY" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileResponse), global::SceneData.SceneTileResponse.Parser, new[]{ "MapId", "TileX", "TileY", "TriangleData", "NormalData", "Walkable", "TriangleCount", "Success", "ErrorMessage", "MinX", "MinY", "MaxX", "MaxY", "TriangleDataCompressed" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.SceneTileResponse), global::SceneData.SceneTileResponse.Parser, new[]{ "MapId", "TileX", "TileY", "TriangleData", "NormalData", "Walkable", "TriangleCount", "Success", "ErrorMessage", "MinX", "MinY", "MaxX", "MaxY", "TriangleDataCompressed", "TriangleMetadataCompressed" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridRequest), global::SceneData.LiquidGridRequest.Parser, new[]{ "MapId", "MinX", "MinY", "MaxX", "MaxY" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::SceneData.LiquidGridResponse), global::SceneData.LiquidGridResponse.Parser, new[]{ "MapId", "LiquidLevels", "LiquidTypes", "CellSize", "CellsX", "CellsY", "Success" }, null, null, null, null)
           }));
@@ -1294,6 +1294,7 @@ namespace SceneData {
       maxX_ = other.maxX_;
       maxY_ = other.maxY_;
       triangleDataCompressed_ = other.triangleDataCompressed_;
+      triangleMetadataCompressed_ = other.triangleMetadataCompressed_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1485,6 +1486,23 @@ namespace SceneData {
       }
     }
 
+    /// <summary>Field number for the "triangle_metadata_compressed" field.</summary>
+    public const int TriangleMetadataCompressedFieldNumber = 15;
+    private pb::ByteString triangleMetadataCompressed_ = pb::ByteString.Empty;
+    /// <summary>
+    /// GZip-compressed triangle metadata (3 uint32 values per triangle):
+    /// sourceType, instanceId, groupFlags. Used by thin scene slices to preserve
+    /// enough WMO metadata for indoor/mount environment classification.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pb::ByteString TriangleMetadataCompressed {
+      get { return triangleMetadataCompressed_; }
+      set {
+        triangleMetadataCompressed_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1514,6 +1532,7 @@ namespace SceneData {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxX, other.MaxX)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxY, other.MaxY)) return false;
       if (TriangleDataCompressed != other.TriangleDataCompressed) return false;
+      if (TriangleMetadataCompressed != other.TriangleMetadataCompressed) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1535,6 +1554,7 @@ namespace SceneData {
       if (MaxX != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxX);
       if (MaxY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxY);
       if (TriangleDataCompressed.Length != 0) hash ^= TriangleDataCompressed.GetHashCode();
+      if (TriangleMetadataCompressed.Length != 0) hash ^= TriangleMetadataCompressed.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1600,6 +1620,10 @@ namespace SceneData {
         output.WriteRawTag(114);
         output.WriteBytes(TriangleDataCompressed);
       }
+      if (TriangleMetadataCompressed.Length != 0) {
+        output.WriteRawTag(122);
+        output.WriteBytes(TriangleMetadataCompressed);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1657,6 +1681,10 @@ namespace SceneData {
         output.WriteRawTag(114);
         output.WriteBytes(TriangleDataCompressed);
       }
+      if (TriangleMetadataCompressed.Length != 0) {
+        output.WriteRawTag(122);
+        output.WriteBytes(TriangleMetadataCompressed);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1702,6 +1730,9 @@ namespace SceneData {
       }
       if (TriangleDataCompressed.Length != 0) {
         size += 1 + pb::CodedOutputStream.ComputeBytesSize(TriangleDataCompressed);
+      }
+      if (TriangleMetadataCompressed.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeBytesSize(TriangleMetadataCompressed);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1750,6 +1781,9 @@ namespace SceneData {
       }
       if (other.TriangleDataCompressed.Length != 0) {
         TriangleDataCompressed = other.TriangleDataCompressed;
+      }
+      if (other.TriangleMetadataCompressed.Length != 0) {
+        TriangleMetadataCompressed = other.TriangleMetadataCompressed;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1829,6 +1863,10 @@ namespace SceneData {
             TriangleDataCompressed = input.ReadBytes();
             break;
           }
+          case 122: {
+            TriangleMetadataCompressed = input.ReadBytes();
+            break;
+          }
         }
       }
     #endif
@@ -1905,6 +1943,10 @@ namespace SceneData {
           }
           case 114: {
             TriangleDataCompressed = input.ReadBytes();
+            break;
+          }
+          case 122: {
+            TriangleMetadataCompressed = input.ReadBytes();
             break;
           }
         }

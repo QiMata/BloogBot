@@ -192,6 +192,9 @@ namespace GameData.Core.Interfaces
         bool PhysicsHitWall => false;
         (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
         float PhysicsBlockedFraction => 1.0f;
+        SceneEnvironmentFlags PhysicsEnvironmentFlags => SceneEnvironmentFlags.None;
+        bool PhysicsIsIndoors => PhysicsEnvironmentFlags.IsIndoors();
+        bool PhysicsAllowsMountByEnvironment => PhysicsEnvironmentFlags.AllowsMountByEnvironment();
         int MovementStuckRecoveryGeneration => 0;
         bool HadRecentMeleeRangeRejection(ulong targetGuid) => false;
         bool HadRecentMeleeFacingRejection(ulong targetGuid) => false;

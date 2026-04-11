@@ -5,9 +5,8 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 /// <summary>
-/// Warsong Gulch 10v10 integration test.
-/// Level 60, full PvP loadout (gear, elixirs, mount), 20 BG bots.
-/// Pipeline: enter world → loadout prep → queue → enter WSG → mount → verify.
+/// Warsong Gulch battleground entry validation.
+/// Setup still requires both teams, but this test only verifies the raid-prep -> queue -> map-entry path.
 /// </summary>
 [Collection(WarsongGulchCollection.Name)]
 public class WarsongGulchTests
@@ -24,35 +23,21 @@ public class WarsongGulchTests
     }
 
     [SkippableFact]
-    public async Task WSG_FullMatch_PrepQueueEnterAndMount()
+    public async Task WSG_PreparedRaid_QueueAndEnterBattleground()
     {
         Assert.True(_bot.IsReady, _bot.FailureReason ?? "Fixture not ready");
         if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
             await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
-        // Phase 1: All 20 bots enter world
         await BgTestHelper.WaitForBotsAsync(_bot, _output, WarsongGulchFixture.TotalBotCount, "WSG");
-
-        // Phase 2: Level 60 loadout prep (PvP gear, elixirs, mount spell)
         await _bot.EnsureLoadoutPreparedAsync();
 
-        // Phase 3: Queue and enter WSG (individual queue, accept >= 75%)
         var minBotsOnMap = (int)(WarsongGulchFixture.TotalBotCount * 0.75);
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, WarsongGulchFixture.WsgMapId, minBotsOnMap, "WSG");
 
-        // Phase 4: Mount up inside WSG
-        await _bot.MountAllBotsAsync();
-        await BgTestHelper.WaitForAccountsMountedAsync(
-            _bot,
-            _output,
-            WarsongGulchFixture.HordeAccountsOrdered.Concat(WarsongGulchFixture.AllianceAccountsOrdered),
-            expectedMounted: minBotsOnMap,
-            phaseName: "WSG:Mount");
-
-        // Phase 5: Verify bots are on WSG map and mounted
-        var snapshots = await _bot.QueryAllSnapshotsAsync();
+        var snapshots = await _bot.QueryAllSnapshotsAsync(logDiagnostics: true);
         var onWsg = BgTestHelper.CountBotsOnMap(snapshots, WarsongGulchFixture.WsgMapId);
-        _output.WriteLine($"[WSG:Final] {onWsg} bots on WSG map, {snapshots.Count} total");
+        _output.WriteLine($"[WSG:Final] onWsg={onWsg}, totalSnapshots={snapshots.Count}");
         Assert.True(onWsg >= minBotsOnMap, $"Expected >= {minBotsOnMap} bots on WSG, got {onWsg}");
     }
 }

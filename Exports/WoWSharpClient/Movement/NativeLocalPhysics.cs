@@ -138,6 +138,7 @@ internal static class NativeLocalPhysics
                 BlockedFraction = output.BlockedFraction,
                 StepUpBaseZ = output.StepUpBaseZ,
                 StepUpAge = output.StepUpAge,
+                EnvironmentFlags = output.EnvironmentFlags,
             };
         }
         finally

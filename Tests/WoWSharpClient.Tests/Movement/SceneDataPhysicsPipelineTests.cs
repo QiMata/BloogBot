@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SceneData;
@@ -98,6 +101,32 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
              true));
     }
 
+    private static void SetTriangleMetadata(SceneTileResponse response, params (uint SourceType, uint InstanceId, uint GroupFlags)[] metadata)
+    {
+        var rawBytes = new byte[checked(metadata.Length * 3 * sizeof(uint))];
+        int offset = 0;
+        foreach (var (sourceType, instanceId, groupFlags) in metadata)
+        {
+            BitConverter.TryWriteBytes(rawBytes.AsSpan(offset), sourceType);
+            offset += sizeof(uint);
+            BitConverter.TryWriteBytes(rawBytes.AsSpan(offset), instanceId);
+            offset += sizeof(uint);
+            BitConverter.TryWriteBytes(rawBytes.AsSpan(offset), groupFlags);
+            offset += sizeof(uint);
+        }
+
+        using var compressedStream = new MemoryStream();
+        using (var gzip = new GZipStream(compressedStream, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            gzip.Write(rawBytes, 0, rawBytes.Length);
+        }
+
+        response.TriangleMetadataCompressed = ByteString.CopyFrom(
+            compressedStream.GetBuffer(),
+            0,
+            (int)compressedStream.Length);
+    }
+
     // =========================================================================
     // 1. EnsureLocalSceneDataFresh called during physics step
     // =========================================================================
@@ -176,7 +205,7 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             var (cx, cy) = SceneDataClient.WorldToTile(1629f, -4373f);
             if (request.TileX == cx && request.TileY == cy)
             {
-                return BuildTileResponse(request,
+                var response = BuildTileResponse(request,
                     // Triangle 0: flat ground at Z=34
                     (new float[] { 1620, -4380, 34, 1640, -4380, 34, 1630, -4360, 34 },
                      new float[] { 0, 0, 1 }, true),
@@ -187,6 +216,13 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
                     (new float[] { 1620, -4380, 34, 1620, -4380, 40, 1620, -4360, 37 },
                      new float[] { 1, 0, 0 }, false)
                 );
+
+                SetTriangleMetadata(response,
+                    (1u, 0u, 0u),
+                    (0u, 0x1234u, 0x00002000u),
+                    (2u, 0x5678u, 0x00008000u));
+
+                return response;
             }
 
             return new SceneTileResponse
@@ -226,6 +262,15 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
         // Triangle 1: sloped vertices
         Assert.Equal(1660f, capturedTriangles[1].V1X);
         Assert.Equal(38f, capturedTriangles[1].V1Z);
+        Assert.Equal(1u, capturedTriangles[0].SourceType);
+        Assert.Equal(0u, capturedTriangles[0].InstanceId);
+        Assert.Equal(0u, capturedTriangles[0].GroupFlags);
+        Assert.Equal(0u, capturedTriangles[1].SourceType);
+        Assert.Equal(0x1234u, capturedTriangles[1].InstanceId);
+        Assert.Equal(0x00002000u, capturedTriangles[1].GroupFlags);
+        Assert.Equal(2u, capturedTriangles[2].SourceType);
+        Assert.Equal(0x5678u, capturedTriangles[2].InstanceId);
+        Assert.Equal(0x00008000u, capturedTriangles[2].GroupFlags);
     }
 
     // =========================================================================

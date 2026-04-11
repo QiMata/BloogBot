@@ -223,6 +223,22 @@ namespace BotRunner.Tests
             Assert.Null(deserialized.MovementData);
         }
 
+        [Fact]
+        public void IsIndoors_ShouldRoundTripThroughProtobuf()
+        {
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                ScreenState = "InWorld",
+                IsIndoors = true,
+            };
+
+            var bytes = snapshot.ToByteArray();
+            var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+            Assert.True(deserialized.IsIndoors);
+        }
+
         [Theory]
         [InlineData(0f, 0f, 0f, false)]      // Origin - invalid
         [InlineData(-1629f, -4373f, 10f, true)]  // Durotar - valid

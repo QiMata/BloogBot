@@ -38,6 +38,8 @@ namespace WoWSharpClient
     /// </summary>
     public partial class WoWSharpObjectManager
     {
+        private const float TeleportStaleLocalUpdateRejectDistance = 10.0f;
+
 
         // Temporary diagnostic: log all opcodes received after GAMEOBJ_USE
         internal volatile bool _sniffingGameObjUse = false;
@@ -338,14 +340,37 @@ namespace WoWSharpClient
 
                                         // During teleports, clear queued moving/turn flags for local player updates.
                                         // This prevents stale MOVEFLAG_FORWARD from pre-teleport packets from getting re-applied.
+                                        var rejectStaleTeleportMovement = false;
                                         if (isLocalPlayer && _isBeingTeleported && movementData != null)
                                         {
-                                            movementData = movementData.Clone();
-                                            movementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
+                                            rejectStaleTeleportMovement = IsStaleLocalTeleportMovementUpdate(
+                                                (WoWUnit)obj,
+                                                movementData);
+                                            if (rejectStaleTeleportMovement)
+                                            {
+                                                Log.Warning(
+                                                    "[TeleportGuard] Ignoring stale local movement update during teleport: " +
+                                                    "current=({CurX:F1},{CurY:F1},{CurZ:F1}) incoming=({NewX:F1},{NewY:F1},{NewZ:F1})",
+                                                    obj.Position.X,
+                                                    obj.Position.Y,
+                                                    obj.Position.Z,
+                                                    movementData.X,
+                                                    movementData.Y,
+                                                    movementData.Z);
+                                            }
+                                            else
+                                            {
+                                                movementData = movementData.Clone();
+                                                movementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
+                                            }
                                         }
 
                                         bool allowLocalOverwrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
-                                        ApplyMovementData((WoWUnit)obj, movementData, allowLocalOverwrite, allowLocalOverwrite);
+                                        if (rejectStaleTeleportMovement)
+                                            allowLocalOverwrite = false;
+
+                                        var allowMovementFlagWrite = allowLocalOverwrite && !rejectStaleTeleportMovement;
+                                        ApplyMovementData((WoWUnit)obj, movementData, allowLocalOverwrite, allowMovementFlagWrite);
 
                                         // Wire spline data to SplineController for server-driven movement
                                         TryActivateSpline(update.Guid, movementData, isLocalPlayer);
@@ -447,6 +472,19 @@ namespace WoWSharpClient
                 _ => Language.Common,
             };
             _ = _woWClient.SendChatMessageAsync(ChatMsg.CHAT_MSG_SAY, language, "", chatMessage);
+        }
+
+        private static bool IsStaleLocalTeleportMovementUpdate(WoWUnit unit, MovementInfoUpdate movementData)
+        {
+            var currentPosition = unit.Position;
+            if (currentPosition == null)
+                return false;
+
+            var dx = movementData.X - currentPosition.X;
+            var dy = movementData.Y - currentPosition.Y;
+            var dz = movementData.Z - currentPosition.Z;
+            var distance = MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+            return distance > TeleportStaleLocalUpdateRejectDistance;
         }
 
         /// <summary>

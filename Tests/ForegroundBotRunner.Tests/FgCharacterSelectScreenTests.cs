@@ -103,6 +103,47 @@ public sealed class FgCharacterSelectScreenTests
         }
     }
 
+    [Fact]
+    public void IsCharacterCreationPending_WhenNameUnavailableDialogVisible_ClearsPendingForRetry()
+    {
+        var originalThrottle = FgCharacterSelectScreen.CreateStepThrottle;
+        var originalTransitionTimeout = FgCharacterSelectScreen.CharacterCreateTransitionTimeout;
+
+        try
+        {
+            FgCharacterSelectScreen.CreateStepThrottle = TimeSpan.Zero;
+            FgCharacterSelectScreen.CharacterCreateTransitionTimeout = TimeSpan.FromSeconds(5);
+
+            var screenState = WoWScreenState.CharacterSelect;
+            string dialogText = string.Empty;
+            var screen = new FgCharacterSelectScreen(
+                () => screenState,
+                () => 0,
+                _ => { },
+                getGlueDialogText: () => dialogText);
+
+            InvokeCreate(screen); // step 0
+            InvokeCreate(screen); // step 1
+
+            screenState = WoWScreenState.CharacterCreate;
+            InvokeCreate(screen); // step 2
+            InvokeCreate(screen); // step 3
+            InvokeCreate(screen, name: "Takenname"); // step 4
+
+            Assert.True(screen.IsCharacterCreationPending);
+
+            dialogText = "That name is unavailable.";
+
+            Assert.False(screen.IsCharacterCreationPending);
+            Assert.Equal(1, screen.CharacterCreateAttempts);
+        }
+        finally
+        {
+            FgCharacterSelectScreen.CreateStepThrottle = originalThrottle;
+            FgCharacterSelectScreen.CharacterCreateTransitionTimeout = originalTransitionTimeout;
+        }
+    }
+
     private static void InvokeCreate(
         FgCharacterSelectScreen screen,
         string name = "FGBot",

@@ -314,6 +314,7 @@ private:
         G3D::Vector3 wallHitNormal;
         float wallBlockedFraction = 1.0f;
         bool groundedWallState = false;
+        uint32_t environmentFlags = 0;
     };
 
     // Added physics query result structs

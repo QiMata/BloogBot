@@ -589,6 +589,21 @@ internal static class BgTestHelper
     private static bool IsMounted(WoWActivitySnapshot snapshot)
         => (snapshot.Player?.Unit?.MountDisplayId ?? 0) != 0;
 
+    private static IReadOnlyList<string> GetMountedAccounts(
+        IReadOnlyList<WoWActivitySnapshot> snapshots,
+        IReadOnlyCollection<string> accounts)
+    {
+        var accountSet = new HashSet<string>(accounts, StringComparer.OrdinalIgnoreCase);
+        return snapshots
+            .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.AccountName))
+            .Where(snapshot => accountSet.Contains(snapshot.AccountName))
+            .Where(IsMounted)
+            .Select(snapshot => snapshot.AccountName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(account => account, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static bool IsAccountNearAssignedTarget(
         IReadOnlyList<WoWActivitySnapshot> snapshots,
         string account,

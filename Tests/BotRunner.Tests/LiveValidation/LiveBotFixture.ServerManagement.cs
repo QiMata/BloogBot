@@ -300,6 +300,25 @@ public partial class LiveBotFixture
         return results;
     }
 
+    private protected async Task<bool> CharacterNameExistsAsync(string characterName)
+    {
+        if (string.IsNullOrWhiteSpace(characterName))
+            throw new ArgumentException("Character name is required.", nameof(characterName));
+
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT 1
+            FROM characters
+            WHERE name = @characterName
+            LIMIT 1";
+        cmd.Parameters.AddWithValue("@characterName", characterName);
+
+        return await cmd.ExecuteScalarAsync() != null;
+    }
+
     /// <summary>
     /// Ensure live battleground accounts meet honor-rank requirements before launch.
     /// This must run while characters are offline so rank fields hydrate on next login.

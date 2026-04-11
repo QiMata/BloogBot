@@ -244,7 +244,8 @@ namespace ForegroundBotRunner.Statics
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
                 lua => MainThreadLuaCall(lua),
-                context => CaptureLuaErrors(context));
+                context => CaptureLuaErrors(context),
+                () => GlueDialogText);
             _fgGossipFrame = new FgGossipFrame(
                 lua => MainThreadLuaCall(lua),
                 lua => MainThreadLuaCallWithResult(lua),

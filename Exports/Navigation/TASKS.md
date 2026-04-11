@@ -67,6 +67,32 @@
 - [x] Code-complete. `RetrieveCorpseTask` already consumes the path directly with probe-skip/direct-fallback disabled (`enableProbeHeuristics: false`, `enableDynamicProbeSkipping: false`, `strictPathValidation: true`, `allowDirectFallback: false`). `PathFinder` generates valid Detour paths. No wall-loop fallback exists in this code path.
 - [x] Live validation passed (session 188): `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer` green with navtrace ownership assertion.
 
+### NAV-SCENE-001 Preserve thin scene-slice metadata so physics can emit indoors-aware environment flags
+- [ ] Problem: `.scene/.scenetile` v2 already persists per-triangle metadata, but the scene-tile service/client/native injection path currently forwards only triangle vertices. `SceneTileSocketServer` skips `sourceType`, `SceneDataClient` reconstructs only vertex arrays, and `SceneCache::InjectTriangles(...)` reclassifies all injected triangles as ADT terrain. Practical result: thin BG/FG scene slices cannot distinguish outdoor terrain from interior WMO/building geometry well enough to block mounts inside buildings.
+- [ ] Target files:
+  - `Exports/BotCommLayer/Models/ProtoDef/scenedata.proto`
+  - `Services/SceneDataService/SceneTileSocketServer.cs`
+  - `Exports/WoWSharpClient/Movement/SceneDataClient.cs`
+  - `Exports/WoWSharpClient/Movement/NativePhysicsInterop.cs`
+  - `Exports/Navigation/SceneCache.h`
+  - `Exports/Navigation/SceneCache.cpp`
+  - `Exports/Navigation/DllMain.cpp`
+  - `Exports/Navigation/SceneQuery.h`
+  - Focused coverage in `Tests/WoWSharpClient.Tests/*` and `Tests/Navigation.Physics.Tests/*`
+- [x] Progress (2026-04-11 discovery): traced the metadata seam end-to-end. `.scene/.scenetile` v2 already writes `SceneTriMetadata`, and native `SceneQuery::AABBContact` already carries `sourceType`, `instanceFlags`, `modelFlags`, `groupFlags`, `rootId`, and `groupId`. The loss happens in the thin-slice transport path: `SceneTileSocketServer` never reads the v2 metadata block and explicitly skips `sourceType`, `SceneDataClient` only unpacks vertices, and `SceneCache::InjectTriangles(...)` defaults every injected triangle to `sourceType=1` (ADT). There is likely enough VMAP/WMO metadata to derive an indoor semantic, but the exact WMO-group indoor bit still needs confirmation before hard-coding `INDOORS`.
+- [x] Progress (2026-04-11 implementation): the thin-scene path now preserves compressed per-triangle `sourceType`, `instanceId`, and `groupFlags` through `SceneTileResponse`, `SceneTileSocketServer`, `SceneDataClient`, `NativePhysics.InjectedTriangle`, and `SceneCache::InjectTriangles(...)` instead of collapsing injected slices to ADT. Native `PhysicsOutput` now exposes `environmentFlags`, the managed `IObjectManager`/`WoWSharpObjectManager` surface now exposes `PhysicsEnvironmentFlags` plus `PhysicsIsIndoors`, and focused WoWSharpClient pipeline coverage now proves metadata survives the transport. Deterministic native `SceneEnvironmentFlagTests` were added for indoor + mount-allowed support surfaces, but this environment skipped them because the local native physics fixture was unavailable.
+- [x] Progress (2026-04-11 verification): the grounded idle path now recomputes `environmentFlags` from the current support surface instead of leaving stationary players at `0`. `SceneEnvironmentFlagTests` now pass both on injected support triangles and on real map data (`Durotar` outdoor spawn + `Wailing Caverns` interior), `PhysicsTestFixtures` now auto-discovers the local `C:\MaNGOS\data` root on this machine, and the managed seam now exposes `PhysicsAllowsMountByEnvironment` / `AllowsMountByEnvironment()` so higher layers can ask the environment question directly without reinterpreting raw bits.
+- [x] Progress (2026-04-11 downstream wiring): BotRunner now consumes that environment seam in the shared mount-action paths instead of only exposing it. `BuildCastSpellSequence(...)`, `BuildUseItemSequence(...)`, `BuildUseItemByIdSequence(...)`, `CastSpellTask`, and `UseItemTask` now short-circuit known mount spell/item attempts when `PhysicsAllowsMountByEnvironment` is false, using a shared `MountUsageGuard` for AV mount items/spells plus class mount spells and item-subclass mount detection. Focused BotRunner coverage is green for both the behavior-tree dispatch path and the legacy atomic-task wrappers.
+- [x] Progress (2026-04-11 mount spell catalog): `MountUsageGuard` no longer relies on a hand-maintained spell ID list. `GameData.Core.Constants.SpellData.MountSpellIds` is now sourced from the local VMaNGOS `spell_template` mounted-aura query (`effectApplyAuraName1/2/3 = 78` grouped by `entry`), and BotRunner coverage now exercises a DB-only mount spell (`458`, Brown Horse) to prove the indoor guard is data-driven instead of AV-specific.
+- [x] Progress (2026-04-11 mount item catalog): removed the remaining item-side heuristics from `MountUsageGuard`. `GameData.Core.Constants.ItemData.MountItemIds` is now sourced from the local VMaNGOS `item_template` rows whose `spellid_1..5` trigger a mounted-aura spell, and the BotRunner mount-item guard now classifies by DB-derived item entry instead of explicit AV item IDs or client-subclass fallback. Focused tests now exercise a DB-only mount item (`23720`, Riding Turtle) through both by-ID and slot-based paths.
+- [x] Progress (2026-04-11 by-id inventory resolution): removed the brute-force slot probing from `BuildUseItemByIdSequence(...)` and `BuildEquipItemByIdSequence(...)`. Those actions now resolve an exact `(bag, slot)` from tracked inventory, execute only that slot, and return `Failure` when the item is absent instead of spraying `UseItem`/`EquipItem` calls across every bag slot.
+- [ ] Required change:
+  1. Extend the tile contract to preserve per-triangle metadata, or preserve a compressed derived flag payload, instead of only triangle vertices.
+  2. Preserve that metadata through C# unpacking and native `InjectSceneTriangles(...)` so thin scene slices do not collapse to "all terrain."
+  3. Add a native environment output seam (`IsIndoors` or `EnvironmentFlags`) so higher layers can gate mount casting without needing raw triangle semantics.
+  4. Prove the signal on representative WMO/interior cases before wiring mount suppression.
+- [ ] Acceptance criteria: thin-scene physics can reliably distinguish outdoor terrain from interior WMO/building slices well enough to emit a stable indoor/environment flag, and downstream mount logic has a concrete seam to reject indoor mount attempts.
+
 ### NAV-FISH-001 Fix Ratchet shoreline terrain sticking / no-LOS approach points
 - [ ] Problem: the fishing live slice now has two distinct Ratchet blockers. The staged pool-visibility preflight is nondeterministic, so some reruns still fail before movement with no visible pool while other reruns can spawn local Ratchet children that never become visible from the dock stages. When staging does succeed, FG can still snag on the pier search route and fail before `FishingTask in_cast_range`.
 - [ ] Target files: `Exports/Navigation/PhysicsCollideSlide.cpp`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PathFinder.cpp`, replay/log evidence from `FishingProfessionTests`.
@@ -130,10 +156,20 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-04-02 (session 293)
+- Last updated: 2026-04-11
 - Pass result: `delta shipped`
-- Active task: `NAV-FISH-001` keep staged Ratchet visibility explicit, then fix the remaining dual-slice shoreline/runtime stall once the stage is visible again
+- Active task: `NAV-SCENE-001` preserve thin scene-slice metadata through service/client/native injection so physics can emit an indoors-aware environment flag for mount gating
 - Last delta:
+  - Wired the environment flag into runtime mount suppression. `MountUsageGuard` now classifies known mount spells/items, `BuildCastSpellSequence(...)` plus the `UseItem` behavior-tree sequences now skip indoor mount attempts before sending packets/Lua, and the legacy `CastSpellTask` / `UseItemTask` wrappers now apply the same check so both dispatch paths agree.
+  - Replaced the hardcoded mount spell list with a DB-derived catalog. `SpellData.MountSpellIds` now carries every distinct `spell_template.entry` whose `effectApplyAuraName1/2/3 = 78` (mounted aura) in the local VMaNGOS DB, and `MountUsageGuard` now defers to that catalog instead of a tiny AV/class-only set.
+  - Replaced the remaining mount-item heuristics with a DB-derived catalog. `ItemData.MountItemIds` now carries every distinct `item_template.entry` whose `spellid_1..5` trigger a mounted-aura spell, and `MountUsageGuard` now classifies mount items by item entry instead of explicit AV item IDs or `MiscMount` subclass fallback.
+  - Removed the by-ID inventory brute-force fallback. `BuildUseItemByIdSequence(...)` and `BuildEquipItemByIdSequence(...)` now resolve tracked inventory only, emit a clear warning when the item is absent, and return `Failure` instead of sending packets/Lua calls against every possible bag slot.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --no-restore --filter "FullyQualifiedName~ItemDataTests|FullyQualifiedName~SpellDataTests|FullyQualifiedName~BotRunnerServiceInventoryResolutionTests|FullyQualifiedName~CastSpellTaskTests|FullyQualifiedName~UseItemTaskTests"` -> `passed (125/125)`
+  - Preserved thin-scene metadata end to end. `scenedata.proto`/`Scenedata.cs` now carry compressed triangle metadata, `SceneTileSocketServer` reads v1/v2 scene-cache triangles plus v2 metadata blocks, `SceneDataClient` now injects `sourceType`, `instanceId`, and `groupFlags`, and native `SceneCache::InjectTriangles(...)` keeps those values instead of defaulting everything to terrain.
+  - Added runtime environment flags. `PhysicsBridge.h`, native `PhysicsEngine.cpp`, `pathfinding.proto`/`Pathfinding.cs`, `NativePhysicsInterop`, `NativeLocalPhysics`, `MovementController`, and `IObjectManager`/`WoWSharpObjectManager` now propagate an `environmentFlags` bitfield with at least `Indoors` and `MountAllowed`. The grounded idle path now refreshes that field from the current support surface, and the managed seam now exposes `PhysicsAllowsMountByEnvironment`.
+  - Added focused coverage. `SceneDataPhysicsPipelineTests` still prove compressed metadata survives into injected triangles, and `SceneEnvironmentFlagTests` now pass both deterministic injected support cases and real-data probes (`Durotar` outdoor vs `Wailing Caverns` indoor) against `Navigation.dll`.
+  - Test fixture discovery now auto-detects `C:\MaNGOS\data` as a fallback `WWOW_DATA_DIR` root on this workstation so native physics/map tests can run without a manual env var export.
   - Session 293 added thin-scene-slice mode to `SceneQuery` for the BG local-physics path. `EnsureMapLoaded(...)` now bails out early when slice mode is enabled, `GetGroundZ(...)` stays on injected scene cache plus dynamic-object support instead of auto-loading full-map terrain, and `SweepCapsule(...)` now returns no static hits when no local slice is present rather than falling back to global VMAP data.
   - Exported `SetSceneSliceMode(...)` from `Navigation.dll` and added deterministic regression coverage in `SceneSliceModeTests.GetGroundZ_SceneSliceMode_DoesNotAutoloadFullSceneCache`, which proves the native scene query can no longer autoload the full map cache while the thin-slice mode is active.
   - Validation:
@@ -817,7 +853,7 @@
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `py -c "from capstone import *; import pathlib; code=pathlib.Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x6A3DC0; data=code[start-0x400000:start-0x400000+1024]; [print(f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}') for i in md.disasm(data, start) if i.address < 0x6A4100]"`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~SceneDataClientTests|FullyQualifiedName~SceneDataPhysicsPipelineTests|FullyQualifiedName~SceneDataClientIntegrationTests" --logger "console;verbosity=minimal"`
 - Blockers:
   - The production-DLL deterministic harness now exposes grounded blocker selection directly, and the visible `0x6351A0` tail is closed. The next missing visibility is the paired `0xC4E544` payload, the selected index that chose it, and how `0x635450` consumes the two out-state dwords after `0x6351A0`.
   - The next missing visibility is still inside the selected-contact producer chain, not in a separate native test project. The higher-leverage step is a transaction/export seam around the production DLL so deterministic tests can capture the chosen index plus paired `0xC4E544` payload directly.

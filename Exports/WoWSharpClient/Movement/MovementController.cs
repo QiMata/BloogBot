@@ -89,6 +89,8 @@ namespace WoWSharpClient.Movement
         private int _staleForwardNoDisplacementTicks;
         private int _staleForwardRecoveryCount;
         private const float STALE_FORWARD_DISPLACEMENT_EPSILON = 0.05f;
+        private const float StalePhysicsInputRejectDistance = 5.0f;
+        private const float AuthoritativeRelocationGroundSnapDistance = 5.0f;
         private const int STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD = 15;
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RESET_MS = 2000;
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS = 1500;
@@ -117,6 +119,17 @@ namespace WoWSharpClient.Movement
         public bool LastHitWall { get; private set; }
         public Vector3 LastWallNormal { get; private set; } = new Vector3(0, 0, 1);
         public float LastBlockedFraction { get; private set; } = 1.0f;
+        public SceneEnvironmentFlags LastEnvironmentFlags { get; private set; } = SceneEnvironmentFlags.None;
+        private SceneEnvironmentFlags _lastResolvedEnvironmentFlags = SceneEnvironmentFlags.None;
+        private uint _lastResolvedEnvironmentMapId = player.MapId;
+        private bool _hasResolvedEnvironmentState;
+        public bool HasResolvedEnvironmentState => _hasResolvedEnvironmentState;
+        public SceneEnvironmentFlags EffectiveEnvironmentFlags =>
+            _hasResolvedEnvironmentState
+                ? LastEnvironmentFlags
+                : (_lastResolvedEnvironmentMapId == _player.MapId
+                    ? _lastResolvedEnvironmentFlags
+                    : SceneEnvironmentFlags.None);
 
         // Escalating stuck signal (diagnostic only).
         // MovementController remains parity-focused and does not mutate route policy.
@@ -135,6 +148,7 @@ namespace WoWSharpClient.Movement
 
         // Debug tracking
         private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
+        private uint _lastPhysicsMapId = player.MapId;
         // _accumulatedDelta removed — was causing π speed multiplier bug in dead-reckoning
         private int _frameCounter = 0;
         private int _movementDiagCounter = 0;
@@ -167,6 +181,8 @@ namespace WoWSharpClient.Movement
                     _player.Position.X, _player.Position.Y, _player.Position.Z);
             }
 
+            DetectAuthoritativeRelocationAndPrimeGroundSnap();
+
             if (_forceStopAfterReset)
             {
                 SendForcedStopPacket(gameTimeMs);
@@ -191,10 +207,12 @@ namespace WoWSharpClient.Movement
             // This was present in the 100% parity commit (70c72973) and was accidentally removed.
             if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
                 && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
+                && _hasResolvedEnvironmentState
                 && !_needsGroundSnap
                 && !_player.IsAutoAttacking)
             {
                 CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                _lastPhysicsMapId = _player.MapId;
                 return;
             }
 
@@ -205,6 +223,20 @@ namespace WoWSharpClient.Movement
             if (_player.IsChanneling || _player.IsCasting)
             {
                 CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                _lastPhysicsMapId = _player.MapId;
+                return;
+            }
+
+            // Cross-map teleports can update the local player's destination coordinates
+            // slightly before the map transition fully settles. Running ground-snap
+            // physics against the old map during that window can classify the teleport
+            // target with stale support geometry and lock in the wrong environment flags.
+            // Wait until the object manager leaves map-transition state, then let the
+            // normal post-teleport forced update perform the first ground snap.
+            if (_needsGroundSnap && _objectManager?.IsInMapTransition == true)
+            {
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                _lastPhysicsMapId = _player.MapId;
                 return;
             }
 
@@ -213,6 +245,12 @@ namespace WoWSharpClient.Movement
 
             // 1. Run physics based on current player state
             var physicsResult = RunPhysics(deltaSec);
+            if (ShouldDiscardStalePhysicsResult(gameTimeMs))
+            {
+                CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                _lastPhysicsMapId = _player.MapId;
+                return;
+            }
 
             // Check for position mismatch (external teleport, server correction, etc.)
             var physicsPosDiff = new Vector3(
@@ -226,6 +264,7 @@ namespace WoWSharpClient.Movement
                 Log.Warning("[MovementController] Teleport detected ({Dist:F1} units). Resetting physics state.", physicsPosDiff.Length());
                 Reset();
                 _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+                _lastPhysicsMapId = _player.MapId;
                 return; // Skip this frame — let next frame start fresh
             }
             else if (physicsPosDiff.Length() > 0.01f)
@@ -237,6 +276,7 @@ namespace WoWSharpClient.Movement
             {
                 Log.Warning("[MovementController] Physics returned null — skipping frame {Frame}", _frameCounter);
                 CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
+                _lastPhysicsMapId = _player.MapId;
                 return;
             }
             ApplyPhysicsResult(physicsResult, deltaSec);
@@ -250,6 +290,7 @@ namespace WoWSharpClient.Movement
 
             ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
             _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+            _lastPhysicsMapId = _player.MapId;
 
             // Post-teleport ground snap: keep running physics until the character reaches
             // ground (no FALLINGFAR flag). One frame of gravity at 33ms only drops ~0.01y,
@@ -292,8 +333,16 @@ namespace WoWSharpClient.Movement
                 {
                     _needsGroundSnap = false;
 
-                    Log.Information("[MovementController] Post-teleport ground snap complete: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X} frames={Frames}",
-                        _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags, _groundSnapFrames);
+                    Log.Warning("[MovementController] Post-teleport ground snap complete: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) groundZ={GroundZ:F3} moveFlags=0x{MoveFlags:X} envFlags=0x{EnvFlags:X} indoors={Indoors} frames={Frames}",
+                        _player.MapId,
+                        _player.Position.X,
+                        _player.Position.Y,
+                        _player.Position.Z,
+                        _prevGroundZ,
+                        (uint)_player.MovementFlags,
+                        (uint)LastEnvironmentFlags,
+                        LastEnvironmentFlags.IsIndoors(),
+                        _groundSnapFrames);
 
                     // Force a stop packet with the corrected position so the server knows
                     // where we actually landed.
@@ -313,6 +362,38 @@ namespace WoWSharpClient.Movement
             }
 
             CapturePhysicsFrameRecord(physicsResult, deltaSec, gameTimeMs);
+        }
+
+        private void DetectAuthoritativeRelocationAndPrimeGroundSnap()
+        {
+            if (_needsGroundSnap || _player.Position == null)
+                return;
+
+            float dx = _player.Position.X - _lastPhysicsPosition.X;
+            float dy = _player.Position.Y - _lastPhysicsPosition.Y;
+            float dz = _player.Position.Z - _lastPhysicsPosition.Z;
+            float distance = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+            bool mapChanged = _player.MapId != _lastPhysicsMapId;
+            if (!mapChanged && distance <= AuthoritativeRelocationGroundSnapDistance)
+                return;
+
+            Log.Warning(
+                "[MovementController] Authoritative relocation detected without pending ground snap: " +
+                "prevMap={PrevMapId} currentMap={CurrentMapId} prevPos=({PrevX:F1},{PrevY:F1},{PrevZ:F1}) " +
+                "currentPos=({CurrentX:F1},{CurrentY:F1},{CurrentZ:F1}) dist={Distance:F1}",
+                _lastPhysicsMapId,
+                _player.MapId,
+                _lastPhysicsPosition.X,
+                _lastPhysicsPosition.Y,
+                _lastPhysicsPosition.Z,
+                _player.Position.X,
+                _player.Position.Y,
+                _player.Position.Z,
+                distance);
+
+            Reset(teleportDestZ: _player.Position.Z);
+            _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+            _lastPhysicsMapId = _player.MapId;
         }
 
         // ======== PHYSICS ========
@@ -408,12 +489,14 @@ namespace WoWSharpClient.Movement
             input.NearbyObjects.Add(BuildPhysicsNearbyObjects(_player.Position, activeTransport));
 
             // Save the position and flags we're sending to C++ for race-detection and diagnostics.
-            // If a teleport modifies _player.Position during the gRPC call,
-            // ApplyPhysicsResult will detect the divergence and discard the stale result.
-            _physicsInputX = input.PosX;
-            _physicsInputY = input.PosY;
-            _physicsInputZ = input.PosZ;
+            // Compare against the player's world-space state, not transport-local input,
+            // so cross-map teleports and server corrections can discard stale results.
+            _physicsInputX = _player.Position.X;
+            _physicsInputY = _player.Position.Y;
+            _physicsInputZ = _player.Position.Z;
             _physicsInputFlags = input.MovementFlags;
+            _physicsInputMapId = _player.MapId;
+            _physicsInputTransportGuid = _player.TransportGuid;
 
             // Physics is always local — NativeLocalPhysics.Step calls Navigation.dll directly.
             // No remote fallback. WoW.exe runs physics locally; so do we.
@@ -599,10 +682,13 @@ namespace WoWSharpClient.Movement
                 && float.IsFinite(position.Z);
 
         // Race-detection: position that was sent to the C++ physics engine.
-        // If _player.Position diverges from this after RunPhysics returns,
-        // a teleport occurred during the gRPC call and the result is stale.
+        // If the player's world state diverges from this after RunPhysics returns,
+        // a teleport or authoritative correction occurred during the physics step
+        // and the result must be discarded instead of overwriting the new state.
         private float _physicsInputX, _physicsInputY, _physicsInputZ;
         private uint _physicsInputFlags;
+        private uint _physicsInputMapId;
+        private ulong _physicsInputTransportGuid;
         // _noGroundFrameCount removed — workaround
         // Track whether _prevGroundZ was established from actual physics ground contact
         // (not just constructor initialization from player.Position.Z). The hysteresis guard
@@ -645,9 +731,17 @@ namespace WoWSharpClient.Movement
             LastHitWall = output.HitWall;
             LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);
             LastBlockedFraction = output.BlockedFraction;
+            LastEnvironmentFlags = (SceneEnvironmentFlags)output.EnvironmentFlags;
+            _lastResolvedEnvironmentFlags = LastEnvironmentFlags;
+            _lastResolvedEnvironmentMapId = _player.MapId;
+            _hasResolvedEnvironmentState = true;
 
             // Apply position directly from physics — no guards, no clamping
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
+            _objectManager?.RecordResolvedEnvironmentState(
+                _player.MapId,
+                _player.Position,
+                LastEnvironmentFlags);
             _player.Facing = output.Orientation;
             _player.SwimPitch = output.Pitch;
 
@@ -708,6 +802,47 @@ namespace WoWSharpClient.Movement
                 _player.TransportOrientation = 0f;
             }
 
+        }
+
+        private bool ShouldDiscardStalePhysicsResult(uint gameTimeMs)
+        {
+            var currentPosition = _player.Position;
+            if (currentPosition == null)
+                return false;
+
+            float dx = currentPosition.X - _physicsInputX;
+            float dy = currentPosition.Y - _physicsInputY;
+            float dz = currentPosition.Z - _physicsInputZ;
+            float distance = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+
+            bool mapChanged = _player.MapId != _physicsInputMapId;
+            bool transportChanged = _player.TransportGuid != _physicsInputTransportGuid;
+            bool positionChanged = distance > StalePhysicsInputRejectDistance;
+            if (!mapChanged && !transportChanged && !positionChanged)
+                return false;
+
+            Log.Warning(
+                "[MovementController] Discarding stale physics result: inputMap={InputMapId} currentMap={CurrentMapId} " +
+                "inputPos=({InputX:F1},{InputY:F1},{InputZ:F1}) currentPos=({CurrentX:F1},{CurrentY:F1},{CurrentZ:F1}) " +
+                "inputTransport=0x{InputTransport:X} currentTransport=0x{CurrentTransport:X} dist={Distance:F1}",
+                _physicsInputMapId,
+                _player.MapId,
+                _physicsInputX,
+                _physicsInputY,
+                _physicsInputZ,
+                currentPosition.X,
+                currentPosition.Y,
+                currentPosition.Z,
+                _physicsInputTransportGuid,
+                _player.TransportGuid,
+                distance);
+
+            _lastPhysicsPosition = new Vector3(currentPosition.X, currentPosition.Y, currentPosition.Z);
+            _lastPacketPosition = _lastPhysicsPosition;
+            _lastPhysicsMapId = _player.MapId;
+            _lastPacketTime = gameTimeMs;
+            _staleForwardNoDisplacementTicks = 0;
+            return true;
         }
 
         private void CapturePhysicsFrameRecord(PhysicsOutput? output, float deltaSec, uint gameTimeMs)
@@ -1132,6 +1267,8 @@ namespace WoWSharpClient.Movement
             _pendingDepen = Vector3.Zero;
             _standingOnInstanceId = 0;
             _standingOnLocal = Vector3.Zero;
+            LastEnvironmentFlags = SceneEnvironmentFlags.None;
+            _hasResolvedEnvironmentState = false;
             _stepUpBaseZ = -200000f;
             _stepUpAge = 0;
             _hasPhysicsGroundContact = false;

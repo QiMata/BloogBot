@@ -1,0 +1,30 @@
+name: wwow-db
+
+services:
+  maria-db:
+    image: mariadb:10.11
+    container_name: maria-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${WWOW_VMANGOS_DB_ROOT_PASSWORD:-root}
+    networks:
+      - gameserver-net
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ${WWOW_VMANGOS_DB_DUMP_DIR:-C:/Mangos/db/db_dump}:/docker-entrypoint-initdb.d/dumps:ro
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/00-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  gameserver-net:
+    external: true
+
+volumes:
+  mariadb-data:

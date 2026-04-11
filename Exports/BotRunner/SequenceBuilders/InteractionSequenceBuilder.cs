@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -17,15 +18,23 @@ namespace BotRunner.SequenceBuilders
     /// </summary>
     internal sealed class InteractionSequenceBuilder
     {
+        private const int BackpackSlotCount = 16;
+        private const int ExtraBagCount = 4;
+        private const int MaxExtraBagSlots = 20;
+
         private readonly IObjectManager _objectManager;
         private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
+        private readonly Action<string>? _addDiagnosticMessage;
+        private bool _skipMountUse;
 
         internal InteractionSequenceBuilder(
             IObjectManager objectManager,
-            Func<IAgentFactory?>? agentFactoryAccessor)
+            Func<IAgentFactory?>? agentFactoryAccessor,
+            Action<string>? addDiagnosticMessage = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
             _agentFactoryAccessor = agentFactoryAccessor;
+            _addDiagnosticMessage = addDiagnosticMessage;
         }
 
         // =====================================================================
@@ -225,9 +234,31 @@ namespace BotRunner.SequenceBuilders
 
         internal IBehaviourTreeNode BuildUseItemSequence(int fromBag, int fromSlot, ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Use Item Sequence")
+                .Do("Reset Mount Use Validation", time =>
+                {
+                    _skipMountUse = false;
+                    return BehaviourTreeStatus.Success;
+                })
                 .Condition("Has Item", time => _objectManager.GetContainedItem(fromBag, fromSlot) != null)
+                .Do("Validate Mount Use", time =>
+                {
+                    var item = _objectManager.GetContainedItem(fromBag, fromSlot);
+                    if (MountUsageGuard.TryGetBlockedReasonForItem(_objectManager, item, out var blockReason))
+                    {
+                        _skipMountUse = true;
+                        Log.Information("[BOT RUNNER] Skipping mount item {ItemId} at bag={Bag} slot={Slot}: {Reason}",
+                            item?.ItemId ?? 0u, fromBag, fromSlot, blockReason);
+                        _addDiagnosticMessage?.Invoke(
+                            $"[MOUNT-BLOCK] item={item?.ItemId ?? 0u} bag={fromBag} slot={fromSlot} {blockReason}");
+                    }
+
+                    return BehaviourTreeStatus.Success;
+                })
                 .Do("Use Item", time =>
                 {
+                    if (_skipMountUse)
+                        return BehaviourTreeStatus.Success;
+
                     _objectManager.UseItem(fromBag, fromSlot, targetGuid);
                     return BehaviourTreeStatus.Success;
                 })
@@ -240,26 +271,32 @@ namespace BotRunner.SequenceBuilders
                 .Sequence("Use Item By ID")
                     .Do("Find and Use Item", time =>
                     {
-                        // Search all bag slots for the item by ID
-                        for (int bag = 0; bag <= 4; bag++)
+                        if (MountUsageGuard.TryGetBlockedReasonForItemId(_objectManager, (uint)itemId, out var blockReason))
                         {
-                            int maxSlot = bag == 0 ? 16 : 36;
-                            for (int slot = 0; slot < maxSlot; slot++)
-                            {
-                                var contained = _objectManager.GetContainedItem(bag, slot);
-                                if (contained != null && contained.ItemId == (uint)itemId)
-                                {
-                                    Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Using.", itemId, bag, slot);
-                                    _objectManager.UseItem(bag, slot, 0);
-                                    return BehaviourTreeStatus.Success;
-                                }
-                            }
+                            Log.Information("[BOT RUNNER] Skipping mount item {ItemId} by id: {Reason}", itemId, blockReason);
+                            _addDiagnosticMessage?.Invoke($"[MOUNT-BLOCK] item={itemId} {blockReason}");
+                            return BehaviourTreeStatus.Success;
                         }
 
-                        // Fallback: brute-force use all backpack slots (server ignores invalid)
-                        Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Trying brute-force use for all backpack slots.", itemId);
-                        for (int slot = 0; slot < 16; slot++)
-                            _objectManager.UseItem(0, slot, 0);
+                        var containedLocation = FindContainedItemLocation((uint)itemId);
+                        if (containedLocation == null)
+                        {
+                            Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Failing UseItemById.", itemId);
+                            return BehaviourTreeStatus.Failure;
+                        }
+
+                        var (bag, slot, contained) = containedLocation.Value;
+                        if (MountUsageGuard.TryGetBlockedReasonForItem(_objectManager, contained, out var trackedBlockReason))
+                        {
+                            Log.Information("[BOT RUNNER] Skipping tracked mount item {ItemId} at bag={Bag}, slot={Slot}: {Reason}",
+                                itemId, bag, slot, trackedBlockReason);
+                            _addDiagnosticMessage?.Invoke(
+                                $"[MOUNT-BLOCK] item={itemId} bag={bag} slot={slot} {trackedBlockReason}");
+                            return BehaviourTreeStatus.Success;
+                        }
+
+                        Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Using.", itemId, bag, slot);
+                        _objectManager.UseItem(bag, slot, 0);
                         return BehaviourTreeStatus.Success;
                     })
                 .End()
@@ -290,50 +327,24 @@ namespace BotRunner.SequenceBuilders
             .Build();
 
         internal IBehaviourTreeNode BuildEquipItemByIdSequence(int itemId)
-        {
-            var allItems = _objectManager.GetContainedItems().ToList();
-            var allObjects = _objectManager.Objects.ToList();
-            var objectsByType = allObjects.GroupBy(o => o.ObjectType)
-                .Select(g => $"{g.Key}={g.Count()}")
-                .ToList();
-            Log.Information("[BOT RUNNER] BuildEquipItemByIdSequence: itemId={ItemId}, containedItems={Count}, itemIds=[{Items}], totalObjects={Total}, byType=[{Types}]",
-                itemId, allItems.Count, string.Join(",", allItems.Select(i => i.ItemId)),
-                allObjects.Count, string.Join(",", objectsByType));
-            return new BehaviourTreeBuilder()
+            => new BehaviourTreeBuilder()
                 .Sequence("Equip Item By ID")
                     .Do("Find and Equip Item", time =>
                     {
-                        // Fast path: find item by ID in tracked inventory
-                        foreach (var item in _objectManager.GetContainedItems())
+                        var containedLocation = FindContainedItemLocation((uint)itemId);
+                        if (containedLocation == null)
                         {
-                            if (item.ItemId == (uint)itemId)
-                            {
-                                for (int bag = 0; bag <= 4; bag++)
-                                {
-                                    int maxSlot = bag == 0 ? 16 : 36;
-                                    for (int slot = 0; slot < maxSlot; slot++)
-                                    {
-                                        var contained = _objectManager.GetContainedItem(bag, slot);
-                                        if (contained != null && contained.ItemId == (uint)itemId)
-                                        {
-                                            Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Equipping.", itemId, bag, slot);
-                                            _objectManager.EquipItem(bag, slot);
-                                            return BehaviourTreeStatus.Success;
-                                        }
-                                    }
-                                }
-                            }
+                            Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Failing EquipItemById.", itemId);
+                            return BehaviourTreeStatus.Failure;
                         }
 
-                        // Fallback: item not tracked in ObjectManager (e.g., added via GM command).
-                        Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Trying brute-force equip for all backpack slots.", itemId);
-                        for (int slot = 0; slot < 16; slot++)
-                            _objectManager.EquipItem(0, slot);
+                        var (bag, slot, _) = containedLocation.Value;
+                        Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Equipping.", itemId, bag, slot);
+                        _objectManager.EquipItem(bag, slot);
                         return BehaviourTreeStatus.Success;
                     })
                 .End()
                 .Build();
-        }
 
         internal IBehaviourTreeNode BuildEquipItemSequence(int bag, int slot) => new BehaviourTreeBuilder()
             .Sequence("Equip Item Sequence")
@@ -343,8 +354,30 @@ namespace BotRunner.SequenceBuilders
                     _objectManager.EquipItem(bag, slot);
                     return BehaviourTreeStatus.Success;
                 })
-            .End()
-            .Build();
+                .End()
+                .Build();
+
+        private (int bag, int slot, IWoWItem item)? FindContainedItemLocation(uint itemId)
+        {
+            for (int slot = 0; slot < BackpackSlotCount; slot++)
+            {
+                var item = _objectManager.GetContainedItem(0, slot);
+                if (item != null && item.ItemId == itemId)
+                    return (0, slot, item);
+            }
+
+            for (int bag = 1; bag <= ExtraBagCount; bag++)
+            {
+                for (int slot = 0; slot < MaxExtraBagSlots; slot++)
+                {
+                    var item = _objectManager.GetContainedItem(bag, slot);
+                    if (item != null && item.ItemId == itemId)
+                        return (bag, slot, item);
+                }
+            }
+
+            return null;
+        }
 
         internal IBehaviourTreeNode BuildEquipItemSequence(int bag, int slot, EquipSlot equipSlot) => new BehaviourTreeBuilder()
             .Sequence("Equip Item Sequence")

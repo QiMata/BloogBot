@@ -209,6 +209,7 @@ message WoWActivitySnapshot {
     TravelObjective travel_objective = 21;      // Current travel objective (set by StateManager for goal-driven travel)
     CharacterGoals character_goals = 22;        // Build config / progression goals from CharacterSettings.BuildConfig
     ProgressionStatus progression_status = 23;  // Current progress toward goals (populated by StateManager)
+    bool isIndoors = 24;                        // Runtime scene/environment classification from local physics
 }
 
 // Progress toward character goals. StateManager populates from snapshot + goal comparison.

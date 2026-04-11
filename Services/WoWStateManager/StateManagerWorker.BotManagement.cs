@@ -53,7 +53,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null)
+        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
         {
             var tokenSource = new CancellationTokenSource();
 
@@ -114,6 +114,8 @@ namespace WoWStateManager
                 psi.Environment["WWOW_CHARACTER_SPEC"] = characterSpec;
             if (!string.IsNullOrEmpty(talentBuildName))
                 psi.Environment["WWOW_TALENT_BUILD"] = talentBuildName;
+            if (characterNameAttemptOffset.HasValue)
+                psi.Environment["WWOW_CHARACTER_NAME_ATTEMPT_OFFSET"] = characterNameAttemptOffset.Value.ToString();
 
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
@@ -152,7 +154,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null)
+        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
             if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
@@ -163,7 +165,7 @@ namespace WoWStateManager
             _lastLaunchTimes[accountName] = DateTime.UtcNow;
 
             // Start WoW process and inject the bot worker service
-            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender, characterSpec, talentBuildName);
+            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender, characterSpec, talentBuildName, characterNameAttemptOffset);
         }
 
         /// <summary>
@@ -258,7 +260,7 @@ namespace WoWStateManager
         }
 
 
-        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null)
+        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
         {
             // Set the path to ForegroundBotRunner.dll in an environment variable
             var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
@@ -280,6 +282,9 @@ namespace WoWStateManager
                 Environment.SetEnvironmentVariable("WWOW_CHARACTER_SPEC", characterSpec);
             if (!string.IsNullOrEmpty(talentBuildName))
                 Environment.SetEnvironmentVariable("WWOW_TALENT_BUILD", talentBuildName);
+            Environment.SetEnvironmentVariable(
+                "WWOW_CHARACTER_NAME_ATTEMPT_OFFSET",
+                characterNameAttemptOffset?.ToString());
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
             // Disable packet hooks for crash diagnostics: "Injection:DisablePacketHooks": "true"

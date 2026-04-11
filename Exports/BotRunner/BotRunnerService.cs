@@ -87,20 +87,6 @@ namespace BotRunner
         private int _lastLoggedContainedItems = -1;
         private int _lastLoggedItemObjects = -1;
 
-        // Inventory slot constants for item-by-ID fallback probing
-        internal const int BackpackSlots = 16;
-        internal const int ExtraBagCount = 4;
-        internal const int ExtraBagSlots = 20;
-
-        internal static IEnumerable<(int bag, int slot)> EnumerateByIdFallbackSlots()
-        {
-            for (int slot = 0; slot < BackpackSlots; slot++)
-                yield return (0, slot);
-            for (int bag = 1; bag <= ExtraBagCount; bag++)
-                for (int slot = 0; slot < ExtraBagSlots; slot++)
-                    yield return (bag, slot);
-        }
-
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
         private readonly InteractionSequenceBuilder _interactionSequences;
@@ -161,7 +147,7 @@ namespace BotRunner
             _diagnosticsRecorder = new DiagnosticsRecorder(objectManager, diagnosticPacketTraceRecorder);
             _diagnosticsRecorder.AccountNameAccessor = () => _activitySnapshot?.AccountName ?? "unknown";
 
-            _interactionSequences = new InteractionSequenceBuilder(objectManager, agentFactoryAccessor);
+            _interactionSequences = new InteractionSequenceBuilder(objectManager, agentFactoryAccessor, EnqueueDiagnosticMessage);
 
             // Subscribe to chat/error events for test observability
             SubscribeToMessageEvents();
@@ -256,7 +242,12 @@ namespace BotRunner
                         var taskTop = _botTasks.Count > 0 ? _botTasks.Peek().GetType().Name : "empty";
                         var screenState = _activitySnapshot?.ScreenState ?? "?";
                         var mapId = (_objectManager.Player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0;
-                        DiagLog($"[TICK#{_tickCount}] ready={playerWorldReady} action={actionType} tree={_behaviorTreeStatus} tasks={_botTasks.Count}({taskTop}) screen={screenState} map={mapId} char={_activitySnapshot?.CharacterName ?? "?"}");
+                        var position = _objectManager.Player?.Position;
+                        DiagLog(
+                            $"[TICK#{_tickCount}] ready={playerWorldReady} action={actionType} tree={_behaviorTreeStatus} " +
+                            $"tasks={_botTasks.Count}({taskTop}) screen={screenState} map={mapId} char={_activitySnapshot?.CharacterName ?? "?"} " +
+                            $"snapIndoors={_activitySnapshot?.IsIndoors} physIndoors={_objectManager.PhysicsIsIndoors} " +
+                            $"env=0x{(uint)_objectManager.PhysicsEnvironmentFlags:X} pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1})");
                     }
 
                     UpdateBehaviorTree(incomingActivityMemberState);
@@ -454,12 +445,14 @@ namespace BotRunner
                         createAttempts + 1);
                 }
 
+                var attemptOffset = ResolveCharacterNameAttemptOffset();
+
                 _behaviorTree = _interactionSequences.BuildCreateCharacterSequence(
                     [
                         WoWNameGenerator.GenerateName(
                             race,
                             gender,
-                            BuildCharacterUniquenessSeed(_activitySnapshot.AccountName, createAttempts)),
+                            BuildCharacterUniquenessSeed(_activitySnapshot.AccountName, createAttempts, attemptOffset)),
                         race,
                         gender,
                         @class,
@@ -479,13 +472,25 @@ namespace BotRunner
         }
 
         internal static string? BuildCharacterUniquenessSeed(string? accountName, int createAttempts)
+            => BuildCharacterUniquenessSeed(accountName, createAttempts, attemptOffset: 0);
+
+        internal static string? BuildCharacterUniquenessSeed(string? accountName, int createAttempts, int attemptOffset)
         {
             if (string.IsNullOrWhiteSpace(accountName))
                 return accountName;
 
-            return createAttempts <= 0
+            var effectiveAttempts = Math.Max(0, createAttempts) + Math.Max(0, attemptOffset);
+            return effectiveAttempts <= 0
                 ? accountName
-                : $"{accountName}:{createAttempts}";
+                : $"{accountName}:{effectiveAttempts}";
+        }
+
+        internal static int ResolveCharacterNameAttemptOffset()
+        {
+            var rawValue = Environment.GetEnvironmentVariable("WWOW_CHARACTER_NAME_ATTEMPT_OFFSET");
+            return int.TryParse(rawValue, out var parsedOffset) && parsedOffset >= 0
+                ? parsedOffset
+                : 0;
         }
 
         internal static Position? ResolveNextWaypoint(Position[]? positions, Action<string>? logAction = null)

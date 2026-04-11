@@ -134,6 +134,23 @@ public class PhysicsEngineFixture : IDisposable
         if (Directory.Exists(Path.Combine(baseDir, "mmaps")))
         {
             Environment.SetEnvironmentVariable("WWOW_DATA_DIR", baseDir);
+            return;
+        }
+
+        var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+        var externalDataRoots = new[]
+        {
+            Path.Combine(systemDrive + Path.DirectorySeparatorChar, "MaNGOS", "data"),
+            Path.Combine(systemDrive + Path.DirectorySeparatorChar, "mangos", "data"),
+        };
+
+        foreach (var candidate in externalDataRoots)
+        {
+            if (!Directory.Exists(Path.Combine(candidate, "mmaps")))
+                continue;
+
+            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", candidate);
+            return;
         }
     }
 

@@ -124,6 +124,13 @@ namespace WoWStateManager.Settings
         public string? CharacterGender { get; set; }
 
         /// <summary>
+        /// Optional character-name seed offset used when the default generated name
+        /// is already taken. Bot runners add this offset before applying retry suffixes.
+        /// </summary>
+        [JsonProperty("CharacterNameAttemptOffset", NullValueHandling = NullValueHandling.Ignore)]
+        public int? CharacterNameAttemptOffset { get; set; }
+
+        /// <summary>
         /// Optional build configuration: spec selection, talent build, gold target, professions, quests.
         /// If null/omitted, uses default spec for the character's class.
         /// </summary>

@@ -199,6 +199,29 @@ namespace BotRunner.Tests.Combat
             Assert.Single(SpellData.SpellNameToIds[name]);
         }
 
+        [Fact]
+        public void MountSpellIds_DbDerivedCatalog_HasExpectedCount()
+        {
+            Assert.Equal(126, SpellData.MountSpellIds.Count);
+        }
+
+        [Theory]
+        [InlineData(458u)]   // Brown Horse, present in spell_template mounted-aura query
+        [InlineData(30174u)] // Riding Turtle, also outside the old hardcoded guard
+        [InlineData(23510u)] // Stormpike Battle Charger
+        public void IsMountSpell_DbDerivedCatalog_ReturnsTrue(uint spellId)
+        {
+            Assert.True(SpellData.IsMountSpell(spellId));
+        }
+
+        [Theory]
+        [InlineData(78u)]   // Heroic Strike
+        [InlineData(1459u)] // Arcane Intellect
+        public void IsMountSpell_NonMountSpell_ReturnsFalse(uint spellId)
+        {
+            Assert.False(SpellData.IsMountSpell(spellId));
+        }
+
         // ======== GetSpellName ========
 
         [Theory]

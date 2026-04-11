@@ -30,7 +30,7 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
     private readonly object _initLock = new();
 
     public SceneTileSocketServer(string ipAddress, int port, ILogger logger)
-        : base(ipAddress, port, logger)
+        : base(ipAddress, port, logger, startImmediately: false)
     {
         _logger = logger;
     }
@@ -150,9 +150,7 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
         float maxY = reader.ReadSingle();
         uint reserved = reader.ReadUInt32();
 
-        // Read triangles (SceneTri = 36 bytes: 9 floats + sourceType + instanceId)
-        // But SceneTri is actually: ax,ay,az,bx,by,bz,cx,cy,cz (9 floats) + sourceType(u32) + instanceId(u32) = 44 bytes
-        const int SCENE_TRI_SIZE = 44; // 9 * 4 + 4 + 4
+        // Read SceneTri payloads: 9 vertex floats plus sourceType + instanceId.
         var response = new SceneTileResponse
         {
             MapId = mapId,
@@ -168,24 +166,60 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
 
         // Read all vertex floats into a raw byte buffer, then gzip compress.
         // 9 floats per triangle × 4 bytes = 36 bytes per triangle.
-        int floatCount = (int)triCount * 9;
-        var rawBytes = new byte[floatCount * 4];
+        int floatCount = checked((int)triCount * 9);
+        var rawBytes = new byte[floatCount * sizeof(float)];
+        var metadataBytes = new byte[checked((int)triCount * 3 * sizeof(uint))];
         int byteOffset = 0;
+        int metadataByteOffset = 0;
+        var sourceTypes = new uint[checked((int)triCount)];
+        var instanceIds = new uint[checked((int)triCount)];
 
-        for (uint i = 0; i < triCount; i++)
+        for (int i = 0; i < (int)triCount; i++)
         {
-            // Read 9 vertex floats + skip sourceType(4) + instanceId(4)
             for (int f = 0; f < 9; f++)
             {
                 float val = reader.ReadSingle();
                 BitConverter.TryWriteBytes(rawBytes.AsSpan(byteOffset), val);
-                byteOffset += 4;
+                byteOffset += sizeof(float);
             }
-            reader.ReadUInt32(); // sourceType (skip)
-            reader.ReadUInt32(); // instanceId (skip)
+
+            sourceTypes[i] = reader.ReadUInt32();
+            instanceIds[i] = reader.ReadUInt32();
         }
 
-        // GZip compress
+        if (version >= 2u)
+        {
+            for (int i = 0; i < (int)triCount; i++)
+            {
+                uint sourceType = reader.ReadUInt32();
+                uint instanceId = reader.ReadUInt32();
+                reader.ReadUInt32(); // instanceFlags
+                reader.ReadUInt32(); // modelFlags
+                uint groupFlags = reader.ReadUInt32();
+                reader.ReadInt32();  // rootId
+                reader.ReadInt32();  // groupId
+
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), sourceType);
+                metadataByteOffset += sizeof(uint);
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), instanceId);
+                metadataByteOffset += sizeof(uint);
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), groupFlags);
+                metadataByteOffset += sizeof(uint);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < (int)triCount; i++)
+            {
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), sourceTypes[i]);
+                metadataByteOffset += sizeof(uint);
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), instanceIds[i]);
+                metadataByteOffset += sizeof(uint);
+                BitConverter.TryWriteBytes(metadataBytes.AsSpan(metadataByteOffset), 0u);
+                metadataByteOffset += sizeof(uint);
+            }
+        }
+
         using var compressedStream = new MemoryStream();
         using (var gzip = new GZipStream(compressedStream, CompressionLevel.Fastest, leaveOpen: true))
         {
@@ -193,6 +227,20 @@ public sealed class SceneTileSocketServer : ProtobufSocketServer<SceneTileReques
         }
 
         response.TriangleDataCompressed = ByteString.CopyFrom(compressedStream.GetBuffer(), 0, (int)compressedStream.Length);
+
+        if (metadataBytes.Length > 0)
+        {
+            using var compressedMetadataStream = new MemoryStream();
+            using (var gzip = new GZipStream(compressedMetadataStream, CompressionLevel.Fastest, leaveOpen: true))
+            {
+                gzip.Write(metadataBytes, 0, metadataBytes.Length);
+            }
+
+            response.TriangleMetadataCompressed = ByteString.CopyFrom(
+                compressedMetadataStream.GetBuffer(),
+                0,
+                (int)compressedMetadataStream.Length);
+        }
 
         return response;
     }

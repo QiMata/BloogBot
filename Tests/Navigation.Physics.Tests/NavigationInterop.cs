@@ -163,6 +163,17 @@ public static partial class NavigationInterop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct InjectedTriangle
+    {
+        public float V0X, V0Y, V0Z;
+        public float V1X, V1Y, V1Z;
+        public float V2X, V2Y, V2Z;
+        public uint SourceType;
+        public uint InstanceId;
+        public uint GroupFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct TerrainQueryPairPayload
     {
         public float First;
@@ -684,6 +695,7 @@ public static partial class NavigationInterop
         public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
         public uint StepUpAge;          // frames since step-up detected
         public uint GroundedWallState;  // internal selected-contact walkability state
+        public uint EnvironmentFlags;
     }
 
     // ==========================================================================
@@ -1977,6 +1989,20 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "PreloadMap", CallingConvention = CallingConvention.Cdecl)]
     public static extern void PreloadMap(uint mapId);
+
+    [DllImport(NavigationDll, EntryPoint = "InjectSceneTriangles", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool InjectSceneTriangles(
+        uint mapId,
+        float minX,
+        float minY,
+        float maxX,
+        float maxY,
+        [In] InjectedTriangle[] triangles,
+        int triangleCount);
+
+    [DllImport(NavigationDll, EntryPoint = "ClearSceneCache", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void ClearSceneCache(uint mapId);
 
     // ==========================================================================
     // DYNAMIC OBJECT REGISTRY (elevators, doors, chests)

@@ -5,6 +5,7 @@ using Serilog;
 using System;
 using System.Linq;
 using Xas.FluentBehaviourTree;
+using MountUsageGuard = BotRunner.Helpers.MountUsageGuard;
 
 namespace BotRunner
 {
@@ -247,11 +248,26 @@ namespace BotRunner
         private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
         {
             Log.Information("[BOT RUNNER] BuildCastSpellSequence: spell={SpellId}, target=0x{Target:X}", spellId, targetGuid);
+            var skipMountCast = false;
             return new BehaviourTreeBuilder()
                 .Sequence("Cast Spell Sequence")
                     .Splice(CheckForTarget(targetGuid))
+                    .Do("Validate Mount Cast", time =>
+                    {
+                        skipMountCast = MountUsageGuard.TryGetBlockedReasonForSpell(_objectManager, spellId, out var blockReason);
+                        if (skipMountCast)
+                        {
+                            Log.Information("[BOT RUNNER] Skipping mount spell {SpellId}: {Reason}", spellId, blockReason);
+                            EnqueueDiagnosticMessage($"[MOUNT-BLOCK] spell={spellId} {blockReason}");
+                        }
+
+                        return BehaviourTreeStatus.Success;
+                    })
                     .Condition("Can Cast Spell", time =>
                     {
+                        if (skipMountCast)
+                            return true;
+
                         var canCast = _objectManager.CanCastSpell(spellId, targetGuid);
                         if (!canCast)
                             Log.Debug("[BOT RUNNER] CanCastSpell({SpellId}, 0x{Target:X}) = false", spellId, targetGuid);
@@ -259,6 +275,9 @@ namespace BotRunner
                     })
                     .Do("Stop and Face Target", time =>
                     {
+                        if (skipMountCast)
+                            return BehaviourTreeStatus.Success;
+
                         _objectManager.StopAllMovement();
 
                         var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
@@ -269,6 +288,9 @@ namespace BotRunner
                     })
                     .Do("Cast Spell", time =>
                     {
+                        if (skipMountCast)
+                            return BehaviourTreeStatus.Success;
+
                         Log.Information("[BOT RUNNER] Casting spell {SpellId} on target 0x{Target:X}", spellId, targetGuid);
                         _objectManager.CastSpell(spellId);
                         return BehaviourTreeStatus.Success;

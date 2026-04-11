@@ -10,7 +10,8 @@ using BotRunnerType = WoWStateManager.Settings.BotRunnerType;
 namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 /// <summary>
-/// Fixture for Warsong Gulch tests. Launches 20 bots: 10 Horde + 10 Alliance (all BG headless).
+/// Fixture for Warsong Gulch tests. Launches 20 bots: 10 Horde (1 FG + 9 BG) and
+/// 10 Alliance (1 FG + 9 BG).
 /// Level 60, PvP gear loadout, elixirs, mount, talents — full combat-ready prep.
 /// </summary>
 public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
@@ -40,11 +41,11 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
     ];
 
     internal static readonly IReadOnlyList<string> HordeAccountsOrdered = Enumerable.Range(0, HordeBotCount)
-        .Select(index => $"WSGBOT{index + 1}")
+        .Select(index => index == 0 ? HordeLeaderAccount : $"WSGBOT{index + 1}")
         .ToArray();
 
     internal static readonly IReadOnlyList<string> AllianceAccountsOrdered = Enumerable.Range(0, AllianceBotCount)
-        .Select(index => $"WSGBOTA{index + 1}")
+        .Select(index => index == 0 ? AllianceLeaderAccount : $"WSGBOTA{index + 1}")
         .ToArray();
 
     protected override string SettingsFileName => "WarsongGulch.settings.json";
@@ -86,22 +87,22 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         {
             var template = HordeTemplates[index];
             bots.Add(CreateCharacterSetting(
-                accountName: $"WSGBOT{index + 1}",
+                accountName: index == 0 ? HordeLeaderAccount : $"WSGBOT{index + 1}",
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: BotRunnerType.Background));
+                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
         {
             var template = AllianceTemplates[index];
             bots.Add(CreateCharacterSetting(
-                accountName: $"WSGBOTA{index + 1}",
+                accountName: index == 0 ? AllianceLeaderAccount : $"WSGBOTA{index + 1}",
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: BotRunnerType.Background));
+                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         return bots;
@@ -236,18 +237,28 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         }
     }
 
-    internal async Task MountAllBotsAsync()
+    internal Task<ResponseResult> SetRuntimeCoordinatorEnabledAsync(bool enabled)
+        => SetCoordinatorEnabledAsync(enabled);
+
+    internal async Task AttemptMountSpellsAsync(IEnumerable<string> accountNames)
     {
-        foreach (var settings in CharacterSettings)
+        foreach (var accountName in accountNames
+            .Where(account => !string.IsNullOrWhiteSpace(account))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var isHorde = HordeAccountsOrdered.Contains(settings.AccountName, StringComparer.OrdinalIgnoreCase);
-            var mountSpellId = isHorde ? 23509 : 23510;
-            await SendSilentGmChatCommandAsync(settings.AccountName, ".gm on");
-            await Task.Delay(50);
-            await SendSilentGmChatCommandAsync(settings.AccountName, ".targetself");
-            await Task.Delay(50);
-            await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
-            await Task.Delay(50);
+            var mountSpellId = HordeAccountsOrdered.Contains(accountName, StringComparer.OrdinalIgnoreCase) ? 23509 : 23510;
+            var result = await SendSilentActionAsync(accountName, new ActionMessage
+            {
+                ActionType = ActionType.CastSpell,
+                Parameters = { new RequestParameter { IntParam = mountSpellId } }
+            });
+            if (result != ResponseResult.Success)
+            {
+                throw new InvalidOperationException(
+                    $"WSG mount spell dispatch failed for '{accountName}' (spell={mountSpellId}, result={result}).");
+            }
+
+            await Task.Delay(100);
         }
     }
 }

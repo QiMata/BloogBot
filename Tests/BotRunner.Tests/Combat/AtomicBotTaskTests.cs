@@ -260,6 +260,21 @@ public class CastSpellTaskTests
         om.Verify(o => o.CastSpell(1459, -1, true), Times.Once);
         Assert.Empty(stack);
     }
+
+    [Fact]
+    public void Update_MountSpellBlockedByEnvironment_DoesNotCast()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        om.SetupGet(o => o.PhysicsAllowsMountByEnvironment).Returns(false);
+        om.SetupGet(o => o.PhysicsEnvironmentFlags).Returns(SceneEnvironmentFlags.Indoors);
+        var task = new CastSpellTask(ctx.Object, spellId: 458);
+        stack.Push(task);
+
+        task.Update();
+
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        Assert.Empty(stack);
+    }
 }
 
 // ==================== FishingTask Tests ====================
@@ -1919,6 +1934,24 @@ public class UseItemTaskTests
 
         om.Verify(o => o.SetTarget(0x9999UL), Times.Once);
         om.Verify(o => o.UseItem(1, 5, 0x9999UL), Times.Once);
+        Assert.Empty(stack);
+    }
+
+    [Fact]
+    public void Update_MountItemBlockedByEnvironment_DoesNotUseItem()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var mountItem = new Mock<IWoWItem>();
+        mountItem.SetupGet(i => i.ItemId).Returns(23720u);
+        om.Setup(o => o.GetContainedItem(0, 3)).Returns(mountItem.Object);
+        om.SetupGet(o => o.PhysicsAllowsMountByEnvironment).Returns(false);
+        om.SetupGet(o => o.PhysicsEnvironmentFlags).Returns(SceneEnvironmentFlags.Indoors);
+        var task = new UseItemTask(ctx.Object, bagId: 0, slotId: 3);
+        stack.Push(task);
+
+        task.Update();
+
+        om.Verify(o => o.UseItem(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<ulong>()), Times.Never);
         Assert.Empty(stack);
     }
 }

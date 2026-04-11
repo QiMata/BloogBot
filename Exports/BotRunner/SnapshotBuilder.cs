@@ -77,6 +77,7 @@ namespace BotRunner
                 _activitySnapshot.ConnectionState == BotConnectionState.BotInWorld
                 && _objectManager.Player != null
                 && !inMapTransition;
+            _activitySnapshot.IsIndoors = false;
 
             // Top-level MapId for reliable BG transfer detection.
             // This bypasses the deep nesting (Player.Unit.GameObject.Base.MapId)
@@ -95,6 +96,7 @@ namespace BotRunner
                 return;
 
             var player = _objectManager.Player;
+            _activitySnapshot.IsIndoors = _objectManager.PhysicsIsIndoors;
 
             // Track the last known alive position to recover corpse navigation when corpse coordinates
             // are not populated immediately after release on some client/server combinations.

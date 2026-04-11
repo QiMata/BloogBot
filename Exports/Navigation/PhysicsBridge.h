@@ -172,6 +172,13 @@ struct PhysicsInput
 
 constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
 
+enum SceneEnvironmentFlags : uint32_t
+{
+    SCENE_ENVIRONMENT_FLAG_NONE = 0x0,
+    SCENE_ENVIRONMENT_FLAG_INDOORS = 0x1,
+    SCENE_ENVIRONMENT_FLAG_MOUNT_ALLOWED = 0x2,
+};
+
 // Physics output back to the game
 struct PhysicsOutput
 {
@@ -231,4 +238,5 @@ struct PhysicsOutput
     float stepUpBaseZ;
     uint32_t stepUpAge;
     uint32_t groundedWallState;
+    uint32_t environmentFlags;
 };

@@ -412,6 +412,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         {
             _previousRecordingArtifactsFlag = Environment.GetEnvironmentVariable(RecordingArtifactsEnvVar);
             Environment.SetEnvironmentVariable(RecordingArtifactsEnvVar, "1");
+            EnsurePhysicsDataDirectory();
 
             // Live corpse-flow tests must own the release step via explicit client action.
             // Disable BotRunner auto-release so death setup remains deterministic.
@@ -564,6 +565,62 @@ public partial class LiveBotFixture : IAsyncLifetime
             FailureReason = $"Fixture init failed: {ex.Message}";
             _logger.LogError(ex, "[FIXTURE] Initialization failed");
         }
+    }
+
+    private void EnsurePhysicsDataDirectory()
+    {
+        var existing = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+        if (IsUsablePhysicsDataDirectory(existing))
+        {
+            _logger.LogInformation("[FIXTURE] Using existing WWOW_DATA_DIR={DataDir}", Path.GetFullPath(existing!));
+            return;
+        }
+
+        foreach (var candidate in EnumeratePhysicsDataDirectoryCandidates())
+        {
+            if (!IsUsablePhysicsDataDirectory(candidate))
+                continue;
+
+            var resolved = Path.GetFullPath(candidate!);
+            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", resolved);
+            _logger.LogInformation("[FIXTURE] Set WWOW_DATA_DIR={DataDir}", resolved);
+            return;
+        }
+
+        _logger.LogWarning("[FIXTURE] Could not resolve WWOW_DATA_DIR. Native physics will run without terrain data.");
+    }
+
+    private IEnumerable<string?> EnumeratePhysicsDataDirectoryCandidates()
+    {
+        var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        yield return Path.Combine(baseDir, "Data");
+        yield return baseDir;
+        yield return Path.Combine(baseDir, "..");
+        yield return Path.Combine(baseDir, "..", "..");
+        yield return Path.Combine(baseDir, "..", "..", "..");
+
+        if (!string.IsNullOrWhiteSpace(Config.MangosDirectory))
+        {
+            yield return Path.Combine(Config.MangosDirectory, "..", "data");
+            yield return Path.Combine(Config.MangosDirectory, "..", "..", "data");
+        }
+
+        var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
+        yield return Path.Combine(systemDrive + Path.DirectorySeparatorChar, "MaNGOS", "data");
+        yield return Path.Combine(systemDrive + Path.DirectorySeparatorChar, "Mangos", "data");
+        yield return Path.Combine(systemDrive + Path.DirectorySeparatorChar, "mangos", "data");
+    }
+
+    private static bool IsUsablePhysicsDataDirectory(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        var resolved = Path.GetFullPath(candidate);
+        return Directory.Exists(Path.Combine(resolved, "maps"))
+            && Directory.Exists(Path.Combine(resolved, "mmaps"))
+            && Directory.Exists(Path.Combine(resolved, "vmaps"));
     }
 
     private static string SummarizeLatestSnapshotStates(IReadOnlyCollection<WoWActivitySnapshot> snapshots)

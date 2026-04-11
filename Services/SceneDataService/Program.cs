@@ -59,9 +59,10 @@ internal static class Program
             {
                 WriteStartupInfo($"[SceneDataService] Tile mode: loading .scenetile files from {tilesDir}");
                 using var tileServer = new SceneTileSocketServer(ipAddress, port, logger);
-                WriteStartupInfo($"[SceneDataService] Socket listener bound on {ipAddress}:{port}");
 
                 tileServer.LoadTiles(tilesDir);
+                tileServer.StartListening();
+                WriteStartupInfo($"[SceneDataService] Socket listener bound on {ipAddress}:{port}");
                 WriteStartupInfo($"[SceneDataService] Ready and listening on {ipAddress}:{port} (tile mode)");
 
                 using var tileShutdown = new ManualResetEventSlim(false);

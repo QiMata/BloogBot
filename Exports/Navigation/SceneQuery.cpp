@@ -680,6 +680,28 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     return bestZ;
 }
 
+bool SceneQuery::GetAreaInfo(uint32_t mapId,
+                             float x,
+                             float y,
+                             float z,
+                             uint32_t& flags,
+                             int32_t& rootId,
+                             int32_t& groupId)
+{
+    EnsureMapLoaded(mapId);
+
+    flags = 0u;
+    rootId = -1;
+    groupId = -1;
+
+    if (!m_vmapManager)
+        return false;
+
+    int32_t adtId = -1;
+    float queryZ = z;
+    return m_vmapManager->getAreaInfo(mapId, x, y, queryZ, flags, adtId, rootId, groupId);
+}
+
 float SceneQuery::GetCapsuleSupportZ(
     uint32_t mapId,
     float x,

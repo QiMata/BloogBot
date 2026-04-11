@@ -115,6 +115,134 @@ void PhysicsEngine::Shutdown()
 
 namespace
 {
+    constexpr uint32_t WMO_GROUP_FLAG_INTERIOR = 0x00002000u;
+    constexpr uint32_t WMO_GROUP_FLAG_MOUNT_ALLOWED = 0x00008000u;
+    constexpr float ENVIRONMENT_OVERHEAD_COLUMN_HALF_WIDTH = 0.25f;
+    constexpr float ENVIRONMENT_OVERHEAD_MIN_CLEARANCE = 1.0f;
+    constexpr float ENVIRONMENT_OVERHEAD_MAX_PROBE = 18.0f;
+
+    uint32_t ComputeSceneEnvironmentFlags(const SceneQuery::AABBContact* supportContact)
+    {
+        if (!supportContact)
+            return SCENE_ENVIRONMENT_FLAG_NONE;
+
+        uint32_t flags = SCENE_ENVIRONMENT_FLAG_NONE;
+        if ((supportContact->groupFlags & WMO_GROUP_FLAG_INTERIOR) != 0u)
+            flags |= SCENE_ENVIRONMENT_FLAG_INDOORS;
+        if ((supportContact->groupFlags & WMO_GROUP_FLAG_MOUNT_ALLOWED) != 0u)
+            flags |= SCENE_ENVIRONMENT_FLAG_MOUNT_ALLOWED;
+
+        return flags;
+    }
+
+    uint32_t QueryEnvironmentFlagsAtGroundSupport(uint32_t mapId, float x, float y, float supportZ, float radius, float height)
+    {
+        uint32_t areaFlags = 0u;
+        int32_t areaRootId = -1;
+        int32_t areaGroupId = -1;
+        const float areaQueryZ = supportZ + std::max(ENVIRONMENT_OVERHEAD_MIN_CLEARANCE, height * 0.5f);
+        if (SceneQuery::GetAreaInfo(mapId, x, y, areaQueryZ, areaFlags, areaRootId, areaGroupId))
+        {
+            SceneQuery::AABBContact areaInfoContact{};
+            areaInfoContact.groupFlags = areaFlags;
+            areaInfoContact.rootId = areaRootId;
+            areaInfoContact.groupId = areaGroupId;
+
+            const uint32_t directAreaFlags = ComputeSceneEnvironmentFlags(&areaInfoContact);
+            if (directAreaFlags != SCENE_ENVIRONMENT_FLAG_NONE)
+                return directAreaFlags;
+        }
+
+        const float skin = PhysicsConstants::COLLISION_SKIN_FRACTION;
+        const float adjustedMaxZ = supportZ + PhysicsConstants::STEP_HEIGHT;
+        const float adjustedMinZ = adjustedMaxZ - radius - PhysicsConstants::STEP_HEIGHT;
+        const float minGroundZ = supportZ - PhysicsConstants::STEP_DOWN_HEIGHT;
+        const float maxGroundZ = supportZ + PhysicsConstants::STEP_HEIGHT;
+
+        std::vector<SceneQuery::AABBContact> contacts;
+        SceneQuery::TestTerrainAABB(
+            mapId,
+            G3D::Vector3(x - skin, y - skin, adjustedMinZ),
+            G3D::Vector3(x + skin, y + skin, adjustedMaxZ),
+            contacts);
+
+        const SceneQuery::AABBContact* bestSupport = nullptr;
+        float bestZError = FLT_MAX;
+        float bestNormalZ = -FLT_MAX;
+
+        for (const auto& contact : contacts)
+        {
+            if (!contact.walkable)
+                continue;
+            if (contact.point.z < minGroundZ || contact.point.z > maxGroundZ)
+                continue;
+
+            const float zError = std::fabs(contact.point.z - supportZ);
+            const float normalZ = std::fabs(contact.normal.z);
+            bool better = false;
+            if (!bestSupport)
+            {
+                better = true;
+            }
+            else if (zError < bestZError - 1e-4f)
+            {
+                better = true;
+            }
+            else if (std::fabs(zError - bestZError) <= 1e-4f)
+            {
+                if (normalZ > bestNormalZ + 1e-4f)
+                    better = true;
+                else if (std::fabs(normalZ - bestNormalZ) <= 1e-4f && contact.point.z > bestSupport->point.z)
+                    better = true;
+            }
+
+            if (better)
+            {
+                bestSupport = &contact;
+                bestZError = zError;
+                bestNormalZ = normalZ;
+            }
+        }
+
+        uint32_t flags = ComputeSceneEnvironmentFlags(bestSupport);
+        if ((flags & SCENE_ENVIRONMENT_FLAG_INDOORS) != 0u)
+            return flags;
+
+        const float columnHalfWidth = std::max(ENVIRONMENT_OVERHEAD_COLUMN_HALF_WIDTH, radius * 0.5f);
+        const float columnMinZ = supportZ + std::max(ENVIRONMENT_OVERHEAD_MIN_CLEARANCE, height * 0.35f);
+        const float columnMaxZ = supportZ + height + ENVIRONMENT_OVERHEAD_MAX_PROBE;
+
+        std::vector<SceneQuery::AABBContact> overheadContacts;
+        SceneQuery::TestTerrainAABB(
+            mapId,
+            G3D::Vector3(x - columnHalfWidth, y - columnHalfWidth, columnMinZ),
+            G3D::Vector3(x + columnHalfWidth, y + columnHalfWidth, columnMaxZ),
+            overheadContacts);
+
+        const SceneQuery::AABBContact* closestInteriorCeiling = nullptr;
+        float closestInteriorCeilingZ = FLT_MAX;
+        for (const auto& contact : overheadContacts)
+        {
+            const uint32_t contactFlags = ComputeSceneEnvironmentFlags(&contact);
+            if ((contactFlags & SCENE_ENVIRONMENT_FLAG_INDOORS) == 0u)
+                continue;
+
+            if (contact.point.z < columnMinZ || contact.point.z > columnMaxZ)
+                continue;
+
+            if (!closestInteriorCeiling || contact.point.z < closestInteriorCeilingZ)
+            {
+                closestInteriorCeiling = &contact;
+                closestInteriorCeilingZ = contact.point.z;
+            }
+        }
+
+        if (closestInteriorCeiling)
+            flags |= ComputeSceneEnvironmentFlags(closestInteriorCeiling);
+
+        return flags;
+    }
+
     /// Parameters for PhysX-style "walk experiment" second pass.
     /// Used when initial move lands on non-walkable slope.
     struct WalkExperimentParams
@@ -4982,6 +5110,7 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     st.vx = dirN.x * moveSpeed;
     st.vy = dirN.y * moveSpeed;
     st.groundNormal = bestNormal;
+    st.environmentFlags = ComputeSceneEnvironmentFlags(bestSupportContact);
 
     // Binary 0x635600 tail: reset groundedWallState when landing on a clearly
     // walkable surface. The flag should only persist across frames when the
@@ -5817,6 +5946,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				st.z = idleGroundZ;
 				st.isGrounded = true;
 				st.vz = 0.0f;
+                st.environmentFlags = QueryEnvironmentFlagsAtGroundSupport(input.mapId, st.x, st.y, st.z, r, h);
 			}
 		}
         // Post-step penetration diagnostics: check for any remaining overlaps
@@ -6586,6 +6716,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.pendingDepenY = deferredDepen.y;
 	out.pendingDepenZ = deferredDepen.z;
 	out.groundedWallState = st.groundedWallState ? 1u : 0u;
+	out.environmentFlags = st.environmentFlags;
 
 	out.standingOnInstanceId = st.supportInstanceId;
 	out.standingOnLocalX = st.supportLocalPoint.x;

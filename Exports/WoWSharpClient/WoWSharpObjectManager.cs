@@ -482,13 +482,15 @@ namespace WoWSharpClient
                     }
                 }
 
-                // 3b. Clear teleport flag once ground snap is complete.
-                // Previously _isBeingTeleported stayed true until the 500ms fallback timer,
-                // blocking MoveToward and physics for up to 500ms after landing. Now we clear
-                // it as soon as ground snap finishes, so the bot can immediately start moving.
-                // This matches FG behavior where WoW.exe resumes movement immediately after
-                // the teleport ACK + gravity settle.
-                if (_isBeingTeleported && _movementController != null && !_movementController.NeedsGroundSnap)
+                // 3b. Flush pending teleport ACKs once the client is genuinely ready:
+                // local player placement applied, object updates drained, nearby scene data
+                // loaded, and post-teleport ground snap complete. Only then leave map-transition
+                // state so movement resumes without a timer-based race.
+                if (!TryFlushPendingTeleportAck()
+                    && _pendingTeleportAck == null
+                    && _isBeingTeleported
+                    && _movementController != null
+                    && !_movementController.NeedsGroundSnap)
                 {
                     _isBeingTeleported = false;
                 }
@@ -705,6 +707,7 @@ namespace WoWSharpClient
             ClearPendingWorldEntry();
             _isInControl = false;
             _isBeingTeleported = false;
+            _pendingTeleportAck = null;
             _movementController = null;
 
             _pendingUpdates.Clear();

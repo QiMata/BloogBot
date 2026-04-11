@@ -15,7 +15,8 @@ public class FgCharacterSelectScreen(
     Func<WoWScreenState> getScreenState,
     Func<int> getMaxCharacterCount,
     Action<string> luaCall,
-    Action<string>? captureLuaErrors = null) : ICharacterSelectScreen
+    Action<string>? captureLuaErrors = null,
+    Func<string>? getGlueDialogText = null) : ICharacterSelectScreen
 {
     private DateTime? _charSelectFirstSeen;
     private static readonly TimeSpan CharListGracePeriod = TimeSpan.FromSeconds(2);
@@ -75,7 +76,17 @@ public class FgCharacterSelectScreen(
         set { }
     }
 
-    public bool IsCharacterCreationPending { get; private set; }
+    private bool _isCharacterCreationPending;
+
+    public bool IsCharacterCreationPending
+    {
+        get
+        {
+            TryClearPendingCharacterCreationFromNameError();
+            return _isCharacterCreationPending;
+        }
+        private set => _isCharacterCreationPending = value;
+    }
 
     public DateTime LastCharacterListRequestUtc { get; private set; }
 
@@ -301,6 +312,47 @@ public class FgCharacterSelectScreen(
     {
         _createCharStep = 0;
         _createStepEnteredAt = DateTime.MinValue;
+    }
+
+    private void TryClearPendingCharacterCreationFromNameError()
+    {
+        if (!_isCharacterCreationPending || getGlueDialogText == null)
+            return;
+
+        string? dialogText;
+        try
+        {
+            dialogText = getGlueDialogText();
+        }
+        catch
+        {
+            return;
+        }
+
+        if (!IsNameUnavailableDialog(dialogText))
+            return;
+
+        Log.Warning(
+            "[FG-CHARSEL] Character creation for '{Name}' failed because the name was unavailable. Clearing pending state for retry. dialog='{DialogText}'",
+            _pendingCharName ?? "?",
+            dialogText);
+
+        _isCharacterCreationPending = false;
+        _charSelectFirstSeen = null;
+        _hasLoggedGracePeriod = false;
+        ResetCreateFlow();
+    }
+
+    private static bool IsNameUnavailableDialog(string? dialogText)
+    {
+        if (string.IsNullOrWhiteSpace(dialogText))
+            return false;
+
+        var normalized = dialogText.Trim().ToLowerInvariant();
+        return (normalized.Contains("name") && normalized.Contains("unavailable"))
+            || normalized.Contains("name in use")
+            || normalized.Contains("already in use")
+            || normalized.Contains("choose another name");
     }
 
     /// <summary>Maps Race enum to WoW character creation button index (1-based).</summary>

@@ -808,12 +808,14 @@ void SceneCache::InjectTriangles(float minX, float minY, float maxX, float maxY,
         tri.ax = t.v0x; tri.ay = t.v0y; tri.az = t.v0z;
         tri.bx = t.v1x; tri.by = t.v1y; tri.bz = t.v1z;
         tri.cx = t.v2x; tri.cy = t.v2y; tri.cz = t.v2z;
-        tri.sourceType = 1; // ADT terrain (default)
-        tri.instanceId = 0;
+        tri.sourceType = t.sourceType;
+        tri.instanceId = t.instanceId;
         m_triangles.push_back(tri);
 
         SceneTriMetadata meta{};
-        meta.sourceType = 1;
+        meta.sourceType = t.sourceType;
+        meta.instanceId = t.instanceId;
+        meta.groupFlags = t.groupFlags;
         m_triangleMetadata.push_back(meta);
     }
 

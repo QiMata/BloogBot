@@ -1449,6 +1449,177 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
     }
 
+    [Fact]
+    public void TryFlushPendingTeleportAck_WaitsForUpdatesGroundSnapAndSceneData()
+    {
+        _fixture._woWClient.Reset();
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+
+        var originalSceneOverride = SceneDataClient.TestEnsureSceneDataAroundOverride;
+        var sceneReady = false;
+        SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => sceneReady;
+
+        try
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            var sceneDataClient = new SceneDataClient(NullLogger<SceneDataClient>.Instance);
+            objectManager.Initialize(
+                _fixture._woWClient.Object,
+                _fixture._pathfindingClient.Object,
+                NullLogger<WoWSharpObjectManager>.Instance,
+                sceneDataClient: sceneDataClient,
+                useLocalPhysics: true);
+
+            const ulong playerGuid = 0x12E0;
+            objectManager.EnterWorld(playerGuid);
+            InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+            SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+            SetPrivateField(objectManager, "_isInControl", true);
+            SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+            var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+            player.MapId = 389;
+            player.Position = new Position(3f, -11f, -18f);
+            player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            objectManager.NotifyTeleportIncoming(-18f);
+            player.Position = new Position(3f, -11f, -18f);
+
+            InvokePrivateMethod(objectManager, "EventEmitter_OnTeleport", null, new RequiresAcknowledgementArgs(playerGuid, 42));
+
+            objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+                playerGuid,
+                WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                WoWObjectType.Player,
+                new MovementInfoUpdate
+                {
+                    Guid = playerGuid,
+                    X = 3f,
+                    Y = -11f,
+                    Z = -18f,
+                    Facing = 1.5f,
+                    MovementFlags = MovementFlags.MOVEFLAG_NONE,
+                },
+                new Dictionary<uint, object?>()));
+
+            Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
+            Assert.Empty(sentPackets);
+
+            UpdateProcessingHelper.DrainPendingUpdates();
+            Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
+            Assert.Empty(sentPackets);
+
+            var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+            SetPrivateField(controller, "_needsGroundSnap", false);
+
+            Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
+            Assert.Empty(sentPackets);
+
+            sceneReady = true;
+
+            Assert.True(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
+            Assert.Single(sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_TELEPORT_ACK, sentPackets[0].opcode);
+            Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        }
+        finally
+        {
+            SceneDataClient.TestEnsureSceneDataAroundOverride = originalSceneOverride;
+        }
+    }
+
+    [Fact]
+    public void ProcessUpdatesAsync_DuringTeleport_IgnoresStaleLocalPlayerMovementUpdate()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(-618.518f, -4251.67f, 38.718f);
+        player.MapId = 1;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        objectManager.NotifyTeleportIncoming(-18f);
+
+        // Mirror MovementHandler's direct local-player position write for the teleport target.
+        player.Position = new Position(3f, -11f, -18f);
+        player.MapId = 389;
+
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            playerGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Update,
+            WoWObjectType.Player,
+            new MovementInfoUpdate
+            {
+                X = -618.518f,
+                Y = -4251.67f,
+                Z = 38.718f,
+                Facing = 1.5f,
+                MovementFlags = MovementFlags.MOVEFLAG_FORWARD,
+            },
+            new Dictionary<uint, object?>()));
+
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        Assert.Equal(3f, player.Position.X, 3);
+        Assert.Equal(-11f, player.Position.Y, 3);
+        Assert.Equal(-18f, player.Position.Z, 3);
+        Assert.Equal((uint)389, player.MapId);
+    }
+
+    [Fact]
+    public void ProcessUpdatesAsync_DuringTeleport_AcceptsTeleportDestinationMovementUpdate()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12F;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(-618.518f, -4251.67f, 38.718f);
+        player.MapId = 1;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        objectManager.NotifyTeleportIncoming(-18f);
+
+        // Mirror MovementHandler's direct local-player position write for the teleport target.
+        player.Position = new Position(3f, -11f, -18f);
+        player.MapId = 389;
+
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            playerGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Update,
+            WoWObjectType.Player,
+            new MovementInfoUpdate
+            {
+                X = 3.5f,
+                Y = -10.5f,
+                Z = -18f,
+                Facing = 2.0f,
+                MovementFlags = MovementFlags.MOVEFLAG_FORWARD,
+            },
+            new Dictionary<uint, object?>()));
+
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        Assert.Equal(3.5f, player.Position.X, 3);
+        Assert.Equal(-10.5f, player.Position.Y, 3);
+        Assert.Equal(-18f, player.Position.Z, 3);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(
@@ -1793,6 +1964,48 @@ public class ObjectManagerWorldSessionTests
         Assert.NotNull(field);
         var value = field!.GetValue(target);
         return Assert.IsType<T>(value);
+    }
+
+    private static T GetPrivateFieldValue<T>(object target, string fieldName)
+    {
+        var type = target.GetType();
+        FieldInfo? field = null;
+        while (type != null && field == null)
+        {
+            field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            type = type.BaseType;
+        }
+
+        Assert.NotNull(field);
+        return Assert.IsType<T>(field!.GetValue(target));
+    }
+
+    private static void InvokePrivateMethod(object target, string methodName, params object?[] args)
+    {
+        var type = target.GetType();
+        MethodInfo? method = null;
+        while (type != null && method == null)
+        {
+            method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+            type = type.BaseType;
+        }
+
+        Assert.NotNull(method);
+        method!.Invoke(target, args);
+    }
+
+    private static T InvokePrivateMethod<T>(object target, string methodName, params object?[] args)
+    {
+        var type = target.GetType();
+        MethodInfo? method = null;
+        while (type != null && method == null)
+        {
+            method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+            type = type.BaseType;
+        }
+
+        Assert.NotNull(method);
+        return Assert.IsType<T>(method!.Invoke(target, args));
     }
 
     private static void WaitForCondition(Func<bool> predicate, int timeoutMs = 1000)

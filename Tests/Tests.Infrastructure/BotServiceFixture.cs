@@ -884,6 +884,13 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] Set DOTNET_ROOT(x86) = {x86DotnetRoot}");
             }
 
+            var dotnetEnvironment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+            if (string.IsNullOrWhiteSpace(dotnetEnvironment))
+                dotnetEnvironment = "test";
+            psi.Environment["DOTNET_ENVIRONMENT"] = dotnetEnvironment;
+            psi.Environment["ASPNETCORE_ENVIRONMENT"] = dotnetEnvironment;
+            Log($"  [StateManager] DOTNET_ENVIRONMENT={dotnetEnvironment}");
+
             // Always show console windows for child processes (BG/FG bot runners)
             // so test runners can observe bot output in real time.
             psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
@@ -903,6 +910,17 @@ public class BotServiceFixture : IAsyncLifetime
             else if (!string.IsNullOrEmpty(CustomSettingsPath))
             {
                 Log($"  [StateManager] WARNING: CustomSettingsPath set but file not found: {CustomSettingsPath}");
+            }
+
+            var loaderDllPath = Path.Combine(BotOutputDirectory, "Loader.dll");
+            if (File.Exists(loaderDllPath))
+            {
+                psi.Environment["WWOW_LOADER_DLL_PATH"] = loaderDllPath;
+                Log($"  [StateManager] WWOW_LOADER_DLL_PATH={loaderDllPath}");
+            }
+            else
+            {
+                Log($"  [StateManager] WARNING: Loader.dll not found at expected bot output path: {loaderDllPath}");
             }
 
             // Reduce log level to Warning to prevent stdout pipe saturation with 10+ bots.

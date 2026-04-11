@@ -92,7 +92,7 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.DynamicObjectProto), global::Pathfinding.DynamicObjectProto.Parser, new[]{ "Guid", "DisplayId", "X", "Y", "Z", "Orientation", "Scale", "GoState" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge", "WasGrounded" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge", "EnvironmentFlags" }, null, null, null, null)
           }));
     }
     #endregion
@@ -3888,6 +3888,7 @@ namespace Pathfinding {
       blockedFraction_ = other.blockedFraction_;
       stepUpBaseZ_ = other.stepUpBaseZ_;
       stepUpAge_ = other.stepUpAge_;
+      environmentFlags_ = other.environmentFlags_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -4374,6 +4375,21 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "environment_flags" field.</summary>
+    public const int EnvironmentFlagsFieldNumber = 38;
+    private uint environmentFlags_;
+    /// <summary>
+    /// Runtime scene/environment classification (bitfield, see SceneEnvironmentFlags).
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint EnvironmentFlags {
+      get { return environmentFlags_; }
+      set {
+        environmentFlags_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -4426,6 +4442,7 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(BlockedFraction, other.BlockedFraction)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
       if (StepUpAge != other.StepUpAge) return false;
+      if (EnvironmentFlags != other.EnvironmentFlags) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -4470,6 +4487,7 @@ namespace Pathfinding {
       if (BlockedFraction != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(BlockedFraction);
       if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
       if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
+      if (EnvironmentFlags != 0) hash ^= EnvironmentFlags.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -4636,6 +4654,10 @@ namespace Pathfinding {
         output.WriteRawTag(168, 2);
         output.WriteUInt32(StepUpAge);
       }
+      if (EnvironmentFlags != 0) {
+        output.WriteRawTag(176, 2);
+        output.WriteUInt32(EnvironmentFlags);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -4794,6 +4816,10 @@ namespace Pathfinding {
         output.WriteRawTag(168, 2);
         output.WriteUInt32(StepUpAge);
       }
+      if (EnvironmentFlags != 0) {
+        output.WriteRawTag(176, 2);
+        output.WriteUInt32(EnvironmentFlags);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -4914,6 +4940,9 @@ namespace Pathfinding {
       }
       if (StepUpAge != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(StepUpAge);
+      }
+      if (EnvironmentFlags != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(EnvironmentFlags);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -5037,6 +5066,9 @@ namespace Pathfinding {
       }
       if (other.StepUpAge != 0) {
         StepUpAge = other.StepUpAge;
+      }
+      if (other.EnvironmentFlags != 0) {
+        EnvironmentFlags = other.EnvironmentFlags;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -5205,6 +5237,10 @@ namespace Pathfinding {
             StepUpAge = input.ReadUInt32();
             break;
           }
+          case 304: {
+            EnvironmentFlags = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -5370,6 +5406,10 @@ namespace Pathfinding {
           }
           case 296: {
             StepUpAge = input.ReadUInt32();
+            break;
+          }
+          case 304: {
+            EnvironmentFlags = input.ReadUInt32();
             break;
           }
         }

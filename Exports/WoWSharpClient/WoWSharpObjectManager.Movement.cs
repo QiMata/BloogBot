@@ -67,6 +67,8 @@ namespace WoWSharpClient
         private long _teleportFlagSetTicks;  // Stopwatch.GetTimestamp() when _isBeingTeleported was last set true
 
         private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)
+        private PendingTeleportAck? _pendingTeleportAck;
+        private readonly record struct PendingTeleportAck(ulong Guid, uint Counter, Position TargetPosition);
 
 
         private TimeSpan _lastPositionUpdate = TimeSpan.Zero;
@@ -538,40 +540,13 @@ namespace WoWSharpClient
             _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
 
             var player = (WoWLocalPlayer)Player;
-            var ackPayload = MovementPacketHandler.BuildMoveTeleportAckPayload(
-                player,
+            _pendingTeleportAck = new PendingTeleportAck(
+                player.Guid,
                 e.Counter,
-                (uint)_worldTimeTracker.NowMS.TotalMilliseconds
-            );
+                new Position(player.Position.X, player.Position.Y, player.Position.Z));
 
-            Log.Information("[ACK] TELEPORT counter={Counter} guid=0x{Guid:X} pos=({X:F1},{Y:F1},{Z:F1}) payloadLen={Len}",
-                e.Counter, player.Guid, player.Position.X, player.Position.Y, player.Position.Z, ackPayload.Length);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.MSG_MOVE_TELEPORT_ACK,
-                ackPayload
-            );
-
-            // Clear after a delay so ProcessUpdatesAsync has time to apply the position update.
-            // SMSG_CLIENT_CONTROL_UPDATE will also clear this if it arrives sooner.
-            // Also send a stop packet so the server knows we're stationary after teleport
-            // (prevents stale MOVEFLAG_FORWARD from persisting on the server side).
-            Task.Delay(500).ContinueWith(_ =>
-            {
-                Log.Information("[ACK] TELEPORT 500ms fallback: clearing _isBeingTeleported");
-                _isBeingTeleported = false;
-                // Force one physics frame immediately to execute pending ground snap.
-                // The game loop guard blocks Update() while _isBeingTeleported is true,
-                // so we must explicitly run it here to avoid missing the ground snap window.
-                if (_isInControl && Player != null && _movementController != null)
-                {
-                    _movementController.Update(0.016f, (uint)_worldTimeTracker.NowMS.TotalMilliseconds);
-                }
-                else
-                {
-                    _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
-                }
-            }, TaskScheduler.Default);
+            Log.Information("[ACK] TELEPORT queued: counter={Counter} guid=0x{Guid:X} target=({X:F1},{Y:F1},{Z:F1})",
+                e.Counter, player.Guid, player.Position.X, player.Position.Y, player.Position.Z);
         }
 
 
@@ -585,6 +560,68 @@ namespace WoWSharpClient
 
             Log.Information("[TeleportReset] source={Source} flags cleared; teleportDestZ={DestZ:F1}; pos=({X:F1},{Y:F1},{Z:F1})",
                 source, teleportDestZ, player.Position.X, player.Position.Y, player.Position.Z);
+        }
+
+        internal bool TryFlushPendingTeleportAck()
+        {
+            if (_pendingTeleportAck is not PendingTeleportAck pendingAck
+                || Player is not WoWLocalPlayer player
+                || _movementController == null)
+            {
+                return false;
+            }
+
+            if (player.Guid != pendingAck.Guid
+                || !HasEnteredWorld
+                || HasPendingWorldEntry
+                || !_isInControl
+                || PendingUpdateCount > 0
+                || _updateSemaphore.CurrentCount == 0
+                || _movementController.NeedsGroundSnap
+                || !IsTeleportTargetResolved(player, pendingAck)
+                || !IsSceneDataReadyForTeleportAck(player))
+            {
+                return false;
+            }
+
+            var ackPayload = MovementPacketHandler.BuildMoveTeleportAckPayload(
+                player,
+                pendingAck.Counter,
+                (uint)_worldTimeTracker.NowMS.TotalMilliseconds
+            );
+
+            Log.Information("[ACK] TELEPORT ready: counter={Counter} guid=0x{Guid:X} pos=({X:F1},{Y:F1},{Z:F1}) payloadLen={Len}",
+                pendingAck.Counter, player.Guid, player.Position.X, player.Position.Y, player.Position.Z, ackPayload.Length);
+
+            _ = _woWClient.SendMSGPackedAsync(
+                Opcode.MSG_MOVE_TELEPORT_ACK,
+                ackPayload
+            );
+
+            _pendingTeleportAck = null;
+            _isBeingTeleported = false;
+            return true;
+        }
+
+        private static bool IsTeleportTargetResolved(WoWLocalPlayer player, PendingTeleportAck pendingAck)
+        {
+            const float xyTolerance = 1.5f;
+            const float zTolerance = 5.0f;
+
+            return MathF.Abs(player.Position.X - pendingAck.TargetPosition.X) <= xyTolerance
+                && MathF.Abs(player.Position.Y - pendingAck.TargetPosition.Y) <= xyTolerance
+                && MathF.Abs(player.Position.Z - pendingAck.TargetPosition.Z) <= zTolerance;
+        }
+
+        private bool IsSceneDataReadyForTeleportAck(WoWLocalPlayer player)
+        {
+            if (_sceneDataClient == null)
+                return true;
+
+            return _sceneDataClient.EnsureSceneDataAround(
+                (uint)player.MapId,
+                player.Position.X,
+                player.Position.Y);
         }
 
 
@@ -723,6 +760,15 @@ namespace WoWSharpClient
         /// Fraction of intended horizontal movement that was completed (0 = fully blocked, 1 = unblocked).
         /// </summary>
         public float PhysicsBlockedFraction => _movementController?.LastBlockedFraction ?? 1.0f;
+
+        public SceneEnvironmentFlags PhysicsEnvironmentFlags =>
+            _movementController?.EffectiveEnvironmentFlags ?? SceneEnvironmentFlags.None;
+
+        public bool PhysicsIsIndoors =>
+            PhysicsEnvironmentFlags.IsIndoors();
+
+        public bool PhysicsAllowsMountByEnvironment =>
+            PhysicsEnvironmentFlags.AllowsMountByEnvironment();
 
         // ======== Frame Recording (parity diagnostics) ========
 

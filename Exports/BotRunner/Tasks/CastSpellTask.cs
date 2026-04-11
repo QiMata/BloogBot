@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +17,14 @@ public class CastSpellTask(IBotContext botContext, int spellId, ulong targetGuid
     {
         if (!_castInitiated)
         {
+            if (MountUsageGuard.TryGetBlockedReasonForSpell(ObjectManager, spellId, out var blockReason))
+            {
+                Logger.LogInformation("[CAST_SPELL] Skipped mount spell {SpellId}: {Reason}", spellId, blockReason);
+                BotContext.AddDiagnosticMessage($"[MOUNT-BLOCK] spell={spellId} {blockReason}");
+                BotTasks.Pop();
+                return;
+            }
+
             if (targetGuid != 0)
                 ObjectManager.SetTarget(targetGuid);
 

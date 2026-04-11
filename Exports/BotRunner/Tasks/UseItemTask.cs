@@ -1,3 +1,4 @@
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,15 @@ public class UseItemTask(IBotContext botContext, int bagId, int slotId, ulong ta
 {
     public void Update()
     {
+        var item = ObjectManager.GetContainedItem(bagId, slotId);
+        if (MountUsageGuard.TryGetBlockedReasonForItem(ObjectManager, item, out var blockReason))
+        {
+            Logger.LogInformation("[USE_ITEM] Skipped mount item at bag={Bag} slot={Slot}: {Reason}", bagId, slotId, blockReason);
+            BotContext.AddDiagnosticMessage($"[MOUNT-BLOCK] item={item?.ItemId ?? 0u} bag={bagId} slot={slotId} {blockReason}");
+            BotTasks.Pop();
+            return;
+        }
+
         if (targetGuid != 0)
             ObjectManager.SetTarget(targetGuid);
 

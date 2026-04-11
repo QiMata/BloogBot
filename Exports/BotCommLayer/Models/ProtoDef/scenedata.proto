@@ -75,6 +75,11 @@ message SceneTileResponse {
     // GZip-compressed triangle vertex data (9 floats × 4 bytes per triangle).
     // When present, triangle_data is empty — client decompresses this instead.
     bytes triangle_data_compressed = 14;
+
+    // GZip-compressed triangle metadata (3 uint32 values per triangle):
+    // sourceType, instanceId, groupFlags. Used by thin scene slices to preserve
+    // enough WMO metadata for indoor/mount environment classification.
+    bytes triangle_metadata_compressed = 15;
 }
 
 // Liquid data for a region

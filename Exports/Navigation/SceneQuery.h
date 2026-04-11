@@ -284,6 +284,16 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
+        // Query VMAP area/group flags at a world position when full VMAP data is available.
+        // Returns false when the map has no VMAP tree loaded (for example scene-slice-only bots).
+        static bool GetAreaInfo(uint32_t mapId,
+                                float x,
+                                float y,
+                                float z,
+                                uint32_t& flags,
+                                int32_t& rootId,
+                                int32_t& groupId);
+
         // Capsule-aware support query. Samples the center and nearby footprint points
         // so narrow ledges / triangle seams do not falsely report "no support" when the
         // character capsule is still safely supported.

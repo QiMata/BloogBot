@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZRIWCg5idWlsZF90ZW1w",
             "bGF0ZRgJIAEoCSJ5ChBSZXF1ZXN0UGFyYW1ldGVyEhUKC2Zsb2F0X3BhcmFt",
             "GAEgASgCSAASEwoJaW50X3BhcmFtGAIgASgFSAASFAoKbG9uZ19wYXJhbRgD",
-            "IAEoA0gAEhYKDHN0cmluZ19wYXJhbRgEIAEoCUgAQgsKCXBhcmFtZXRlciK0",
+            "IAEoA0gAEhYKDHN0cmluZ19wYXJhbRgEIAEoCUgAQgsKCXBhcmFtZXRlciLH",
             "BgoTV29XQWN0aXZpdHlTbmFwc2hvdBIRCgl0aW1lc3RhbXAYASABKA0SEwoL",
             "YWNjb3VudE5hbWUYAiABKAkSHwoGcGxheWVyGAMgASgLMg8uZ2FtZS5Xb1dQ",
             "bGF5ZXISNAoOcHJldmlvdXNBY3Rpb24YBCABKAsyHC5jb21tdW5pY2F0aW9u",
@@ -72,64 +72,64 @@ namespace Communication {
             "b21tdW5pY2F0aW9uLlRyYXZlbE9iamVjdGl2ZRI2Cg9jaGFyYWN0ZXJfZ29h",
             "bHMYFiABKAsyHS5jb21tdW5pY2F0aW9uLkNoYXJhY3RlckdvYWxzEjwKEnBy",
             "b2dyZXNzaW9uX3N0YXR1cxgXIAEoCzIgLmNvbW11bmljYXRpb24uUHJvZ3Jl",
-            "c3Npb25TdGF0dXMimwEKEVByb2dyZXNzaW9uU3RhdHVzEhsKE2dlYXJfY29t",
-            "cGxldGlvbl9wY3QYASABKAISFQoNZ29sZF9wcm9ncmVzcxgCIAEoBRIZChFj",
-            "dXJyZW50X29iamVjdGl2ZRgDIAEoCRIeChZjb21wbGV0ZWRfcXVlc3RfY2hh",
-            "aW5zGAQgAygJEhcKD3Byb2Zlc3Npb25fZ2FwcxgFIAEoBSKvAQoOQ2hhcmFj",
-            "dGVyR29hbHMSEQoJc3BlY19uYW1lGAEgASgJEhkKEXRhbGVudF9idWlsZF9u",
-            "YW1lGAIgASgJEhoKEmdvbGRfdGFyZ2V0X2NvcHBlchgDIAEoBRIYChBza2ls",
-            "bF9wcmlvcml0aWVzGAQgAygJEhQKDHF1ZXN0X2NoYWlucxgFIAMoCRIjChtt",
-            "YXhfY29uc3VtYWJsZV9zcGVuZF9jb3BwZXIYBiABKAUiqAEKD1RyYXZlbE9i",
-            "amVjdGl2ZRIVCg10YXJnZXRfbWFwX2lkGAEgASgNEicKD3RhcmdldF9wb3Np",
-            "dGlvbhgCIAEoCzIOLmdhbWUuUG9zaXRpb24SHAoUdGFyZ2V0X2xvY2F0aW9u",
-            "X25hbWUYAyABKAkSGQoRYWxsb3dfaGVhcnRoc3RvbmUYBCABKAgSHAoUYWxs",
-            "b3dfY2xhc3NfdGVsZXBvcnQYBSABKAgiTwoITG9nRW50cnkSDQoFbGV2ZWwY",
-            "ASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRIRCgl0",
-            "aW1lc3RhbXAYBCABKAkq+wsKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
-            "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
-            "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
-            "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
-            "RVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIPCgtP",
-            "RkZFUl9UUkFERRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVNEA0S",
-            "EAoMQUNDRVBUX1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVOQ0hB",
-            "TlRfVFJBREUQEBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVfTEVB",
-            "REVSEBISFQoRUFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xPT1Rf",
-            "TUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xPT1QQ",
-            "FhISCg5MT09UX1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAYEg0K",
-            "CUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUNDRVBU",
-            "X0dST1VQX0lOVklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwSDwoL",
-            "S0lDS19QTEFZRVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRfR1JP",
-            "VVAQHxIWChJTVEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5HRURf",
-            "QVRUQUNLECESFQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FUVEFD",
-            "SxAjEg4KCkNBU1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0VfSVRF",
-            "TRAmEg4KCkVRVUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxERVNU",
-            "Uk9ZX0lURU0QKRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxArEgwK",
-            "CEJVWV9JVEVNECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVNEC4S",
-            "DwoLUkVQQUlSX0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoMRElT",
-            "TUlTU19CVUZGEDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVMT0dJ",
-            "ThA0EgoKBkxPR09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBERUxF",
-            "VEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBT",
-            "RRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsS",
-            "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
-            "VBA+Eg4KClNFVF9GQUNJTkcQPxIQCgxWSVNJVF9WRU5ET1IQQBIRCg1WSVNJ",
-            "VF9UUkFJTkVSEEESFwoTVklTSVRfRkxJR0hUX01BU1RFUhBCEhEKDVNUQVJU",
-            "X0ZJU0hJTkcQQxIZChVTVEFSVF9HQVRIRVJJTkdfUk9VVEUQRBIOCgpDSEVD",
-            "S19NQUlMEEUSGwoXU1RBUlRfUEhZU0lDU19SRUNPUkRJTkcQRhIaChZTVE9Q",
-            "X1BIWVNJQ1NfUkVDT1JESU5HEEcSFwoTU1RBUlRfRFVOR0VPTkVFUklORxBI",
-            "EhMKD0NPTlZFUlRfVE9fUkFJRBBJEhgKFENIQU5HRV9SQUlEX1NVQkdST1VQ",
-            "EEoSEQoNRk9MTE9XX1RBUkdFVBBLEhUKEUpPSU5fQkFUVExFR1JPVU5EEEwS",
-            "FwoTQUNDRVBUX0JBVFRMRUdST1VORBBNEhYKEkxFQVZFX0JBVFRMRUdST1VO",
-            "RBBOEg0KCVRSQVZFTF9UTxBPKi8KDUJvdFJ1bm5lclR5cGUSDgoKRk9SRUdS",
-            "T1VORBAAEg4KCkJBQ0tHUk9VTkQQASqPAQoPU3RhdGVDaGFuZ2VUeXBlEggK",
-            "BE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAIS",
-            "EAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJP",
-            "VElDSVNNEAUSFwoTQ09PUkRJTkFUT1JfRU5BQkxFRBAGKjsKDlJlc3BvbnNl",
-            "UmVzdWx0EgsKB1NVQ0NFU1MQABILCgdGQUlMVVJFEAESDwoLSU5fUFJPR1JF",
-            "U1MQAiqsAQoSQm90Q29ubmVjdGlvblN0YXRlEhQKEEJPVF9ESVNDT05ORUNU",
-            "RUQQABIWChJCT1RfQVVUSEVOVElDQVRJTkcQARITCg9CT1RfQ0hBUl9TRUxF",
-            "Q1QQAhIWChJCT1RfRU5URVJJTkdfV09STEQQAxIQCgxCT1RfSU5fV09STEQQ",
-            "BBIUChBCT1RfVFJBTlNGRVJSSU5HEAUSEwoPQk9UX0xPR0dJTkdfT1VUEAZi",
-            "BnByb3RvMw=="));
+            "c3Npb25TdGF0dXMSEQoJaXNJbmRvb3JzGBggASgIIpsBChFQcm9ncmVzc2lv",
+            "blN0YXR1cxIbChNnZWFyX2NvbXBsZXRpb25fcGN0GAEgASgCEhUKDWdvbGRf",
+            "cHJvZ3Jlc3MYAiABKAUSGQoRY3VycmVudF9vYmplY3RpdmUYAyABKAkSHgoW",
+            "Y29tcGxldGVkX3F1ZXN0X2NoYWlucxgEIAMoCRIXCg9wcm9mZXNzaW9uX2dh",
+            "cHMYBSABKAUirwEKDkNoYXJhY3RlckdvYWxzEhEKCXNwZWNfbmFtZRgBIAEo",
+            "CRIZChF0YWxlbnRfYnVpbGRfbmFtZRgCIAEoCRIaChJnb2xkX3RhcmdldF9j",
+            "b3BwZXIYAyABKAUSGAoQc2tpbGxfcHJpb3JpdGllcxgEIAMoCRIUCgxxdWVz",
+            "dF9jaGFpbnMYBSADKAkSIwobbWF4X2NvbnN1bWFibGVfc3BlbmRfY29wcGVy",
+            "GAYgASgFIqgBCg9UcmF2ZWxPYmplY3RpdmUSFQoNdGFyZ2V0X21hcF9pZBgB",
+            "IAEoDRInCg90YXJnZXRfcG9zaXRpb24YAiABKAsyDi5nYW1lLlBvc2l0aW9u",
+            "EhwKFHRhcmdldF9sb2NhdGlvbl9uYW1lGAMgASgJEhkKEWFsbG93X2hlYXJ0",
+            "aHN0b25lGAQgASgIEhwKFGFsbG93X2NsYXNzX3RlbGVwb3J0GAUgASgIIk8K",
+            "CExvZ0VudHJ5Eg0KBWxldmVsGAEgASgJEhAKCGNhdGVnb3J5GAIgASgJEg8K",
+            "B21lc3NhZ2UYAyABKAkSEQoJdGltZXN0YW1wGAQgASgJKvsLCgpBY3Rpb25U",
+            "eXBlEggKBFdBSVQQABIICgRHT1RPEAESEQoNSU5URVJBQ1RfV0lUSBACEhEK",
+            "DVNFTEVDVF9HT1NTSVAQAxIUChBTRUxFQ1RfVEFYSV9OT0RFEAQSEAoMQUND",
+            "RVBUX1FVRVNUEAUSEQoNREVDTElORV9RVUVTVBAGEhEKDVNFTEVDVF9SRVdB",
+            "UkQQBxISCg5DT01QTEVURV9RVUVTVBAIEg8KC1RSQUlOX1NLSUxMEAkSEAoM",
+            "VFJBSU5fVEFMRU5UEAoSDwoLT0ZGRVJfVFJBREUQCxIOCgpPRkZFUl9HT0xE",
+            "EAwSDgoKT0ZGRVJfSVRFTRANEhAKDEFDQ0VQVF9UUkFERRAOEhEKDURFQ0xJ",
+            "TkVfVFJBREUQDxIRCg1FTkNIQU5UX1RSQURFEBASEgoOTE9DS1BJQ0tfVFJB",
+            "REUQERISCg5QUk9NT1RFX0xFQURFUhASEhUKEVBST01PVEVfQVNTSVNUQU5U",
+            "EBMSGAoUUFJPTU9URV9MT09UX01BTkFHRVIQFBISCg5TRVRfR1JPVVBfTE9P",
+            "VBAVEg8KC0FTU0lHTl9MT09UEBYSEgoOTE9PVF9ST0xMX05FRUQQFxITCg9M",
+            "T09UX1JPTExfR1JFRUQQGBINCglMT09UX1BBU1MQGRIVChFTRU5EX0dST1VQ",
+            "X0lOVklURRAaEhcKE0FDQ0VQVF9HUk9VUF9JTlZJVEUQGxIYChRERUNMSU5F",
+            "X0dST1VQX0lOVklURRAcEg8KC0tJQ0tfUExBWUVSEB0SDwoLTEVBVkVfR1JP",
+            "VVAQHhIRCg1ESVNCQU5EX0dST1VQEB8SFgoSU1RBUlRfTUVMRUVfQVRUQUNL",
+            "ECASFwoTU1RBUlRfUkFOR0VEX0FUVEFDSxAhEhUKEVNUQVJUX1dBTkRfQVRU",
+            "QUNLECISDwoLU1RPUF9BVFRBQ0sQIxIOCgpDQVNUX1NQRUxMECQSDQoJU1RP",
+            "UF9DQVNUECUSDAoIVVNFX0lURU0QJhIOCgpFUVVJUF9JVEVNECcSEAoMVU5F",
+            "UVVJUF9JVEVNECgSEAoMREVTVFJPWV9JVEVNECkSDQoJTU9WRV9JVEVNECoS",
+            "DwoLU1BMSVRfU1RBQ0sQKxIMCghCVVlfSVRFTRAsEhAKDEJVWUJBQ0tfSVRF",
+            "TRAtEg0KCVNFTExfSVRFTRAuEg8KC1JFUEFJUl9JVEVNEC8SFAoQUkVQQUlS",
+            "X0FMTF9JVEVNUxAwEhAKDERJU01JU1NfQlVGRhAxEg0KCVJFU1VSUkVDVBAy",
+            "EgkKBUNSQUZUEDMSCQoFTE9HSU4QNBIKCgZMT0dPVVQQNRIUChBDUkVBVEVf",
+            "Q0hBUkFDVEVSEDYSFAoQREVMRVRFX0NIQVJBQ1RFUhA3Eg8KC0VOVEVSX1dP",
+            "UkxEEDgSDwoLTE9PVF9DT1JQU0UQORISCg5SRUxFQVNFX0NPUlBTRRA6EhMK",
+            "D1JFVFJJRVZFX0NPUlBTRRA7Eg8KC1NLSU5fQ09SUFNFEDwSDwoLR0FUSEVS",
+            "X05PREUQPRINCglTRU5EX0NIQVQQPhIOCgpTRVRfRkFDSU5HED8SEAoMVklT",
+            "SVRfVkVORE9SEEASEQoNVklTSVRfVFJBSU5FUhBBEhcKE1ZJU0lUX0ZMSUdI",
+            "VF9NQVNURVIQQhIRCg1TVEFSVF9GSVNISU5HEEMSGQoVU1RBUlRfR0FUSEVS",
+            "SU5HX1JPVVRFEEQSDgoKQ0hFQ0tfTUFJTBBFEhsKF1NUQVJUX1BIWVNJQ1Nf",
+            "UkVDT1JESU5HEEYSGgoWU1RPUF9QSFlTSUNTX1JFQ09SRElORxBHEhcKE1NU",
+            "QVJUX0RVTkdFT05FRVJJTkcQSBITCg9DT05WRVJUX1RPX1JBSUQQSRIYChRD",
+            "SEFOR0VfUkFJRF9TVUJHUk9VUBBKEhEKDUZPTExPV19UQVJHRVQQSxIVChFK",
+            "T0lOX0JBVFRMRUdST1VORBBMEhcKE0FDQ0VQVF9CQVRUTEVHUk9VTkQQTRIW",
+            "ChJMRUFWRV9CQVRUTEVHUk9VTkQQThINCglUUkFWRUxfVE8QTyovCg1Cb3RS",
+            "dW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqjwEK",
+            "D1N0YXRlQ2hhbmdlVHlwZRIICgROQU1FEAASDAoIT1BFTk5FU1MQARIVChFD",
+            "T05TQ0lFTlRJT1VTTkVTUxACEhAKDEVYVFJBVkVSU0lPThADEhEKDUFHUkVF",
+            "QUJMRU5FU1MQBBIPCgtORVVST1RJQ0lTTRAFEhcKE0NPT1JESU5BVE9SX0VO",
+            "QUJMRUQQBio7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNTEAASCwoHRkFJ",
+            "TFVSRRABEg8KC0lOX1BST0dSRVNTEAIqrAEKEkJvdENvbm5lY3Rpb25TdGF0",
+            "ZRIUChBCT1RfRElTQ09OTkVDVEVEEAASFgoSQk9UX0FVVEhFTlRJQ0FUSU5H",
+            "EAESEwoPQk9UX0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVSSU5HX1dPUkxE",
+            "EAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVSUklORxAFEhMK",
+            "D0JPVF9MT0dHSU5HX09VVBAGYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -142,7 +142,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType", "BuildTemplate" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals", "ProgressionStatus" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals", "ProgressionStatus", "IsIndoors" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ProgressionStatus), global::Communication.ProgressionStatus.Parser, new[]{ "GearCompletionPct", "GoldProgress", "CurrentObjective", "CompletedQuestChains", "ProfessionGaps" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterGoals), global::Communication.CharacterGoals.Parser, new[]{ "SpecName", "TalentBuildName", "GoldTargetCopper", "SkillPriorities", "QuestChains", "MaxConsumableSpendCopper" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.TravelObjective), global::Communication.TravelObjective.Parser, new[]{ "TargetMapId", "TargetPosition", "TargetLocationName", "AllowHearthstone", "AllowClassTeleport" }, null, null, null, null),
@@ -3052,6 +3052,7 @@ namespace Communication {
       travelObjective_ = other.travelObjective_ != null ? other.travelObjective_.Clone() : null;
       characterGoals_ = other.characterGoals_ != null ? other.characterGoals_.Clone() : null;
       progressionStatus_ = other.progressionStatus_ != null ? other.progressionStatus_.Clone() : null;
+      isIndoors_ = other.isIndoors_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3381,6 +3382,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "isIndoors" field.</summary>
+    public const int IsIndoorsFieldNumber = 24;
+    private bool isIndoors_;
+    /// <summary>
+    /// Runtime scene/environment classification from local physics
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool IsIndoors {
+      get { return isIndoors_; }
+      set {
+        isIndoors_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3419,6 +3435,7 @@ namespace Communication {
       if (!object.Equals(TravelObjective, other.TravelObjective)) return false;
       if (!object.Equals(CharacterGoals, other.CharacterGoals)) return false;
       if (!object.Equals(ProgressionStatus, other.ProgressionStatus)) return false;
+      if (IsIndoors != other.IsIndoors) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3449,6 +3466,7 @@ namespace Communication {
       if (travelObjective_ != null) hash ^= TravelObjective.GetHashCode();
       if (characterGoals_ != null) hash ^= CharacterGoals.GetHashCode();
       if (progressionStatus_ != null) hash ^= ProgressionStatus.GetHashCode();
+      if (IsIndoors != false) hash ^= IsIndoors.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3547,6 +3565,10 @@ namespace Communication {
         output.WriteRawTag(186, 1);
         output.WriteMessage(ProgressionStatus);
       }
+      if (IsIndoors != false) {
+        output.WriteRawTag(192, 1);
+        output.WriteBool(IsIndoors);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3637,6 +3659,10 @@ namespace Communication {
         output.WriteRawTag(186, 1);
         output.WriteMessage(ProgressionStatus);
       }
+      if (IsIndoors != false) {
+        output.WriteRawTag(192, 1);
+        output.WriteBool(IsIndoors);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3707,6 +3733,9 @@ namespace Communication {
       }
       if (progressionStatus_ != null) {
         size += 2 + pb::CodedOutputStream.ComputeMessageSize(ProgressionStatus);
+      }
+      if (IsIndoors != false) {
+        size += 2 + 1;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -3801,6 +3830,9 @@ namespace Communication {
           ProgressionStatus = new global::Communication.ProgressionStatus();
         }
         ProgressionStatus.MergeFrom(other.ProgressionStatus);
+      }
+      if (other.IsIndoors != false) {
+        IsIndoors = other.IsIndoors;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -3934,6 +3966,10 @@ namespace Communication {
             input.ReadMessage(ProgressionStatus);
             break;
           }
+          case 192: {
+            IsIndoors = input.ReadBool();
+            break;
+          }
         }
       }
     #endif
@@ -4064,6 +4100,10 @@ namespace Communication {
               ProgressionStatus = new global::Communication.ProgressionStatus();
             }
             input.ReadMessage(ProgressionStatus);
+            break;
+          }
+          case 192: {
+            IsIndoors = input.ReadBool();
             break;
           }
         }

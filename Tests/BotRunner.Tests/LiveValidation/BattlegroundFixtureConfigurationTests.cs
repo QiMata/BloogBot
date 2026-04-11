@@ -14,14 +14,14 @@ namespace BotRunner.Tests.LiveValidation;
 public sealed class BattlegroundFixtureConfigurationTests
 {
     [Fact]
-    public void WarsongGulchFixture_UsesBackgroundRunnersForAllBots()
+    public void WarsongGulchFixture_UsesForegroundLeadersForBothFactions()
     {
         var fixture = new WarsongGulchFixture();
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        Assert.All(settings, setting => Assert.Equal(SettingsBotRunnerType.Background, setting.RunnerType));
+        AssertForegroundLeaders(settings, WarsongGulchFixture.HordeLeaderAccount, WarsongGulchFixture.AllianceLeaderAccount);
     }
 
     [Fact]

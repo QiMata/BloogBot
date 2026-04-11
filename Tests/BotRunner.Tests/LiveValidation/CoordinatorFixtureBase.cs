@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using BotRunner;
 using GameData.Core.Enums;
 using Tests.Infrastructure;
 using WoWStateManager.Settings;
@@ -26,6 +27,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     private Task? _prepareTask;
     private const int InitialRaidInviteBatchSize = 4;
     private const int MaxGroupFormationAttempts = 3;
+    private const int MaxCharacterNameAttemptOffset = 128;
     private const float StageMaxDistance2D = 15f;
     private const float StageMaxVerticalDelta = 4.5f;
 
@@ -268,6 +270,8 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     private async Task EnsureAccountsAndCharactersReadyForLaunchAsync()
     {
+        var accountsNeedingCharacters = new List<CharacterSettings>();
+
         foreach (var settings in CharacterSettings)
         {
             if (!await AccountExistsAsync(settings.AccountName))
@@ -289,11 +293,22 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             }
 
             var existingCharacters = (await QueryCharactersForAccountAsync(settings.AccountName)).ToArray();
-            if (existingCharacters.Length == 0 || CanReuseExistingCharacters(settings, existingCharacters))
+            if (existingCharacters.Length == 0)
+            {
+                accountsNeedingCharacters.Add(settings);
+                settings.CharacterNameAttemptOffset = null;
                 continue;
+            }
+
+            if (CanReuseExistingCharacters(settings, existingCharacters))
+            {
+                settings.CharacterNameAttemptOffset = null;
+                continue;
+            }
 
             if (PreserveExistingCharactersWhenAnyMatch && HasAnyMatchingCharacter(settings, existingCharacters))
             {
+                settings.CharacterNameAttemptOffset = null;
                 Console.WriteLine(
                     $"[{FixtureLabel}:LaunchPrep] preserving account '{settings.AccountName}' " +
                     $"with {existingCharacters.Length} existing character(s); at least one matches configured race/class/gender.");
@@ -311,6 +326,13 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             }
 
             await WaitForCharacterCountAsync(settings.AccountName, expectedCount: 0, TimeSpan.FromSeconds(15));
+            accountsNeedingCharacters.Add(settings);
+            settings.CharacterNameAttemptOffset = null;
+        }
+
+        if (accountsNeedingCharacters.Count > 0)
+        {
+            await ReserveAvailableCharacterNamesAsync(accountsNeedingCharacters);
         }
     }
 
@@ -385,6 +407,108 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             : string.Join(", ", finalCharacters.Select(character => character.Name));
         throw new InvalidOperationException(
             $"[{FixtureLabel}:LaunchPrep] account '{accountName}' still has {finalCharacters.Count} character(s) after cleanup: {details}");
+    }
+
+    private async Task ReserveAvailableCharacterNamesAsync(IEnumerable<CharacterSettings> settingsNeedingCharacters)
+    {
+        var reservedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var settings in settingsNeedingCharacters)
+        {
+            var reservedName = await ReserveAvailableCharacterNameAsync(settings, reservedNames);
+            Console.WriteLine(
+                $"[{FixtureLabel}:LaunchPrep] reserved generated name '{reservedName}' for account '{settings.AccountName}' " +
+                $"(offset={settings.CharacterNameAttemptOffset ?? 0}).");
+        }
+    }
+
+    private async Task<string> ReserveAvailableCharacterNameAsync(
+        CharacterSettings settings,
+        ISet<string> reservedNames)
+    {
+        for (var attemptOffset = 0; attemptOffset <= MaxCharacterNameAttemptOffset; attemptOffset++)
+        {
+            var candidateName = BuildGeneratedCharacterName(settings, attemptOffset);
+            if (reservedNames.Contains(candidateName))
+                continue;
+
+            if (await CharacterNameExistsAsync(candidateName))
+                continue;
+
+            settings.CharacterNameAttemptOffset = attemptOffset == 0 ? null : attemptOffset;
+            reservedNames.Add(candidateName);
+            return candidateName;
+        }
+
+        throw new InvalidOperationException(
+            $"[{FixtureLabel}:LaunchPrep] unable to reserve an unused generated name for account '{settings.AccountName}' " +
+            $"after {MaxCharacterNameAttemptOffset + 1} attempts.");
+    }
+
+    private static string BuildGeneratedCharacterName(CharacterSettings settings, int attemptOffset)
+    {
+        var characterClass = ResolveCharacterClass(settings);
+        var race = ResolveCharacterRace(settings);
+        var gender = ResolveCharacterGender(settings, characterClass);
+        var seed = BotRunnerService.BuildCharacterUniquenessSeed(settings.AccountName, 0, attemptOffset);
+        return WoWNameGenerator.GenerateName(race, gender, seed);
+    }
+
+    private static Class ResolveCharacterClass(CharacterSettings settings)
+    {
+        if (TryParseConfiguredEnum<Class>(settings.CharacterClass, out var configuredClass))
+            return configuredClass;
+
+        if (!string.IsNullOrWhiteSpace(settings.AccountName) && settings.AccountName.Length >= 4)
+        {
+            try
+            {
+                return WoWNameGenerator.ParseClassCode(settings.AccountName.Substring(2, 2));
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        return Class.Warrior;
+    }
+
+    private static Race ResolveCharacterRace(CharacterSettings settings)
+    {
+        if (TryParseConfiguredEnum<Race>(settings.CharacterRace, out var configuredRace))
+            return configuredRace;
+
+        if (!string.IsNullOrWhiteSpace(settings.AccountName) && settings.AccountName.Length >= 2)
+        {
+            try
+            {
+                return WoWNameGenerator.ParseRaceCode(settings.AccountName[..2]);
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        return Race.Orc;
+    }
+
+    private static Gender ResolveCharacterGender(CharacterSettings settings, Class characterClass)
+    {
+        if (TryParseConfiguredEnum<Gender>(settings.CharacterGender, out var configuredGender))
+            return configuredGender;
+
+        return WoWNameGenerator.DetermineGender(characterClass);
+    }
+
+    private static bool TryParseConfiguredEnum<TEnum>(string? configuredValue, out TEnum parsedValue)
+        where TEnum : struct, Enum
+    {
+        parsedValue = default;
+        if (string.IsNullOrWhiteSpace(configuredValue))
+            return false;
+
+        var token = new string(configuredValue.Where(char.IsLetterOrDigit).ToArray());
+        return Enum.TryParse(token, ignoreCase: true, out parsedValue);
     }
 
     private static bool MatchesExpectedValue(byte? expectedValue, byte actualValue)

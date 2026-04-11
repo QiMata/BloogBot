@@ -21,5 +21,10 @@ namespace GameData.Core.Interfaces
         /// Gets or sets the current WoW screen state (e.g. "LoginScreen", "CharacterSelect", "InWorld").
         /// </summary>
         string ScreenState { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether local scene/physics currently classifies the player as indoors.
+        /// </summary>
+        bool IsIndoors { get; set; }
     }
 }

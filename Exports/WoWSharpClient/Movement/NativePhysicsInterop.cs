@@ -9,7 +9,7 @@ namespace WoWSharpClient.Movement;
 /// </summary>
 internal static class NativePhysics
 {
-    private const string DllName = "Physics";
+    private const string DllName = "Navigation";
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetDataDirectory(string dataDir);
@@ -52,6 +52,9 @@ internal static class NativePhysics
         public float V0X, V0Y, V0Z;
         public float V1X, V1Y, V1Z;
         public float V2X, V2Y, V2Z;
+        public uint SourceType;
+        public uint InstanceId;
+        public uint GroupFlags;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -132,5 +135,6 @@ internal static class NativePhysics
         public float StepUpBaseZ;
         public uint StepUpAge;
         public uint GroundedWallState;
+        public uint EnvironmentFlags;
     }
 }

@@ -15,21 +15,35 @@ namespace BotCommLayer
         private bool _disposed;
         private readonly TcpListener _server;
         private bool _isRunning;
+        private readonly object _startLock = new();
         protected readonly ILogger _logger;
         private long _clientHandlerThreadSequence;
 
-        public ProtobufSocketServer(string ipAddress, int port, ILogger logger)
+        public ProtobufSocketServer(string ipAddress, int port, ILogger logger, bool startImmediately = true)
         {
             _logger = logger;
             _server = new TcpListener(IPAddress.Parse(ipAddress), port);
-            _server.Start(256); // AV-scale reconnect bursts can exceed 80 concurrent clients.
-            _isRunning = true;
 
-            Thread serverThread = new(Run)
+            if (startImmediately)
+                StartListening();
+        }
+
+        public void StartListening()
+        {
+            lock (_startLock)
             {
-                IsBackground = true
-            };
-            serverThread.Start();
+                if (_isRunning)
+                    return;
+
+                _server.Start(256); // AV-scale reconnect bursts can exceed 80 concurrent clients.
+                _isRunning = true;
+
+                Thread serverThread = new(Run)
+                {
+                    IsBackground = true
+                };
+                serverThread.Start();
+            }
         }
 
         private void Run()
@@ -43,7 +57,8 @@ namespace BotCommLayer
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Server error: {ex}");
+                    if (_isRunning)
+                        _logger.LogError($"Server error: {ex}");
                 }
             }
         }

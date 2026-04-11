@@ -105,7 +105,7 @@ public partial class LiveBotFixture
             var accountName = string.IsNullOrWhiteSpace(snapshot.AccountName) ? "(blank)" : snapshot.AccountName;
             var nestedMapId = snapshot.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
             _testOutput?.WriteLine(
-                $"  [QUERY] {accountName}: Screen={snapshot.ScreenState}, CurrentMapId={snapshot.CurrentMapId}, NestedMapId={nestedMapId}, ObjMgr={snapshot.IsObjectManagerValid}, Char={snapshot.CharacterName}");
+                $"  [QUERY] {accountName}: Screen={snapshot.ScreenState}, CurrentMapId={snapshot.CurrentMapId}, NestedMapId={nestedMapId}, ObjMgr={snapshot.IsObjectManagerValid}, Indoors={snapshot.IsIndoors}, Char={snapshot.CharacterName}");
         }
 
         return snapshots;

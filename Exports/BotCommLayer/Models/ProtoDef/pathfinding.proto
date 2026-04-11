@@ -200,4 +200,7 @@ message PhysicsOutput {
 	// Step-up height persistence
 	float step_up_base_z = 36;
 	uint32 step_up_age = 37;
+
+	// Runtime scene/environment classification (bitfield, see SceneEnvironmentFlags).
+	uint32 environment_flags = 38;
 }
