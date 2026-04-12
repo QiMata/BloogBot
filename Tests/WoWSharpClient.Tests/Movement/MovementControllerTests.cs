@@ -1251,6 +1251,51 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void TryResolvePassiveEnvironmentState_UnresolvedIdle_SeedsEnvironmentFlagsWithoutPackets()
+        {
+            var stepCallCount = 0;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                stepCallCount++;
+                Assert.Equal(0f, input.DeltaTime);
+                Assert.Equal(_player.Position.X, input.X, 3);
+                Assert.Equal(_player.Position.Y, input.Y, 3);
+                Assert.Equal(_player.Position.Z, input.Z, 3);
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z + 1.193f,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = 0f,
+                    GroundZ = input.Z + 1.193f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                    FallTime = 0,
+                    EnvironmentFlags = (uint)SceneEnvironmentFlags.Indoors,
+                };
+            };
+
+            _player.MapId = 389;
+            _player.Position = new Position(3f, -11f, -18f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            Assert.False(_controller.HasResolvedEnvironmentState);
+            Assert.True(_controller.TryResolvePassiveEnvironmentState());
+            Assert.Equal(1, stepCallCount);
+            Assert.True(_controller.HasResolvedEnvironmentState);
+            Assert.True(_controller.LastEnvironmentFlags.IsIndoors());
+            Assert.Equal(-18f, _player.Position.Z, 3);
+            Assert.Empty(_sentPackets);
+        }
+
+        [Fact]
         public void Reset_SameMap_PreservesLastResolvedEnvironmentUntilNextPhysics()
         {
             NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput

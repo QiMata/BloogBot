@@ -14,6 +14,12 @@ namespace WoWSharpClient.Movement
 {
     public class MovementController(WoWClient client, WoWLocalPlayer player, SceneDataClient? sceneDataClient = null, WoWSharpObjectManager? objectManager = null)
     {
+        private static readonly bool EnableEnvironmentDiagnostics =
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ENABLE_ENV_DIAG"),
+                "1",
+                StringComparison.Ordinal);
+
         private readonly WoWClient _client = client;
         private readonly WoWLocalPlayer _player = player;
         private readonly WoWSharpObjectManager? _objectManager = objectManager;
@@ -731,17 +737,11 @@ namespace WoWSharpClient.Movement
             LastHitWall = output.HitWall;
             LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);
             LastBlockedFraction = output.BlockedFraction;
-            LastEnvironmentFlags = (SceneEnvironmentFlags)output.EnvironmentFlags;
-            _lastResolvedEnvironmentFlags = LastEnvironmentFlags;
-            _lastResolvedEnvironmentMapId = _player.MapId;
-            _hasResolvedEnvironmentState = true;
 
             // Apply position directly from physics — no guards, no clamping
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
-            _objectManager?.RecordResolvedEnvironmentState(
-                _player.MapId,
-                _player.Position,
-                LastEnvironmentFlags);
+            UpdateResolvedEnvironmentFlags((SceneEnvironmentFlags)output.EnvironmentFlags, _player.Position);
+
             _player.Facing = output.Orientation;
             _player.SwimPitch = output.Pitch;
 
@@ -802,6 +802,47 @@ namespace WoWSharpClient.Movement
                 _player.TransportOrientation = 0f;
             }
 
+        }
+
+        internal bool TryResolvePassiveEnvironmentState()
+        {
+            if (_player.Position == null
+                || _objectManager?.IsInMapTransition == true)
+            {
+                return false;
+            }
+
+            var currentPosition = new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
+            var probe = RunPhysics(0f);
+            UpdateResolvedEnvironmentFlags((SceneEnvironmentFlags)probe.EnvironmentFlags, currentPosition);
+            return true;
+        }
+
+        private void UpdateResolvedEnvironmentFlags(SceneEnvironmentFlags flags, Position resolvedPosition)
+        {
+            var previousEnvironmentFlags = LastEnvironmentFlags;
+            LastEnvironmentFlags = flags;
+            _lastResolvedEnvironmentFlags = LastEnvironmentFlags;
+            _lastResolvedEnvironmentMapId = _player.MapId;
+            _hasResolvedEnvironmentState = true;
+            _objectManager?.RecordResolvedEnvironmentState(
+                _player.MapId,
+                resolvedPosition,
+                LastEnvironmentFlags);
+
+            if (EnableEnvironmentDiagnostics
+                && previousEnvironmentFlags != LastEnvironmentFlags)
+            {
+                Log.Warning(
+                    "[MovementController] Environment flags changed: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) prev=0x{Prev:X} next=0x{Next:X} indoors={Indoors}",
+                    _player.MapId,
+                    resolvedPosition.X,
+                    resolvedPosition.Y,
+                    resolvedPosition.Z,
+                    (uint)previousEnvironmentFlags,
+                    (uint)LastEnvironmentFlags,
+                    LastEnvironmentFlags.IsIndoors());
+            }
         }
 
         private bool ShouldDiscardStalePhysicsResult(uint gameTimeMs)

@@ -1530,6 +1530,212 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void ReconcilePlayerControlState_RestoresControlWhenStable()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E0;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 389;
+        player.Position = new Position(3f, -11f, -16.8f);
+
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+        SetPrivateField(objectManager, "_isInControl", false);
+
+        InvokePrivateMethod(objectManager, "ReconcilePlayerControlState");
+
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+    }
+
+    [Fact]
+    public void PhysicsEnvironmentFlags_UsesObjectManagerFallbackWhenControllerStateIsUnresolved()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E1;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 389;
+        player.Position = new Position(3f, -11f, -16.8f);
+
+        InvokePrivateMethod(
+            objectManager,
+            "RecordResolvedEnvironmentState",
+            (uint)389,
+            new Position(3f, -11f, -16.8f),
+            SceneEnvironmentFlags.Indoors);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_hasResolvedEnvironmentState", false);
+        SetPrivateField(controller, "_lastResolvedEnvironmentFlags", SceneEnvironmentFlags.None);
+        SetPrivateField(controller, "_lastResolvedEnvironmentMapId", (uint)389);
+
+        Assert.Equal(SceneEnvironmentFlags.Indoors, objectManager.PhysicsEnvironmentFlags);
+        Assert.True(objectManager.PhysicsIsIndoors);
+
+        player.Position = new Position(20f, -11f, -16.8f);
+        Assert.Equal(SceneEnvironmentFlags.None, objectManager.PhysicsEnvironmentFlags);
+    }
+
+    [Fact]
+    public void PhysicsEnvironmentFlags_PrefersNearbyCachedFlagsWhenControllerResolvesNone()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E2;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 389;
+        player.Position = new Position(3f, -11f, -16.8f);
+
+        InvokePrivateMethod(
+            objectManager,
+            "RecordResolvedEnvironmentState",
+            (uint)389,
+            new Position(3f, -11f, -16.8f),
+            SceneEnvironmentFlags.Indoors);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "<LastEnvironmentFlags>k__BackingField", SceneEnvironmentFlags.None);
+        SetPrivateField(controller, "_lastResolvedEnvironmentFlags", SceneEnvironmentFlags.None);
+        SetPrivateField(controller, "_lastResolvedEnvironmentMapId", (uint)389);
+        SetPrivateField(controller, "_hasResolvedEnvironmentState", true);
+
+        Assert.Equal(SceneEnvironmentFlags.Indoors, objectManager.PhysicsEnvironmentFlags);
+        Assert.True(objectManager.PhysicsIsIndoors);
+
+        player.Position = new Position(20f, -11f, -16.8f);
+        Assert.Equal(SceneEnvironmentFlags.None, objectManager.PhysicsEnvironmentFlags);
+    }
+
+    [Fact]
+    public void RecordResolvedEnvironmentState_DoesNotClearNearbyIndoorCacheWithNone()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E3;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 389;
+        player.Position = new Position(3f, -11f, -16.8f);
+
+        InvokePrivateMethod(
+            objectManager,
+            "RecordResolvedEnvironmentState",
+            (uint)389,
+            new Position(3f, -11f, -16.8f),
+            SceneEnvironmentFlags.Indoors);
+
+        InvokePrivateMethod(
+            objectManager,
+            "RecordResolvedEnvironmentState",
+            (uint)389,
+            new Position(3.2f, -11.1f, -16.8f),
+            SceneEnvironmentFlags.None);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_hasResolvedEnvironmentState", false);
+        SetPrivateField(controller, "_lastResolvedEnvironmentFlags", SceneEnvironmentFlags.None);
+        SetPrivateField(controller, "_lastResolvedEnvironmentMapId", (uint)389);
+
+        Assert.Equal(SceneEnvironmentFlags.Indoors, objectManager.PhysicsEnvironmentFlags);
+
+        player.Position = new Position(30f, -11f, -16.8f);
+        InvokePrivateMethod(
+            objectManager,
+            "RecordResolvedEnvironmentState",
+            (uint)389,
+            new Position(30f, -11f, -16.8f),
+            SceneEnvironmentFlags.None);
+
+        Assert.Equal(SceneEnvironmentFlags.None, objectManager.PhysicsEnvironmentFlags);
+    }
+
+    [Fact]
+    public void PhysicsEnvironmentFlags_TriggersPassiveProbeWhenControllerStateIsUnresolved()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E4;
+        var stepCallCount = 0;
+
+        NativeLocalPhysics.TestStepOverride = input =>
+        {
+            stepCallCount++;
+            Assert.Equal(0f, input.DeltaTime);
+            Assert.Equal(389u, input.MapId);
+            Assert.Equal(3f, input.X, 3);
+            Assert.Equal(-11f, input.Y, 3);
+            Assert.Equal(-18f, input.Z, 3);
+
+            return new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z + 1.193f,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = 0f,
+                GroundZ = input.Z + 1.193f,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+                EnvironmentFlags = (uint)SceneEnvironmentFlags.Indoors,
+            };
+        };
+
+        try
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            objectManager.EnterWorld(playerGuid);
+            InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+            SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+            var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+            player.MapId = 389;
+            player.Position = new Position(3f, -11f, -18f);
+
+            var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+            SetPrivateField(controller, "_hasResolvedEnvironmentState", false);
+            SetPrivateField(controller, "<LastEnvironmentFlags>k__BackingField", SceneEnvironmentFlags.None);
+            SetPrivateField(controller, "_lastResolvedEnvironmentFlags", SceneEnvironmentFlags.None);
+            SetPrivateField(controller, "_lastResolvedEnvironmentMapId", (uint)389);
+
+            Assert.Equal(SceneEnvironmentFlags.Indoors, objectManager.PhysicsEnvironmentFlags);
+            Assert.True(objectManager.PhysicsIsIndoors);
+            Assert.Equal(1, stepCallCount);
+
+            _ = objectManager.PhysicsEnvironmentFlags;
+            Assert.Equal(1, stepCallCount);
+        }
+        finally
+        {
+            NativeLocalPhysics.TestStepOverride = null;
+        }
+    }
+
+    [Fact]
     public void ProcessUpdatesAsync_DuringTeleport_IgnoresStaleLocalPlayerMovementUpdate()
     {
         ResetObjectManager();

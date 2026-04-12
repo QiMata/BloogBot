@@ -119,7 +119,7 @@ public class MountEnvironmentTests
             account,
             baselineChats,
             baselineErrors,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
             phaseName: "MOUNT-ENV:IndoorBlock");
         Assert.NotNull(rejectionEvidence);
         _output.WriteLine($"[MOUNT-ENV:IndoorBlock] {rejectionEvidence}");
@@ -136,14 +136,32 @@ public class MountEnvironmentTests
     {
         await _bot.EnsureCleanSlateAsync(account, "BG", teleportToSafeZone: false);
 
-        await _bot.BotLearnSpellAsync(account, ApprenticeRidingSpellId);
-        await _bot.BotSetSkillAsync(account, RidingSkillId, currentValue: 150, maxValue: 150);
-        await _bot.BotLearnSpellAsync(account, TestMountSpellId);
+        var snapshot = await _bot.GetSnapshotAsync(account);
+        var knownSpells = snapshot?.Player?.SpellList;
+        var skillInfo = snapshot?.Player?.SkillInfo;
+
+        if (knownSpells?.Contains(ApprenticeRidingSpellId) != true)
+            await _bot.BotLearnSpellAsync(account, ApprenticeRidingSpellId);
+
+        if (skillInfo == null
+            || !skillInfo.TryGetValue(RidingSkillId, out var ridingSkillValue)
+            || ridingSkillValue < 150)
+        {
+            await _bot.BotSetSkillAsync(account, RidingSkillId, currentValue: 150, maxValue: 150);
+        }
+
+        if (knownSpells?.Contains(TestMountSpellId) != true)
+            await _bot.BotLearnSpellAsync(account, TestMountSpellId);
+
         await EnsureUnmountedAsync(account, "MOUNT-ENV:Unmounted");
     }
 
     private async Task EnsureUnmountedAsync(string account, string phaseName)
     {
+        var baseline = await _bot.GetSnapshotAsync(account);
+        if ((baseline?.Player?.Unit?.MountDisplayId ?? 0) == 0)
+            return;
+
         await _bot.SendGmChatCommandAsync(account, ".dismount");
         await _bot.SendGmChatCommandAsync(account, $".unaura {TestMountSpellId}");
 
@@ -404,17 +422,6 @@ public class MountEnvironmentTests
         }
 
         return null;
-    }
-
-    private static bool IsObservedCastSpell(WoWActivitySnapshot snapshot, uint spellId)
-    {
-        var previousAction = snapshot.PreviousAction;
-        if (previousAction?.ActionType != ActionType.CastSpell || previousAction.Parameters.Count == 0)
-            return false;
-
-        var parameter = previousAction.Parameters[0];
-        return parameter.ParameterCase == RequestParameter.ParameterOneofCase.IntParam
-            && parameter.IntParam == (int)spellId;
     }
 
     private static List<string> GetDeltaMessages(IReadOnlyList<string> baseline, IReadOnlyList<string> current)

@@ -14,6 +14,11 @@ namespace BotRunner
                 Environment.GetEnvironmentVariable("WWOW_ENABLE_SNAP_POS_DIAG"),
                 "1",
                 StringComparison.Ordinal);
+        private static readonly bool EnableSnapshotEnvironmentDiagnostics =
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ENABLE_ENV_DIAG"),
+                "1",
+                StringComparison.Ordinal);
 
         private void PopulateSnapshotFromObjectManager()
         {
@@ -97,6 +102,15 @@ namespace BotRunner
 
             var player = _objectManager.Player;
             _activitySnapshot.IsIndoors = _objectManager.PhysicsIsIndoors;
+
+            if (EnableSnapshotEnvironmentDiagnostics)
+            {
+                var envFlags = _objectManager.PhysicsEnvironmentFlags;
+                var envPos = player.Position;
+                DiagLog(
+                    $"[SNAP_ENV] map={(player as IWoWPlayer)?.MapId ?? 0} pos=({envPos?.X:F1},{envPos?.Y:F1},{envPos?.Z:F1}) " +
+                    $"indoors={_activitySnapshot.IsIndoors} flags=0x{(uint)envFlags:X} objMgrValid={_activitySnapshot.IsObjectManagerValid} transition={inMapTransition}");
+            }
 
             // Track the last known alive position to recover corpse navigation when corpse coordinates
             // are not populated immediately after release on some client/server combinations.

@@ -159,6 +159,9 @@ namespace WoWSharpClient
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             _physicsTimeAccumulator = 0f;
+            _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
+            _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
+            _lastResolvedSceneEnvironmentPosition = null;
 
             // Wire handler context so legacy opcode handlers use this instance.
             // StoreHandlerContext applies immediately if WorldClient exists,
@@ -439,6 +442,13 @@ namespace WoWSharpClient
                 // 2. Handle ping heartbeat
                 HandlePingHeartbeat((long)now.TotalMilliseconds);
 
+                // 2a. Some transfers and server-driven moves can leave the local player
+                // out of control even after the world/object state has fully settled.
+                // Recover that state once there is no active spline or teleport in flight
+                // so passive physics (relocation detection, ground snap, environment flags)
+                // can resume immediately.
+                ReconcilePlayerControlState();
+
                 // 3. Update player movement if we're in control.
                 // Allow physics during teleport if ground snap is pending — the bot needs gravity
                 // to fall from teleport Z to the actual ground (e.g. teleported above a rooftop).
@@ -520,6 +530,28 @@ namespace WoWSharpClient
 
             _lastPingMs = now;
             _ = _woWClient.SendPingAsync();
+        }
+
+        private void ReconcilePlayerControlState()
+        {
+            if (_isInControl
+                || Player == null
+                || _isBeingTeleported
+                || HasPendingWorldEntry
+                || PendingUpdateCount > 0
+                || SplineCtrl.HasActiveSpline(Player.Guid))
+            {
+                return;
+            }
+
+            _isInControl = true;
+            Log.Warning(
+                "[SplineLockout] Restoring control from reconciliation: guid=0x{Guid:X} map={MapId} pos=({X:F1},{Y:F1},{Z:F1})",
+                Player.Guid,
+                (Player as IWoWPlayer)?.MapId ?? 0,
+                Player.Position.X,
+                Player.Position.Y,
+                Player.Position.Z);
         }
 
         // ============= INPUT HANDLERS =============
@@ -708,6 +740,9 @@ namespace WoWSharpClient
             _isInControl = false;
             _isBeingTeleported = false;
             _pendingTeleportAck = null;
+            _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
+            _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
+            _lastResolvedSceneEnvironmentPosition = null;
             _movementController = null;
 
             _pendingUpdates.Clear();

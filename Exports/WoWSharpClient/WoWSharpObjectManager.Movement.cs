@@ -69,6 +69,11 @@ namespace WoWSharpClient
         private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)
         private PendingTeleportAck? _pendingTeleportAck;
         private readonly record struct PendingTeleportAck(ulong Guid, uint Counter, Position TargetPosition);
+        private SceneEnvironmentFlags _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
+        private uint _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
+        private Position? _lastResolvedSceneEnvironmentPosition;
+        private const float ResolvedEnvironmentReuseDistance2D = 6.0f;
+        private const float ResolvedEnvironmentReuseZTolerance = 8.0f;
 
 
         private TimeSpan _lastPositionUpdate = TimeSpan.Zero;
@@ -624,6 +629,92 @@ namespace WoWSharpClient
                 player.Position.Y);
         }
 
+        internal void RecordResolvedEnvironmentState(uint mapId, Position position, SceneEnvironmentFlags flags)
+        {
+            if (flags == SceneEnvironmentFlags.None
+                && _lastResolvedSceneEnvironmentFlags != SceneEnvironmentFlags.None
+                && _lastResolvedSceneEnvironmentPosition != null
+                && mapId == _lastResolvedSceneEnvironmentMapId
+                && IsWithinResolvedEnvironmentReuseWindow(position, _lastResolvedSceneEnvironmentPosition))
+            {
+                return;
+            }
+
+            _lastResolvedSceneEnvironmentMapId = mapId;
+            _lastResolvedSceneEnvironmentPosition = new Position(position.X, position.Y, position.Z);
+            _lastResolvedSceneEnvironmentFlags = flags;
+        }
+
+        private SceneEnvironmentFlags ResolveCurrentEnvironmentFlags()
+        {
+            bool hasCachedFlags = TryResolveCachedEnvironmentFlags(out var cachedFlags);
+
+            if (_movementController != null)
+            {
+                if (!_movementController.HasResolvedEnvironmentState
+                    && Player != null
+                    && !_isBeingTeleported)
+                {
+                    try
+                    {
+                        _movementController.TryResolvePassiveEnvironmentState();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "[EnvironmentProbe] Passive scene environment refresh failed");
+                    }
+                }
+
+                var controllerFlags = _movementController.EffectiveEnvironmentFlags;
+                if (_movementController.HasResolvedEnvironmentState)
+                {
+                    if (controllerFlags == SceneEnvironmentFlags.None
+                        && hasCachedFlags
+                        && cachedFlags != SceneEnvironmentFlags.None)
+                    {
+                        return cachedFlags;
+                    }
+
+                    return controllerFlags;
+                }
+
+                if (controllerFlags != SceneEnvironmentFlags.None)
+                    return controllerFlags;
+            }
+
+            return hasCachedFlags
+                ? cachedFlags
+                : SceneEnvironmentFlags.None;
+        }
+
+        private bool TryResolveCachedEnvironmentFlags(out SceneEnvironmentFlags flags)
+        {
+            flags = SceneEnvironmentFlags.None;
+
+            if (Player == null
+                || _lastResolvedSceneEnvironmentPosition == null
+                || (uint)Player.MapId != _lastResolvedSceneEnvironmentMapId)
+            {
+                return false;
+            }
+
+            if (!IsWithinResolvedEnvironmentReuseWindow(Player.Position, _lastResolvedSceneEnvironmentPosition))
+                return false;
+
+            flags = _lastResolvedSceneEnvironmentFlags;
+            return true;
+        }
+
+        private static bool IsWithinResolvedEnvironmentReuseWindow(Position currentPosition, Position resolvedPosition)
+        {
+            float dx = currentPosition.X - resolvedPosition.X;
+            float dy = currentPosition.Y - resolvedPosition.Y;
+            float horizontalDistance = MathF.Sqrt((dx * dx) + (dy * dy));
+            float dz = MathF.Abs(currentPosition.Z - resolvedPosition.Z);
+            return horizontalDistance <= ResolvedEnvironmentReuseDistance2D
+                && dz <= ResolvedEnvironmentReuseZTolerance;
+        }
+
 
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
         {
@@ -762,7 +853,7 @@ namespace WoWSharpClient
         public float PhysicsBlockedFraction => _movementController?.LastBlockedFraction ?? 1.0f;
 
         public SceneEnvironmentFlags PhysicsEnvironmentFlags =>
-            _movementController?.EffectiveEnvironmentFlags ?? SceneEnvironmentFlags.None;
+            ResolveCurrentEnvironmentFlags();
 
         public bool PhysicsIsIndoors =>
             PhysicsEnvironmentFlags.IsIndoors();

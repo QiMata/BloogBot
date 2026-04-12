@@ -417,6 +417,15 @@ public partial class LiveBotFixture
         await BotSelectSelfAsync(accountName);
         await Task.Delay(300);
         await SendGmChatCommandAsync(accountName, $".setskill {skillId} {currentValue} {maxValue}");
+
+        var verified = await WaitForSnapshotConditionAsync(accountName,
+            snapshot => snapshot.Player?.SkillInfo != null
+                && snapshot.Player.SkillInfo.TryGetValue(skillId, out var skillValue)
+                && skillValue >= currentValue,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300);
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{accountName}] Skill {skillId} not confirmed at {currentValue}/{maxValue} after .setskill");
     }
 
     /// <summary>
