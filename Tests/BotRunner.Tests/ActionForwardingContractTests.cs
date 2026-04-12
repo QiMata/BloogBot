@@ -456,6 +456,37 @@ public class ActionForwardingContractTests
     }
 
     [Fact]
+    public void DrainPendingActions_RemovesQueuedActions_ForSpecificAccountOnly()
+    {
+        var listener = CreateListener("BOT_A", "BOT_B");
+
+        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Wait }));
+        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Goto }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.SendChat }));
+
+        var drained = listener.DrainPendingActions("BOT_A");
+
+        Assert.Equal(2, drained);
+        Assert.Equal(0, listener.DrainPendingActions("BOT_A"));
+        Assert.Equal(1, listener.DrainPendingActions("BOT_B"));
+    }
+
+    [Fact]
+    public void DrainPendingActions_WithoutAccount_RemovesQueuedActions_ForAllAccounts()
+    {
+        var listener = CreateListener("BOT_A", "BOT_B");
+
+        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Wait }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.Goto }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.SendChat }));
+
+        var drained = listener.DrainPendingActions();
+
+        Assert.Equal(3, drained);
+        Assert.Equal(0, listener.DrainPendingActions());
+    }
+
+    [Fact]
     public void SetCoordinatorEnabled_TogglesRuntimeCoordinatorState()
     {
         var listener = CreateListener("TESTBOT1");

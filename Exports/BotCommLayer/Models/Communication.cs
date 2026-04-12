@@ -120,16 +120,17 @@ namespace Communication {
             "SEFOR0VfUkFJRF9TVUJHUk9VUBBKEhEKDUZPTExPV19UQVJHRVQQSxIVChFK",
             "T0lOX0JBVFRMRUdST1VORBBMEhcKE0FDQ0VQVF9CQVRUTEVHUk9VTkQQTRIW",
             "ChJMRUFWRV9CQVRUTEVHUk9VTkQQThINCglUUkFWRUxfVE8QTyovCg1Cb3RS",
-            "dW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqjwEK",
+            "dW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqqgEK",
             "D1N0YXRlQ2hhbmdlVHlwZRIICgROQU1FEAASDAoIT1BFTk5FU1MQARIVChFD",
             "T05TQ0lFTlRJT1VTTkVTUxACEhAKDEVYVFJBVkVSU0lPThADEhEKDUFHUkVF",
             "QUJMRU5FU1MQBBIPCgtORVVST1RJQ0lTTRAFEhcKE0NPT1JESU5BVE9SX0VO",
-            "QUJMRUQQBio7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNTEAASCwoHRkFJ",
-            "TFVSRRABEg8KC0lOX1BST0dSRVNTEAIqrAEKEkJvdENvbm5lY3Rpb25TdGF0",
-            "ZRIUChBCT1RfRElTQ09OTkVDVEVEEAASFgoSQk9UX0FVVEhFTlRJQ0FUSU5H",
-            "EAESEwoPQk9UX0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVSSU5HX1dPUkxE",
-            "EAMSEAoMQk9UX0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVSUklORxAFEhMK",
-            "D0JPVF9MT0dHSU5HX09VVBAGYgZwcm90bzM="));
+            "QUJMRUQQBhIZChVEUkFJTl9QRU5ESU5HX0FDVElPTlMQByo7Cg5SZXNwb25z",
+            "ZVJlc3VsdBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dS",
+            "RVNTEAIqrAEKEkJvdENvbm5lY3Rpb25TdGF0ZRIUChBCT1RfRElTQ09OTkVD",
+            "VEVEEAASFgoSQk9UX0FVVEhFTlRJQ0FUSU5HEAESEwoPQk9UX0NIQVJfU0VM",
+            "RUNUEAISFgoSQk9UX0VOVEVSSU5HX1dPUkxEEAMSEAoMQk9UX0lOX1dPUkxE",
+            "EAQSFAoQQk9UX1RSQU5TRkVSUklORxAFEhMKD0JPVF9MT0dHSU5HX09VVBAG",
+            "YgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -255,6 +256,7 @@ namespace Communication {
     [pbr::OriginalName("AGREEABLENESS")] Agreeableness = 4,
     [pbr::OriginalName("NEUROTICISM")] Neuroticism = 5,
     [pbr::OriginalName("COORDINATOR_ENABLED")] CoordinatorEnabled = 6,
+    [pbr::OriginalName("DRAIN_PENDING_ACTIONS")] DrainPendingActions = 7,
   }
 
   public enum ResponseResult {

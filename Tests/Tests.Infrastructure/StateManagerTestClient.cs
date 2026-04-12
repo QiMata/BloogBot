@@ -118,6 +118,22 @@ public class StateManagerTestClient : IDisposable
         return response.Response;
     }
 
+    public async Task<ResponseResult> DrainPendingActionsAsync(string? accountName = null, CancellationToken ct = default)
+    {
+        var request = new AsyncRequest
+        {
+            Id = Interlocked.Increment(ref _nextId),
+            StateChange = new StateChangeRequest
+            {
+                ChangeType = StateChangeType.DrainPendingActions,
+                RequestParameter = new RequestParameter { StringParam = accountName ?? string.Empty }
+            }
+        };
+
+        var response = await SendRequestAsync(request, ct, _defaultRequestTimeout);
+        return response.Response;
+    }
+
     /// <summary>
     /// Wait until the specified bot reports "InWorld" screen state.
     /// Polls every <paramref name="pollIntervalMs"/> ms until timeout.

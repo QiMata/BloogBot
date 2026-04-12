@@ -187,6 +187,16 @@ public partial class LiveBotFixture
     /// </summary>
     public async Task EnsureCleanSlateAsync(string account, string label, bool teleportToSafeZone = true)
     {
+        if (_stateManagerClient != null)
+        {
+            var drainResult = await _stateManagerClient.DrainPendingActionsAsync(account);
+            _logger.LogInformation(
+                "[{Label}] CleanSlate drained pending actions for {Account}: {Result}",
+                label,
+                account,
+                drainResult);
+        }
+
         await WaitForSnapshotConditionAsync(
             account,
             snapshot =>

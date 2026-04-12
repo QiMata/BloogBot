@@ -88,6 +88,22 @@ namespace WoWStateManager
                         ? ResponseResult.Success
                         : ResponseResult.Failure;
                     return;
+
+                case StateChangeType.DrainPendingActions:
+                    if (!TryParseOptionalStringStateParameter(stateChange.RequestParameter, out var accountName))
+                    {
+                        _logger.LogWarning("State change request failed: DRAIN_PENDING_ACTIONS requires an optional string parameter.");
+                        response.Response = ResponseResult.Failure;
+                        return;
+                    }
+
+                    var drained = _activityMemberSocketListener.DrainPendingActions(accountName);
+                    _logger.LogInformation(
+                        "State change request completed: DRAIN_PENDING_ACTIONS account={AccountName} drained={Count}",
+                        string.IsNullOrWhiteSpace(accountName) ? "<all>" : accountName,
+                        drained);
+                    response.Response = ResponseResult.Success;
+                    return;
             }
 
             response.Response = ResponseResult.Success;
@@ -124,6 +140,21 @@ namespace WoWStateManager
                 default:
                     return false;
             }
+        }
+
+        private static bool TryParseOptionalStringStateParameter(RequestParameter? parameter, out string? value)
+        {
+            value = null;
+            if (parameter == null)
+                return true;
+
+            if (parameter.ParameterCase == RequestParameter.ParameterOneofCase.StringParam)
+            {
+                value = parameter.StringParam;
+                return true;
+            }
+
+            return false;
         }
 
 

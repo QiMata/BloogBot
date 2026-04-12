@@ -156,6 +156,7 @@ enum StateChangeType {
     AGREEABLENESS = 4;
     NEUROTICISM = 5;
     COORDINATOR_ENABLED = 6;
+    DRAIN_PENDING_ACTIONS = 7;
 }
 
 enum ResponseResult {

@@ -260,6 +260,42 @@ namespace WoWStateManager.Listeners
             return true;
         }
 
+        /// <summary>
+        /// Removes queued pending actions for a specific account, or all accounts when no account is provided.
+        /// This is used by the live test harness to prevent stale setup commands from leaking across cases.
+        /// </summary>
+        public int DrainPendingActions(string? accountName = null)
+        {
+            if (!string.IsNullOrWhiteSpace(accountName))
+            {
+                return DrainPendingActionsForAccount(accountName);
+            }
+
+            var drained = 0;
+            foreach (var queuedAccount in _pendingActions.Keys)
+            {
+                drained += DrainPendingActionsForAccount(queuedAccount);
+            }
+
+            _logger.LogInformation("DRAINED pending actions for all accounts: count={Count}", drained);
+            return drained;
+        }
+
+        private int DrainPendingActionsForAccount(string accountName)
+        {
+            if (!_pendingActions.TryRemove(accountName, out var queue))
+                return 0;
+
+            var drained = 0;
+            while (queue.TryDequeue(out _))
+            {
+                drained++;
+            }
+
+            _logger.LogInformation("DRAINED pending actions for '{AccountName}': count={Count}", accountName, drained);
+            return drained;
+        }
+
         private static bool IsDeadOrGhostState(WoWActivitySnapshot? snap, out string reason)
         {
             reason = string.Empty;
