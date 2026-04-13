@@ -32,6 +32,24 @@ namespace WoWStateManagerUI.ViewModels
         public ICommand BrowseExeCommand { get; }
 
         public string StateManagerUrl { get; set; } = "http://localhost:8088";
+        public string MangosUrl { get; set; } = "http://localhost:7878";
+        public string AdminUsername { get; set; } = "ADMINISTRATOR";
+        public string AdminPassword { get; set; } = "PASSWORD";
+
+        public string RealmState
+        {
+            get => _healthCheck.RealmdStatus == ServiceStatus.Up ? "UP" : _healthCheck.RealmdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
+        }
+
+        public string WorldState
+        {
+            get => _healthCheck.MangosdStatus == ServiceStatus.Up ? "UP" : _healthCheck.MangosdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
+        }
+
+        public string TotalPopulation
+        {
+            get => _healthCheck.RealmdStatus == ServiceStatus.Up && _healthCheck.MangosdStatus == ServiceStatus.Up ? "3000" : "0";
+        }
 
         public string StateManagerExePath
         {
@@ -103,6 +121,15 @@ namespace WoWStateManagerUI.ViewModels
         public DashboardViewModel(HealthCheckService healthCheck)
         {
             _healthCheck = healthCheck;
+            _healthCheck.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(HealthCheckService.RealmdStatus) or nameof(HealthCheckService.MangosdStatus))
+                {
+                    OnPropertyChanged(nameof(RealmState));
+                    OnPropertyChanged(nameof(WorldState));
+                    OnPropertyChanged(nameof(TotalPopulation));
+                }
+            };
             ProcessLauncher = new ProcessLauncherService();
 
             LocalStateManagerLoadCommand = new CommandHandler(() => { }, true);

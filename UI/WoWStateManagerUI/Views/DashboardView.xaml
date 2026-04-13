@@ -27,40 +27,50 @@
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: URL + Exe path -->
+        <!-- Row 0: State URL + Launch controls -->
         <Label Grid.Column="0" Grid.Row="0" Content="State URL:" />
-        <TextBox Grid.Column="1" Grid.Row="0" Grid.ColumnSpan="2" Margin="2"
-                 Text="{Binding StateManagerUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}"/>
-        <Button Grid.Column="3" Grid.Row="0" Margin="4" Content="Local" Command="{Binding LocalStateManagerLoadCommand}"
-                IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}"/>
+        <TextBox Grid.Column="1" Grid.Row="0" Grid.ColumnSpan="2" Text="{Binding StateManagerUrl, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}"/>
+        <Button Grid.Column="3" Grid.Row="0" Margin="4" IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}" Content="Local" Command="{Binding LocalStateManagerLoadCommand}"/>
         <Button Grid.Column="4" Grid.Row="0" Margin="4" Content="Exe..." Command="{Binding BrowseExeCommand}" ToolTip="Select StateManager executable"/>
         <Button Grid.Column="5" Grid.Row="0" Margin="4" Content="Launch" Command="{Binding LaunchStateManagerCommand}"/>
         <Button Grid.Column="6" Grid.Row="0" Margin="4" Content="Stop SM" Command="{Binding StopStateManagerCommand}"/>
 
-        <!-- Row 1: Connect/Disconnect -->
-        <Button Grid.Column="0" Grid.Row="1" Margin="4" Content="Connect" Command="{Binding StateManagerConnectCommand}"
-                IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}"/>
-        <Button Grid.Column="1" Grid.Row="1" Margin="4" Content="Disconnect" Command="{Binding StateManagerDisconnectCommand}"/>
+        <!-- Row 1: Connect/Disconnect + Add/Remove -->
+        <Button Grid.Column="0" Grid.Row="1" Margin="4" IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}" Content="Connect" Command="{Binding StateManagerConnectCommand}"/>
+        <Button Grid.Column="1" Grid.Row="1" Margin="4" IsEnabled="{Binding IsConnected, Converter={StaticResource InverseBooleanConverter}}" Content="Disconnect" Command="{Binding StateManagerDisconnectCommand}"/>
         <Label Grid.Column="3" Grid.Row="1" Grid.ColumnSpan="4" Content="{Binding StatusMessage}" Foreground="DarkSlateGray" VerticalAlignment="Center"/>
 
-        <!-- Row 2: Character DataGrid -->
-        <DataGrid Grid.Column="0" Grid.Row="2" Grid.ColumnSpan="7" Margin="0,4"
+        <!-- Row 2-3: Realm/World status -->
+        <Label Grid.Column="3" Grid.Row="2" Content="Realm:" HorizontalContentAlignment="Right"/>
+        <Label Grid.Column="3" Grid.Row="3" Content="World:" HorizontalContentAlignment="Right"/>
+        <Label Grid.Column="5" Grid.Row="3" Content="Total Pop." HorizontalContentAlignment="Right"/>
+
+        <Label Grid.Column="4" Grid.Row="2" Content="{Binding RealmState}" d:Content="UP" />
+        <Label Grid.Column="4" Grid.Row="3" Content="{Binding WorldState}" d:Content="UP" />
+        <Label Grid.Column="6" Grid.Row="3" Content="{Binding TotalPopulation}" d:Content="3000" />
+
+        <!-- Row 4-10: Character DataGrid (left half) -->
+        <DataGrid Grid.Column="0" Grid.Row="4" Grid.ColumnSpan="7" Grid.RowSpan="7"
+                  d:ItemsSource="{d:SampleData ItemCount=20}"
                   AutoGenerateColumns="False" CanUserSortColumns="True" IsReadOnly="True"
                   CanUserAddRows="False" SelectionMode="Single">
             <DataGrid.Columns>
@@ -76,52 +86,77 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Row 3: Pagination -->
-        <Button Grid.Column="0" Grid.Row="3" Margin="4" Content="Previous"/>
-        <Button Grid.Column="1" Grid.Row="3" Margin="4" Content="Next"/>
-        <Label Grid.Column="2" Grid.Row="3" HorizontalContentAlignment="Center" Content="1 / 11"/>
+        <!-- Row 11: Pagination -->
+        <Button Grid.Column="0" Grid.Row="11" Margin="4" Content="Previous"/>
+        <Button Grid.Column="1" Grid.Row="11" Margin="4" Content="Next"/>
+        <Label Grid.Column="2" Grid.Row="11" HorizontalContentAlignment="Center" Content="1 / 11"/>
 
-        <!-- Right panel: Character detail -->
+        <!-- Right panel: Character detail (rows 0-3, columns 7-12) -->
         <Label Grid.Column="7" Grid.Row="0" Content="Name:" />
-        <Label Grid.Column="10" Grid.Row="0" Content="Level:" />
         <Label Grid.Column="7" Grid.Row="1" Content="Race:" />
+        <Label Grid.Column="7" Grid.Row="2" Content="Continent:" />
+        <Label Grid.Column="7" Grid.Row="3" Content="Action:" />
+
+        <Label Grid.Column="10" Grid.Row="0" Content="Level:" />
         <Label Grid.Column="10" Grid.Row="1" Content="Class:" />
+        <Label Grid.Column="10" Grid.Row="2" Content="Map:" />
+        <Label Grid.Column="10" Grid.Row="3" Content="Task:" />
 
-        <!-- Personality sliders -->
-        <Label Grid.Column="7" Grid.Row="2" Grid.ColumnSpan="2" Content="Openness:"
-               IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
-        <Slider Grid.Column="9" Grid.Row="2" Grid.ColumnSpan="4" Minimum="0.0" Maximum="1.0"
-                Value="{Binding OpennessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
+        <!-- Personality sliders (rows 4-8, columns 7-13) -->
+        <Label Grid.Column="7" Grid.Row="4" Grid.ColumnSpan="2" Content="Openness:"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <Label Grid.Column="7" Grid.Row="5" Grid.ColumnSpan="2" Content="Conscientiousness:"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <Label Grid.Column="7" Grid.Row="6" Grid.ColumnSpan="2" Content="Extraversion:"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <Label Grid.Column="7" Grid.Row="7" Grid.ColumnSpan="2" Content="Agreeableness:"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <Label Grid.Column="7" Grid.Row="8" Grid.ColumnSpan="2" Content="Neuroticism:"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
 
-        <Label Grid.Column="7" Grid.Row="3" Grid.ColumnSpan="2" Content="Conscientiousness:"
-               IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
-        <Slider Grid.Column="9" Grid.Row="3" Grid.ColumnSpan="4" Minimum="0.0" Maximum="1.0"
-                Value="{Binding ConscientiousnessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
+        <Slider Grid.Column="9" Grid.Row="4" Grid.ColumnSpan="4"
+            Minimum="0.0" Maximum="1.0"
+            Value="{Binding OpennessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
 
-        <Label Grid.Column="7" Grid.Row="4" Grid.ColumnSpan="2" Content="Extraversion:"
-               IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
-        <Slider Grid.Column="9" Grid.Row="4" Grid.ColumnSpan="4" Minimum="0.0" Maximum="1.0"
-                Value="{Binding ExtraversionValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
+        <Slider Grid.Column="9" Grid.Row="5" Grid.ColumnSpan="4"
+            Minimum="0.0" Maximum="1.0"
+            Value="{Binding ConscientiousnessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
 
-        <Label Grid.Column="7" Grid.Row="5" Grid.ColumnSpan="2" Content="Agreeableness:"
-               IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
-        <Slider Grid.Column="9" Grid.Row="5" Grid.ColumnSpan="4" Minimum="0.0" Maximum="1.0"
-                Value="{Binding AgreeablenessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
+        <Slider Grid.Column="9" Grid.Row="6" Grid.ColumnSpan="4"
+            Minimum="0.0" Maximum="1.0"
+            Value="{Binding ExtraversionValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
 
-        <Label Grid.Column="7" Grid.Row="6" Grid.ColumnSpan="2" Content="Neuroticism:"
-               IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
-        <Slider Grid.Column="9" Grid.Row="6" Grid.ColumnSpan="4" Minimum="0.0" Maximum="1.0"
-                Value="{Binding NeuroticismValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}" VerticalAlignment="Center"/>
+        <Slider Grid.Column="9" Grid.Row="7" Grid.ColumnSpan="4"
+            Minimum="0.0" Maximum="1.0"
+            Value="{Binding AgreeablenessValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
 
-        <!-- Chat/command input -->
-        <TextBox Grid.Column="7" Grid.Row="8" Grid.ColumnSpan="5" FontSize="12" Text="..." Margin="4"
-                 IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
-        <Button Grid.Column="12" Grid.Row="8" Margin="4" Content="Send"
-                IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <Slider Grid.Column="9" Grid.Row="8" Grid.ColumnSpan="4"
+            Minimum="0.0" Maximum="1.0"
+            Value="{Binding NeuroticismValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+
+        <!-- Personality trait numeric TextBoxes (column 13) -->
+        <TextBox Grid.Column="13" Grid.Row="4" Text="{Binding OpennessValue, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <TextBox Grid.Column="13" Grid.Row="5" Text="{Binding ConscientiousnessValue, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <TextBox Grid.Column="13" Grid.Row="6" Text="{Binding ExtraversionValue, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <TextBox Grid.Column="13" Grid.Row="7" Text="{Binding AgreeablenessValue, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+        <TextBox Grid.Column="13" Grid.Row="8" Text="{Binding NeuroticismValue, Mode=TwoWay, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+
+        <!-- Chat/command input (row 10) -->
+        <TextBox Grid.Column="7" Grid.Row="10" Grid.ColumnSpan="6" FontSize="12" Text="..." Margin="4"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
+
+        <!-- Send button (row 11) -->
+        <Button Grid.Column="12" Grid.Row="11" Margin="4" Content="Send"
+            IsEnabled="{Binding SelectCharacterIndex, Converter={StaticResource GreaterThanZeroToBooleanConverter}}"/>
     </Grid>
 </UserControl>
