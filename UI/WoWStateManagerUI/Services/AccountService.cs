@@ -17,12 +17,13 @@ namespace WoWStateManagerUI.Services
         public string LastIp { get; set; } = "";
         public int FailedLogins { get; set; }
         public int NumCharacters { get; set; }
-        public int Expansion { get; set; }
+        public bool Locked { get; set; }
     }
 
     /// <summary>
-    /// Read-only MySQL queries against the realmd database for account listing,
-    /// plus SOAP-based mutations for create/delete.
+    /// MySQL queries against the dockerized realmd database for account listing.
+    /// Schema: VMaNGOS realmd (maria-db container, port 3306, root:root).
+    /// Bans live in account_banned (not a column on account).
     /// </summary>
     public class AccountService
     {
@@ -33,9 +34,6 @@ namespace WoWStateManagerUI.Services
             _connectionString = connectionString;
         }
 
-        /// <summary>
-        /// List all accounts with character counts from the realmd database.
-        /// </summary>
         public async Task<List<AccountInfo>> GetAllAccountsAsync()
         {
             var accounts = new List<AccountInfo>();
@@ -43,35 +41,42 @@ namespace WoWStateManagerUI.Services
             await using var conn = new MySqlConnection(_connectionString);
             await conn.OpenAsync();
 
-            // Left join realmcharacters to get character counts per account
+            // Join realmcharacters for char count, account_banned for active ban status.
+            // last_login can be '0000-00-00 00:00:00' which MySql.Data can't parse as DateTime,
+            // so we read it as string and parse manually.
             var sql = @"
                 SELECT
-                    a.id, a.username, a.gmlevel, a.online, a.banned,
-                    a.joindate, a.last_login, a.last_ip, a.failed_logins,
-                    a.expansion,
-                    COALESCE(rc.numchars, 0) AS numchars
+                    a.id, a.username, a.gmlevel, a.online,
+                    a.joindate,
+                    CAST(a.last_login AS CHAR) AS last_login_str,
+                    a.last_ip, a.failed_logins, a.locked,
+                    COALESCE(rc.numchars, 0) AS numchars,
+                    CASE WHEN ab.id IS NOT NULL THEN 1 ELSE 0 END AS is_banned
                 FROM account a
                 LEFT JOIN realmcharacters rc ON a.id = rc.acctid
+                LEFT JOIN account_banned ab ON a.id = ab.id AND ab.active = 1
                 ORDER BY a.id";
 
             await using var cmd = new MySqlCommand(sql, conn);
-            await using var reader = (MySqlDataReader) await cmd.ExecuteReaderAsync();
+            await using var reader = (MySqlDataReader)await cmd.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
             {
+                var lastLoginStr = reader.GetString(reader.GetOrdinal("last_login_str"));
+
                 accounts.Add(new AccountInfo
                 {
                     Id = reader.GetUInt32(reader.GetOrdinal("id")),
                     Username = reader.GetString(reader.GetOrdinal("username")),
                     GmLevel = reader.GetInt32(reader.GetOrdinal("gmlevel")),
                     Online = reader.GetBoolean(reader.GetOrdinal("online")),
-                    Banned = reader.GetBoolean(reader.GetOrdinal("banned")),
                     JoinDate = reader.GetDateTime(reader.GetOrdinal("joindate")),
-                    LastLogin = TryGetDateTime(reader, reader.GetOrdinal("last_login")),
+                    LastLogin = ParseMySqlTimestamp(lastLoginStr),
                     LastIp = reader.GetString(reader.GetOrdinal("last_ip")),
                     FailedLogins = reader.GetInt32(reader.GetOrdinal("failed_logins")),
-                    Expansion = reader.GetInt32(reader.GetOrdinal("expansion")),
+                    Locked = reader.GetBoolean(reader.GetOrdinal("locked")),
                     NumCharacters = reader.GetInt32(reader.GetOrdinal("numchars")),
+                    Banned = reader.GetBoolean(reader.GetOrdinal("is_banned")),
                 });
             }
 
@@ -80,7 +85,7 @@ namespace WoWStateManagerUI.Services
 
         /// <summary>
         /// Delete an account by ID. Direct SQL since MaNGOS has no .account delete SOAP command.
-        /// Deletes from account, account_access, and realmcharacters.
+        /// Cleans up account, account_access, account_banned, and realmcharacters.
         /// </summary>
         public async Task DeleteAccountAsync(uint accountId)
         {
@@ -90,9 +95,10 @@ namespace WoWStateManagerUI.Services
             await using var tx = await conn.BeginTransactionAsync();
             try
             {
-                await ExecuteNonQueryAsync(conn, tx, "DELETE FROM realmcharacters WHERE acctid = @id", accountId);
-                await ExecuteNonQueryAsync(conn, tx, "DELETE FROM account_access WHERE id = @id", accountId);
-                await ExecuteNonQueryAsync(conn, tx, "DELETE FROM account WHERE id = @id", accountId);
+                await ExecAsync(conn, tx, "DELETE FROM realmcharacters WHERE acctid = @id", accountId);
+                await ExecAsync(conn, tx, "DELETE FROM account_banned WHERE id = @id", accountId);
+                await ExecAsync(conn, tx, "DELETE FROM account_access WHERE id = @id", accountId);
+                await ExecAsync(conn, tx, "DELETE FROM account WHERE id = @id", accountId);
                 await tx.CommitAsync();
             }
             catch
@@ -102,9 +108,6 @@ namespace WoWStateManagerUI.Services
             }
         }
 
-        /// <summary>
-        /// Test the database connection.
-        /// </summary>
         public async Task<bool> TestConnectionAsync()
         {
             try
@@ -119,23 +122,21 @@ namespace WoWStateManagerUI.Services
             }
         }
 
-        private static async Task ExecuteNonQueryAsync(MySqlConnection conn, MySqlTransaction tx, string sql, uint accountId)
+        private static async Task ExecAsync(MySqlConnection conn, MySqlTransaction tx, string sql, uint accountId)
         {
             await using var cmd = new MySqlCommand(sql, conn, tx);
             cmd.Parameters.AddWithValue("@id", accountId);
             await cmd.ExecuteNonQueryAsync();
         }
 
-        private static DateTime TryGetDateTime(MySqlDataReader reader, int ordinal)
+        /// <summary>
+        /// MariaDB returns '0000-00-00 00:00:00' for unset timestamps which .NET can't parse.
+        /// </summary>
+        private static DateTime ParseMySqlTimestamp(string value)
         {
-            try
-            {
-                return reader.IsDBNull(ordinal) ? DateTime.MinValue : reader.GetDateTime(ordinal);
-            }
-            catch
-            {
+            if (string.IsNullOrEmpty(value) || value.StartsWith("0000"))
                 return DateTime.MinValue;
-            }
+            return DateTime.TryParse(value, out var dt) ? dt : DateTime.MinValue;
         }
     }
 }

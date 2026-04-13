@@ -74,7 +74,7 @@
                 <DataGridTextColumn Header="Chars" Binding="{Binding NumCharacters}" Width="45"/>
                 <DataGridCheckBoxColumn Header="Online" Binding="{Binding Online}" Width="50"/>
                 <DataGridCheckBoxColumn Header="Banned" Binding="{Binding Banned}" Width="55"/>
-                <DataGridTextColumn Header="Expansion" Binding="{Binding Expansion}" Width="65"/>
+                <DataGridCheckBoxColumn Header="Locked" Binding="{Binding Locked}" Width="50"/>
                 <DataGridTextColumn Header="Last IP" Binding="{Binding LastIp}" Width="100"/>
                 <DataGridTextColumn Header="Failed Logins" Binding="{Binding FailedLogins}" Width="85"/>
                 <DataGridTextColumn Header="Join Date" Binding="{Binding JoinDate, StringFormat=yyyy-MM-dd}" Width="85"/>
