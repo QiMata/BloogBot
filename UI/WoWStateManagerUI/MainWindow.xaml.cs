@@ -1,18 +1,18 @@
-﻿using WoWStateManagerUI.Views;
+using WoWStateManagerUI.ViewModels;
 using System.Windows;
 
 namespace WoWStateManagerUI
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
-        private readonly StateManagerViewModel _stateManagerViewModel;
+        private readonly MainViewModel _viewModel;
+
         public MainWindow()
         {
-            _stateManagerViewModel = new StateManagerViewModel();
-            DataContext = _stateManagerViewModel;
+            _viewModel = new MainViewModel();
+            DataContext = _viewModel;
+            InitializeComponent();
+            Closed += (_, _) => _viewModel.Dispose();
         }
     }
 }

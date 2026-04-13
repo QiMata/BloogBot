@@ -1,0 +1,161 @@
+<UserControl x:Class="WoWStateManagerUI.Views.ConfigEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
+             xmlns:models="clr-namespace:WoWStateManagerUI.Models"
+             d:DataContext="{d:DesignInstance Type=vm:ConfigEditorViewModel}"
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="560">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Profile toolbar -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="Browse..." Command="{Binding BrowseDirectoryCommand}" Padding="10,4" Margin="0,0,6,0"/>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding ProfilePaths}" SelectedItem="{Binding SelectedProfilePath}"
+                      Margin="0,0,6,0" VerticalContentAlignment="Center">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Converter={x:Static vm:PathToFilenameConverter.Instance}}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Column="2" Content="Load" Command="{Binding LoadProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Button Grid.Column="3" Content="Save" Command="{Binding SaveProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Button Grid.Column="4" Content="Save As..." Command="{Binding SaveAsProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
+        </Grid>
+
+        <!-- Row 1: Character action buttons -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+            <Button Content="Add Character" Command="{Binding AddCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Button Content="Remove" Command="{Binding RemoveCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Button Content="Duplicate" Command="{Binding DuplicateCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
+        </StackPanel>
+
+        <!-- Row 2: Main content — character list + detail editor -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Character list -->
+            <DataGrid Grid.Column="0" ItemsSource="{Binding Characters}" SelectedItem="{Binding SelectedCharacter}"
+                      AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                      SelectionMode="Single" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Account" Binding="{Binding AccountName}" Width="120"/>
+                    <DataGridTextColumn Header="Class" Binding="{Binding CharacterClass}" Width="70"/>
+                    <DataGridTextColumn Header="Runner" Binding="{Binding RunnerType}" Width="80"/>
+                    <DataGridCheckBoxColumn Header="Run" Binding="{Binding ShouldRun}" Width="40"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Right: Detail editor -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <Grid DataContext="{Binding SelectedCharacter}" IsEnabled="{Binding DataContext.SelectedCharacter, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vm:NullToBoolConverter.Instance}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Identity -->
+                    <Label Grid.Row="0" Content="Account Name:" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AccountName, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"/>
+
+                    <Label Grid.Row="1" Content="Character Class:" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableClasses, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding CharacterClass}" Margin="0,2"/>
+
+                    <Label Grid.Row="2" Content="Character Race:" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableRaces, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding CharacterRace}" Margin="0,2"/>
+
+                    <Label Grid.Row="3" Content="Gender:" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableGenders, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              SelectedItem="{Binding CharacterGender}" Margin="0,2"/>
+
+                    <Label Grid.Row="4" Content="Runner Type:" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="4" Grid.Column="1" SelectedItem="{Binding RunnerType}" Margin="0,2">
+                        <models:BotRunnerType>Foreground</models:BotRunnerType>
+                        <models:BotRunnerType>Background</models:BotRunnerType>
+                    </ComboBox>
+
+                    <Label Grid.Row="5" Content="GM Level (0-6):" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding GmLevel, UpdateSourceTrigger=PropertyChanged}" Width="50" HorizontalAlignment="Left" Margin="0,2"/>
+
+                    <Label Grid.Row="6" Content="Should Run:" VerticalAlignment="Center"/>
+                    <CheckBox Grid.Row="6" Grid.Column="1" IsChecked="{Binding ShouldRun}" VerticalAlignment="Center" Margin="0,4"/>
+
+                    <!-- Personality traits -->
+                    <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Text="Personality Traits" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+                    <Label Grid.Row="9" Content="Openness:" VerticalAlignment="Center"/>
+                    <DockPanel Grid.Row="9" Grid.Column="1" Margin="0,2">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding Openness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
+                        <Slider Minimum="0" Maximum="1" Value="{Binding Openness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
+                    </DockPanel>
+
+                    <Label Grid.Row="10" Content="Conscientiousness:" VerticalAlignment="Center"/>
+                    <DockPanel Grid.Row="10" Grid.Column="1" Margin="0,2">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding Conscientiousness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
+                        <Slider Minimum="0" Maximum="1" Value="{Binding Conscientiousness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
+                    </DockPanel>
+
+                    <Label Grid.Row="11" Content="Extraversion:" VerticalAlignment="Center"/>
+                    <DockPanel Grid.Row="11" Grid.Column="1" Margin="0,2">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding Extraversion, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
+                        <Slider Minimum="0" Maximum="1" Value="{Binding Extraversion}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
+                    </DockPanel>
+
+                    <Label Grid.Row="12" Content="Agreeableness:" VerticalAlignment="Center"/>
+                    <DockPanel Grid.Row="12" Grid.Column="1" Margin="0,2">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding Agreeableness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
+                        <Slider Minimum="0" Maximum="1" Value="{Binding Agreeableness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
+                    </DockPanel>
+
+                    <Label Grid.Row="13" Content="Neuroticism:" VerticalAlignment="Center"/>
+                    <DockPanel Grid.Row="13" Grid.Column="1" Margin="0,2">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding Neuroticism, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
+                        <Slider Minimum="0" Maximum="1" Value="{Binding Neuroticism}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
+                    </DockPanel>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Row 3: Status bar -->
+        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
+    </Grid>
+</UserControl>

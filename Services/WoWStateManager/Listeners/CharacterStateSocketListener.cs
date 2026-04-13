@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using WoWStateManager.Clients;
+using MangosSOAPClient = WoWStateManager.Clients.MangosSOAPClient;
 using WoWStateManager.Coordination;
 using WoWStateManager.Progression;
 using WoWStateManager.Settings;

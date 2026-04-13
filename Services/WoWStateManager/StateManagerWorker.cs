@@ -46,6 +46,8 @@ namespace WoWStateManager
 
         private readonly MangosSOAPClient _mangosSOAPClient;
 
+        private readonly UIUpdateClient? _uiUpdateClient;
+
         private readonly ConcurrentDictionary<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)> _managedServices = new();
 
         // Optional basic backoff tracking (account -> last launch time)
@@ -101,6 +103,20 @@ namespace WoWStateManager
 
             // Updated to new IObservable-based API
             _worldStateManagerSocketListener.DataMessageStream.Subscribe(OnWorldStateUpdate);
+
+            // Optional UI push client — connects to the UI listener if configured
+            var uiListenerIp = configuration["UIListener:IpAddress"];
+            var uiListenerPortStr = configuration["UIListener:Port"];
+            if (!string.IsNullOrEmpty(uiListenerIp) && int.TryParse(uiListenerPortStr, out var uiListenerPort))
+            {
+                _uiUpdateClient = new UIUpdateClient(uiListenerIp, uiListenerPort,
+                    _loggerFactory.CreateLogger<UIUpdateClient>());
+                _logger.LogInformation("UI push client configured for {Ip}:{Port}", uiListenerIp, uiListenerPort);
+            }
+            else
+            {
+                _logger.LogInformation("UI push client not configured (no UIListener section in appsettings.json)");
+            }
         }
 
 
@@ -439,6 +455,9 @@ namespace WoWStateManager
                         _logger.LogDebug("No managed services currently running");
                     }
 
+                    // Push snapshots to UI if connected
+                    PushSnapshotsToUI();
+
                     await Task.Delay(5000, stoppingToken); // Check every 5 seconds
                 }
                 catch (OperationCanceledException)
@@ -466,9 +485,31 @@ namespace WoWStateManager
         /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
         /// The .NET host calls StopAsync on all IHostedService instances during shutdown.
         /// </summary>
+        private void PushSnapshotsToUI()
+        {
+            if (_uiUpdateClient == null) return;
+
+            try
+            {
+                var snapshots = _activityMemberSocketListener.CurrentActivityMemberList;
+                if (snapshots.Count == 0) return;
+
+                var push = new StateChangeResponse { Response = ResponseResult.Success };
+                foreach (var snapshot in snapshots.Values)
+                    push.Snapshots.Add(snapshot);
+
+                _uiUpdateClient.PushSnapshots(push);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("UI snapshot push failed: {Message}", ex.Message);
+            }
+        }
+
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("StateManagerWorker.StopAsync — cleaning up managed processes...");
+            _uiUpdateClient?.Dispose();
             await StopAllManagedServices();
             await base.StopAsync(cancellationToken);
             _logger.LogInformation("StateManagerWorker.StopAsync — complete.");
