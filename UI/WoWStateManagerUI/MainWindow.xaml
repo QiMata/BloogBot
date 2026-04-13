@@ -44,6 +44,9 @@
             <TabItem Header="MaNGOS Console">
                 <views:MangosConsoleView DataContext="{Binding MangosConsole}"/>
             </TabItem>
+            <TabItem Header="Accounts">
+                <views:AccountManagementView DataContext="{Binding AccountManagement}"/>
+            </TabItem>
             <TabItem Header="Config Editor">
                 <views:ConfigEditorView DataContext="{Binding ConfigEditor}"/>
             </TabItem>

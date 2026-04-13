@@ -1,0 +1,99 @@
+<UserControl x:Class="WoWStateManagerUI.Views.AccountManagementView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:AccountManagementViewModel}"
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="560">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: Connection bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Label Grid.Column="0" Content="Realmd DB:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding ConnectionString, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center" FontSize="10"/>
+            <Label Grid.Column="2" Content="SOAP:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="3" Text="{Binding SoapUrl, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center"/>
+            <Button Grid.Column="4" Content="Connect" Command="{Binding ConnectCommand}" Margin="4,2" Padding="12,4"/>
+        </Grid>
+
+        <!-- Row 1: Summary stats -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Accounts: " FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding TotalAccounts}" Margin="0,0,16,0"/>
+            <TextBlock Text="Total Characters: " FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding TotalCharacters}" Margin="0,0,16,0"/>
+            <TextBlock Text="Online: " FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding OnlineAccounts}" Margin="0,0,16,0"/>
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="8,2" Margin="8,0,0,0"/>
+        </StackPanel>
+
+        <!-- Row 2: Create account bar -->
+        <Border Grid.Row="2" BorderBrush="LightGray" BorderThickness="1" Padding="6" Margin="0,0,0,8" CornerRadius="3">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Create Account" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <Label Content="Name:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding NewAccountName, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="4,2" VerticalAlignment="Center">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding CreateAccountCommand}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
+                <Label Content="Password:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding NewAccountPassword, UpdateSourceTrigger=PropertyChanged}" Width="90" Margin="4,2" VerticalAlignment="Center"/>
+                <Label Content="GM Level:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding NewAccountGmLevel, UpdateSourceTrigger=PropertyChanged}" Width="30" Margin="4,2" VerticalAlignment="Center"/>
+                <Button Content="Create" Command="{Binding CreateAccountCommand}" Margin="8,0,0,0" Padding="10,4"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Row 3: Account DataGrid -->
+        <DataGrid Grid.Row="3" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                  SelectionMode="Single" GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray"
+                  CanUserSortColumns="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="45"/>
+                <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="130"/>
+                <DataGridTextColumn Header="GM" Binding="{Binding GmLevel}" Width="35"/>
+                <DataGridTextColumn Header="Chars" Binding="{Binding NumCharacters}" Width="45"/>
+                <DataGridCheckBoxColumn Header="Online" Binding="{Binding Online}" Width="50"/>
+                <DataGridCheckBoxColumn Header="Banned" Binding="{Binding Banned}" Width="55"/>
+                <DataGridTextColumn Header="Expansion" Binding="{Binding Expansion}" Width="65"/>
+                <DataGridTextColumn Header="Last IP" Binding="{Binding LastIp}" Width="100"/>
+                <DataGridTextColumn Header="Failed Logins" Binding="{Binding FailedLogins}" Width="85"/>
+                <DataGridTextColumn Header="Join Date" Binding="{Binding JoinDate, StringFormat=yyyy-MM-dd}" Width="85"/>
+                <DataGridTextColumn Header="Last Login" Binding="{Binding LastLogin, StringFormat=yyyy-MM-dd HH:mm}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Row 4: Selected account actions -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,6,0,0">
+            <TextBlock Text="Selected:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding SelectedAccount.Username, FallbackValue=(none)}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+            <Button Content="Delete Account" Command="{Binding DeleteAccountCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Label Content="Set GM:" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding NewAccountGmLevel, UpdateSourceTrigger=PropertyChanged}" Width="30" Margin="4,2" VerticalAlignment="Center"/>
+            <Button Content="Apply GM Level" Command="{Binding SetGmLevelCommand}" Padding="10,4" Margin="4,0"/>
+            <Button Content="Ban/Unban" Command="{Binding BanAccountCommand}" Padding="10,4" Margin="4,0"/>
+        </StackPanel>
+
+        <!-- Row 5: Status -->
+        <TextBlock Grid.Row="5" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
+    </Grid>
+</UserControl>
