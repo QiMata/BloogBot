@@ -1,0 +1,30 @@
+[
+  {
+    "AccountName": "TESTBOT1",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "Openness": 1.0,
+    "Conscientiousness": 1.0,
+    "Extraversion": 1.0,
+    "Agreeableness": 1.0,
+    "Neuroticism": 1.0,
+    "ShouldRun": true,
+    "RunnerType": "Foreground"
+  },
+  {
+    "AccountName": "COMBATTEST",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "Openness": 1.0,
+    "Conscientiousness": 1.0,
+    "Extraversion": 1.0,
+    "Agreeableness": 1.0,
+    "Neuroticism": 1.0,
+    "ShouldRun": true,
+    "RunnerType": "Background"
+  }
+]

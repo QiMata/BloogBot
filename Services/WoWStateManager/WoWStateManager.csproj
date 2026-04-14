@@ -10,6 +10,9 @@
 </PropertyGroup>
 
 	<ItemGroup>
+		<None Update="Settings\Configs\*.config.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 		<None Update="appsettings.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
