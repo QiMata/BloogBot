@@ -68,10 +68,10 @@
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding State}" Value="running">
-                            <Setter Property="Background" Value="#E8F5E9"/>
+                            <Setter Property="Background" Value="#22339933"/>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding State}" Value="exited">
-                            <Setter Property="Background" Value="#FFEBEE"/>
+                            <Setter Property="Background" Value="#22993333"/>
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -86,7 +86,7 @@
             <TextBox Text="{Binding LogOutput, Mode=OneWay}" IsReadOnly="True"
                      FontFamily="Consolas" FontSize="10" TextWrapping="NoWrap"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                     Background="#1E1E1E" Foreground="#D4D4D4" BorderThickness="0"/>
+                     BorderThickness="0"/>
         </Border>
 
         <!-- Row 5: Status -->
