@@ -1,0 +1,23 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "StartAttackTask",
+      "PullTargetTask",
+      "StopAttackTask"
+    ],
+    "AllowedActions": [
+      "StartRangedAttack",
+      "StopAttack",
+      "CastSpell",
+      "Goto",
+      "Wait"
+    ]
+  }
+]

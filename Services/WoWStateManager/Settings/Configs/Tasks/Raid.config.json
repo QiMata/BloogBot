@@ -1,0 +1,22 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [],
+    "AllowedActions": [
+      "ConvertToRaid",
+      "ChangeRaidSubgroup",
+      "PromoteLeader",
+      "PromoteAssistant",
+      "PromoteLootManager",
+      "SetGroupLoot",
+      "AssignLoot",
+      "Wait"
+    ]
+  }
+]

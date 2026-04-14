@@ -1,0 +1,29 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "DungeoneeringTask",
+      "EncounterMechanicsTask",
+      "GoToTask",
+      "StartAttackTask",
+      "LootCorpseTask",
+      "RestTask",
+      "BuffTask"
+    ],
+    "AllowedActions": [
+      "StartDungeoneering",
+      "Goto",
+      "StartMeleeAttack",
+      "CastSpell",
+      "StopAttack",
+      "LootCorpse",
+      "Wait"
+    ]
+  }
+]

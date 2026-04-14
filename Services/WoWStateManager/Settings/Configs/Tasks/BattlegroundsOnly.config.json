@@ -1,0 +1,35 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": null,
+    "AllowedActions": null,
+    "Features": {
+      "Combat": true,
+      "Questing": false,
+      "Gathering": false,
+      "Crafting": false,
+      "Trading": false,
+      "Grouping": true,
+      "Dungeoneering": false,
+      "Battlegrounds": true,
+      "Travel": false,
+      "Training": false,
+      "Vendoring": false,
+      "PetManagement": false,
+      "Looting": false,
+      "Skinning": false,
+      "MountUsage": false,
+      "Rest": true,
+      "Buffing": true,
+      "Resurrection": true,
+      "DecisionEngine": false,
+      "ProgressionPlanning": false
+    }
+  }
+]

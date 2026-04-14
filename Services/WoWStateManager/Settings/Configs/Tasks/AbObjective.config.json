@@ -1,0 +1,24 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "AbObjectiveTask",
+      "GoToTask",
+      "StartAttackTask"
+    ],
+    "AllowedActions": [
+      "Goto",
+      "StartMeleeAttack",
+      "CastSpell",
+      "StopAttack",
+      "InteractWith",
+      "Wait"
+    ]
+  }
+]

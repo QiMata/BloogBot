@@ -1,0 +1,19 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "GoToTask",
+      "MoveToPositionTask"
+    ],
+    "AllowedActions": [
+      "Goto",
+      "Wait"
+    ]
+  }
+]

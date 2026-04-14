@@ -1,0 +1,21 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "PetManagementTask",
+      "PetFeedingTask",
+      "SummonPetTask"
+    ],
+    "AllowedActions": [
+      "CastSpell",
+      "UseItem",
+      "Wait"
+    ]
+  }
+]

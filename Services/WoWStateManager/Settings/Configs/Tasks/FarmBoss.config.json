@@ -1,0 +1,25 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "FarmBossTask",
+      "GoToTask",
+      "StartAttackTask",
+      "LootCorpseTask"
+    ],
+    "AllowedActions": [
+      "Goto",
+      "StartMeleeAttack",
+      "CastSpell",
+      "StopAttack",
+      "LootCorpse",
+      "Wait"
+    ]
+  }
+]

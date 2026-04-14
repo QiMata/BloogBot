@@ -1,0 +1,18 @@
+[
+  {
+    "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "AllowedTasks": [
+      "TrainSpellTask"
+    ],
+    "AllowedActions": [
+      "TrainTalent",
+      "Wait"
+    ]
+  }
+]
