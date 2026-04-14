@@ -150,7 +150,7 @@ A permanent Foreground character that:
 
 ```json
 {
-  "AccountName": "GMCAMERA",
+  "AccountName": "CAMBOT",
   "CharacterClass": "Warrior",
   "CharacterRace": "Orc",
   "CharacterGender": "Male",
