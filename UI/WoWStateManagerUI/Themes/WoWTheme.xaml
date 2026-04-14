@@ -69,61 +69,88 @@
         <Setter Property="FontFamily" Value="Palatino Linotype, Book Antiqua, Georgia, serif"/>
     </Style>
 
-    <!-- ── Buttons ────────────────────────────────────────────── -->
+    <!-- ── Buttons (WoW Classic red panel buttons) ───────────── -->
+    <!-- Sampled from UI-Panel-Button-Up.PNG / 128RedButton.PNG:
+         Top highlight: bright crimson #9B1A1A → #AA2222
+         Center body:   deep maroon   #580808 → #6B0A0A
+         Bottom shadow: near-black    #1A0000 → #2A0505
+         Border:        dark charcoal #2A2A2A with inner red glow #4A0808 -->
     <Style TargetType="Button">
         <Setter Property="Background">
             <Setter.Value>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#FF3D2E1E" Offset="0"/>
-                    <GradientStop Color="#FF2A1F14" Offset="0.5"/>
-                    <GradientStop Color="#FF1A1208" Offset="1"/>
+                    <GradientStop Color="#FF9B1A1A" Offset="0.0"/>
+                    <GradientStop Color="#FF7A0E0E" Offset="0.15"/>
+                    <GradientStop Color="#FF580808" Offset="0.5"/>
+                    <GradientStop Color="#FF3A0404" Offset="0.85"/>
+                    <GradientStop Color="#FF1A0000" Offset="1.0"/>
                 </LinearGradientBrush>
             </Setter.Value>
         </Setter>
         <Setter Property="Foreground" Value="{StaticResource WoW.GoldBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource WoW.BorderGoldBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="8,3"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="Padding" Value="10,4"/>
         <Setter Property="FontFamily" Value="Palatino Linotype, Book Antiqua, Georgia, serif"/>
         <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="border" Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="2" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- Outer border: dark charcoal frame -->
+                    <Border x:Name="outerBorder" BorderBrush="#FF2A2A2A" BorderThickness="1" CornerRadius="1">
+                        <!-- Inner border: subtle red/gold edge -->
+                        <Border x:Name="innerBorder" BorderBrush="#FF4A0808" BorderThickness="1"
+                                Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <!-- Hover: brighter red, gold outer glow -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background">
+                            <Setter TargetName="innerBorder" Property="Background">
                                 <Setter.Value>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                        <GradientStop Color="#FF4D3E2E" Offset="0"/>
-                                        <GradientStop Color="#FF3D2E1E" Offset="0.5"/>
-                                        <GradientStop Color="#FF2A1F14" Offset="1"/>
+                                        <GradientStop Color="#FFBB2828" Offset="0.0"/>
+                                        <GradientStop Color="#FF9A1414" Offset="0.15"/>
+                                        <GradientStop Color="#FF6E0A0A" Offset="0.5"/>
+                                        <GradientStop Color="#FF4A0606" Offset="0.85"/>
+                                        <GradientStop Color="#FF2A0202" Offset="1.0"/>
                                     </LinearGradientBrush>
                                 </Setter.Value>
                             </Setter>
-                            <Setter TargetName="border" Property="BorderBrush">
-                                <Setter.Value>
-                                    <SolidColorBrush Color="{StaticResource WoW.Gold}"/>
-                                </Setter.Value>
-                            </Setter>
+                            <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF8B6914"/>
+                            <Setter TargetName="innerBorder" Property="BorderBrush" Value="#FF6B1010"/>
                         </Trigger>
+                        <!-- Pressed: darker, flattened gradient -->
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="border" Property="Background">
+                            <Setter TargetName="innerBorder" Property="Background">
                                 <Setter.Value>
-                                    <SolidColorBrush Color="{StaticResource WoW.ButtonPressed}"/>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FF3A0404" Offset="0.0"/>
+                                        <GradientStop Color="#FF4A0808" Offset="0.3"/>
+                                        <GradientStop Color="#FF580808" Offset="0.7"/>
+                                        <GradientStop Color="#FF1A0000" Offset="1.0"/>
+                                    </LinearGradientBrush>
                                 </Setter.Value>
                             </Setter>
+                            <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF1A1A1A"/>
                         </Trigger>
+                        <!-- Disabled: desaturated, dimmed -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{StaticResource WoW.TextDimBrush}"/>
-                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource WoW.BorderBrush}"/>
-                            <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                            <Setter TargetName="innerBorder" Property="Background">
+                                <Setter.Value>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FF3A2020" Offset="0.0"/>
+                                        <GradientStop Color="#FF2A1515" Offset="0.5"/>
+                                        <GradientStop Color="#FF1A0A0A" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF1A1A1A"/>
+                            <Setter TargetName="innerBorder" Property="BorderBrush" Value="#FF2A1010"/>
+                            <Setter TargetName="outerBorder" Property="Opacity" Value="0.65"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
