@@ -50,6 +50,9 @@
             <TabItem Header="Config Editor">
                 <views:ConfigEditorView DataContext="{Binding ConfigEditor}"/>
             </TabItem>
+            <TabItem Header="Services">
+                <views:ServicesView DataContext="{Binding Services}"/>
+            </TabItem>
             <TabItem Header="Instances">
                 <views:InstancesView DataContext="{Binding Instances}"/>
             </TabItem>

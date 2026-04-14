@@ -12,6 +12,7 @@ namespace WoWStateManagerUI.ViewModels
         public MangosConsoleViewModel MangosConsole { get; } = new();
         public ConfigEditorViewModel ConfigEditor { get; } = new();
         public AccountManagementViewModel AccountManagement { get; } = new();
+        public ServicesViewModel Services { get; } = new();
         public InstancesViewModel Instances { get; } = new();
 
         public MainViewModel()
