@@ -80,6 +80,7 @@ namespace WoWSharpClient.Tests.Movement
         {
             NativeLocalPhysics.TestStepOverride = null;
             NativeLocalPhysics.TestClearSceneCacheOverride = null;
+            NativeLocalPhysics.TestGetGroundZOverride = null;
         }
 
         // ======== OPCODE SELECTION ========
@@ -301,8 +302,14 @@ namespace WoWSharpClient.Tests.Movement
         {
             _player.Position = new Position(1630.5f, -4420.3f, 17.85f);
             _player.Facing = 1.57f;
-            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
+            // Prime: settle _lastPhysicsPosition so DetectAuthoritativeRelocation
+            // does not fire Reset and produce an extra forced-stop packet.
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Update(0.01f, 4900);
+            _sentPackets.Clear();
+
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.05f, 5000);
 
             Assert.Single(_sentPackets);
@@ -362,6 +369,8 @@ namespace WoWSharpClient.Tests.Movement
                     X = input.X,
                     Y = input.Y,
                     Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
                     GroundNz = 1,
                     MoveFlags = input.MoveFlags,
                 };
@@ -370,8 +379,14 @@ namespace WoWSharpClient.Tests.Movement
             _player.Position = new Position(500f, 600f, 100f);
             _player.Facing = 2.0f;
             _player.RunSpeed = 7.0f;
-            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
+            // Prime: settle _lastPhysicsPosition at new location so DetectAuthoritativeRelocation
+            // does not fire Reset on the real test update.
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Update(0.01f, 2900);
+            _sentPackets.Clear();
+
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
             _controller.Update(0.1f, 3000);
 
             Assert.NotNull(capturedInput);
@@ -515,7 +530,8 @@ namespace WoWSharpClient.Tests.Movement
                 _player.Position = new Position(100f, 200f, 50f);
                 _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
-                _controller.Update(0.05f, 1000);
+                var controller = new MovementController(_mockClient.Object, _player, objectManager: WoWSharpObjectManager.Instance);
+                controller.Update(0.05f, 1000);
 
                 Assert.NotNull(capturedInput);
                 Assert.NotNull(capturedNearbyObjects);
@@ -584,7 +600,8 @@ namespace WoWSharpClient.Tests.Movement
                 _player.TransportOrientation = _player.Facing - transport.Facing;
                 _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
 
-                _controller.Update(0.1f, 3000);
+                var controller = new MovementController(_mockClient.Object, _player, objectManager: WoWSharpObjectManager.Instance);
+                controller.Update(0.1f, 3000);
 
                 Assert.NotNull(capturedInput);
                 Assert.NotNull(capturedNearbyObjects);
@@ -845,6 +862,8 @@ namespace WoWSharpClient.Tests.Movement
         {
             // When movement flags are NONE and no ground snap is needed,
             // the idle guard short-circuits Update to avoid unnecessary physics.
+            // Prime environment state so the idle guard is armed.
+            _controller.TryResolvePassiveEnvironmentState();
             _physicsStepCallCount = 0;
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
@@ -885,6 +904,10 @@ namespace WoWSharpClient.Tests.Movement
             };
 
             var controller = new MovementController(_mockClient.Object, _player);
+            // Prime environment state so the idle guard is armed.
+            controller.TryResolvePassiveEnvironmentState();
+            localStepCount = 0;
+            _sentPackets.Clear();
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             controller.Update(0.05f, 1000);
@@ -920,7 +943,7 @@ namespace WoWSharpClient.Tests.Movement
             };
 
             var snapshot = ReplaceTrackedObjects(transport, nearbyDoor);
-            var controller = new MovementController(_mockClient.Object, _player);
+            var controller = new MovementController(_mockClient.Object, _player, objectManager: WoWSharpObjectManager.Instance);
 
             try
             {
@@ -946,10 +969,17 @@ namespace WoWSharpClient.Tests.Movement
                     };
                 };
 
-                _player.Transport = transport;
-                _player.TransportGuid = transport.Guid;
                 _player.Position = new Position(110f, 210f, 55f);
                 _player.Facing = 2.2f;
+
+                // Prime: settle _lastPhysicsPosition at new location so DetectAuthoritativeRelocation
+                // does not fire Reset on the real test update.
+                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                controller.Update(0.01f, 2900);
+                _sentPackets.Clear();
+
+                _player.Transport = transport;
+                _player.TransportGuid = transport.Guid;
                 _player.TransportOffset = new Position(10f, -10f, 5f);
                 _player.TransportOrientation = _player.Facing - transport.Facing;
                 _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
@@ -1062,6 +1092,7 @@ namespace WoWSharpClient.Tests.Movement
         {
             var objectManager = new WoWSharpObjectManager();
             SetPrivateField(objectManager, "_isBeingTeleported", true);
+            SetPrivateField(objectManager, "_pendingWorldEntryGuid", 1L);
 
             var stepCallCount = 0;
             var controller = new MovementController(_mockClient.Object, _player, objectManager: objectManager);
@@ -1098,6 +1129,7 @@ namespace WoWSharpClient.Tests.Movement
             Assert.True(controller.NeedsGroundSnap);
 
             SetPrivateField(objectManager, "_isBeingTeleported", false);
+            SetPrivateField(objectManager, "_pendingWorldEntryGuid", 0L);
 
             controller.Update(0.05f, 1550);
 
@@ -1423,6 +1455,43 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void Update_PostTeleport_NearbySupportBelowTeleportTarget_SnapsToNearbyGround()
+        {
+            NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = 29.601f,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = 0f,
+                GroundZ = 29.601f,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = input.MoveFlags,
+                FallTime = 0,
+            };
+            NativeLocalPhysics.TestGetGroundZOverride = (_, _, _, _, maxSearchDist) =>
+                maxSearchDist >= 6f
+                    ? (61.246f, true)
+                    : (-50001f, false);
+
+            _player.Position = new Position(1660.734f, -4332.938f, 64.669f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Reset(teleportDestZ: 64.669f);
+            _sentPackets.Clear();
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.Equal(61.246f, _player.Position.Z, 3);
+            Assert.False((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.False(_controller.NeedsGroundSnap);
+        }
+
+        [Fact]
         public void Update_IdleFreefallStillAppliesPhysics()
         {
             NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
@@ -1657,6 +1726,8 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        [Trait("Category", "MovementParity")]
+        [Trait("ParityLayer", "DeterministicBgProtocol")]
         public void PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity()
         {
             ClearPendingKnockback();
@@ -1682,7 +1753,12 @@ namespace WoWSharpClient.Tests.Movement
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT;
             SetPendingKnockback(4f, -2f, 6f);
 
-            _controller.Update(0.05f, 1000);
+            var controller = new MovementController(
+                _mockClient.Object,
+                _player,
+                objectManager: WoWSharpObjectManager.Instance);
+
+            controller.Update(0.05f, 1000);
 
             Assert.NotNull(capturedInput);
             Assert.Equal(4f, capturedInput!.Value.Vx, 3);

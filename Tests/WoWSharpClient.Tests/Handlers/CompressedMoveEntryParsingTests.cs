@@ -54,7 +54,7 @@ public class CompressedMoveEntryParsingTests
             BindingFlags.Static | BindingFlags.NonPublic);
 
         Assert.NotNull(method);
-        method!.Invoke(null, [reader]);
+        method!.Invoke(null, [reader, null]);
     }
 
     private static byte[] BuildCompressedEntry(Opcode opcode, ulong guid, byte[] payload)

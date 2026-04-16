@@ -272,6 +272,12 @@ namespace BotRunner.Tests
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
         public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0) => _path;
 
+        public override PathfindingRouteResult GetPathResult(uint mapId, Position start, Position end,
+            IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0)
+            => new(_path, _path.Length > 0 ? "ok" : "error", (uint)_path.Length, null, "none",
+                PathSegmentAffordance.Walk, _path.Length > 0,
+                0, 0, 0, 0, 0f, 0f, 0f, 0, 0, 0, 0, 0f, 0f, 0f);
+
         public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
 
         public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)

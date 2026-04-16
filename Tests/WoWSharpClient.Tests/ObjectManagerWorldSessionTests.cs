@@ -145,6 +145,7 @@ public class ObjectManagerWorldSessionTests
     public void LocalPlayerUpdate_AppliesWithoutPriorAddObject()
     {
         var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.ResetWorldSessionState("LocalPlayerUpdate_AppliesWithoutPriorAddObject");
         const ulong playerGuid = 0x9;
 
         objectManager.EnterWorld(playerGuid);
@@ -486,6 +487,8 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void MoveKnockBack_ParseStoresImpulseClearsDirectionAndAcks()
     {
         ResetObjectManager();
@@ -561,6 +564,109 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(ms.Length, ms.Position);
     }
 
+    [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
+    public void MoveKnockBack_ServerPacketFeedsMovementControllerNextFrame()
+    {
+        _fixture._woWClient.Reset();
+        var movementPackets = new List<(Opcode opcode, byte[] payload)>();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => movementPackets.Add((opcode, payload)))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x0102030405060712ul;
+        const uint movementCounter = 92u;
+        const float vSin = -0.25f;
+        const float vCos = 0.75f;
+        const float hSpeed = 10.0f;
+        const float vSpeed = 5.0f;
+
+        NativePhysics.PhysicsInput? capturedInput = null;
+        NativeLocalPhysics.TestStepOverride = input =>
+        {
+            capturedInput = input;
+            return new NativePhysics.PhysicsOutput
+            {
+                X = input.X + (input.Vx * input.DeltaTime),
+                Y = input.Y + (input.Vy * input.DeltaTime),
+                Z = input.Z + (input.Vz * input.DeltaTime),
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = input.Vx,
+                Vy = input.Vy,
+                Vz = input.Vz,
+                GroundZ = input.Z,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                FallTime = 50,
+            };
+        };
+
+        try
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            objectManager.EnterWorld(playerGuid);
+            InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+            var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+            player.Position = new Position(15f, 25f, 35f);
+            player.Facing = 1.25f;
+            player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_STRAFE_RIGHT;
+
+            SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var ackPackets).Object);
+            SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+            var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+            SetPrivateField(controller, "_needsGroundSnap", false);
+            SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+                player.Position.X,
+                player.Position.Y,
+                player.Position.Z));
+            SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
+
+            MovementHandler.HandleUpdateMovement(
+                Opcode.SMSG_MOVE_KNOCK_BACK,
+                BuildKnockBackPayload(playerGuid, movementCounter, vSin, vCos, hSpeed, vSpeed),
+                ctx);
+
+            var ack = Assert.Single(ackPackets);
+            Assert.Equal(Opcode.CMSG_MOVE_KNOCK_BACK_ACK, ack.opcode);
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+
+            controller.Update(0.05f, 1000);
+
+            Assert.NotNull(capturedInput);
+            Assert.Equal(hSpeed * vCos, capturedInput!.Value.Vx, 3);
+            Assert.Equal(hSpeed * vSin, capturedInput.Value.Vy, 3);
+            Assert.Equal(vSpeed, capturedInput.Value.Vz, 3);
+            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.Value.MoveFlags);
+            Assert.False(objectManager.TryConsumePendingKnockback(out _, out _, out _));
+
+            var movement = Assert.Single(movementPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, movement.opcode);
+            using var ms = new MemoryStream(movement.payload);
+            using var reader = new BinaryReader(ms);
+            var movementInfo = MovementPacketHandler.ParseMovementInfo(reader);
+            Assert.True(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+            Assert.False(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.False(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        }
+        finally
+        {
+            NativeLocalPhysics.TestStepOverride = null;
+        }
+    }
+
     [Theory]
     [InlineData(Opcode.SMSG_FORCE_RUN_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK, 8.5f)]
     [InlineData(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK, 4.25f)]
@@ -568,6 +674,8 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, 2.5f)]
     [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, 1.25f)]
     [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void ForceSpeedChangeOpcodes_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
@@ -663,6 +771,8 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_MOVE_UNSET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, false)]
     [InlineData(Opcode.SMSG_MOVE_FEATHER_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
     [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void ServerControlledMovementFlagChanges_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
@@ -715,6 +825,8 @@ public class ObjectManagerWorldSessionTests
     [Theory]
     [InlineData(Opcode.SMSG_FORCE_MOVE_ROOT, Opcode.CMSG_FORCE_MOVE_ROOT_ACK, true)]
     [InlineData(Opcode.SMSG_FORCE_MOVE_UNROOT, Opcode.CMSG_FORCE_MOVE_UNROOT_ACK, false)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void CompressedForceMoveRootOpcodes_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
@@ -770,6 +882,8 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_MOVE_UNSET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, false)]
     [InlineData(Opcode.SMSG_MOVE_FEATHER_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
     [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void CompressedServerControlledMovementFlagChanges_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
@@ -825,6 +939,8 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, 2.5f)]
     [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, 1.25f)]
     [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void CompressedForceSpeedChangeOpcodes_ParseApplyAndAck(
         Opcode serverOpcode,
         Opcode ackOpcode,
@@ -1310,6 +1426,76 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void HandleMovementControllerStuckRecovery_RepeatedSameAnchorLevel2_EscalatesToStrafeJump()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12A0;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        var stuckAnchor = new Position(10f, 20f, 30f);
+        player.Position = stuckAnchor;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.Facing = 1.50f;
+        SetPrivateField(objectManager, "_lastGlobalStuckRecoveryTick", Environment.TickCount64 - 5000);
+        SetPrivateField(objectManager, "_globalStuckRecoveryRepeatCount", 2);
+        SetPrivateField(objectManager, "_lastGlobalStuckRecoveryAnchor", new Position(stuckAnchor.X, stuckAnchor.Y, stuckAnchor.Z));
+        InvokePrivateMethod(objectManager, "HandleMovementControllerStuckRecovery", 2, stuckAnchor);
+
+        Assert.True(
+            player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT)
+            || player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+        Assert.Equal(3, GetPrivateFieldValue<int>(objectManager, "_globalStuckRecoveryRepeatCount"));
+    }
+
+    [Fact]
+    public void HandleMovementControllerStuckRecovery_NewAnchor_ResetsBackToTurnJump()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12A1;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        var firstAnchor = new Position(10f, 20f, 30f);
+        player.Position = firstAnchor;
+
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        SetPrivateField(objectManager, "_lastGlobalStuckRecoveryTick", Environment.TickCount64 - 5000);
+        SetPrivateField(objectManager, "_globalStuckRecoveryRepeatCount", 2);
+        SetPrivateField(objectManager, "_lastGlobalStuckRecoveryAnchor", new Position(firstAnchor.X, firstAnchor.Y, firstAnchor.Z));
+        InvokePrivateMethod(objectManager, "HandleMovementControllerStuckRecovery", 2, firstAnchor);
+
+        Assert.True(
+            player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT)
+            || player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+
+        var secondAnchor = new Position(18f, 26f, 30f);
+        player.Position = secondAnchor;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        SetPrivateField(objectManager, "_lastGlobalStuckRecoveryTick", Environment.TickCount64 - 5000);
+        InvokePrivateMethod(objectManager, "HandleMovementControllerStuckRecovery", 2, secondAnchor);
+
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.Equal(1, GetPrivateFieldValue<int>(objectManager, "_globalStuckRecoveryRepeatCount"));
+    }
+
+    [Fact]
     public void MoveTowardWithFacing_IdleInControl_SendsSetFacingBeforeForwardIntent()
     {
         _fixture._woWClient.Reset();
@@ -1417,6 +1603,64 @@ public class ObjectManagerWorldSessionTests
         Assert.Empty(sentPackets);
         Assert.Equal(0.58f, player.Facing, 3);
         Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
+    }
+
+    [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
+    public void ForceStopImmediate_BlocksStopPacketBeforeGameObjectUse()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12CF;
+        const ulong nodeGuid = 0xF11000000000ABCDul;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateDelayedWorldClientRecorder(
+            out var sentPackets,
+            opcode => opcode == Opcode.MSG_MOVE_STOP ? 40 : 1).Object);
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(async (Opcode opcode, byte[] payload, CancellationToken cancellationToken) =>
+            {
+                var delay = opcode == Opcode.MSG_MOVE_STOP ? 40 : 1;
+                await Task.Delay(delay, cancellationToken);
+                sentPackets.Add((opcode, payload));
+            });
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.Facing = 0.75f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_lastSentFlags", MovementFlags.MOVEFLAG_FORWARD);
+
+        ((IObjectManager)objectManager).ForceStopImmediate();
+        objectManager.InteractWithGameObject(nodeGuid);
+
+        Assert.Collection(sentPackets,
+            packet => Assert.Equal(Opcode.MSG_MOVE_STOP, packet.opcode),
+            packet => Assert.Equal(Opcode.CMSG_GAMEOBJ_USE, packet.opcode));
+        Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
+
+        using var ms = new MemoryStream(sentPackets[0].payload);
+        using var reader = new BinaryReader(ms);
+        var movementInfo = MovementPacketHandler.ParseMovementInfo(reader);
+        Assert.Equal(MovementFlags.MOVEFLAG_NONE, movementInfo.MovementFlags);
+        Assert.Equal(player.Position.X, movementInfo.X, 3);
+        Assert.Equal(player.Position.Y, movementInfo.Y, 3);
+        Assert.Equal(player.Position.Z, movementInfo.Z, 3);
     }
 
     [Fact]
@@ -1832,6 +2076,7 @@ public class ObjectManagerWorldSessionTests
             _fixture._woWClient.Object,
             _fixture._pathfindingClient.Object,
             NullLogger<WoWSharpObjectManager>.Instance,
+            WoWSharpEventEmitter.Instance,
             useLocalPhysics: true);
     }
 
@@ -1843,6 +2088,26 @@ public class ObjectManagerWorldSessionTests
             .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
             .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => packets.Add((opcode, payload)))
             .Returns(Task.CompletedTask);
+        sentPackets = packets;
+        return mockWorldClient;
+    }
+
+    private static Mock<IWorldClient> CreateDelayedWorldClientRecorder(
+        out List<(Opcode opcode, byte[] payload)> sentPackets,
+        Func<Opcode, int> delayMs)
+    {
+        var packets = new List<(Opcode opcode, byte[] payload)>();
+        var mockWorldClient = new Mock<IWorldClient>();
+        mockWorldClient
+            .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Returns(async (Opcode opcode, byte[] payload, CancellationToken cancellationToken) =>
+            {
+                var delay = delayMs(opcode);
+                if (delay > 0)
+                    await Task.Delay(delay, cancellationToken);
+
+                packets.Add((opcode, payload));
+            });
         sentPackets = packets;
         return mockWorldClient;
     }

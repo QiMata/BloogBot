@@ -245,6 +245,21 @@ public class ActiveSplineStepTests
     }
 
     [Fact]
+    public void Constructor_HugeClockSkew_IgnoresSeedAndStartsAtOrigin()
+    {
+        var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
+        var spline = new Spline(1, 1, 1000, SplineFlags.None, points, 1000);
+        var active = new ActiveSpline(spline, currentTimeMs: 1_000_000);
+
+        var initial = active.Step(0);
+        var mid = active.Step(500);
+
+        Assert.Equal(0f, initial.X, 0.01f);
+        Assert.Equal(5f, mid.X, 0.01f);
+        Assert.False(active.Finished);
+    }
+
+    [Fact]
     public void Step_CyclicSpline_AtExactDuration_StaysOnLastPointBeforeWrap()
     {
         var points = new List<Position> { new(0, 0, 0), new(10, 0, 0) };
@@ -416,7 +431,8 @@ public class SplineFacingTests(ObjectManagerFixture fixture) : IClassFixture<Obj
         {
             SplineType = SplineType.FacingTarget,
             SplineTargetGuid = targetGuid,
-            Facing = 0f
+            Facing = 0f,
+            ObjectManager = objectManager
         };
 
         float facing = SplineController.ResolveFacing(unit, new Position(5f, 0f, 0f), new Position(5f, 5f, 0f));

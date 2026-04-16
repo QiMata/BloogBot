@@ -500,9 +500,9 @@ public class BattlegroundQueueTaskTests
 
     private static void ResetSharedWaits(BotTask instance)
     {
-        var waitProperty = typeof(BotTask).GetProperty("Wait", BindingFlags.Instance | BindingFlags.NonPublic)
+        var waitProperty = typeof(BotTask).GetProperty("Wait", BindingFlags.Static | BindingFlags.NonPublic)
             ?? throw new MissingMemberException(typeof(BotTask).FullName, "Wait");
-        var wait = waitProperty.GetValue(instance) ?? throw new InvalidOperationException("BotTask.Wait was null.");
+        var wait = waitProperty.GetValue(null) ?? throw new InvalidOperationException("BotTask.Wait was null.");
         wait.GetType().GetMethod("RemoveAll", BindingFlags.Instance | BindingFlags.Public)
             ?.Invoke(wait, null);
     }

@@ -1,8 +1,10 @@
 using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Movement;
+using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
+using Pathfinding;
 
 namespace BotRunner.Tests.Movement;
 
@@ -49,6 +51,33 @@ public class GoToArrivalTests
                 pathfindingCalls++;
                 return [destination];
             });
+        pathfinding
+            .Setup(client => client.GetPathResult(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender>(
+                (_, _, destination, _, _, _, _) =>
+                {
+                    pathfindingCalls++;
+                    var corners = new[] { destination };
+                    return new PathfindingRouteResult(
+                        Corners: corners,
+                        Result: "ok",
+                        RawCornerCount: (uint)corners.Length,
+                        BlockedSegmentIndex: null,
+                        BlockedReason: "none",
+                        MaxAffordance: PathSegmentAffordance.Walk,
+                        PathSupported: true,
+                        StepUpCount: 0, DropCount: 0, CliffCount: 0, VerticalCount: 0,
+                        TotalZGain: 0f, TotalZLoss: 0f, MaxSlopeAngleDeg: 0f,
+                        JumpGapCount: 0, SafeDropCount: 0, UnsafeDropCount: 0, BlockedCount: 0,
+                        MaxClimbHeight: 0f, MaxGapDistance: 0f, MaxDropHeight: 0f);
+                });
         pathfinding
             .Setup(client => client.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
             .Returns(true);

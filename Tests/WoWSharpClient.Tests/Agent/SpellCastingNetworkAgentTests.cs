@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+using WoWSharpClient;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 
@@ -35,6 +36,7 @@ namespace WoWSharpClient.Tests.Agent
                     return stream;
                 });
             _agent = new SpellCastingNetworkClientComponent(_mockWorld.Object, Mock.Of<ILogger<SpellCastingNetworkClientComponent>>());
+            _agent.EventEmitter = WoWSharpEventEmitter.Instance;
         }
 
         #region Constructor Tests

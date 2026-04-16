@@ -1,4 +1,6 @@
+using GameData.Core.Enums;
 using GameData.Core.Models;
+using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
@@ -89,13 +91,19 @@ public class MovementControllerIntegrationTests
 
     private static MovementController Create(out WoWLocalPlayer player)
     {
-        var client = new WoWClient();
+        var mockClient = new Mock<WoWClient>();
+        mockClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         player = new WoWLocalPlayer(new HighGuid(new byte[] { 1, 0, 0, 0 }, new byte[] { 0, 0, 0, 0 }))
         {
             Position = new Position(1629f, -4373f, 34f),
             Facing = 0f,
             MapId = 1
         };
-        return new MovementController(client, player);
+        return new MovementController(mockClient.Object, player);
     }
 }
