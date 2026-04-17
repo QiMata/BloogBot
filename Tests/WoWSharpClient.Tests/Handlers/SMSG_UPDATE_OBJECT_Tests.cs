@@ -99,6 +99,67 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.All(gameObjects, go => Assert.True(go.DisplayId > 0,
                 $"Game object GUID={go.Guid} has DisplayId=0, expected a valid display ID."));
         }
+
+        [Fact]
+        public void NearObjects_RemovesStaleCachedObjectsBeforeCreateBlocksArrive()
+        {
+            const ulong guid = 0xF11000000000BEEFul;
+            var objectManager = WoWSharpObjectManager.Instance;
+
+            objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+                guid,
+                WoWSharpObjectManager.ObjectUpdateOperation.Add,
+                WoWObjectType.GameObj,
+                null,
+                []));
+            UpdateProcessingHelper.DrainPendingUpdates();
+            Assert.NotNull(objectManager.GetObjectByGuid(guid));
+
+            ObjectUpdateHandler.HandleUpdateObject(Opcode.SMSG_UPDATE_OBJECT, BuildGuidListPacket(ObjectUpdateType.NEAR_OBJECTS, guid), ctx);
+            UpdateProcessingHelper.DrainPendingUpdates();
+
+            Assert.Null(objectManager.GetObjectByGuid(guid));
+        }
+
+        private static byte[] BuildGuidListPacket(ObjectUpdateType updateType, params ulong[] guids)
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write(1u); // blockCount
+            writer.Write((byte)0); // leading flag byte consumed by WoW.exe 0x4651A0 and our parser
+            writer.Write((byte)updateType);
+            writer.Write((uint)guids.Length);
+
+            foreach (var guid in guids)
+            {
+                WritePackedGuid(writer, guid);
+            }
+
+            return ms.ToArray();
+        }
+
+        private static void WritePackedGuid(BinaryWriter writer, ulong guid)
+        {
+            byte mask = 0;
+            Span<byte> bytes = stackalloc byte[8];
+            for (int i = 0; i < 8; i++)
+            {
+                bytes[i] = (byte)((guid >> (8 * i)) & 0xFF);
+                if (bytes[i] != 0)
+                {
+                    mask |= (byte)(1 << i);
+                }
+            }
+
+            writer.Write(mask);
+            for (int i = 0; i < 8; i++)
+            {
+                if ((mask & (1 << i)) != 0)
+                {
+                    writer.Write(bytes[i]);
+                }
+            }
+        }
     }
 
     /// <summary>

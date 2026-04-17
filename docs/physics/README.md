@@ -47,6 +47,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [0x401BC0_disasm.txt](./0x401BC0_disasm.txt) | Raw deferred world-entry callback disassembly |
 | [0x401DE0_disasm.txt](./0x401DE0_disasm.txt) | Raw `SMSG_LOGIN_VERIFY_WORLD` handler disassembly |
 | [msg_move_worldport_ack.md](./msg_move_worldport_ack.md) | World-entry and `MSG_MOVE_WORLDPORT_ACK` send conditions |
+| [0x4651A0_disasm.txt](./0x4651A0_disasm.txt) | Raw `SMSG_UPDATE_OBJECT` top-level dispatcher disassembly |
 | [0x601580_disasm.txt](./0x601580_disasm.txt) | Raw movement-dispatch wrapper below `0x603BB0` |
 | [0x602780_disasm.txt](./0x602780_disasm.txt) | Raw force-speed/root/flag dispatch wrapper below `0x603F90` |
 | [0x603F90_disasm.txt](./0x603F90_disasm.txt) | Raw top-level wrapper for force-speed/root/flag opcodes |
@@ -69,7 +70,9 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [smsg_move_flag_toggle_handler.md](./smsg_move_flag_toggle_handler.md) | Water-walk, feather-fall, and hover toggle notes |
 | [msg_move_teleport_handler.md](./msg_move_teleport_handler.md) | Teleport apply vs teleport ACK send path |
 | [packet_ack_timing.md](./packet_ack_timing.md) | Q1-Q5 timing answers for knockback, speed, teleport, worldport, and spline/monster movement |
+| [smsg_update_object_handler.md](./smsg_update_object_handler.md) | `SMSG_UPDATE_OBJECT` multi-pass dispatch and type-`5` findings |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
+| [cgobject_layout.md](./cgobject_layout.md) | Confirmed typed storage offsets from `0x466C70` and related helpers |
 | [movement_counter_tracking.md](./movement_counter_tracking.md) | `local + 0x128` / `local + 0x12C` counter trace |
 
 ## Physics Pipeline Summary

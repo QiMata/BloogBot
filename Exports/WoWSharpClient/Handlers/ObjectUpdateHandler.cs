@@ -55,6 +55,9 @@ namespace WoWSharpClient.Handlers
                     case ObjectUpdateType.OUT_OF_RANGE_OBJECTS:
                         ParseOutOfRangeObjects(reader, ctx);
                         break;
+                    case ObjectUpdateType.NEAR_OBJECTS:
+                        ParseNearObjects(reader, ctx);
+                        break;
                     default:
                         throw new Exception($"Unhandled update type: {updateType}");
                 }
@@ -174,6 +177,15 @@ namespace WoWSharpClient.Handlers
         }
 
         private static void ParseOutOfRangeObjects(BinaryReader reader, HandlerContext ctx)
+            => ParseGuidListRemoval(reader, ctx);
+
+        private static void ParseNearObjects(BinaryReader reader, HandlerContext ctx)
+            // WoW.exe routes type 5 through the same top-level GUID-list handler as type 4
+            // (`0x4651A0 -> 0x465FD0`), and its type-5 prepass (`0x467230 -> 0x4644F0`)
+            // removes any stale cached object before the create blocks arrive.
+            => ParseGuidListRemoval(reader, ctx);
+
+        private static void ParseGuidListRemoval(BinaryReader reader, HandlerContext ctx)
         {
             uint count = reader.ReadUInt32();
             for (int j = 0; j < count; j++)

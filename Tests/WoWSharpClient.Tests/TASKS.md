@@ -14,26 +14,23 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.3 timing parity is now test-backed across knockback, speed, root, and server-controlled flag ACKs; parity bundles stayed green`
+- Pass result: `P2.4 kickoff added binary-backed coverage for the type-5 NEAR_OBJECTS gap and parity bundles stayed green`
 - Last delta:
-  - Expanded the P2.3 deterministic timing suite beyond knockback. `ObjectManagerWorldSessionTests` now asserts that speed changes, server-controlled movement-flag toggles, direct root/unroot, compressed root/unroot, and compressed speed/flag variants all stage without mutating or ACKing inline and only apply on the next `MovementController.Update()` tick.
-  - The first timing sweep failed `26/26`, which cleanly proved the current inline BG divergence for the remaining queue-first families. After the deferred queue change in `WoWSharpObjectManager`, the same sweep passed `26/26`, and the added direct root/unroot timing coverage passed `4/4`.
+  - Added `NearObjects_RemovesStaleCachedObjectsBeforeCreateBlocksArrive`, a deterministic regression that seeds a cached object, replays a synthetic type-`5` GUID-list block, and proves the object is removed instead of being left stale in the ObjectManager.
+  - The test is anchored to the fresh WoW.exe object-update capture rather than protocol heuristics: `0x4651A0` routes type `5` through the same direct GUID-list handler as type `4`, and `0x467230 -> 0x4644F0` proves the prepass actively removes stale cached objects before create blocks follow.
   - Validation:
-    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test build runs.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~ServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate" --logger "console;verbosity=minimal"` -> first run `failed (26/26)` before the fix; final rerun `passed (26/26)`.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test build run.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NearObjects_RemovesStaleCachedObjectsBeforeCreateBlocksArrive" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
-    - `Exports/WoWSharpClient/Movement/MovementController.cs`
-    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
-    - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+    - `Tests/WoWSharpClient.Tests/Handlers/SMSG_UPDATE_OBJECT_Tests.cs`
+    - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "HandleUpdateObject|ObjectStateUpdate|ObjectUpdateOperation|CGObject_C|CGUnit_C|CGPlayer_C" Exports/WoWSharpClient docs/physics C:/Users/lrhod/.claude/projects/e--repos-Westworld-of-Warcraft/memory/wow_exe_physics_decompilation.md -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "466590|466320|466A20|ObjectUpdateMutationOrderTests|NEAR_OBJECTS" docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Added `WorldportAck_MatchesWoWExeBytes` to `Parity/AckBinaryParityTests.cs` and captured live `MSG_MOVE_WORLDPORT_ACK` fixtures via an FG cross-map teleport harness. The new fixtures (`20260417_161214_670_0001.json`, `20260417_161217_932_0002.json`) both prove the worldport ACK is just `DC000000`.
   - `AckParity` now passes for the live teleport/worldport corpus entries (`4/4` in the current corpus). The remaining P2.2 gap is fixture acquisition for the force-speed/root/flag/knockback/raw-position/flight ACK set.
   - Validation:
