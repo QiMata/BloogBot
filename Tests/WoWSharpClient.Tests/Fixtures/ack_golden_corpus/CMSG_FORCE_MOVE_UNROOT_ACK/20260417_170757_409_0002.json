@@ -1,0 +1,33 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T17:07:57.4091094Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 235,
+  "OpcodeName": "CMSG_FORCE_MOVE_UNROOT_ACK",
+  "PacketSize": 60,
+  "PacketBytesHex": "EB000000BE000000000000000200000000200000D4D4A207CDACCB4433AB88C59C1BFA410DFBE53E0000000000000000079B663F1F53DE3E00000000",
+  "Guid": 190,
+  "Counter": 2,
+  "ClientTimeMs": 128111828,
+  "Speed": null,
+  "Movement": {
+    "MovementFlags": 8192,
+    "ClientTimeMs": 128111828,
+    "X": 1629.4,
+    "Y": -4373.4,
+    "Z": 31.263481,
+    "Facing": 0.449181,
+    "TransportGuid": null,
+    "TransportOffsetX": null,
+    "TransportOffsetY": null,
+    "TransportOffsetZ": null,
+    "TransportOrientation": null,
+    "SwimPitch": null,
+    "FallTimeMs": 0,
+    "JumpVerticalSpeed": 0,
+    "JumpCosAngle": 0.900803,
+    "JumpSinAngle": 0.4342279,
+    "JumpHorizontalSpeed": 0,
+    "SplineElevation": null
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T17:04:15.7769099Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 720,
+  "OpcodeName": "CMSG_MOVE_WATER_WALK_ACK",
+  "PacketSize": 64,
+  "PacketBytesHex": "D0020000BE0000000000000006000000002000001B739F07CDACCB4433AB88C5D80D01420DFBE53E0000000000000000079B663F1F53DE3E0000000000000000",
+  "Guid": 190,
+  "Counter": 6,
+  "ClientTimeMs": 127890203,
+  "Speed": null,
+  "Movement": {
+    "MovementFlags": 8192,
+    "ClientTimeMs": 127890203,
+    "X": 1629.4,
+    "Y": -4373.4,
+    "Z": 32.26352,
+    "Facing": 0.449181,
+    "TransportGuid": null,
+    "TransportOffsetX": null,
+    "TransportOffsetY": null,
+    "TransportOffsetZ": null,
+    "TransportOrientation": null,
+    "SwimPitch": null,
+    "FallTimeMs": 0,
+    "JumpVerticalSpeed": 0,
+    "JumpCosAngle": 0.900803,
+    "JumpSinAngle": 0.4342279,
+    "JumpHorizontalSpeed": 0,
+    "SplineElevation": null
+  }
+}

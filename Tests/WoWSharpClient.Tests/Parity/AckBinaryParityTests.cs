@@ -38,7 +38,28 @@ public sealed class AckBinaryParityTests
             Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK,
             Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
             Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK,
-            Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK
+            Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
+            Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,
+            Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK
+        };
+
+        foreach (var opcode in opcodes)
+        {
+            foreach (var fixture in LoadFixtures(opcode))
+                yield return new object[] { fixture };
+        }
+    }
+
+    public static IEnumerable<object[]> ForceMoveAckFixtures()
+    {
+        var opcodes = new[]
+        {
+            Opcode.CMSG_FORCE_MOVE_ROOT_ACK,
+            Opcode.CMSG_FORCE_MOVE_UNROOT_ACK,
+            Opcode.CMSG_MOVE_WATER_WALK_ACK,
+            Opcode.CMSG_MOVE_HOVER_ACK,
+            Opcode.CMSG_MOVE_FEATHER_FALL_ACK,
+            Opcode.CMSG_MOVE_KNOCK_BACK_ACK
         };
 
         foreach (var opcode in opcodes)
@@ -99,6 +120,35 @@ public sealed class AckBinaryParityTests
             fixture.Speed.Value);
 
         var actualBytes = EncodeRawClientPacket((Opcode)(uint)fixture.Opcode, payload);
+        var expectedBytes = Convert.FromHexString(fixture.PacketBytesHex);
+
+        Assert.Equal(expectedBytes, actualBytes);
+    }
+
+    [Theory]
+    [MemberData(nameof(ForceMoveAckFixtures))]
+    [Trait("Category", "AckParity")]
+    public void ForceMoveAck_MatchesWoWExeBytes(AckCorpusFixture fixture)
+    {
+        Assert.NotNull(fixture.Guid);
+        Assert.NotNull(fixture.Counter);
+        Assert.NotNull(fixture.ClientTimeMs);
+        Assert.NotNull(fixture.Movement);
+
+        var player = BuildPlayerFromFixture(fixture);
+        var opcode = (Opcode)(uint)fixture.Opcode;
+        var payload = IsMovementFlagToggleAck(opcode)
+            ? MovementPacketHandler.BuildMovementFlagToggleAck(
+                player,
+                fixture.Counter.Value,
+                fixture.ClientTimeMs.Value,
+                ResolveToggleApply(fixture, opcode))
+            : MovementPacketHandler.BuildForceMoveAck(
+                player,
+                fixture.Counter.Value,
+                fixture.ClientTimeMs.Value);
+
+        var actualBytes = EncodeRawClientPacket(opcode, payload);
         var expectedBytes = Convert.FromHexString(fixture.PacketBytesHex);
 
         Assert.Equal(expectedBytes, actualBytes);
@@ -168,6 +218,26 @@ public sealed class AckBinaryParityTests
         return player;
     }
 
+    private static bool IsMovementFlagToggleAck(Opcode opcode)
+        => opcode is Opcode.CMSG_MOVE_WATER_WALK_ACK
+            or Opcode.CMSG_MOVE_HOVER_ACK
+            or Opcode.CMSG_MOVE_FEATHER_FALL_ACK;
+
+    private static bool ResolveToggleApply(AckCorpusFixture fixture, Opcode opcode)
+    {
+        if (fixture.ToggleValue.HasValue)
+            return fixture.ToggleValue.Value != 0f;
+
+        var movement = Assert.IsType<MovementSnapshot>(fixture.Movement);
+        return opcode switch
+        {
+            Opcode.CMSG_MOVE_WATER_WALK_ACK => ((MovementFlags)movement.MovementFlags).HasFlag(MovementFlags.MOVEFLAG_WATERWALKING),
+            Opcode.CMSG_MOVE_HOVER_ACK => ((MovementFlags)movement.MovementFlags).HasFlag(MovementFlags.MOVEFLAG_HOVER),
+            Opcode.CMSG_MOVE_FEATHER_FALL_ACK => ((MovementFlags)movement.MovementFlags).HasFlag(MovementFlags.MOVEFLAG_SAFE_FALL),
+            _ => throw new InvalidOperationException($"Opcode {opcode} is not a movement flag toggle ACK.")
+        };
+    }
+
     private static string ResolveRepoRoot()
     {
         var envRoot = Environment.GetEnvironmentVariable("WWOW_REPO_ROOT");
@@ -199,6 +269,7 @@ public sealed class AckBinaryParityTests
         public uint? Counter { get; init; }
         public uint? ClientTimeMs { get; init; }
         public float? Speed { get; init; }
+        public float? ToggleValue { get; init; }
         public MovementSnapshot? Movement { get; init; }
     }
 

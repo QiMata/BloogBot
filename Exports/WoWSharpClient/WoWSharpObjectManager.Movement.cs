@@ -463,7 +463,8 @@ namespace WoWSharpClient
         // - SMSG_MOVE_WATER_WALK / SMSG_MOVE_LAND_WALK -> CMSG_MOVE_WATER_WALK_ACK
         // - SMSG_MOVE_SET_HOVER / SMSG_MOVE_UNSET_HOVER -> CMSG_MOVE_HOVER_ACK
         // - SMSG_MOVE_FEATHER_FALL / SMSG_MOVE_NORMAL_FALL -> CMSG_MOVE_FEATHER_FALL_ACK
-        // Payload is packed guid + counter on 1.12.1, and the ACK echoes full MovementInfo.
+        // WoW.exe NetClient::Send 0x005379A0 captures show this family appends a trailing
+        // float marker: 1.0f for set/apply, 0.0f for clear/remove.
 
         private void EventEmitter_OnMoveWaterWalk(object? sender, RequiresAcknowledgementArgs e)
             => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: true, Opcode.CMSG_MOVE_WATER_WALK_ACK);
@@ -497,10 +498,11 @@ namespace WoWSharpClient
 
             _ = _woWClient.SendMSGPackedAsync(
                 ackOpcode,
-                MovementPacketHandler.BuildForceMoveAck(
+                MovementPacketHandler.BuildMovementFlagToggleAck(
                     player,
                     e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
+                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
+                    apply
                 )
             );
         }

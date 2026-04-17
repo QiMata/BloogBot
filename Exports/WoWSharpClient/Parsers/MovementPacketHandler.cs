@@ -125,6 +125,28 @@ namespace WoWSharpClient.Parsers
         }
 
         /// <summary>
+        /// WoW.exe 0x005379A0 captures show that water-walk / hover / feather-fall ACKs
+        /// append a trailing float toggle marker after the echoed MovementInfo:
+        /// 1.0f when the flag is being applied, 0.0f when it is being cleared.
+        /// </summary>
+        internal static byte[] BuildMovementFlagToggleAck(WoWLocalPlayer player,
+                                                          uint movementCounter,
+                                                          uint clientTimeMs,
+                                                          bool apply)
+        {
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+
+            w.Write(player.Guid);
+            w.Write(movementCounter);
+            w.Write(BuildMovementInfoBuffer(player,
+                                            clientTimeMs,
+                                            (uint)player.FallTime));
+            w.Write(apply ? 1.0f : 0.0f);
+            return ms.ToArray();
+        }
+
+        /// <summary>
         /// ACK for speed changes: full 8-byte GUID + counter + MovementInfo + float speed
         /// </summary>
         internal static byte[] BuildForceSpeedChangeAck(WoWLocalPlayer player,

@@ -14,28 +14,32 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `AckParity is live-backed and green for teleport/worldport plus four force-speed ACK opcodes`
+- Pass result: `AckParity is live-backed and green for teleport/worldport, four force-speed ACKs, root/unroot, and three movement-flag toggle ACKs`
 - Last delta:
-  - Extended `Parity/AckBinaryParityTests.cs` to deserialize the captured movement snapshot and rebuild `BuildForceSpeedChangeAck(...)` payloads directly from corpus state. The class now has live-backed byte-parity coverage for `CMSG_FORCE_WALK_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK`, and `CMSG_FORCE_SWIM_SPEED_CHANGE_ACK` in addition to teleport/worldport.
-  - Added representative live fixtures under `Fixtures/ack_golden_corpus/` for those four force-speed ACK opcodes using the new FG GM-command probe harness. The remaining P2.2 gap is now 8 wired ACK opcodes: swim-back, turn-rate, root, unroot, water-walk, hover, feather-fall, and knockback.
+  - Extended `Parity/AckBinaryParityTests.cs` to load force-move corpus entries and distinguish plain root/unroot ACKs from the movement-flag toggle family. The suite now has live-backed coverage for root/unroot plus water-walk / hover / feather-fall in addition to teleport/worldport and the earlier force-speed ACKs.
+  - Live `WoW.exe NetClient::Send` (`0x005379A0`) fixtures proved that `CMSG_MOVE_WATER_WALK_ACK`, `CMSG_MOVE_HOVER_ACK`, and `CMSG_MOVE_FEATHER_FALL_ACK` append a trailing float toggle marker after `MovementInfo`. Updated `MovementPacketHandler.BuildMovementFlagToggleAck(...)`, the FG corpus recorder, and `ObjectManagerWorldSessionTests` so the managed path now writes and asserts the exact `1.0f` apply / `0.0f` clear contract.
   - Validation:
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify aspeed 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify aspeed 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify bwalk 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify bwalk 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_REPO_ROOT='E:\repos\Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 1706'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 1706'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 339'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 339'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (19/19)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
-    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
     - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
     - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_WALK_SPEED_CHANGE_ACK/20260417_163614_067_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_SPEED_CHANGE_ACK/20260417_163614_076_0002.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK/20260417_164150_738_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_SPEED_CHANGE_ACK/20260417_163614_079_0003.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_ROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_UNROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_WATER_WALK_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_HOVER_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_FEATHER_FALL_ACK/`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
-    - `docs/TASKS.md`
+    - `Exports/WoWSharpClient/Parsers/MovementPacketHandler.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
   - Next command:
-    - `rg -n "aura|root|water walk|hover|feather fall|knockback|turn rate" Tests/BotRunner.Tests docs Services -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK|CMSG_FORCE_TURN_RATE_CHANGE_ACK|CMSG_MOVE_KNOCK_BACK_ACK|knockback|turn rate|bwalk|swim back" docs/physics Exports/WoWSharpClient Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Added `WorldportAck_MatchesWoWExeBytes` to `Parity/AckBinaryParityTests.cs` and captured live `MSG_MOVE_WORLDPORT_ACK` fixtures via an FG cross-map teleport harness. The new fixtures (`20260417_161214_670_0001.json`, `20260417_161217_932_0002.json`) both prove the worldport ACK is just `DC000000`.
   - `AckParity` now passes for the live teleport/worldport corpus entries (`4/4` in the current corpus). The remaining P2.2 gap is fixture acquisition for the force-speed/root/flag/knockback/raw-position/flight ACK set.
   - Validation:
@@ -71,6 +75,45 @@
     - `docs/TASKS.md`
   - Next command:
     - `rg -n "MSG_MOVE_WORLDPORT_ACK|SMSG_NEW_WORLD|SMSG_TRANSFER_PENDING|ForegroundAckCorpusRecorder" Services/ForegroundBotRunner Exports/WoWSharpClient Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Added deterministic parity-tagged stop/use ordering coverage for the BG interaction trigger path:
+    - `ObjectManagerWorldSessionTests.ForceStopImmediate_BlocksStopPacketBeforeGameObjectUse` proves `ForceStopImmediate()` completes `MSG_MOVE_STOP` before `CMSG_GAMEOBJ_USE` can be recorded.
+    - The coverage stays in `Category=MovementParity` with the existing `MovementHandler -> WoWSharpObjectManager -> MovementController` server-trigger bundle.
+    - `SpellHandlerTests.HandleCastFailed_TryAgainReason_FiresNamedErrorMessage` pins `SMSG_CAST_FAILED` reason `0x7A` as `TRY_AGAIN`, matching VMaNGOS `SPELL_FAILED_TRY_AGAIN`.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellHandlerTests.HandleCastFailed" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - Files changed:
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+    - `Tests/WoWSharpClient.Tests/Handlers/SpellHandlerTests.cs`
+    - `Exports/WoWSharpClient/Movement/MovementController.cs`
+    - `Exports/WoWSharpClient/InventoryManager.cs`
+    - `Exports/WoWSharpClient/SpellcastingManager.cs`
+    - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+    - `Tests/WoWSharpClient.Tests/TASKS_ARCHIVE.md`
+    - `docs/TASKS.md`
+  - Next command:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"`
+  - Session 343 closed the centralized scene-data-service gap that was still leaking into live dungeon/raid entry:
+  - Session 343 closed the centralized scene-data-service gap that was still leaking into live dungeon/raid entry:
+    - `SceneTileSocketServer` now synthesizes missing tile responses from sibling `.scene` sources and returns success-empty only when the source scene has no geometry in that tile.
+    - `SceneTileSocketServerTests` now cover failure-without-source, synthesize-and-cache-from-source, and empty-success-from-source on top of the earlier filename/header/cache tests.
+    - `SceneDataClientIntegrationTests` now directly prove the Docker service can synthesize `409_31_33`, serve `409_30_33`, and satisfy the full Molten Core/Strath 3x3 entry neighborhoods.
+    - Validation:
+      - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`
+      - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map409_31_33_TileCanBeSynthesizedFromSceneSource|FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_Map409_30_33_TileReturnsSceneData|FullyQualifiedName~SceneDataClientIntegrationTests.LiveService_DungeonAndRaidEntryNeighborhoods_ReturnSceneData" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - Session 342 added direct deterministic coverage for the remaining Ratchet fishing protocol mismatch:
+    - `WoWSharpObjectManagerCombatTests.CastSpell_FishingSpell_IgnoresSelectedTargetAndSendsNoTargetPayload` now proves fishing keeps the no-target cast payload instead of a destination payload.
+    - The corresponding live compare passed on the split-service Docker stack after the fix, with BG now reaching the same cast/channel/loot packet milestones as FG.
+    - Validation:
+      - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+      - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_ComparePacketSequences_BgMatchesFgReference" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ratchet_fg_bg_packet_sequence_compare_after_fishing_cast_packet_fix.trx"` -> `passed (1/1)`
+  - Session 341 added combat-state regressions for the remaining mining-route blocker:
+    - `WoWSharpObjectManagerCombatTests` now proves confirmed same-target melee does not resend `CMSG_ATTACKSWING`, pending-but-unconfirmed starts still retry after timeout, and stop clears the confirmation latch.
+    - `SpellHandlerTests` now pin confirm-on-attack-start, confirm-on-attacker-state-update, and clear-on-attack-stop/cancel behavior.
+    - `WorldClientAttackErrorTests` now verify attack-swing rejection opcodes clear both pending and confirmed melee state once handler context is wired.
+    - Validation:
+      - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests|FullyQualifiedName~SpellHandlerTests.HandleAttackStart_LocalPlayerConfirmsPendingAutoAttack|FullyQualifiedName~SpellHandlerTests.HandleAttackStop_LocalPlayerClearsPendingAutoAttack|FullyQualifiedName~SpellHandlerTests.HandleCancelCombat_LocalPlayerClearsTrackedAutoAttackState|FullyQualifiedName~SpellHandlerTests.HandleAttackerStateUpdate_OurSwingConfirmsPendingAutoAttack|FullyQualifiedName~WorldClientAttackErrorTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
   - Session 300 added direct live tile assertions in `SceneDataClientIntegrationTests` for the previously missing startup keys:
     - `LiveService_Map0_48_32_TileExists`
     - `LiveService_Map1_28_41_TileExists`
@@ -156,7 +199,7 @@
   - `Exports/WoWSharpClient/Movement/MovementController.cs`
   - `Tests/WoWSharpClient.Tests/Movement/MovementControllerRecordedFrameTests.cs`
 - Next command:
-  - `$env:WWOW_DATA_DIR='E:\repos\Westworld of Warcraft\Data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullyPreparedRaids_MountAndReachFirstObjective" --logger "console;verbosity=normal"`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Dungeons.StratholmeLivingTests.STRAT_LIVE_GroupFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=strath_living_entry_post_scene_service_source_fallback.trx"`
 
 ## Prior Session
 - Last updated: `2026-03-23`

@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T17:04:09.6490483Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 199,
+  "OpcodeName": "MSG_MOVE_TELEPORT_ACK",
+  "PacketSize": 20,
+  "PacketBytesHex": "C7000000BE00000000000000000000002E5B9F07",
+  "Guid": 190,
+  "Counter": 0,
+  "ClientTimeMs": 127884078,
+  "Speed": null,
+  "Movement": null
+}

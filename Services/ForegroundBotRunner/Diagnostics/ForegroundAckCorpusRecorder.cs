@@ -140,6 +140,14 @@ public sealed class ForegroundAckCorpusRecorder : IDisposable
             return entry;
         }
 
+        if (IsMovementFlagToggleAckOpcode(opcode))
+        {
+            entry.Movement = ParseMovementSnapshot(rawBytes.AsSpan(16, rawBytes.Length - 20));
+            entry.ClientTimeMs = entry.Movement?.ClientTimeMs;
+            entry.ToggleValue = BitConverter.ToSingle(rawBytes, rawBytes.Length - 4);
+            return entry;
+        }
+
         entry.Movement = ParseMovementSnapshot(rawBytes.AsSpan(16));
         entry.ClientTimeMs = entry.Movement?.ClientTimeMs;
         return entry;
@@ -200,6 +208,11 @@ public sealed class ForegroundAckCorpusRecorder : IDisposable
             or Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK
             or Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK;
 
+    private static bool IsMovementFlagToggleAckOpcode(Opcode opcode)
+        => opcode is Opcode.CMSG_MOVE_WATER_WALK_ACK
+            or Opcode.CMSG_MOVE_HOVER_ACK
+            or Opcode.CMSG_MOVE_FEATHER_FALL_ACK;
+
     private static string ResolveOutputDirectory()
     {
         var explicitPath = Environment.GetEnvironmentVariable(OutputDirEnvVar);
@@ -233,6 +246,7 @@ public sealed class ForegroundAckCorpusRecorder : IDisposable
         public uint? Counter { get; set; }
         public uint? ClientTimeMs { get; set; }
         public float? Speed { get; set; }
+        public float? ToggleValue { get; set; }
         public MovementSnapshot? Movement { get; set; }
     }
 

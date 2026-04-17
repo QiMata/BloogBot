@@ -819,6 +819,7 @@ public class ObjectManagerWorldSessionTests
             Assert.True(ackMovement.MovementFlags.HasFlag(flag));
         else
             Assert.False(ackMovement.MovementFlags.HasFlag(flag));
+        Assert.Equal(apply ? 1.0f : 0.0f, reader.ReadSingle(), 5);
         Assert.Equal(ms.Length, ms.Position);
     }
 
@@ -929,6 +930,7 @@ public class ObjectManagerWorldSessionTests
             Assert.True(ackMovement.MovementFlags.HasFlag(flag));
         else
             Assert.False(ackMovement.MovementFlags.HasFlag(flag));
+        Assert.Equal(apply ? 1.0f : 0.0f, reader.ReadSingle(), 5);
         Assert.Equal(ms.Length, ms.Position);
     }
 

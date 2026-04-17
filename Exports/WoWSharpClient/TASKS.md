@@ -16,11 +16,45 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-03` Redirect parity test captures matched FG/BG traces with packet sidecars (session 188).
 - [x] `WSC-PAR-04` BG `SET_FACING` on mid-route redirects: removed `!wasHorizontallyMoving` guard so BG sends `MSG_MOVE_SET_FACING` during movement, matching FG. Deterministic test `MoveTowardWithFacing_AlreadyMovingForward_SendsSetFacingOnRedirect` pins the fix (session 188).
 - [x] `WSC-PAR-05` `MSG_MOVE_SET_FACING` packet timing now matches WoW.exe send semantics: removed the synthetic pre-facing heartbeat from `MovementController.SendFacingUpdate(...)` and replaced the idle/mid-move dampening split with the binary-backed `0.1 rad` gate from `0x60E1EA` / `0x80C408` (session 188).
+- [x] `WSC-PAR-06` BG server-packet trigger parity is part of the deterministic movement bundle: force-speed/root/flag-toggle/compressed-trigger tests plus knockback `ObjectManager -> MovementController` consumption now run under `Category=MovementParity` (2026-04-15).
+- [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
-- Last updated: `2026-04-09 (session 308)`
-- Pass result: `MovementController no longer mutates movement/path state for stale-forward recovery; it now stays parity-focused and emits caller-owned stuck signals only`
+- Last updated: `2026-04-17`
+- Pass result: `BG ACK parity now matches live WoW.exe for root/unroot plus water-walk/hover/feather-fall`
 - Last delta:
+  - Extended the ACK parity surface from teleport/worldport and speed-change ACKs into the force-move family. `AckBinaryParityTests` now rebuild root/unroot plus water-walk / hover / feather-fall ACKs directly from the captured WoW.exe corpus state.
+  - Live `WoW.exe NetClient::Send` (`0x005379A0`) captures proved that `CMSG_MOVE_WATER_WALK_ACK`, `CMSG_MOVE_HOVER_ACK`, and `CMSG_MOVE_FEATHER_FALL_ACK` append a trailing float toggle marker after `MovementInfo`: `1.0f` while the flag is being applied and `0.0f` while it is being cleared.
+  - Added `MovementPacketHandler.BuildMovementFlagToggleAck(...)`, updated `WoWSharpObjectManager.SendMovementFlagToggleAck(...)` to use it, and extended deterministic object-manager assertions so the toggle value is pinned alongside the existing root/unroot ACK payload checks.
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Exports/WoWSharpClient/Parsers/MovementPacketHandler.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Exports/WoWSharpClient/TASKS.md`
+  - Next command:
+    - `rg -n "CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK|CMSG_FORCE_TURN_RATE_CHANGE_ACK|CMSG_MOVE_KNOCK_BACK_ACK" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics -g '!**/bin/**' -g '!**/obj/**'`
+  - Session 342 closed the remaining Ratchet packet-sequence blocker:
+  - Session 342 closed the remaining Ratchet packet-sequence blocker:
+    - `SpellcastingManager.CastSpell(...)` no longer forces fishing through `CastSpellAtLocation(...)`; fishing now keeps the no-target `CMSG_CAST_SPELL` payload shape.
+    - `WoWSharpObjectManagerCombatTests.CastSpell_FishingSpell_IgnoresSelectedTargetAndSendsNoTargetPayload` pins the corrected packet contract deterministically.
+    - The latest live compare now shows BG reaching the same cast/channel/loot packet milestones as FG (`SMSG_SPELL_GO`, `MSG_CHANNEL_START`, `SMSG_GAMEOBJECT_CUSTOM_ANIM`, `CMSG_GAMEOBJ_USE`, `SMSG_LOOT_RESPONSE`).
+    - Validation:
+      - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (5/5)`.
+      - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_ComparePacketSequences_BgMatchesFgReference" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ratchet_fg_bg_packet_sequence_compare_after_fishing_cast_packet_fix.trx"` -> `passed (1/1)`.
+  - Session 341 closed the combat-side blocker behind the remaining mining-route timeout:
+    - `SpellcastingManager` now remembers confirmed melee auto-attack per target and treats repeated same-target `StartMeleeAttack()` calls as a no-op after `SMSG_ATTACKSTART` / `ATTACKER_STATE_UPDATE` has already confirmed the swing.
+    - Rejection, stop, and cancel paths now clear both pending and confirmed melee-start state so retries still occur when the server actually invalidates the engage.
+    - Added deterministic regression coverage in `WoWSharpObjectManagerCombatTests`, `SpellHandlerTests`, and `WorldClientAttackErrorTests`.
+    - Validation:
+      - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests|FullyQualifiedName~SpellHandlerTests.HandleAttackStart_LocalPlayerConfirmsPendingAutoAttack|FullyQualifiedName~SpellHandlerTests.HandleAttackStop_LocalPlayerClearsPendingAutoAttack|FullyQualifiedName~SpellHandlerTests.HandleCancelCombat_LocalPlayerClearsTrackedAutoAttackState|FullyQualifiedName~SpellHandlerTests.HandleAttackerStateUpdate_OurSwingConfirmsPendingAutoAttack|FullyQualifiedName~WorldClientAttackErrorTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`.
+      - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~AtomicBotTaskTests" --logger "console;verbosity=minimal"` -> `passed (99/99)`.
+      - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests.Mining_BG_GatherCopperVein" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=mining_bg_gather_route_post_melee_confirm_fix.trx"` -> `passed (1/1)`.
   - Session 308 tightened parity ownership per BG contract:
     - Removed in-controller stale-forward forced recovery behavior (no movement-flag rewrites, no forced strafe arming, no steering-target clearing as recovery policy).
     - `ObserveStaleForwardAndRecover(...)` now emits severity callbacks only; BotRunner/upper layers keep recovery ownership.

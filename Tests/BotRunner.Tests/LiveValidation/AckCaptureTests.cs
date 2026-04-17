@@ -101,6 +101,7 @@ public sealed class AckCaptureTests
     {
         var command = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_GM_COMMAND");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(command), "WWOW_ACK_CAPTURE_GM_COMMAND not set");
+        var prepCommands = ParseCommands(Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_PREP_GM_COMMANDS"));
         var resetCommand = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_RESET_GM_COMMAND");
 
         var fgAccount = _bot.FgAccountName!;
@@ -117,6 +118,13 @@ public sealed class AckCaptureTests
             progressLabel: "FG ack-probe-org",
             xyToleranceYards: 10f);
         Assert.True(settled, "FG bot should settle in Orgrimmar before the ACK probe command.");
+
+        foreach (var prepCommand in prepCommands)
+        {
+            _output.WriteLine($"[FG-ACK-PROBE] Prep GM command: {prepCommand}");
+            var prepTrace = await _bot.SendGmChatCommandTrackedAsync(fgAccount, prepCommand, captureResponse: true);
+            Assert.Equal(ResponseResult.Success, prepTrace.DispatchResult);
+        }
 
         var corpusRoot = ResolveCorpusOutputDirectory();
         var baselineCounts = corpusRoot != null
@@ -202,6 +210,17 @@ public sealed class AckCaptureTests
 
         return raw
             .Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> ParseCommands(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return Array.Empty<string>();
+
+        return raw
+            .Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

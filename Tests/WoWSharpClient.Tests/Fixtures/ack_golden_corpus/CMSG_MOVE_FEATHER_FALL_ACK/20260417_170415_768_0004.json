@@ -1,0 +1,33 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T17:04:15.7684244Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 719,
+  "OpcodeName": "CMSG_MOVE_FEATHER_FALL_ACK",
+  "PacketSize": 48,
+  "PacketBytesHex": "CF020000BE0000000000000004000000000000500B739F07CDACCB4433AB88C5D80D01420DFBE53E9E02000000000000",
+  "Guid": 190,
+  "Counter": 4,
+  "ClientTimeMs": 127890187,
+  "Speed": null,
+  "Movement": {
+    "MovementFlags": 1342177280,
+    "ClientTimeMs": 127890187,
+    "X": 1629.4,
+    "Y": -4373.4,
+    "Z": 32.26352,
+    "Facing": 0.449181,
+    "TransportGuid": null,
+    "TransportOffsetX": null,
+    "TransportOffsetY": null,
+    "TransportOffsetZ": null,
+    "TransportOrientation": null,
+    "SwimPitch": null,
+    "FallTimeMs": 670,
+    "JumpVerticalSpeed": null,
+    "JumpCosAngle": null,
+    "JumpSinAngle": null,
+    "JumpHorizontalSpeed": null,
+    "SplineElevation": null
+  }
+}

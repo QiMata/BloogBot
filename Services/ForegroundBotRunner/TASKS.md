@@ -18,7 +18,7 @@
 - [x] Re-check `ConnectionStateMachine` and inferred packet fallbacks after the hook/offset audit is complete.
 
 2. FG snapshot/runtime parity
-- [ ] Keep FG snapshot data complete and comparable with the BG path.
+- [x] Keep FG snapshot data complete and comparable with the BG path.
 - [x] Make `MovementRecorder` transport captures self-contained by resolving the active transport outside visible-object enumeration and serializing transport-local offset/orientation from the real mover pose.
 - [x] Restore descriptor-backed `Coinage`/`Copper` plus local state helpers (`InBattleground`, `HasQuestTargets`) so FG snapshots stop hardcoding those fields.
 - [x] Fix FG `SpellList` parity for learned/already-known talent spells (for example `.learn 16462` acknowledged but missing from FG snapshot spell list).
@@ -37,26 +37,29 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-17 (session 308)`
-- Pass result: `FG ACK corpus recorder captured four force-speed ACK families via the reusable GM-command probe harness`
+- Last updated: `2026-04-17 (session 309)`
+- Pass result: `FG ACK corpus recorder captured root/unroot plus water-walk/hover/feather-fall ACK families via the reusable GM-command probe harness`
 - Last delta:
-  - Session 308 proved the existing `PacketLogger` + `ForegroundAckCorpusRecorder` plumbing is reusable beyond worldport capture. The new BotRunner-side GM-command probe harness drove FG `.modify aspeed 2` / `.modify aspeed 1` and `.modify bwalk 2` / `.modify bwalk 1`, and FG captured live `CMSG_FORCE_WALK_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK`, and `CMSG_FORCE_SWIM_SPEED_CHANGE_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`).
-  - The service-side conclusion is now broader: the current ACK recorder/hook timing is sufficient not only for post-worldport transfers, but also for server-driven speed-family movement ACKs triggered after FG is actionable.
+  - Session 309 extended the reusable BotRunner-side ACK probe harness with `WWOW_ACK_CAPTURE_PREP_GM_COMMANDS`, so setup commands now execute before the fixture-count baseline. That made self-target aura captures reliable without polluting the probe diff.
+  - The direct `.cast 1706` probe was not usable for live capture on this stack, but `.targetself` followed by `.aura 1706` and `.aura 339` worked cleanly. FG then captured real `CMSG_MOVE_WATER_WALK_ACK`, `CMSG_MOVE_HOVER_ACK`, `CMSG_MOVE_FEATHER_FALL_ACK`, `CMSG_FORCE_MOVE_ROOT_ACK`, and `CMSG_FORCE_MOVE_UNROOT_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`).
+  - The service-side conclusion is broader again: the current packet hook and corpus recorder are sufficient for post-worldport transfers, server-driven speed ACKs, and self-target aura/root ACK families emitted after FG is fully in-world.
   - Validation:
-    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the BotRunner build and focused parity reruns.
-    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify aspeed 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify aspeed 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify bwalk 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify bwalk 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
+    - `docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 1706'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 1706'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 339'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 339'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (19/19)`
   - Files changed:
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
     - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_WALK_SPEED_CHANGE_ACK/20260417_163614_067_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_SPEED_CHANGE_ACK/20260417_163614_076_0002.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK/20260417_164150_738_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_SPEED_CHANGE_ACK/20260417_163614_079_0003.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_ROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_UNROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_WATER_WALK_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_HOVER_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_FEATHER_FALL_ACK/`
     - `Services/ForegroundBotRunner/TASKS.md`
   - Next command:
-    - `rg -n "aura|root|water walk|hover|feather fall|knockback|turn rate" Tests/BotRunner.Tests docs Services -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK|CMSG_FORCE_TURN_RATE_CHANGE_ACK|CMSG_MOVE_KNOCK_BACK_ACK|knockback|turn rate|bwalk|swim back" docs/physics Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Session 307 closed the earlier `MSG_MOVE_WORLDPORT_ACK` corpus gap without changing the deferred packet-hook startup. A new live BotRunner harness teleports the already-in-world FG client across maps, and the existing `PacketLogger` + `ForegroundAckCorpusRecorder` captured two real `MSG_MOVE_WORLDPORT_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`), both `DC000000`.
   - The service-side conclusion is narrower now: the initial login-worldport send still happens before the current hook-init path, but P2.2 corpus coverage no longer depends on moving the hook earlier because the same opcode is observable from later cross-map transfers.
   - Validation:
@@ -91,6 +94,20 @@
     - `Services/ForegroundBotRunner/TASKS.md`
   - Next command:
     - `rg -n "InitializeObjectManager|PacketLogger|ForegroundAckCorpusRecorder|MSG_MOVE_WORLDPORT_ACK" Services/ForegroundBotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
+  - Session 305 hardened `CollectAllMailAsync(...)` so the foreground runtime waits for the mailbox frame to become visible, triggers `CheckInbox()`, and polls inbox counts before treating `GetInboxNumItems()==0` as final. This closes the false-success path where newly delivered mail briefly reported zero items and the client returned success after collecting nothing.
+  - Added deterministic `WaitForInboxCountAsync` coverage for the transient-zero and stable-zero paths in `ForegroundInteractionFrameTests`.
+  - Live `EconomyInteractionTests.Mail_OpenMailbox` is now green again after the inbox-load wait change.
+  - Validation:
+    - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+    - `dotnet build Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+    - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxCountAsync|FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"` -> `passed (16/16)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EconomyInteractionTests.Mail_OpenMailbox" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=fg_mail_open_mailbox_post_inbox_wait_fix.trx"` -> `passed (1/1)`
+  - Files changed:
+    - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+    - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+    - `Services/ForegroundBotRunner/TASKS.md`
+  - Next command:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EconomyInteractionTests.Mail_OpenMailbox|FullyQualifiedName~MailSystemTests" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=fg_mail_followup_bundle_after_inbox_wait_fix.trx"`
   - Session 304 removed runtime `_G` fallback sweeps from realm wizard action Lua (`select english`, `suggest realm`, `confirm suggestion`) and kept only state-driven named-control actions plus direct API fallback sequencing.
   - Session 304 kept realm-wizard handoff detection state-based (`CURRENT_GLUE_SCREEN/loginState == charselect`) so empty character lists are treated as a valid post-realm transition without Lua frame sweeps.
   - Added deterministic guard coverage that realm-wizard action Lua strings do not contain global frame iteration (`for _, frame in pairs`, `getglobals`).

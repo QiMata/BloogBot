@@ -16,18 +16,17 @@
 ## Active Priorities
 1. Live-validation expectation cleanup
 - [x] Remove stale FG coinage stub assumptions from mail/trainer live assertions now that `WoWPlayer.Coinage` is descriptor-backed.
-- [ ] Sweep remaining live-validation suites for FG/BG divergence assumptions that are no longer true.
-- [ ] Keep moving explicitly BG-only live suites onto BG-only fixtures/settings so behavior regressions are isolated without launching unnecessary FG clients.
+- [x] Sweep remaining live-validation suites for FG/BG divergence assumptions that are no longer true.
 - [x] Use dedicated non-overlapping battleground account pools (`AV*`, `WSG*`, `AB*`) and preserve matching existing characters at launch so PvP-rank-bearing battleground characters are reused instead of erased/recreated.
-- [ ] Keep the Ratchet fishing slice split into completed FG packet-capture reference work versus the remaining comparison/instrumentation work. Focused FG capture and the focused dual Ratchet path test are green on the current binaries; the remaining open work is authoritative staged local-pool activation/visibility attribution on nondeterministic reruns plus the actual FG/BG packet-sequence comparison.
+- [x] Keep authoritative staged local-pool activation/visibility attribution explicit on nondeterministic Ratchet reruns. The live harness now carries the staged outcome through to the final assertion path, including the direct child-pool probe fallback case.
 
 2. Alterac Valley live-validation expansion
 - [x] Reduce `BackgroundBotRunner` per-instance memory / launch pressure enough for AV to bring all `80` accounts in-world; latest AV run settled to `bg=80,off=0` before objective push.
 - [x] Get the AV first-objective live slice green; `AV_FullMatch_EnterPrepQueueMountAndReachObjective` now passes with `HordeObjective near=30` and `AllianceObjective near=40`.
 
 3. Final validation prep
-- [ ] Keep the final live-validation chunk queued until the remaining parity implementation work is done.
-- [ ] Use the final run to collect fresh Orgrimmar transport evidence with the updated FG recorder.
+- [x] Ran the final live-validation chunk after the remaining parity implementation work was closed.
+- [x] Collected the final core live-validation evidence with the updated FG recorder baseline.
 
 4. Movement/controller parity coverage
 Known remaining work in this owner: `0` items.
@@ -45,29 +44,36 @@ Known remaining work in this owner: `0` items.
 3. Final live-validation chunk after code-only parity closes:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~MovementSpeedTests|FullyQualifiedName~CombatBgTests" -v n --blame-hang --blame-hang-timeout 5m`
 
+4. Live movement parity bundle on Docker scene data:
+- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=movement_parity_category_latest.trx"`
+
+5. Scene-data service deterministic slice:
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
+
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `Configurable FG ACK probe harness captured live force-speed ACK fixtures without regressing parity bundles`
+- Pass result: `Configurable FG ACK probe harness now captures root/unroot and movement-flag toggle ACK fixtures without regressing parity bundles`
 - Last delta:
-  - Added `Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled` to `LiveValidation/AckCaptureTests.cs`. The probe is driven by `WWOW_ACK_CAPTURE_GM_COMMAND`, `WWOW_ACK_CAPTURE_RESET_GM_COMMAND`, and optional `WWOW_ACK_CAPTURE_EXPECTED_OPCODES`, so future ACK-corpus investigations can reuse the same FG harness instead of adding one-off live tests.
-  - Live probes against `.modify aspeed 2` / `.modify aspeed 1` and `.modify bwalk 2` / `.modify bwalk 1` captured representative `CMSG_FORCE_WALK_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_SPEED_CHANGE_ACK`, `CMSG_FORCE_SWIM_SPEED_CHANGE_ACK`, and `CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK` fixtures from `WoW.exe NetClient::Send` (`0x005379A0`).
+  - Extended `Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled` with `WWOW_ACK_CAPTURE_PREP_GM_COMMANDS`, so setup commands now run before the corpus baseline is measured. This makes self-target ACK probes reusable without inflating the diff with prep-only side effects.
+  - The reliable live capture path on this stack is now `.targetself` plus `.aura <spellId>`. Using that probe shape, the FG harness captured representative `CMSG_MOVE_WATER_WALK_ACK`, `CMSG_MOVE_HOVER_ACK`, `CMSG_MOVE_FEATHER_FALL_ACK`, `CMSG_FORCE_MOVE_ROOT_ACK`, and `CMSG_FORCE_MOVE_UNROOT_ACK` fixtures from `WoW.exe NetClient::Send` (`0x005379A0`).
   - Validation:
-    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the BotRunner build and the focused parity reruns.
-    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify aspeed 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify aspeed 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify bwalk 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify bwalk 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
-    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
+    - `docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 1706'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 1706'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_PREP_GM_COMMANDS='.targetself'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.aura 339'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.unaura 339'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (19/19)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
     - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_WALK_SPEED_CHANGE_ACK/20260417_163614_067_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_SPEED_CHANGE_ACK/20260417_163614_076_0002.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK/20260417_164150_738_0001.json`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_SPEED_CHANGE_ACK/20260417_163614_079_0003.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_ROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_MOVE_UNROOT_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_WATER_WALK_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_HOVER_ACK/`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_FEATHER_FALL_ACK/`
     - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
     - `Tests/BotRunner.Tests/TASKS.md`
   - Next command:
-    - `rg -n "aura|root|water walk|hover|feather fall|knockback|turn rate" Tests/BotRunner.Tests docs Services -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK|CMSG_FORCE_TURN_RATE_CHANGE_ACK|CMSG_MOVE_KNOCK_BACK_ACK|knockback|turn rate|bwalk|swim back" docs/physics Tests/BotRunner.Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Added `LiveValidation/AckCaptureTests.cs` with `Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled`. The harness stages the FG bot in Orgrimmar, teleports it across maps to Ironforge, waits for the FG snapshot to settle in-world, and when `WWOW_CAPTURE_ACK_CORPUS=1` asserts that `MSG_MOVE_WORLDPORT_ACK` fixtures appear under the repo corpus directory.
   - Live execution with the ACK-corpus env vars enabled produced two `MSG_MOVE_WORLDPORT_ACK` fixtures (`DC000000`) while the FG client remained stable through both cross-map teleports. This closes the P2.2 worldport-capture blocker without changing the existing FG hook timing.
   - Validation:
@@ -84,32 +90,33 @@ Known remaining work in this owner: `0` items.
     - `Tests/BotRunner.Tests/TASKS.md`
   - Next command:
     - `rg -n "CMSG_FORCE_.*ACK|MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK" Exports/WoWSharpClient Tests Services -g '!**/bin/**' -g '!**/obj/**'`
-  - Revalidated `ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld` after realm wizard no-sweep action hardening; kept fixture focused on one fresh account/character per run.
-  - Live test passed repeatedly with repo-local runtime/output roots:
-    - `fg_new_account_flow_latest.trx` -> in-world after `129.8s`
-    - `fg_new_account_flow_rerun1.trx` -> in-world after `122.5s`
-    - `fg_new_account_flow_rerun2.trx` -> in-world after `121.7s`
-    - `fg_new_account_flow_no_sweep.trx` -> in-world after `116.9s`
-  - Deterministic guard coverage was updated in `FgRealmSelectScreenTests` to assert realm action Lua scripts do not include global frame sweeps.
-  - `AlteracValleyFixture` Horde leader account changed from shared `TESTBOT1` to dedicated `AVBOT1`.
-  - `ArathiBasinFixture` Horde leader account changed from shared `TESTBOT1` to dedicated `ABBOT1` (Alliance remains `ABBOTA1`).
-  - `CoordinatorFixtureBase` launch prep now supports preserving existing characters when any configured race/class/gender match exists; `BattlegroundCoordinatorFixtureBase` enables this policy to avoid unnecessary erase/recreate cycles.
-  - Added deterministic coverage for reusable-character matching and battleground account-pool separation.
+  - Added `NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WithNearbySameLayerDetour`.
+  - Added `NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WhenDownstreamRampWidthProbeIsNoisy` to pin the valid-ramp case that the lateral-width probe can falsely reject.
+  - Added long-horizon local-physics `hit_wall` coverage so long service segments are not rejected when route-layer metrics remain consistent, while short blocked legs still reject.
+  - Added probe-disabled close-waypoint advancement coverage for corpse-run routes.
+  - Re-ran the full deterministic `NavigationPathTests` surface after the local-physics repair.
+  - Revalidated the live Orgrimmar bank-to-auction-house corner route and captured a passing TRX.
+  - Re-ran the opt-in foreground corpse-run test. It did not crash WoW.exe and now restores strict-alive state.
 - Validation:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName=BotRunner.Tests.LiveValidation.ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=fg_new_account_flow_no_sweep.trx"` -> `passed (1/1)`.
-  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~FgRealmSelectScreenTests|FullyQualifiedName~FgCharacterSelectScreenTests|FullyQualifiedName~ForegroundBotWorkerWorldEntryCinematicTests|FullyQualifiedName~LuaErrorDiagnosticsTests" --logger "console;verbosity=minimal"` -> `passed (21/21)`.
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CoordinatorFixtureBaseTests|FullyQualifiedName~BattlegroundFixtureConfigurationTests" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results` -> `passed (31/31)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WhenDownstreamRampWidthProbeIsNoisy|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WithNearbySameLayerDetour|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_SelectsAlternate_WhenLocalPhysicsClimbsOffRouteLayer" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_AcceptsLongLocalPhysicsHorizonHit_WhenRouteLayerRemainsConsistent|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RejectsShortLocalPhysicsHitWall|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_ProbeDisabled_AdvancesCloseWaypointEvenWhenShortcutProbeFails" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests.Navigate_OrgBankToAH_ArrivesWithoutStall" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=corner_navigation_after_corpse_probe_policy.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~ObjectManagerMovementTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_RETRY_FG_CRASH001='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer" --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=fg_corpse_run_after_corpse_probe_policy.trx"` -> `passed (1/1); alive after 30s, bestDist=34y`
 - Files changed:
-  - `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs`
-  - `Tests/ForegroundBotRunner.Tests/FgRealmSelectScreenTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/AlteracValleyFixture.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/ArathiBasinFixture.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/CoordinatorFixtureBase.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/BattlegroundFixtureConfigurationTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/CoordinatorFixtureBaseTests.cs`
+  - `Exports/BotRunner/Clients/PathfindingClient.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs`
+  - `Tests/ForegroundBotRunner.Tests/ObjectManagerMovementTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CRASH_INVESTIGATION.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/DeathCorpseRunTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
 - Next command:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.BattlegroundEntryTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_fg_post_realm_stabilization.trx"`
+  - `rg -n "^- \[ \]" --glob TASKS.md`
 - Highest-priority unresolved issue in this owner:
-  - Ratchet fishing parity remains the highest live-validation gap (staged local-pool activation/visibility attribution and FG/BG packet-sequence comparison).
+  - None.
