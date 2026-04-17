@@ -21,7 +21,7 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.4 mutation-order slice is green; fallback GO create blocks now decode fields and follow cached-create parity`
+- Pass result: `P2.4 mutation-order slice is green, and the first managed field-audit doc now exists for the core object classes`
 - Last delta:
   - `ObjectUpdateHandler.ParseCreateObjectBlock(...)` now resolves fallback GO typing from the GUID range before `ReadValuesUpdateBlock(...)` runs, so `ObjectType.None` bobber/trap-style create packets no longer lose `GAMEOBJECT_*` fields on parse.
   - `WoWSharpObjectManager` now exposes a test-only mutation observer and uses it to pin the two WoW.exe-backed mutation orders from `docs/physics/smsg_update_object_handler.md`: new create path fields-before-movement, cached-create path movement-before-fields.
@@ -32,17 +32,23 @@ Known remaining work in this owner: `0` items.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Field-audit follow-up:
+    - Added `docs/physics/csharp_object_field_audit.md` to map the managed `WoWObject` / `WoWGameObject` / `WoWUnit` / `WoWPlayer` / `WoWLocalPlayer` / `WoWLocalPet` state back to the 1.12.1 descriptor and movement sources already documented in `cgobject_layout.md`.
+    - Indexed that doc from `docs/physics/README.md`.
+    - No extra tests were run after the doc-only audit slice.
   - Files changed:
     - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
     - `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`
+    - `docs/physics/csharp_object_field_audit.md`
+    - `docs/physics/README.md`
     - `docs/physics/smsg_update_object_handler.md`
     - `docs/TASKS.md`
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "class WoW(Object|Unit|Player|GameObject|LocalPet)|PLAYER_END|UNIT_END|GAMEOBJECT_END|cgobject_layout|P2\\.4\\.2" Exports/WoWSharpClient/Models docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "CGPet_C|threat|spell cast state|inventory hydration|PLAYER_VISIBLE_ITEM|PLAYER_FIELD_INV_SLOT|cgobject_layout|csharp_object_field_audit" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient/Models -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

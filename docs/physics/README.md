@@ -75,6 +75,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [smsg_update_object_handler.md](./smsg_update_object_handler.md) | `SMSG_UPDATE_OBJECT` multi-pass dispatch and type-`5` findings |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
 | [cgobject_layout.md](./cgobject_layout.md) | Confirmed typed storage offsets from `0x466C70` and related helpers |
+| [csharp_object_field_audit.md](./csharp_object_field_audit.md) | Managed `WoWObject` / `WoWUnit` / `WoWPlayer` / `WoWGameObject` field map against 1.12.1 descriptors |
 | [movement_counter_tracking.md](./movement_counter_tracking.md) | `local + 0x128` / `local + 0x12C` counter trace |
 
 ## Physics Pipeline Summary

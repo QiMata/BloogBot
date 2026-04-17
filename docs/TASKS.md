@@ -97,7 +97,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: advanced P2.4 mutation-order parity. `WoWSharpObjectManager` now exposes a test-only mutation observer, the new `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs` covers four raw `SMSG_UPDATE_OBJECT` replay cases, and `ObjectUpdateHandler` now resolves fallback GO typing before parsing create-block fields.
+- Completed: advanced P2.4 mutation-order parity and started the P2.4.2 field audit. `WoWSharpObjectManager` now exposes a test-only mutation observer, the new `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs` covers four raw `SMSG_UPDATE_OBJECT` replay cases, `ObjectUpdateHandler` now resolves fallback GO typing before parsing create-block fields, and `docs/physics/csharp_object_field_audit.md` now maps the main managed object classes back to 1.12.1 descriptor/movement sources.
 - Binary-backed note:
   - `docs/physics/smsg_update_object_handler.md` already anchors the relevant order facts: create-path descriptor work runs before the later type-specific helper (`0x466320 -> 0x466590` before `0x466A20`), while the cached-object create branch does movement prepass before the descriptor walker (`0x466350` / `0x5FF070` before `0x466590`).
   - The new BG fix follows that evidence by resolving fallback `ObjectType.None` GO GUIDs before both field decoding and the cached-create branch decision. Without that, bobber/trap-style create blocks skipped gameobject field parsing and missed the `0x466350` in-place mutate path entirely.
@@ -110,7 +110,11 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
 - Files changed: `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`, `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`, `docs/physics/smsg_update_object_handler.md`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
-- Next command: `rg -n "class WoW(Object|Unit|Player|GameObject|LocalPet)|PLAYER_END|UNIT_END|GAMEOBJECT_END|cgobject_layout|P2\\.4\\.2" Exports/WoWSharpClient/Models docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
+- Field-audit follow-up:
+  - Added `docs/physics/csharp_object_field_audit.md` and indexed it from `docs/physics/README.md`.
+  - The doc covers `WoWObject`, `WoWGameObject`, `WoWUnit`, `WoWPlayer`, `WoWLocalPlayer`, and `WoWLocalPet`, separating descriptor-backed fields from movement/runtime-only state and calling out the remaining unresolved areas (`CGPet_C`, threat/spell-queue layout, full inventory hydration parity).
+  - No extra tests were run after that doc-only slice; the latest green validation remains the mutation-order + parity bundle listed above.
+- Next command: `rg -n "CGPet_C|threat|spell cast state|inventory hydration|PLAYER_VISIBLE_ITEM|PLAYER_FIELD_INV_SLOT|cgobject_layout|csharp_object_field_audit" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient/Models -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 
