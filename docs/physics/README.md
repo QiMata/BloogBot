@@ -74,6 +74,11 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [raw_position_and_flight_ack.md](./raw_position_and_flight_ack.md) | Evidence that `0x00E0` / `0x0340` are not active WoW.exe ACK surfaces |
 | [packet_ack_timing.md](./packet_ack_timing.md) | Q1-Q5 timing answers for knockback, speed, teleport, worldport, and spline/monster movement |
 | [state_client_control.md](./state_client_control.md) | `SMSG_CLIENT_CONTROL_UPDATE` control-bit state machine notes |
+| [state_teleport.md](./state_teleport.md) | Teleport apply / deferred teleport-ACK state machine |
+| [state_worldport.md](./state_worldport.md) | `SMSG_NEW_WORLD` / `MSG_MOVE_WORLDPORT_ACK` state machine |
+| [state_login.md](./state_login.md) | Initial login world-entry state machine |
+| [state_knockback.md](./state_knockback.md) | Queue-first knockback / ACK state machine |
+| [state_root.md](./state_root.md) | Deferred root / unroot state machine |
 | [smsg_update_object_handler.md](./smsg_update_object_handler.md) | `SMSG_UPDATE_OBJECT` multi-pass dispatch and type-`5` findings |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
 | [cgobject_layout.md](./cgobject_layout.md) | Confirmed typed storage offsets from `0x466C70` and related helpers |

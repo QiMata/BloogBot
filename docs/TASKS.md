@@ -68,7 +68,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [x] P2.5.2 Write one trace test per representative packet (8 tests: UPDATE_OBJECT Add, UPDATE_OBJECT Update, FORCE_RUN_SPEED_CHANGE, FORCE_MOVE_ROOT, MOVE_KNOCK_BACK, MOVE_TELEPORT, NEW_WORLD→WORLDPORT_ACK, MONSTER_MOVE)
   - [x] P2.5.3 Fix divergences discovered by trace tests
 - [ ] **P2.6** State-machine parity
-  - [ ] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
+  - [x] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
   - [ ] P2.6.2 Audit implementation against documented transitions
   - [x] P2.6.3 Write `StateMachineParityTests`
   - [x] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
@@ -97,7 +97,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: advanced P2.6 with the client-control state-machine slice. `docs/physics/0x603EA0_disasm.txt` and `docs/physics/state_client_control.md` now pin `SMSG_CLIENT_CONTROL_UPDATE`, and BG no longer treats that packet as a parameterless teleport-complete event.
+- Completed: advanced P2.6 with the client-control slice and closed the documentation half of `P2.6.1`. `docs/physics/state_client_control.md`, `state_teleport.md`, `state_worldport.md`, `state_login.md`, `state_knockback.md`, and `state_root.md` now cover all six planned state machines.
 - Binary-backed note:
   - `opcode_dispatch_table.md` already pinned `SMSG_CLIENT_CONTROL_UPDATE` to `0x603EA0`; the new disasm now proves that WoW.exe reads a packed GUID, reads a one-byte `canControl` flag, looks up the target object, and forwards the normalized bool into `0x5FA600`.
   - `0x5FA600` toggles bit `0x400` in `[object + 0xC58]` and only runs the follow-up global update when the object's GUID matches the active mover. That means the packet's GUID and byte both matter, so BG now ignores non-local GUIDs and preserves an explicit local lockout until `canControl=true` arrives.
@@ -115,6 +115,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
 - Files changed: `Exports/WoWSharpClient/ClientControlUpdateArgs.cs`, `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`, `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`, `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, `docs/physics/0x603EA0_disasm.txt`, `docs/physics/state_client_control.md`, `docs/physics/README.md`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
+- Documentation-only follow-up: added `docs/physics/state_teleport.md`, `docs/physics/state_worldport.md`, `docs/physics/state_login.md`, `docs/physics/state_knockback.md`, and `docs/physics/state_root.md`, then indexed them in `docs/physics/README.md`.
 - Next command: `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands

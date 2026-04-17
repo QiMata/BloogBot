@@ -21,9 +21,15 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `client-control state is now binary-backed and parity-tested on the managed side`
+- Pass result: `client-control state is now binary-backed, and all six P2.6 state docs exist`
 - Last delta:
   - Added `ClientControlUpdateArgs` and rewired `ClientControlHandler` / `WoWSharpEventEmitter` so `SMSG_CLIENT_CONTROL_UPDATE` now carries the packet GUID and `canControl` bit instead of being reduced to a parameterless event.
+  - Added the remaining P2.6.1 state docs from existing evidence:
+    - `docs/physics/state_teleport.md`
+    - `docs/physics/state_worldport.md`
+    - `docs/physics/state_login.md`
+    - `docs/physics/state_knockback.md`
+    - `docs/physics/state_root.md`
   - `docs/physics/0x603EA0_disasm.txt` and `docs/physics/state_client_control.md` now pin the WoW.exe behavior: `0x603EA0` reads packed GUID + control byte and calls `0x5FA600`, which toggles bit `0x400` in `[object + 0xC58]` and only propagates the follow-up global update for the active mover.
   - `WoWSharpObjectManager.EventEmitter_OnClientControlUpdate(...)` now ignores non-local GUIDs, stores an explicit lockout on `canControl=false`, clears that lockout only on `canControl=true`, and blocks `ReconcilePlayerControlState()` from immediately undoing the server's lockout packet.
   - Added deterministic coverage:

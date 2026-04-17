@@ -14,9 +14,16 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `StateMachineParity now covers the client-control GUID/lockout edge`
+- Pass result: `StateMachineParity covers client-control, and P2.6.1 state docs are fully written`
 - Last delta:
   - Added `StateMachineParityTests.ClientControlUpdate_LocalPlayer_FollowsCanControlAndBlocksReconcile`, which proves the local `canControl=false` edge persists across `ReconcilePlayerControlState()` until a matching `canControl=true` packet arrives.
+  - The state-machine documentation set is now complete on the physics side:
+    - `state_client_control.md`
+    - `state_teleport.md`
+    - `state_worldport.md`
+    - `state_login.md`
+    - `state_knockback.md`
+    - `state_root.md`
   - Added `StateMachineParityTests.ClientControlUpdate_RemoteGuid_DoesNotChangeLocalControlState`, which pins the GUID significance recovered from `0x603EA0` / `0x5FA600`: remote-object control packets must not flip the local mover state.
   - Hardened `PacketFlowTraceFixture.SeedLocalPlayer(...)` so every parity trace clears stale pending world-entry and client-control lockout state on the shared singleton object manager before assertions run.
   - Added matching low-level `ObjectManagerWorldSessionTests` coverage so the same client-control rules are pinned outside the parity trace harness.
