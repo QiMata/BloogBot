@@ -21,24 +21,26 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.5 packet-flow parity is green for the representative traces, and the first P2.6 state-machine checks are in place`
+- Pass result: `P2.6.4 is closed on the managed side: teleport flag clear and teleport ACK deadlock are both pinned`
 - Last delta:
-  - `WoWSharpObjectManager.EventEmitter_OnLoginVerifyWorld(...)` now carries `Facing` from the world-info payload into the local player instead of dropping it on the managed side.
-  - That fix is binary-backed by the login/worldport audit in `docs/physics/msg_move_worldport_ack.md`: `0x401DE0` reads map / XYZ / facing and reuses the deferred world-entry body with `edx = 0`, so BG must keep the world-info orientation while still suppressing `MSG_MOVE_WORLDPORT_ACK` on the login-verify edge.
-  - Added deterministic packet-flow/state-machine coverage around the managed movement/login seam:
-    - `PacketFlowTraceFixture` records ordered inbound dispatch, mutation-stage callbacks, event-emitter transitions, and outbound packets.
-    - `PacketFlowParityTests` now cover the eight representative P2.5 packet flows.
-    - `StateMachineParityTests` now pin the current `SMSG_LOGIN_VERIFY_WORLD` / `SMSG_NEW_WORLD -> MSG_MOVE_WORLDPORT_ACK` split.
+  - `TryFlushPendingTeleportAck()` no longer depends on `_sceneDataClient.EnsureSceneDataAround(...)`. The only binary-backed teleport ACK fact we currently have is the deferred `0x602FB0` gate (`0x468570`); tying ACK send to BG scene-tile availability had no VA support and created an indefinite stall when tiles were missing.
+  - `NotifyTeleportIncoming(...)` already clears the full local movement state to `MOVEFLAG_NONE`; the deterministic coverage now starts from `FORWARD | JUMPING | FALLINGFAR | SWIMMING` so the old partial-mask regression cannot silently reappear.
+  - Added state-machine/packet-flow regression coverage for the teleport edge:
+    - `StateMachineParityTests.MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData`
+    - `PacketFlowParityTests.MoveTeleport_UpdatesPlayerState_ThenFlushesDeferredAck`
+    - `ObjectManagerWorldSessionTests.TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData`
   - Validation:
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (3/3)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`
     - `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`
@@ -46,7 +48,7 @@ Known remaining work in this owner: `0` items.
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "NotifyTeleportIncoming|TryFlushPendingTeleportAck|_isBeingTeleported|ResetMovementStateForTeleport|OnClientControlUpdate" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "ClientControl|OnClientControlUpdate|HandleClientControlUpdate|canControl|0x468570" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

@@ -71,7 +71,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [ ] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
   - [ ] P2.6.2 Audit implementation against documented transitions
   - [x] P2.6.3 Write `StateMachineParityTests`
-  - [ ] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
+  - [x] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
 - [ ] **P2.7** Gap closure (G1-G10 verification)
   - [x] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
   - [x] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
@@ -97,22 +97,21 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: closed the first P2.5 packet-flow slice and started P2.6 state-machine coverage. `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs` now records ordered inbound dispatch, object-manager mutation stages, key movement/login events, and outbound packets; `PacketFlowParityTests` now cover the eight representative packet flows in the plan; `StateMachineParityTests` now pin the current login/worldport state edge.
+- Completed: closed P2.6.4 on the managed side. Teleport entry now has regression coverage proving all local movement bits are cleared on `NotifyTeleportIncoming(...)`, and `TryFlushPendingTeleportAck()` no longer blocks indefinitely on the BG-only scene-data probe once updates are drained and ground snap resolves.
 - Binary-backed note:
-  - `docs/physics/msg_move_worldport_ack.md` anchors the login/worldport split: `SMSG_NEW_WORLD` schedules `0x401BC0`, and the actual `MSG_MOVE_WORLDPORT_ACK` send happens inside `0x401CA5..0x401CF4`; `SMSG_LOGIN_VERIFY_WORLD` at `0x401DE0` reuses the callback body with `edx = 0`, so it does not send `0x0DC`.
-  - The same `0x401DE0` path reads map / XYZ / facing and stores the same world-entry globals, so BG now carries `Facing` through `EventEmitter_OnLoginVerifyWorld(...)` instead of dropping it on the managed side.
+  - `docs/physics/msg_move_teleport_handler.md` / `docs/physics/packet_ack_timing.md` still show the only confirmed WoW.exe teleport-ACK gate at this stage: `MSG_MOVE_TELEPORT` applies through `0x602F90 -> 0x6186B0`, while outbound `0x0C7` is emitted later from `0x602FB0` after the internal `0x468570` gate.
+  - There is still no binary evidence that `0x468570` depends on local tile/scene loading. That made our `SceneDataClient.EnsureSceneDataAround(...)` requirement an unsupported BG-only deadlock source, so the gate was removed and the tests now pin “updates drained + ground snap resolved” as the managed readiness condition.
 - Commands run:
-  - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
-  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the targeted build/test runs.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the targeted build/test run.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (3/3)`
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
-- Files changed: `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`, `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
-- Next command: `rg -n "NotifyTeleportIncoming|TryFlushPendingTeleportAck|_isBeingTeleported|ResetMovementStateForTeleport|OnClientControlUpdate" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics -g '!**/bin/**' -g '!**/obj/**'`
+- Files changed: `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`, `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
+- Next command: `rg -n "ClientControl|OnClientControlUpdate|HandleClientControlUpdate|canControl|0x468570" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 

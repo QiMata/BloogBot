@@ -2,6 +2,8 @@ using System.IO;
 using System.Linq;
 using GameData.Core.Enums;
 using GameData.Core.Models;
+using Microsoft.Extensions.Logging.Abstractions;
+using WoWSharpClient.Movement;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Parity;
@@ -44,6 +46,41 @@ public sealed class StateMachineParityTests
         Assert.Single(trace.Events.Where(e => e.Kind == "outbound" && e.Opcode == Opcode.MSG_MOVE_WORLDPORT_ACK));
     }
 
+    [Fact]
+    [Trait("Category", "StateMachineParity")]
+    public void MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData()
+    {
+        var originalSceneOverride = SceneDataClient.TestEnsureSceneDataAroundOverride;
+        SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => false;
+
+        try
+        {
+            using var trace = new PacketFlowTraceFixture(
+                sceneDataClient: new SceneDataClient(NullLogger<SceneDataClient>.Instance),
+                useLocalPhysics: true);
+            const ulong playerGuid = 0x302ul;
+            trace.SeedLocalPlayer(playerGuid, mapId: 1, position: new Position(1f, 2f, 3f), facing: 0.1f, fixedWorldTimeMs: 5151);
+            trace.EnsureTeleportAckFlushSupport();
+
+            trace.Dispatch(
+                Opcode.MSG_MOVE_TELEPORT,
+                BuildTeleportPacket(
+                    playerGuid,
+                    new Position(150f, 250f, 350f),
+                    facing: 1.75f,
+                    clientTimeMs: 1600u));
+
+            Assert.False(trace.FlushTeleportAck());
+            trace.MarkTeleportGroundSnapResolved();
+            Assert.True(trace.FlushTeleportAck());
+            Assert.Single(trace.Events.Where(e => e.Kind == "outbound" && e.Opcode == Opcode.MSG_MOVE_TELEPORT_ACK));
+        }
+        finally
+        {
+            SceneDataClient.TestEnsureSceneDataAroundOverride = originalSceneOverride;
+        }
+    }
+
     private static byte[] BuildWorldInfoPacket(uint mapId, Position position, float facing)
     {
         using var ms = new MemoryStream();
@@ -53,6 +90,24 @@ public sealed class StateMachineParityTests
         writer.Write(position.Y);
         writer.Write(position.Z);
         writer.Write(facing);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildTeleportPacket(ulong guid, Position position, float facing, uint clientTimeMs)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        WoWSharpClient.Utils.ReaderUtils.WritePackedGuid(writer, guid);
+
+        var player = new WoWSharpClient.Models.WoWLocalPlayer(new HighGuid(guid))
+        {
+            Position = position,
+            Facing = facing,
+            MovementFlags = MovementFlags.MOVEFLAG_NONE,
+            FallTime = 0,
+        };
+
+        writer.Write(WoWSharpClient.Parsers.MovementPacketHandler.BuildMovementInfoBuffer(player, clientTimeMs, 0u));
         return ms.ToArray();
     }
 }

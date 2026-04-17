@@ -735,8 +735,7 @@ namespace WoWSharpClient
                 || PendingUpdateCount > 0
                 || _updateSemaphore.CurrentCount == 0
                 || _movementController.NeedsGroundSnap
-                || !IsTeleportTargetResolved(player, pendingAck)
-                || !IsSceneDataReadyForTeleportAck(player))
+                || !IsTeleportTargetResolved(player, pendingAck))
             {
                 return false;
             }
@@ -768,17 +767,6 @@ namespace WoWSharpClient
             return MathF.Abs(player.Position.X - pendingAck.TargetPosition.X) <= xyTolerance
                 && MathF.Abs(player.Position.Y - pendingAck.TargetPosition.Y) <= xyTolerance
                 && MathF.Abs(player.Position.Z - pendingAck.TargetPosition.Z) <= zTolerance;
-        }
-
-        private bool IsSceneDataReadyForTeleportAck(WoWLocalPlayer player)
-        {
-            if (_sceneDataClient == null)
-                return true;
-
-            return _sceneDataClient.EnsureSceneDataAround(
-                (uint)player.MapId,
-                player.Position.X,
-                player.Position.Y);
         }
 
         internal void RecordResolvedEnvironmentState(uint mapId, Position position, SceneEnvironmentFlags flags)

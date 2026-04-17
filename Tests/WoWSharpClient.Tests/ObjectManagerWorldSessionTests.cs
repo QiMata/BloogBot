@@ -1953,8 +1953,12 @@ public class ObjectManagerWorldSessionTests
         var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
         player.Position = new Position(100f, 200f, 50f);
         player.Facing = 1.5f;
-        // Simulate active movement before teleport
-        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        // Simulate active movement and airborne/swimming state before teleport.
+        player.MovementFlags =
+            MovementFlags.MOVEFLAG_FORWARD
+            | MovementFlags.MOVEFLAG_JUMPING
+            | MovementFlags.MOVEFLAG_FALLINGFAR
+            | MovementFlags.MOVEFLAG_SWIMMING;
 
         // Teleport incoming — should clear all movement flags
         objectManager.NotifyTeleportIncoming(75f);
@@ -1963,7 +1967,7 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
-    public void TryFlushPendingTeleportAck_WaitsForUpdatesGroundSnapAndSceneData()
+    public void TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData()
     {
         _fixture._woWClient.Reset();
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
@@ -2025,11 +2029,6 @@ public class ObjectManagerWorldSessionTests
 
             var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
             SetPrivateField(controller, "_needsGroundSnap", false);
-
-            Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
-            Assert.Empty(sentPackets);
-
-            sceneReady = true;
 
             Assert.True(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
             Assert.Single(sentPackets);

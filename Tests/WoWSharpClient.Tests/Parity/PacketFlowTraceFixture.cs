@@ -25,7 +25,7 @@ internal sealed class PacketFlowTraceFixture : IDisposable
     private readonly Mock<IWorldClient> _worldClient = new();
     private readonly Mock<PathfindingClient> _pathfindingClient = new();
 
-    public PacketFlowTraceFixture()
+    public PacketFlowTraceFixture(SceneDataClient? sceneDataClient = null, bool useLocalPhysics = false)
     {
         SetPrivateField(_client, "_worldClient", _worldClient.Object);
 
@@ -43,7 +43,9 @@ internal sealed class PacketFlowTraceFixture : IDisposable
             _client,
             _pathfindingClient.Object,
             NullLogger<WoWSharpObjectManager>.Instance,
-            EventEmitter);
+            EventEmitter,
+            sceneDataClient,
+            useLocalPhysics);
 
         ObjectManager.TestMutationObserver = trace =>
             Events.Add(new PacketFlowTraceEvent(

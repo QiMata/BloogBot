@@ -179,6 +179,13 @@ public sealed class PacketFlowParityTests
         trace.SeedLocalPlayer(playerGuid, mapId: 1, position: new Position(1f, 2f, 3f), facing: 0.1f, fixedWorldTimeMs: 4242);
         trace.EnsureTeleportAckFlushSupport();
 
+        var player = Assert.IsType<WoWLocalPlayer>(trace.ObjectManager.Player);
+        player.MovementFlags =
+            MovementFlags.MOVEFLAG_FORWARD
+            | MovementFlags.MOVEFLAG_JUMPING
+            | MovementFlags.MOVEFLAG_FALLINGFAR
+            | MovementFlags.MOVEFLAG_SWIMMING;
+
         trace.Dispatch(
             Opcode.MSG_MOVE_TELEPORT,
             BuildTeleportPacket(
@@ -187,10 +194,10 @@ public sealed class PacketFlowParityTests
                 facing: 2.0f,
                 clientTimeMs: 1234u));
 
-        var player = Assert.IsType<WoWLocalPlayer>(trace.ObjectManager.Player);
         Assert.Equal(100f, player.Position.X, 3);
         Assert.Equal(200f, player.Position.Y, 3);
         Assert.Equal(300f, player.Position.Z, 3);
+        Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
         Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
 
         var teleportEvent = Assert.Single(trace.Events.Where(e => e.Kind == "event" && e.Label == "OnTeleport"));

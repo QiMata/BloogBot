@@ -531,9 +531,9 @@ namespace WoWSharpClient
                 }
 
                 // 3b. Flush pending teleport ACKs once the client is genuinely ready:
-                // local player placement applied, object updates drained, nearby scene data
-                // loaded, and post-teleport ground snap complete. Only then leave map-transition
-                // state so movement resumes without a timer-based race.
+                // local player placement applied, object updates drained, and post-teleport
+                // ground snap complete. Only then leave map-transition state so movement
+                // resumes without a timer-based race.
                 if (!TryFlushPendingTeleportAck()
                     && _pendingTeleportAck == null
                     && _isBeingTeleported
