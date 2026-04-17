@@ -489,7 +489,7 @@ public class ObjectManagerWorldSessionTests
     [Fact]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void MoveKnockBack_ParseStoresImpulseClearsDirectionAndAcks()
+    public void MoveKnockBack_ParseStoresImpulseClearsDirectionAndDefersAck()
     {
         ResetObjectManager();
 
@@ -545,29 +545,13 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(vSpeed, vz, 5);
         Assert.False(objectManager.TryConsumePendingKnockback(out _, out _, out _));
 
-        var sent = Assert.Single(sentPackets);
-        Assert.Equal(Opcode.CMSG_MOVE_KNOCK_BACK_ACK, sent.opcode);
-
-        using var ms = new MemoryStream(sent.payload);
-        using var reader = new BinaryReader(ms);
-
-        Assert.Equal(playerGuid, reader.ReadUInt64());
-        Assert.Equal(movementCounter, reader.ReadUInt32());
-
-        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
-        Assert.Equal(player.Position.X, ackMovement.X, 5);
-        Assert.Equal(player.Position.Y, ackMovement.Y, 5);
-        Assert.Equal(player.Position.Z, ackMovement.Z, 5);
-        Assert.Equal(player.Facing, ackMovement.Facing, 5);
-        Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-        Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-        Assert.Equal(ms.Length, ms.Position);
+        Assert.Empty(sentPackets);
     }
 
     [Fact]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void MoveKnockBack_ServerPacketFeedsMovementControllerNextFrame()
+    public void MoveKnockBack_ServerPacketFeedsMovementControllerNextFrameAndAcksAfterImpulse()
     {
         _fixture._woWClient.Reset();
         var movementPackets = new List<(Opcode opcode, byte[] payload)>();
@@ -637,13 +621,16 @@ public class ObjectManagerWorldSessionTests
                 BuildKnockBackPayload(playerGuid, movementCounter, vSin, vCos, hSpeed, vSpeed),
                 ctx);
 
-            var ack = Assert.Single(ackPackets);
-            Assert.Equal(Opcode.CMSG_MOVE_KNOCK_BACK_ACK, ack.opcode);
+            Assert.Empty(ackPackets);
             Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
             Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
             Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
 
+            var ackOrigin = new Position(player.Position.X, player.Position.Y, player.Position.Z);
             controller.Update(0.05f, 1000);
+
+            var ack = Assert.Single(ackPackets);
+            Assert.Equal(Opcode.CMSG_MOVE_KNOCK_BACK_ACK, ack.opcode);
 
             Assert.NotNull(capturedInput);
             Assert.Equal(hSpeed * vCos, capturedInput!.Value.Vx, 3);
@@ -651,6 +638,22 @@ public class ObjectManagerWorldSessionTests
             Assert.Equal(vSpeed, capturedInput.Value.Vz, 3);
             Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.Value.MoveFlags);
             Assert.False(objectManager.TryConsumePendingKnockback(out _, out _, out _));
+
+            using (var ackStream = new MemoryStream(ack.payload))
+            using (var ackReader = new BinaryReader(ackStream))
+            {
+                Assert.Equal(playerGuid, ackReader.ReadUInt64());
+                Assert.Equal(movementCounter, ackReader.ReadUInt32());
+
+                var ackMovement = MovementPacketHandler.ParseMovementInfo(ackReader);
+                Assert.Equal(ackOrigin.X, ackMovement.X, 5);
+                Assert.Equal(ackOrigin.Y, ackMovement.Y, 5);
+                Assert.Equal(ackOrigin.Z, ackMovement.Z, 5);
+                Assert.Equal(player.Facing, ackMovement.Facing, 5);
+                Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+                Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+                Assert.Equal(ackStream.Length, ackStream.Position);
+            }
 
             var movement = Assert.Single(movementPackets);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, movement.opcode);

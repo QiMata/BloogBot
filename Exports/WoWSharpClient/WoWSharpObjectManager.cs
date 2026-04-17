@@ -156,6 +156,10 @@ namespace WoWSharpClient
             _useLocalPhysics = useLocalPhysics;
             _sceneDataClient = sceneDataClient;
             _woWClient = wowClient;
+            if (_useLocalPhysics && _sceneDataClient != null)
+            {
+                NativePhysics.SetSceneAutoloadEnabled(false);
+            }
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             _physicsTimeAccumulator = 0f;
@@ -237,8 +241,12 @@ namespace WoWSharpClient
         private int _movementStuckRecoveryGeneration;
         private long _lastGlobalStuckRecoveryTick = long.MinValue;
         private int _globalStuckRecoveryPulseCount;
+        private Position? _lastGlobalStuckRecoveryAnchor;
+        private int _globalStuckRecoveryRepeatCount;
         private const int GlobalStuckRecoveryCooldownMs = 1200;
         private const int GlobalStuckRecoveryPulseResetMs = 12000;
+        private const float GlobalStuckRecoveryRepeatPositionEpsilon = 1.5f;
+        private const int GlobalStuckRecoveryEscalationThreshold = 3;
         private const MovementFlags GlobalStuckIntentMask =
             MovementFlags.MOVEFLAG_FORWARD |
             MovementFlags.MOVEFLAG_BACKWARD |
@@ -292,22 +300,29 @@ namespace WoWSharpClient
                 || nowTick - _lastGlobalStuckRecoveryTick > GlobalStuckRecoveryPulseResetMs)
             {
                 _globalStuckRecoveryPulseCount = 0;
+                _globalStuckRecoveryRepeatCount = 0;
+                _lastGlobalStuckRecoveryAnchor = null;
             }
 
+            UpdateGlobalStuckRecoveryAnchor(position);
             _lastGlobalStuckRecoveryTick = nowTick;
             _globalStuckRecoveryPulseCount++;
+            var effectiveLevel = level == 2 && _globalStuckRecoveryRepeatCount >= GlobalStuckRecoveryEscalationThreshold
+                ? 3
+                : level;
 
             ((IObjectManager)this).ForceStopImmediate();
 
-            if (level == 2)
+            if (effectiveLevel == 2)
             {
                 ((IObjectManager)this).Turn180();
                 StartMovement(ControlBits.Front | ControlBits.Jump);
                 Log.Warning(
-                    "[NAV-DIAG] Applied global stuck recovery maneuver=turn180_jump level={Level} generation={Generation} pulse={Pulse} pos=({X:F1},{Y:F1},{Z:F1})",
+                    "[NAV-DIAG] Applied global stuck recovery maneuver=turn180_jump level={Level} generation={Generation} pulse={Pulse} repeats={Repeats} pos=({X:F1},{Y:F1},{Z:F1})",
                     level,
                     generation,
                     _globalStuckRecoveryPulseCount,
+                    _globalStuckRecoveryRepeatCount,
                     position.X,
                     position.Y,
                     position.Z);
@@ -318,17 +333,34 @@ namespace WoWSharpClient
                 var strafeBit = strafeLeft ? ControlBits.StrafeLeft : ControlBits.StrafeRight;
                 StartMovement(strafeBit | ControlBits.Jump);
                 Log.Warning(
-                    "[NAV-DIAG] Applied global stuck recovery maneuver={Maneuver} level={Level} generation={Generation} pulse={Pulse} pos=({X:F1},{Y:F1},{Z:F1})",
+                    "[NAV-DIAG] Applied global stuck recovery maneuver={Maneuver} level={Level} effectiveLevel={EffectiveLevel} generation={Generation} pulse={Pulse} repeats={Repeats} pos=({X:F1},{Y:F1},{Z:F1})",
                     strafeLeft ? "strafe_left_jump" : "strafe_right_jump",
                     level,
+                    effectiveLevel,
                     generation,
                     _globalStuckRecoveryPulseCount,
+                    _globalStuckRecoveryRepeatCount,
                     position.X,
                     position.Y,
                     position.Z);
             }
 
             _movementController.NotifyExternalStuckRecoveryApplied();
+        }
+
+        private void UpdateGlobalStuckRecoveryAnchor(Position position)
+        {
+            if (_lastGlobalStuckRecoveryAnchor != null
+                && position.DistanceTo2D(_lastGlobalStuckRecoveryAnchor) <= GlobalStuckRecoveryRepeatPositionEpsilon)
+            {
+                _globalStuckRecoveryRepeatCount++;
+            }
+            else
+            {
+                _globalStuckRecoveryRepeatCount = 1;
+            }
+
+            _lastGlobalStuckRecoveryAnchor = new Position(position.X, position.Y, position.Z);
         }
 
 
@@ -740,6 +772,9 @@ namespace WoWSharpClient
             _isInControl = false;
             _isBeingTeleported = false;
             _pendingTeleportAck = null;
+            _hasPendingKnockback = false;
+            _pendingKnockbackVelX = _pendingKnockbackVelY = _pendingKnockbackVelZ = 0f;
+            _pendingKnockbackAck = null;
             _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
             _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
             _lastResolvedSceneEnvironmentPosition = null;

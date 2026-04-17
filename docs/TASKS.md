@@ -53,10 +53,10 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [x] P2.2.4 Confirm movement counter semantics match WoW.exe
   - [x] P2.2.5 Gate: all 14 wired ACKs have passing byte-parity tests
 - [ ] **P2.3** ACK timing & ordering parity
-  - [ ] P2.3.1 Answer Q1-Q5 (sync vs deferred; see plan §4.3) with binary evidence
+  - [x] P2.3.1 Answer Q1-Q5 (sync vs deferred; see plan §4.3) with binary evidence
   - [ ] P2.3.2 Write failing tests for current timing divergences
   - [ ] P2.3.3 Fix timing via defer-to-controller or immediate-after-mutation pattern
-  - [ ] P2.3.4 Close **G1** knockback ACK race
+  - [x] P2.3.4 Close **G1** knockback ACK race
 - [ ] **P2.4** ObjectManager state mutation parity
   - [ ] P2.4.1 Produce `docs/physics/cgobject_layout.md` with exact field offsets
   - [ ] P2.4.2 Audit C# classes — each field mapped to a WoW.exe field or documented as intentional omission
@@ -97,10 +97,14 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: Closed **P2.2 ACK format parity**. Captured the remaining live `CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK`, `CMSG_FORCE_TURN_RATE_CHANGE_ACK`, and `CMSG_MOVE_KNOCK_BACK_ACK` fixtures, so the corpus now covers all 14 wired ACK families. `AckParity` now passes against the full live WoW.exe corpus (`26/26`).
-- Binary-backed note: the final captures were all source-backed. `.debug send opcode` plus `/home/vmangos/opcode.txt` emitted `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE` / `SMSG_FORCE_TURN_RATE_CHANGE`, and `.knockback 5 5` exercised `MovementPacketSender::SendKnockBackToController(...)`. The debug-opcode packets used movement counter `1`, and WoW.exe echoed that counter verbatim, matching the P2.1.6 counter audit.
-- Next open phase: **P2.3 ACK timing & ordering parity**. Q1-Q5 and **G1** remain open, with the current strongest starting evidence still the queue-first knockback path (`0x602670 -> 0x617A30 -> 0x6177A0`) and the speed/root/flag queue family under `0x602780`.
+- Completed: Started **P2.3 ACK timing & ordering parity**. Added `docs/physics/packet_ack_timing.md`, which answers Q1-Q5 from the plan with VA-backed findings, and closed **G1** by deferring `CMSG_MOVE_KNOCK_BACK_ACK` until `MovementController.Update()` consumes the staged knockback impulse.
+- Binary-backed note: the knockback change is limited to the timing proven by the WoW.exe queue path. `0x602670 -> 0x617A30 -> 0x6177A0` stages slot `0x1C` and never sends inline, so BG no longer emits the ACK from `EventEmitter_OnForceMoveKnockBack`. The ACK is now flushed immediately after the controller applies the pending impulse, which is the first point after the proved non-inline staging step.
+- Remaining P2.3 work: speed/root/flag families are still queued in WoW.exe (`0x619500` / `0x61A700` / `0x61A380` families) but still ACK inline on the BG side. P2.3.2 and P2.3.3 stay open for those timing sweeps.
 - Commands run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the knockback test build runs.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_" --logger "console;verbosity=minimal"` -> failed (`2/2`) before the fix; both tests showed `CMSG_MOVE_KNOCK_BACK_ACK` was still emitted inline from the handler path.
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the post-fix rebuild.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_" --logger "console;verbosity=minimal"` -> passed (`2/2`) after moving knockback ACK emission to `MovementController.Update()`.
   - `docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
   - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
   - `docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF' ... EOF"` -> staged source-backed debug opcode payloads for `SMSG_FORCE_TURN_RATE_CHANGE` (`734`) and `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE` (`732`).
@@ -111,8 +115,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> passed (`30/30`).
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> passed (`8/8`).
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> passed (`80/80`).
-- Files changed: `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, `Services/ForegroundBotRunner/TASKS.md`, `Tests/BotRunner.Tests/TASKS.md`, `Tests/WoWSharpClient.Tests/TASKS.md`, and new fixtures under `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/{CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,CMSG_FORCE_TURN_RATE_CHANGE_ACK,CMSG_MOVE_KNOCK_BACK_ACK,MSG_MOVE_TELEPORT_ACK}`.
-- Next command: `rg -n "Q1|Q2|Q3|Q4|Q5|G1|knockback ACK race|defer" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests -g '!**/bin/**' -g '!**/obj/**'`.
+- Files changed: `docs/TASKS.md`, `docs/physics/README.md`, `docs/physics/packet_ack_timing.md`, `Exports/WoWSharpClient/Movement/MovementController.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, and the earlier P2.2 tracker/corpus files already committed in `38ccd409`.
+- Next command: `rg -n "ForceSpeedChangeOpcodes|CompressedForceMoveRootOpcodes|ServerControlledMovementFlagChanges|CompressedServerControlledMovementFlagChanges|0x619500|0x61A700|0x61A380" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics -g '!**/bin/**' -g '!**/obj/**'`.
 
 ## Canonical Commands
 

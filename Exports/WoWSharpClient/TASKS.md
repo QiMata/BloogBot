@@ -21,23 +21,26 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `All 14 wired ACK opcodes are now live-backed and AckParity is green`
+- Pass result: `Knockback ACK timing now matches the proved non-inline WoW.exe queue shape, and parity bundles stayed green`
 - Last delta:
-  - Reused the earlier `AckBinaryParityTests` expansion to finish the corpus instead of adding new managed code. The final three live fixtures were captured for `CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK`, `CMSG_FORCE_TURN_RATE_CHANGE_ACK`, and `CMSG_MOVE_KNOCK_BACK_ACK`.
-  - The two remaining speed-family ACKs came from VMaNGOS' built-in `.debug send opcode` path with source-backed `/home/vmangos/opcode.txt` payloads, and WoW.exe echoed movement counter `1` exactly as the P2.1.6 counter audit predicts.
-  - `CMSG_MOVE_KNOCK_BACK_ACK` came from the built-in `.knockback 5 5` GM command, which the server source routes through `MovementPacketSender::SendKnockBackToController(...)`. No further managed ACK-format changes were needed after the earlier movement-flag toggle float fix.
+  - Added `docs/physics/packet_ack_timing.md` to answer P2.3 Q1-Q5 from the current decomp set. The key new owner-facing conclusion is that knockback, speed, root, and flag toggles are all queue-first on the WoW.exe side; only knockback is fixed in this slice.
+  - `EventEmitter_OnForceMoveKnockBack(...)` now stages the ACK metadata instead of sending inline, and `MovementController.Update()` flushes `CMSG_MOVE_KNOCK_BACK_ACK` immediately after consuming the pending impulse. That closes G1 without changing ACK bytes.
+  - `ObjectManagerWorldSessionTests` now prove the old behavior failed first (`CMSG_MOVE_KNOCK_BACK_ACK` emitted inline) and the new behavior passes with the ACK deferred until after the controller applies the queued impulse.
   - Validation:
     - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_" --logger "console;verbosity=minimal"` -> first run `failed (2/2)` before the fix because `CMSG_MOVE_KNOCK_BACK_ACK` was emitted inline; second run `passed (2/2)` after the deferral change.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK/`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_TURN_RATE_CHANGE_ACK/`
-    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_MOVE_KNOCK_BACK_ACK/`
+    - `docs/physics/packet_ack_timing.md`
+    - `Exports/WoWSharpClient/Movement/MovementController.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
     - `Exports/WoWSharpClient/TASKS.md`
   - Next command:
-    - `rg -n "Q1|Q2|Q3|Q4|Q5|G1|knockback ACK race|defer" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "ForceSpeedChangeOpcodes|CompressedForceMoveRootOpcodes|ServerControlledMovementFlagChanges|CompressedServerControlledMovementFlagChanges|0x619500|0x61A700|0x61A380" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics -g '!**/bin/**' -g '!**/obj/**'`
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
     - `SpellcastingManager.CastSpell(...)` no longer forces fishing through `CastSpellAtLocation(...)`; fishing now keeps the no-target `CMSG_CAST_SPELL` payload shape.

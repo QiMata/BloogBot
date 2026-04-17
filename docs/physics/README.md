@@ -68,6 +68,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [smsg_move_knock_back_handler.md](./smsg_move_knock_back_handler.md) | Inbound knockback staging notes |
 | [smsg_move_flag_toggle_handler.md](./smsg_move_flag_toggle_handler.md) | Water-walk, feather-fall, and hover toggle notes |
 | [msg_move_teleport_handler.md](./msg_move_teleport_handler.md) | Teleport apply vs teleport ACK send path |
+| [packet_ack_timing.md](./packet_ack_timing.md) | Q1-Q5 timing answers for knockback, speed, teleport, worldport, and spline/monster movement |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
 | [movement_counter_tracking.md](./movement_counter_tracking.md) | `local + 0x128` / `local + 0x12C` counter trace |
 

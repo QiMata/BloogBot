@@ -69,6 +69,7 @@ namespace WoWSharpClient
         private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)
         private PendingTeleportAck? _pendingTeleportAck;
         private readonly record struct PendingTeleportAck(ulong Guid, uint Counter, Position TargetPosition);
+        private readonly record struct PendingKnockbackAck(ulong Guid, uint Counter);
         private SceneEnvironmentFlags _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
         private uint _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
         private Position? _lastResolvedSceneEnvironmentPosition;
@@ -256,22 +257,16 @@ namespace WoWSharpClient
             player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
                 | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
 
+            _pendingKnockbackAck = new PendingKnockbackAck(player.Guid, e.Counter);
+
             Serilog.Log.Information("[KNOCKBACK] vel=({VelX:F2},{VelY:F2},{VelZ:F2}) hSpeed={HSpeed:F2} dir=({VCos:F3},{VSin:F3})",
                 velX, velY, velZ, e.HSpeed, e.VCos, e.VSin);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_MOVE_KNOCK_BACK_ACK,
-                MovementPacketHandler.BuildForceMoveAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
-                )
-            );
         }
 
         // Knockback state — consumed by MovementController on next Update()
         private volatile bool _hasPendingKnockback;
         private float _pendingKnockbackVelX, _pendingKnockbackVelY, _pendingKnockbackVelZ;
+        private PendingKnockbackAck? _pendingKnockbackAck;
 
         /// <summary>Returns and clears any pending knockback velocity impulse.</summary>
         internal bool TryConsumePendingKnockback(out float vx, out float vy, out float vz)
@@ -285,6 +280,28 @@ namespace WoWSharpClient
             vy = _pendingKnockbackVelY;
             vz = _pendingKnockbackVelZ;
             _hasPendingKnockback = false;
+            return true;
+        }
+
+        internal bool TryFlushPendingKnockbackAck(uint gameTimeMs)
+        {
+            if (_pendingKnockbackAck is not PendingKnockbackAck pendingAck
+                || Player is not WoWLocalPlayer player
+                || player.Guid != pendingAck.Guid)
+            {
+                return false;
+            }
+
+            _ = _woWClient.SendMSGPackedAsync(
+                Opcode.CMSG_MOVE_KNOCK_BACK_ACK,
+                MovementPacketHandler.BuildForceMoveAck(
+                    player,
+                    pendingAck.Counter,
+                    gameTimeMs
+                )
+            );
+
+            _pendingKnockbackAck = null;
             return true;
         }
 

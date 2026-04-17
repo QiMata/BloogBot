@@ -65,6 +65,7 @@ namespace WoWSharpClient.Movement
         // mismatches at coasts and WMO surfaces cause cumulative gravity drift.
         private float _teleportZ = float.NaN;
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
+        private const float TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE = 6.0f;
         // Max allowed ground Z descent per physics frame (large single-frame drops).
         private const float MaxGroundZDropPerFrame = 5.0f;
 
@@ -206,6 +207,7 @@ namespace WoWSharpClient.Movement
                     | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
                 Log.Information("[MovementController] Applied knockback impulse vel=({VelX:F2},{VelY:F2},{VelZ:F2})",
                     kbVx, kbVy, kbVz);
+                _objectManager.TryFlushPendingKnockbackAck(gameTimeMs);
             }
 
             // Idle guard: skip physics when no movement intent, no pending ground snap,
@@ -237,9 +239,17 @@ namespace WoWSharpClient.Movement
             // slightly before the map transition fully settles. Running ground-snap
             // physics against the old map during that window can classify the teleport
             // target with stale support geometry and lock in the wrong environment flags.
-            // Wait until the object manager leaves map-transition state, then let the
-            // normal post-teleport forced update perform the first ground snap.
-            if (_needsGroundSnap && _objectManager?.IsInMapTransition == true)
+            //
+            // Same-map GM teleports are different: the transition flag is cleared only
+            // after the post-teleport ground snap settles. If we suppress the ground snap
+            // for all transition states, same-map teleports deadlock with
+            // `_needsGroundSnap=true` and `_isBeingTeleported=true` forever, so BotRunner
+            // stops polling StateManager even though the player has already landed.
+            //
+            // Only suppress the snap while cross-map world entry is still pending.
+            if (_needsGroundSnap
+                && _objectManager?.IsInMapTransition == true
+                && _objectManager.HasPendingWorldEntry)
             {
                 CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
                 _lastPhysicsMapId = _player.MapId;
@@ -305,6 +315,8 @@ namespace WoWSharpClient.Movement
             {
                 _groundSnapFrames++;
 
+                TrySnapToNearbyTeleportSupport();
+
                 // During ground snap, only clamp to teleport Z when physics has NO ground geometry.
                 // If physics finds valid ground below the teleport position (e.g. teleported above a
                 // rooftop), allow gravity to pull the bot down naturally — this is correct WoW behavior.
@@ -368,6 +380,49 @@ namespace WoWSharpClient.Movement
             }
 
             CapturePhysicsFrameRecord(physicsResult, deltaSec, gameTimeMs);
+        }
+
+        private void TrySnapToNearbyTeleportSupport()
+        {
+            if (float.IsNaN(_teleportZ))
+                return;
+
+            var (supportZ, foundSupport) = NativeLocalPhysics.GetGroundZ(
+                _player.MapId,
+                _player.Position.X,
+                _player.Position.Y,
+                _teleportZ + 0.5f,
+                TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE);
+
+            if (!foundSupport)
+                return;
+
+            var supportDrop = _teleportZ - supportZ;
+            if (supportDrop < -0.5f || supportDrop > TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE)
+                return;
+
+            if (MathF.Abs(_player.Position.Z - supportZ) <= 0.05f
+                && (_player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0)
+            {
+                return;
+            }
+
+            Log.Warning(
+                "[MovementController] Nearby teleport support probe corrected post-teleport snap: " +
+                "posZ={PosZ:F3} supportZ={SupportZ:F3} teleportZ={TeleportZ:F3} drop={Drop:F3}",
+                _player.Position.Z,
+                supportZ,
+                _teleportZ,
+                supportDrop);
+
+            _player.Position = new Position(_player.Position.X, _player.Position.Y, supportZ);
+            _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+            _velocity = Vector3.Zero;
+            _fallTimeMs = 0;
+            _prevGroundZ = supportZ;
+            _prevGroundNormal = new Vector3(0, 0, 1);
+            _hasPhysicsGroundContact = true;
+            _wasGroundedLastFrame = true;
         }
 
         private void DetectAuthoritativeRelocationAndPrimeGroundSnap()
@@ -1232,7 +1287,7 @@ namespace WoWSharpClient.Movement
             _player.MovementFlags = ClearForcedStopIntent(_player.MovementFlags);
             var opcode = DetermineOpcode(_player.MovementFlags, _lastSentFlags);
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _ = _client.SendMovementOpcodeAsync(opcode, buffer);
+            _client.SendMovementOpcodeAsync(opcode, buffer).GetAwaiter().GetResult();
             _lastSentFlags = _player.MovementFlags;
             _forceStopAfterReset = false;
             _staleForwardNoDisplacementTicks = 0;
