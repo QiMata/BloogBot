@@ -37,9 +37,28 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-09 (session 304)`
-- Pass result: `FG new-account realm wizard flow is stable with state-based no-sweep actions and repeated live passes`
+- Last updated: `2026-04-17 (session 306)`
+- Pass result: `ACK corpus capture is wired through WoW.exe NetClient::Send and live teleport ACK parity is green`
 - Last delta:
+  - Session 306 added raw-byte packet capture on top of the existing FG send/recv hooks. `PacketLogger` now exposes `OnPacketCapturedDetailed` plus a test helper `RecordOutboundPacket(...)`, so ACK parity tooling can consume exact outbound bytes from `WoW.exe NetClient::Send` (`0x005379A0`) instead of only opcode/size metadata.
+  - Added `ForegroundAckCorpusRecorder` and started/stopped it from `ForegroundBotWorker` when `WWOW_ENABLE_RECORDING_ARTIFACTS=1` and `WWOW_CAPTURE_ACK_CORPUS=1` are both enabled. The recorder writes packet-derived JSON fixtures for outbound ACK opcodes under `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus` (or an override path).
+  - Live FG capture produced `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`, and the new `AckParity` test proves BG builds that teleport ACK byte-for-byte. `MSG_MOVE_WORLDPORT_ACK` still did not appear in the live corpus; current evidence points to the recorder starting after the initial world-entry ACK was already sent.
+  - Validation:
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `scene-data-db`, and `scene-data-redis` were healthy/running.
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the focused test runs.
+    - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAckCorpusRecorderTests|FullyQualifiedName~PacketLoggerBinaryAuditTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:\repos\Westworld of Warcraft\Tests\WoWSharpClient.Tests\Fixtures\ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:\repos\Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DualClientParityTests.Position_BothBotsAgreeOnMapAndLocation" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+  - Files changed:
+    - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
+    - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
+    - `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`
+    - `Services/ForegroundBotRunner/TASKS.md`
+  - Next command:
+    - `rg -n "InitializeObjectManager|PacketLogger|ForegroundAckCorpusRecorder|MSG_MOVE_WORLDPORT_ACK" Services/ForegroundBotRunner Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Session 304 removed runtime `_G` fallback sweeps from realm wizard action Lua (`select english`, `suggest realm`, `confirm suggestion`) and kept only state-driven named-control actions plus direct API fallback sequencing.
   - Session 304 kept realm-wizard handoff detection state-based (`CURRENT_GLUE_SCREEN/loginState == charselect`) so empty character lists are treated as a valid post-realm transition without Lua frame sweeps.
   - Added deterministic guard coverage that realm-wizard action Lua strings do not contain global frame iteration (`for _, frame in pairs`, `getglobals`).

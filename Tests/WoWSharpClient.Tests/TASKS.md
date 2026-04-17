@@ -6,14 +6,34 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Add recorded directional remote-unit packet fixtures so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
-2. Keep remote extrapolation work focused on fixture-backed parity gaps; deterministic math thresholds and basis handling are already covered here.
-3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
+1. Build out the live-backed ACK corpus for P2.2 so `AckParity` has one fixture/test per outbound ACK opcode from `WoW.exe NetClient::Send`.
+2. Add recorded directional remote-unit packet fixtures so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
+3. Keep remote extrapolation work focused on fixture-backed parity gaps; deterministic math thresholds and basis handling are already covered here.
+4. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
+5. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
-- Last updated: `2026-04-08 (session 300)`
-- Pass result: `scene-data tile presence checks added for previously missing city-side startup tiles`
+- Last updated: `2026-04-17`
+- Pass result: `Initial AckParity coverage is live-backed and green for MSG_MOVE_TELEPORT_ACK`
 - Last delta:
+  - Added `Parity/AckBinaryParityTests.cs` and the first `[Trait("Category", "AckParity")]` corpus-backed check. `TeleportAck_MatchesWoWExeBytes` loads raw WoW.exe fixture bytes and proves `MovementPacketHandler.BuildMoveTeleportAckPayload(...)` matches the captured `MSG_MOVE_TELEPORT_ACK` exactly.
+  - Added the first live corpus entry under `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`. The fixture was captured from foreground `NetClient::Send (0x005379A0)` during a live FG/BG parity run rather than synthesized in the test.
+  - `MSG_MOVE_WORLDPORT_ACK` is still missing from the golden corpus. The current blocker is capture timing in FG startup, not the managed encoder itself, so the next P2.2 step is to move the recorder/hook earlier or trigger a flow that emits the opcode after subscription.
+  - Validation:
+    - `$env:WWOW_REPO_ROOT='E:\repos\Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
+    - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+    - `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+    - `docs/TASKS.md`
+  - Next command:
+    - `rg -n "MSG_MOVE_WORLDPORT_ACK|SMSG_NEW_WORLD|SMSG_TRANSFER_PENDING|ForegroundAckCorpusRecorder" Services/ForegroundBotRunner Exports/WoWSharpClient Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Session 300 added direct live tile assertions in `SceneDataClientIntegrationTests` for the previously missing startup keys:
     - `LiveService_Map0_48_32_TileExists`
     - `LiveService_Map1_28_41_TileExists`

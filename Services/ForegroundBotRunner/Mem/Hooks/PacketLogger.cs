@@ -38,6 +38,7 @@ namespace ForegroundBotRunner.Mem.Hooks
         // CDataStore offsets (1.12.1)
         private const int CDataStore_Buffer = 0x04;
         private const int CDataStore_Size = 0x10;
+        private const int MaxCapturedPacketBytes = 8192;
 
         // Circular buffer of recent packets
         private const int MaxPacketEntries = 1024;
@@ -47,6 +48,7 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         // Event for state machine consumption
         public static event Action<PacketDirection, ushort, int>? OnPacketCaptured;
+        public static event Action<PacketCapture>? OnPacketCapturedDetailed;
 
         // State tracking
         private static volatile bool _hooksInitialized;
@@ -250,10 +252,19 @@ namespace ForegroundBotRunner.Mem.Hooks
 
                 uint rawOpcode = MemoryManager.ReadUint(bufferPtr);
                 ushort opcode = (ushort)(rawOpcode & 0xFFFF);
+                var rawBytes = OnPacketCapturedDetailed != null
+                    ? TryReadPacketBytes(bufferPtr, size)
+                    : null;
 
                 _sendCount++;
                 RecordPacket(PacketDirection.Send, opcode, size);
                 OnPacketCaptured?.Invoke(PacketDirection.Send, opcode, size);
+                OnPacketCapturedDetailed?.Invoke(new PacketCapture(
+                    DateTime.UtcNow,
+                    PacketDirection.Send,
+                    opcode,
+                    size,
+                    rawBytes));
             }
             catch (AccessViolationException) { /* stale pointer — skip */ }
             catch (Exception ex) { DiagLog($"OnSendPacket error: {ex.Message}"); }
@@ -423,9 +434,19 @@ namespace ForegroundBotRunner.Mem.Hooks
                     return; // Don't record suspicious packets
                 }
 
+                var rawBytes = OnPacketCapturedDetailed != null
+                    ? TryReadPacketBytes(bufferPtr, size)
+                    : null;
+
                 _recvCount++;
                 RecordPacket(PacketDirection.Recv, opcode, size);
                 OnPacketCaptured?.Invoke(PacketDirection.Recv, opcode, size);
+                OnPacketCapturedDetailed?.Invoke(new PacketCapture(
+                    DateTime.UtcNow,
+                    PacketDirection.Recv,
+                    opcode,
+                    size,
+                    rawBytes));
             }
             catch (AccessViolationException) { /* stale pointer — skip */ }
             catch (Exception ex) { DiagLog($"OnRecvPacket error: {ex.Message}"); }
@@ -723,6 +744,30 @@ namespace ForegroundBotRunner.Mem.Hooks
             _recvCount++;
             RecordPacket(PacketDirection.Recv, opcode, size);
             OnPacketCaptured?.Invoke(PacketDirection.Recv, opcode, size);
+            OnPacketCapturedDetailed?.Invoke(new PacketCapture(
+                DateTime.UtcNow,
+                PacketDirection.Recv,
+                opcode,
+                size,
+                null));
+        }
+
+        /// <summary>
+        /// Test/helper hook for simulated outbound packets with raw bytes.
+        /// </summary>
+        public static void RecordOutboundPacket(ushort opcode, byte[] rawBytes)
+        {
+            ArgumentNullException.ThrowIfNull(rawBytes);
+
+            _sendCount++;
+            RecordPacket(PacketDirection.Send, opcode, rawBytes.Length);
+            OnPacketCaptured?.Invoke(PacketDirection.Send, opcode, rawBytes.Length);
+            OnPacketCapturedDetailed?.Invoke(new PacketCapture(
+                DateTime.UtcNow,
+                PacketDirection.Send,
+                opcode,
+                rawBytes.Length,
+                (byte[])rawBytes.Clone()));
         }
 
         // ===================================================================
@@ -780,6 +825,25 @@ namespace ForegroundBotRunner.Mem.Hooks
                 var dir = direction == PacketDirection.Send ? "C→S" : "S→C";
                 var name = GetOpcodeName(opcode);
                 DiagLog($"[{dir}] 0x{opcode:X4} {name} size={size} (#{total})");
+            }
+        }
+
+        private static byte[]? TryReadPacketBytes(nint bufferPtr, int size)
+        {
+            if (bufferPtr == nint.Zero || size <= 0 || size > MaxCapturedPacketBytes)
+                return null;
+
+            try
+            {
+                var bytes = MemoryManager.ReadBytes(bufferPtr, size);
+                if (bytes == null || bytes.Length != size)
+                    return null;
+
+                return (byte[])bytes.Clone();
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -914,4 +978,14 @@ namespace ForegroundBotRunner.Mem.Hooks
             return $"[{Timestamp:HH:mm:ss.fff}] [{dir}] 0x{Opcode:X4} size={Size}";
         }
     }
+
+    /// <summary>
+    /// Detailed packet capture with a best-effort raw byte clone.
+    /// </summary>
+    public readonly record struct PacketCapture(
+        DateTime TimestampUtc,
+        PacketDirection Direction,
+        ushort Opcode,
+        int Size,
+        byte[]? RawBytes);
 }
