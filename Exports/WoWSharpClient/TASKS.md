@@ -21,26 +21,26 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `Knockback ACK timing now matches the proved non-inline WoW.exe queue shape, and parity bundles stayed green`
+- Pass result: `P2.3 timing parity is closed for knockback, speed, root, and server-controlled flag ACKs; parity bundles stayed green`
 - Last delta:
-  - Added `docs/physics/packet_ack_timing.md` to answer P2.3 Q1-Q5 from the current decomp set. The key new owner-facing conclusion is that knockback, speed, root, and flag toggles are all queue-first on the WoW.exe side; only knockback is fixed in this slice.
-  - `EventEmitter_OnForceMoveKnockBack(...)` now stages the ACK metadata instead of sending inline, and `MovementController.Update()` flushes `CMSG_MOVE_KNOCK_BACK_ACK` immediately after consuming the pending impulse. That closes G1 without changing ACK bytes.
-  - `ObjectManagerWorldSessionTests` now prove the old behavior failed first (`CMSG_MOVE_KNOCK_BACK_ACK` emitted inline) and the new behavior passes with the ACK deferred until after the controller applies the queued impulse.
+  - Closed the rest of the P2.3 queue-first families after the earlier knockback fix. `WoWSharpObjectManager.Movement.cs` now stages speed/root/flag ACK work in a FIFO deferred queue, and `MovementController.Update()` flushes it on the next controller tick instead of mutating or ACKing inline from `EventEmitter_OnForce*` / `EventEmitter_OnMove*`.
+  - The new queue mirrors the WoW.exe staging leaves already documented in `docs/physics/packet_ack_timing.md`, `smsg_force_speed_change_handler.md`, `smsg_force_move_root_handler.md`, and `smsg_move_flag_toggle_handler.md`: `0x619500..0x6197D0`, `0x61A700`, and `0x61A380/0x61A490/0x61A5D0` all stage through `0x6176A0` / `0x617570` and never send inline from the first packet leaf.
+  - Added direct deterministic timing coverage for the remaining families, including non-compressed and compressed root/unroot, speed changes, and server-controlled flag toggles. The first timing sweep failed `26/26` before the runtime change and passed `26/26` after the queue fix; direct root/unroot timing coverage passed `4/4`.
   - Validation:
     - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test compile runs.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack_" --logger "console;verbosity=minimal"` -> first run `failed (2/2)` before the fix because `CMSG_MOVE_KNOCK_BACK_ACK` was emitted inline; second run `passed (2/2)` after the deferral change.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~ServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate" --logger "console;verbosity=minimal"` -> first run `failed (26/26)` before the queue fix; final rerun `passed (26/26)`.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate|FullyQualifiedName~CompressedForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `docs/physics/packet_ack_timing.md`
     - `Exports/WoWSharpClient/Movement/MovementController.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
     - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
     - `Exports/WoWSharpClient/TASKS.md`
   - Next command:
-    - `rg -n "ForceSpeedChangeOpcodes|CompressedForceMoveRootOpcodes|ServerControlledMovementFlagChanges|CompressedServerControlledMovementFlagChanges|0x619500|0x61A700|0x61A380" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "HandleUpdateObject|ObjectStateUpdate|ObjectUpdateOperation|CGObject_C|CGUnit_C|CGPlayer_C" Exports/WoWSharpClient docs/physics C:/Users/lrhod/.claude/projects/e--repos-Westworld-of-Warcraft/memory/wow_exe_physics_decompilation.md -g '!**/bin/**' -g '!**/obj/**'`
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
     - `SpellcastingManager.CastSpell(...)` no longer forces fishing through `CastSpellAtLocation(...)`; fishing now keeps the no-target `CMSG_CAST_SPELL` payload shape.

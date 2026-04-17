@@ -70,6 +70,20 @@ namespace WoWSharpClient
         private PendingTeleportAck? _pendingTeleportAck;
         private readonly record struct PendingTeleportAck(ulong Guid, uint Counter, Position TargetPosition);
         private readonly record struct PendingKnockbackAck(ulong Guid, uint Counter);
+        private enum DeferredMovementChangeKind
+        {
+            Speed,
+            Root,
+            FlagToggle,
+        }
+        private readonly record struct PendingDeferredMovementChange(
+            DeferredMovementChangeKind Kind,
+            ulong Guid,
+            uint Counter,
+            Opcode AckOpcode,
+            float Speed,
+            MovementFlags Flag,
+            bool Apply);
         private SceneEnvironmentFlags _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
         private uint _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
         private Position? _lastResolvedSceneEnvironmentPosition;
@@ -267,6 +281,8 @@ namespace WoWSharpClient
         private volatile bool _hasPendingKnockback;
         private float _pendingKnockbackVelX, _pendingKnockbackVelY, _pendingKnockbackVelZ;
         private PendingKnockbackAck? _pendingKnockbackAck;
+        private readonly object _pendingDeferredMovementChangesLock = new();
+        private readonly Queue<PendingDeferredMovementChange> _pendingDeferredMovementChanges = new();
 
         /// <summary>Returns and clears any pending knockback velocity impulse.</summary>
         internal bool TryConsumePendingKnockback(out float vx, out float vy, out float vz)
@@ -311,19 +327,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.SwimSpeed = e.Speed;
-            Serilog.Log.Information("[SPEED] SwimSpeed changed to {Speed:F2} y/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK);
         }
 
         private void EventEmitter_OnForceSwimBackSpeedChange(
@@ -331,19 +335,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.SwimBackSpeed = e.Speed;
-            Serilog.Log.Information("[SPEED] SwimBackSpeed changed to {Speed:F2} y/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK);
         }
 
         /// <summary>
@@ -365,19 +357,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.RunBackSpeed = e.Speed;
-            Serilog.Log.Information("[SPEED] RunBackSpeed changed to {Speed:F2} y/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK);
         }
 
         private void EventEmitter_OnForceWalkSpeedChange(
@@ -385,19 +365,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.WalkSpeed = e.Speed;
-            Serilog.Log.Information("[SPEED] WalkSpeed changed to {Speed:F2} y/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK);
         }
 
 
@@ -406,19 +374,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.RunSpeed = e.Speed;
-            Serilog.Log.Information("[SPEED] RunSpeed changed to {Speed:F2} y/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK);
         }
 
         private void EventEmitter_OnForceTurnRateChange(
@@ -426,54 +382,19 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            var player = (WoWLocalPlayer)Player;
-            player.TurnRate = e.Speed;
-            Serilog.Log.Information("[SPEED] TurnRate changed to {Speed:F2} rad/s", e.Speed);
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK,
-                MovementPacketHandler.BuildForceSpeedChangeAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    e.Speed
-                )
-            );
+            QueueDeferredSpeedChange(e, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK);
         }
 
 
         private void EventEmitter_OnForceMoveUnroot(object? sender, RequiresAcknowledgementArgs e)
         {
-            // Clear MOVEFLAG_ROOT before ACK — MaNGOS validates the flag is absent
-            var player = (WoWLocalPlayer)Player;
-            player.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_MOVE_UNROOT_ACK,
-                MovementPacketHandler.BuildForceMoveAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
-                )
-            );
+            QueueDeferredRootChange(e, applyRoot: false, Opcode.CMSG_FORCE_MOVE_UNROOT_ACK);
         }
 
 
         private void EventEmitter_OnForceMoveRoot(object? sender, RequiresAcknowledgementArgs e)
         {
-            // Set MOVEFLAG_ROOT and clear movement flags incompatible with root
-            var player = (WoWLocalPlayer)Player;
-            player.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
-            player.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING;
-
-            _ = _woWClient.SendMSGPackedAsync(
-                Opcode.CMSG_FORCE_MOVE_ROOT_ACK,
-                MovementPacketHandler.BuildForceMoveAck(
-                    player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
-                )
-            );
+            QueueDeferredRootChange(e, applyRoot: true, Opcode.CMSG_FORCE_MOVE_ROOT_ACK);
         }
 
         // VMaNGOS MovementPacketSender.cpp / MovementPacketSender.h:
@@ -484,42 +405,211 @@ namespace WoWSharpClient
         // float marker: 1.0f for set/apply, 0.0f for clear/remove.
 
         private void EventEmitter_OnMoveWaterWalk(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: true, Opcode.CMSG_MOVE_WATER_WALK_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: true, Opcode.CMSG_MOVE_WATER_WALK_ACK);
 
         private void EventEmitter_OnMoveLandWalk(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: false, Opcode.CMSG_MOVE_WATER_WALK_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_WATERWALKING, apply: false, Opcode.CMSG_MOVE_WATER_WALK_ACK);
 
         private void EventEmitter_OnMoveSetHover(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_HOVER, apply: true, Opcode.CMSG_MOVE_HOVER_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_HOVER, apply: true, Opcode.CMSG_MOVE_HOVER_ACK);
 
         private void EventEmitter_OnMoveUnsetHover(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_HOVER, apply: false, Opcode.CMSG_MOVE_HOVER_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_HOVER, apply: false, Opcode.CMSG_MOVE_HOVER_ACK);
 
         private void EventEmitter_OnMoveFeatherFall(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: true, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: true, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
 
         private void EventEmitter_OnMoveNormalFall(object? sender, RequiresAcknowledgementArgs e)
-            => SendMovementFlagToggleAck(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: false, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
+            => QueueDeferredMovementFlagToggle(e, MovementFlags.MOVEFLAG_SAFE_FALL, apply: false, Opcode.CMSG_MOVE_FEATHER_FALL_ACK);
 
-        private void SendMovementFlagToggleAck(
+        private void QueueDeferredSpeedChange(RequiresAcknowledgementArgs e, Opcode ackOpcode)
+        {
+            QueueDeferredMovementChange(new PendingDeferredMovementChange(
+                DeferredMovementChangeKind.Speed,
+                e.Guid,
+                e.Counter,
+                ackOpcode,
+                e.Speed,
+                MovementFlags.MOVEFLAG_NONE,
+                true));
+        }
+
+        private void QueueDeferredRootChange(RequiresAcknowledgementArgs e, bool applyRoot, Opcode ackOpcode)
+        {
+            QueueDeferredMovementChange(new PendingDeferredMovementChange(
+                DeferredMovementChangeKind.Root,
+                e.Guid,
+                e.Counter,
+                ackOpcode,
+                0f,
+                MovementFlags.MOVEFLAG_ROOT,
+                applyRoot));
+        }
+
+        private void QueueDeferredMovementFlagToggle(
             RequiresAcknowledgementArgs e,
             MovementFlags flag,
             bool apply,
             Opcode ackOpcode)
         {
-            var player = (WoWLocalPlayer)Player;
-            if (apply)
-                player.MovementFlags |= flag;
-            else
-                player.MovementFlags &= ~flag;
+            QueueDeferredMovementChange(new PendingDeferredMovementChange(
+                DeferredMovementChangeKind.FlagToggle,
+                e.Guid,
+                e.Counter,
+                ackOpcode,
+                0f,
+                flag,
+                apply));
+        }
+
+        private void QueueDeferredMovementChange(PendingDeferredMovementChange pendingChange)
+        {
+            lock (_pendingDeferredMovementChangesLock)
+            {
+                _pendingDeferredMovementChanges.Enqueue(pendingChange);
+            }
+        }
+
+        internal int FlushPendingDeferredMovementChanges(uint gameTimeMs)
+        {
+            PendingDeferredMovementChange[] pendingChanges;
+            lock (_pendingDeferredMovementChangesLock)
+            {
+                if (_pendingDeferredMovementChanges.Count == 0)
+                {
+                    return 0;
+                }
+
+                pendingChanges = _pendingDeferredMovementChanges.ToArray();
+                _pendingDeferredMovementChanges.Clear();
+            }
+
+            if (Player is not WoWLocalPlayer player)
+            {
+                return 0;
+            }
+
+            int flushed = 0;
+            foreach (var pendingChange in pendingChanges)
+            {
+                if (pendingChange.Guid != player.Guid)
+                {
+                    continue;
+                }
+
+                switch (pendingChange.Kind)
+                {
+                    case DeferredMovementChangeKind.Speed:
+                        ApplyDeferredSpeedChange(player, pendingChange, gameTimeMs);
+                        break;
+                    case DeferredMovementChangeKind.Root:
+                        ApplyDeferredRootChange(player, pendingChange, gameTimeMs);
+                        break;
+                    case DeferredMovementChangeKind.FlagToggle:
+                        ApplyDeferredMovementFlagToggle(player, pendingChange, gameTimeMs);
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unhandled deferred movement change kind {pendingChange.Kind}");
+                }
+
+                flushed++;
+            }
+
+            return flushed;
+        }
+
+        private void ApplyDeferredSpeedChange(
+            WoWLocalPlayer player,
+            PendingDeferredMovementChange pendingChange,
+            uint gameTimeMs)
+        {
+            switch (pendingChange.AckOpcode)
+            {
+                case Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK:
+                    player.RunSpeed = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] RunSpeed changed to {Speed:F2} y/s", pendingChange.Speed);
+                    break;
+                case Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK:
+                    player.RunBackSpeed = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] RunBackSpeed changed to {Speed:F2} y/s", pendingChange.Speed);
+                    break;
+                case Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK:
+                    player.SwimSpeed = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] SwimSpeed changed to {Speed:F2} y/s", pendingChange.Speed);
+                    break;
+                case Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK:
+                    player.WalkSpeed = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] WalkSpeed changed to {Speed:F2} y/s", pendingChange.Speed);
+                    break;
+                case Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK:
+                    player.SwimBackSpeed = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] SwimBackSpeed changed to {Speed:F2} y/s", pendingChange.Speed);
+                    break;
+                case Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK:
+                    player.TurnRate = pendingChange.Speed;
+                    Serilog.Log.Information("[SPEED] TurnRate changed to {Speed:F2} rad/s", pendingChange.Speed);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unhandled deferred speed ACK opcode {pendingChange.AckOpcode}");
+            }
 
             _ = _woWClient.SendMSGPackedAsync(
-                ackOpcode,
+                pendingChange.AckOpcode,
+                MovementPacketHandler.BuildForceSpeedChangeAck(
+                    player,
+                    pendingChange.Counter,
+                    gameTimeMs,
+                    pendingChange.Speed
+                )
+            );
+        }
+
+        private void ApplyDeferredRootChange(
+            WoWLocalPlayer player,
+            PendingDeferredMovementChange pendingChange,
+            uint gameTimeMs)
+        {
+            if (pendingChange.Apply)
+            {
+                player.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
+                player.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING;
+            }
+            else
+            {
+                player.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
+            }
+
+            _ = _woWClient.SendMSGPackedAsync(
+                pendingChange.AckOpcode,
+                MovementPacketHandler.BuildForceMoveAck(
+                    player,
+                    pendingChange.Counter,
+                    gameTimeMs
+                )
+            );
+        }
+
+        private void ApplyDeferredMovementFlagToggle(
+            WoWLocalPlayer player,
+            PendingDeferredMovementChange pendingChange,
+            uint gameTimeMs)
+        {
+            if (pendingChange.Apply)
+            {
+                player.MovementFlags |= pendingChange.Flag;
+            }
+            else
+            {
+                player.MovementFlags &= ~pendingChange.Flag;
+            }
+
+            _ = _woWClient.SendMSGPackedAsync(
+                pendingChange.AckOpcode,
                 MovementPacketHandler.BuildMovementFlagToggleAck(
                     player,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds,
-                    apply
+                    pendingChange.Counter,
+                    gameTimeMs,
+                    pendingChange.Apply
                 )
             );
         }

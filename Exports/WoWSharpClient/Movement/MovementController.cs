@@ -210,6 +210,8 @@ namespace WoWSharpClient.Movement
                 _objectManager.TryFlushPendingKnockbackAck(gameTimeMs);
             }
 
+            _objectManager?.FlushPendingDeferredMovementChanges(gameTimeMs);
+
             // Idle guard: skip physics when no movement intent, no pending ground snap,
             // and not auto-attacking. Prevents unnecessary airborne detection on idle frames.
             // This was present in the 100% parity commit (70c72973) and was accidentally removed.

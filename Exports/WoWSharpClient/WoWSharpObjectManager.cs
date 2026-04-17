@@ -163,6 +163,10 @@ namespace WoWSharpClient
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             _physicsTimeAccumulator = 0f;
+            lock (_pendingDeferredMovementChangesLock)
+            {
+                _pendingDeferredMovementChanges.Clear();
+            }
             _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
             _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
             _lastResolvedSceneEnvironmentPosition = null;
@@ -775,6 +779,10 @@ namespace WoWSharpClient
             _hasPendingKnockback = false;
             _pendingKnockbackVelX = _pendingKnockbackVelY = _pendingKnockbackVelZ = 0f;
             _pendingKnockbackAck = null;
+            lock (_pendingDeferredMovementChangesLock)
+            {
+                _pendingDeferredMovementChanges.Clear();
+            }
             _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
             _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
             _lastResolvedSceneEnvironmentPosition = null;

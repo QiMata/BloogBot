@@ -679,11 +679,19 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void ForceSpeedChangeOpcodes_ParseApplyAndAck(
+    public void ForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate(
         Opcode serverOpcode,
         Opcode ackOpcode,
         float newValue)
     {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         ResetObjectManager();
 
         const ulong playerGuid = 0x0102030405060708ul;
@@ -696,12 +704,33 @@ public class ObjectManagerWorldSessionTests
         player.Position = new Position(10f, 20f, 30f);
         player.Facing = 1.25f;
         player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.RunSpeed = 7.0f;
+        player.RunBackSpeed = 4.5f;
+        player.SwimSpeed = 4.722222f;
         player.WalkSpeed = 1.5f;
         player.SwimBackSpeed = 0.75f;
         player.TurnRate = 2.0f;
 
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
         SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
+
+        var oldValue = serverOpcode switch
+        {
+            Opcode.SMSG_FORCE_RUN_SPEED_CHANGE => player.RunSpeed,
+            Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE => player.RunBackSpeed,
+            Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE => player.SwimSpeed,
+            Opcode.SMSG_FORCE_WALK_SPEED_CHANGE => player.WalkSpeed,
+            Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE => player.SwimBackSpeed,
+            Opcode.SMSG_FORCE_TURN_RATE_CHANGE => player.TurnRate,
+            _ => throw new InvalidOperationException($"Unhandled opcode {serverOpcode}"),
+        };
 
         RequiresAcknowledgementArgs? capturedArgs = null;
         EventHandler<RequiresAcknowledgementArgs> handler = (_, args) => capturedArgs = args;
@@ -723,6 +752,37 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(playerGuid, capturedArgs!.Guid);
         Assert.Equal(movementCounter, capturedArgs.Counter);
         Assert.Equal(newValue, capturedArgs.Speed, 5);
+
+        switch (serverOpcode)
+        {
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.RunSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.RunBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.SwimSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.WalkSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.SwimBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                Assert.Equal(oldValue, player.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+
+        Assert.Empty(sentPackets);
+
+        var ackOrigin = new Position(player.Position.X, player.Position.Y, player.Position.Z);
+        var ackFacing = player.Facing;
+        var ackFlags = player.MovementFlags;
+        controller.Update(0.05f, 1000);
 
         switch (serverOpcode)
         {
@@ -758,11 +818,11 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(movementCounter, reader.ReadUInt32());
 
         var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
-        Assert.Equal(player.Position.X, ackMovement.X, 5);
-        Assert.Equal(player.Position.Y, ackMovement.Y, 5);
-        Assert.Equal(player.Position.Z, ackMovement.Z, 5);
-        Assert.Equal(player.Facing, ackMovement.Facing, 5);
-        Assert.Equal(player.MovementFlags, ackMovement.MovementFlags);
+        Assert.Equal(ackOrigin.X, ackMovement.X, 5);
+        Assert.Equal(ackOrigin.Y, ackMovement.Y, 5);
+        Assert.Equal(ackOrigin.Z, ackMovement.Z, 5);
+        Assert.Equal(ackFacing, ackMovement.Facing, 5);
+        Assert.Equal(ackFlags, ackMovement.MovementFlags);
         Assert.Equal(newValue, reader.ReadSingle(), 5);
         Assert.Equal(ms.Length, ms.Position);
     }
@@ -776,12 +836,20 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void ServerControlledMovementFlagChanges_ParseApplyAndAck(
+    public void ServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate(
         Opcode serverOpcode,
         Opcode ackOpcode,
         MovementFlags flag,
         bool apply)
     {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         ResetObjectManager();
 
         const ulong playerGuid = 0x1020304050607080ul;
@@ -797,11 +865,24 @@ public class ObjectManagerWorldSessionTests
 
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
         SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
 
         MovementHandler.HandleUpdateMovement(
             serverOpcode,
             BuildGuidCounterPayload(playerGuid, movementCounter),
             ctx);
+
+        Assert.False(player.MovementFlags.HasFlag(flag));
+
+        Assert.Empty(sentPackets);
+
+        controller.Update(0.05f, 1000);
 
         if (apply)
             Assert.True(player.MovementFlags.HasFlag(flag));
@@ -831,11 +912,97 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_FORCE_MOVE_UNROOT, Opcode.CMSG_FORCE_MOVE_UNROOT_ACK, false)]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void CompressedForceMoveRootOpcodes_ParseApplyAndAck(
+    public void ForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate(
         Opcode serverOpcode,
         Opcode ackOpcode,
         bool expectRooted)
     {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x102030405060707Ful;
+        const uint movementCounter = 95u;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = (WoWLocalPlayer)objectManager.Player;
+        player.Position = new Position(10f, 20f, 30f);
+        player.Facing = 1.25f;
+        player.MovementFlags = expectRooted
+            ? MovementFlags.MOVEFLAG_FORWARD
+            : (MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ROOT);
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
+
+        MovementHandler.HandleUpdateMovement(
+            serverOpcode,
+            BuildGuidCounterPayload(playerGuid, movementCounter),
+            ctx);
+
+        if (expectRooted)
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+
+        Assert.Empty(sentPackets);
+
+        controller.Update(0.05f, 1000);
+
+        if (expectRooted)
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+
+        var sent = Assert.Single(sentPackets);
+        Assert.Equal(ackOpcode, sent.opcode);
+
+        using var ms = new MemoryStream(sent.payload);
+        using var reader = new BinaryReader(ms);
+        Assert.Equal(playerGuid, reader.ReadUInt64());
+        Assert.Equal(movementCounter, reader.ReadUInt32());
+        var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
+
+        if (expectRooted)
+            Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        Assert.Equal(ms.Length, ms.Position);
+    }
+
+    [Theory]
+    [InlineData(Opcode.SMSG_FORCE_MOVE_ROOT, Opcode.CMSG_FORCE_MOVE_ROOT_ACK, true)]
+    [InlineData(Opcode.SMSG_FORCE_MOVE_UNROOT, Opcode.CMSG_FORCE_MOVE_UNROOT_ACK, false)]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
+    public void CompressedForceMoveRootOpcodes_DeferMutationAndAckUntilControllerUpdate(
+        Opcode serverOpcode,
+        Opcode ackOpcode,
+        bool expectRooted)
+    {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         ResetObjectManager();
 
         const ulong playerGuid = 0x1020304050607081ul;
@@ -853,10 +1020,26 @@ public class ObjectManagerWorldSessionTests
 
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
         SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
         MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
+
+        if (expectRooted)
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+        else
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
+
+        Assert.Empty(sentPackets);
+
+        controller.Update(0.05f, 1000);
 
         if (expectRooted)
             Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ROOT));
@@ -888,12 +1071,20 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void CompressedServerControlledMovementFlagChanges_ParseApplyAndAck(
+    public void CompressedServerControlledMovementFlagChanges_DeferMutationAndAckUntilControllerUpdate(
         Opcode serverOpcode,
         Opcode ackOpcode,
         MovementFlags flag,
         bool apply)
     {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         ResetObjectManager();
 
         const ulong playerGuid = 0x1020304050607082ul;
@@ -909,10 +1100,23 @@ public class ObjectManagerWorldSessionTests
 
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
         SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildSingleUIntPayload(movementCounter)));
         MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
+
+        Assert.False(player.MovementFlags.HasFlag(flag));
+
+        Assert.Empty(sentPackets);
+
+        controller.Update(0.05f, 1000);
 
         if (apply)
             Assert.True(player.MovementFlags.HasFlag(flag));
@@ -946,11 +1150,19 @@ public class ObjectManagerWorldSessionTests
     [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, 3.14159f)]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void CompressedForceSpeedChangeOpcodes_ParseApplyAndAck(
+    public void CompressedForceSpeedChangeOpcodes_DeferMutationAndAckUntilControllerUpdate(
         Opcode serverOpcode,
         Opcode ackOpcode,
         float newValue)
     {
+        _fixture._woWClient.Reset();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(
+                It.IsAny<Opcode>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         ResetObjectManager();
 
         const ulong playerGuid = 0x1020304050607083ul;
@@ -963,16 +1175,68 @@ public class ObjectManagerWorldSessionTests
         player.Position = new Position(10f, 20f, 30f);
         player.Facing = 1.25f;
         player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.RunSpeed = 7.0f;
+        player.RunBackSpeed = 4.5f;
+        player.SwimSpeed = 4.722222f;
         player.WalkSpeed = 1.5f;
         player.SwimBackSpeed = 0.75f;
         player.TurnRate = 2.0f;
 
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
         SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", false);
+        SetPrivateField(controller, "_lastPhysicsPosition", new System.Numerics.Vector3(
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z));
+        SetPrivateField(controller, "_lastPhysicsMapId", player.MapId);
+
+        var oldValue = serverOpcode switch
+        {
+            Opcode.SMSG_FORCE_RUN_SPEED_CHANGE => player.RunSpeed,
+            Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE => player.RunBackSpeed,
+            Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE => player.SwimSpeed,
+            Opcode.SMSG_FORCE_WALK_SPEED_CHANGE => player.WalkSpeed,
+            Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE => player.SwimBackSpeed,
+            Opcode.SMSG_FORCE_TURN_RATE_CHANGE => player.TurnRate,
+            _ => throw new InvalidOperationException($"Unhandled opcode {serverOpcode}"),
+        };
 
         var payload = BuildCompressedMovePacket(
             BuildCompressedMoveEntry(serverOpcode, playerGuid, BuildCounterAndFloatPayload(movementCounter, newValue)));
         MovementHandler.HandleUpdateMovement(Opcode.SMSG_COMPRESSED_MOVES, payload, ctx);
+
+        switch (serverOpcode)
+        {
+            case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.RunSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.RunBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.SwimSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_WALK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.WalkSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE:
+                Assert.Equal(oldValue, player.SwimBackSpeed, 5);
+                break;
+            case Opcode.SMSG_FORCE_TURN_RATE_CHANGE:
+                Assert.Equal(oldValue, player.TurnRate, 5);
+                break;
+            default:
+                throw new InvalidOperationException($"Unhandled opcode {serverOpcode}");
+        }
+
+        Assert.Empty(sentPackets);
+
+        var ackOrigin = new Position(player.Position.X, player.Position.Y, player.Position.Z);
+        var ackFacing = player.Facing;
+        var ackFlags = player.MovementFlags;
+        controller.Update(0.05f, 1000);
 
         switch (serverOpcode)
         {
@@ -1006,11 +1270,11 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(playerGuid, reader.ReadUInt64());
         Assert.Equal(movementCounter, reader.ReadUInt32());
         var ackMovement = MovementPacketHandler.ParseMovementInfo(reader);
-        Assert.Equal(player.Position.X, ackMovement.X, 5);
-        Assert.Equal(player.Position.Y, ackMovement.Y, 5);
-        Assert.Equal(player.Position.Z, ackMovement.Z, 5);
-        Assert.Equal(player.Facing, ackMovement.Facing, 5);
-        Assert.Equal(player.MovementFlags, ackMovement.MovementFlags);
+        Assert.Equal(ackOrigin.X, ackMovement.X, 5);
+        Assert.Equal(ackOrigin.Y, ackMovement.Y, 5);
+        Assert.Equal(ackOrigin.Z, ackMovement.Z, 5);
+        Assert.Equal(ackFacing, ackMovement.Facing, 5);
+        Assert.Equal(ackFlags, ackMovement.MovementFlags);
         Assert.Equal(newValue, reader.ReadSingle(), 5);
         Assert.Equal(ms.Length, ms.Position);
     }
