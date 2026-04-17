@@ -25,6 +25,12 @@ public sealed class AckBinaryParityTests
             yield return new object[] { fixture };
     }
 
+    public static IEnumerable<object[]> WorldportAckFixtures()
+    {
+        foreach (var fixture in LoadFixtures(Opcode.MSG_MOVE_WORLDPORT_ACK))
+            yield return new object[] { fixture };
+    }
+
     [Theory]
     [MemberData(nameof(TeleportAckFixtures))]
     [Trait("Category", "AckParity")]
@@ -41,6 +47,17 @@ public sealed class AckBinaryParityTests
             fixture.ClientTimeMs.Value);
 
         var actualBytes = EncodeRawClientPacket((Opcode)(uint)fixture.Opcode, payload);
+        var expectedBytes = Convert.FromHexString(fixture.PacketBytesHex);
+
+        Assert.Equal(expectedBytes, actualBytes);
+    }
+
+    [Theory]
+    [MemberData(nameof(WorldportAckFixtures))]
+    [Trait("Category", "AckParity")]
+    public void WorldportAck_MatchesWoWExeBytes(AckCorpusFixture fixture)
+    {
+        var actualBytes = EncodeRawClientPacket((Opcode)(uint)fixture.Opcode, Array.Empty<byte>());
         var expectedBytes = Convert.FromHexString(fixture.PacketBytesHex);
 
         Assert.Equal(expectedBytes, actualBytes);

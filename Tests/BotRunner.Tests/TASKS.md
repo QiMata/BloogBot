@@ -46,9 +46,25 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~MovementSpeedTests|FullyQualifiedName~CombatBgTests" -v n --blame-hang --blame-hang-timeout 5m`
 
 ## Session Handoff
-- Last updated: `2026-04-09`
-- Pass result: `FG new-account/new-character live flow is stable across repeated runs with state-based realm wizard handling`
+- Last updated: `2026-04-17`
+- Pass result: `FG cross-map ACK capture harness produced live worldport fixtures without regressing parity bundles`
 - Last delta:
+  - Added `LiveValidation/AckCaptureTests.cs` with `Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled`. The harness stages the FG bot in Orgrimmar, teleports it across maps to Ironforge, waits for the FG snapshot to settle in-world, and when `WWOW_CAPTURE_ACK_CORPUS=1` asserts that `MSG_MOVE_WORLDPORT_ACK` fixtures appear under the repo corpus directory.
+  - Live execution with the ACK-corpus env vars enabled produced two `MSG_MOVE_WORLDPORT_ACK` fixtures (`DC000000`) while the FG client remained stable through both cross-map teleports. This closes the P2.2 worldport-capture blocker without changing the existing FG hook timing.
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the build/run.
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
+    - `if (Test-Path 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK') { Remove-Item -LiteralPath 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK' -Recurse -Force }; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161214_670_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161217_932_0002.json`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Tests/BotRunner.Tests/TASKS.md`
+  - Next command:
+    - `rg -n "CMSG_FORCE_.*ACK|MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK" Exports/WoWSharpClient Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Revalidated `ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld` after realm wizard no-sweep action hardening; kept fixture focused on one fresh account/character per run.
   - Live test passed repeatedly with repo-local runtime/output roots:
     - `fg_new_account_flow_latest.trx` -> in-world after `129.8s`

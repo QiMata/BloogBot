@@ -14,8 +14,25 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `Initial AckParity coverage is live-backed and green for MSG_MOVE_TELEPORT_ACK`
+- Pass result: `AckParity is live-backed and green for MSG_MOVE_TELEPORT_ACK plus MSG_MOVE_WORLDPORT_ACK`
 - Last delta:
+  - Added `WorldportAck_MatchesWoWExeBytes` to `Parity/AckBinaryParityTests.cs` and captured live `MSG_MOVE_WORLDPORT_ACK` fixtures via an FG cross-map teleport harness. The new fixtures (`20260417_161214_670_0001.json`, `20260417_161217_932_0002.json`) both prove the worldport ACK is just `DC000000`.
+  - `AckParity` now passes for the live teleport/worldport corpus entries (`4/4` in the current corpus). The remaining P2.2 gap is fixture acquisition for the force-speed/root/flag/knockback/raw-position/flight ACK set.
+  - Validation:
+    - `if (Test-Path 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK') { Remove-Item -LiteralPath 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK' -Recurse -Force }; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:\repos\Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161214_670_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161217_932_0002.json`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+    - `docs/TASKS.md`
+  - Next command:
+    - `rg -n "CMSG_FORCE_.*ACK|MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK" Exports/WoWSharpClient Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Added `Parity/AckBinaryParityTests.cs` and the first `[Trait("Category", "AckParity")]` corpus-backed check. `TeleportAck_MatchesWoWExeBytes` loads raw WoW.exe fixture bytes and proves `MovementPacketHandler.BuildMoveTeleportAckPayload(...)` matches the captured `MSG_MOVE_TELEPORT_ACK` exactly.
   - Added the first live corpus entry under `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`. The fixture was captured from foreground `NetClient::Send (0x005379A0)` during a live FG/BG parity run rather than synthesized in the test.
   - `MSG_MOVE_WORLDPORT_ACK` is still missing from the golden corpus. The current blocker is capture timing in FG startup, not the managed encoder itself, so the next P2.2 step is to move the recorder/hook earlier or trigger a flow that emits the opcode after subscription.

@@ -1,0 +1,14 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T16:12:17.932093Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 220,
+  "OpcodeName": "MSG_MOVE_WORLDPORT_ACK",
+  "PacketSize": 4,
+  "PacketBytesHex": "DC000000",
+  "Guid": null,
+  "Counter": null,
+  "ClientTimeMs": null,
+  "Speed": null,
+  "Movement": null
+}

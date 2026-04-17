@@ -37,9 +37,24 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-17 (session 306)`
-- Pass result: `ACK corpus capture is wired through WoW.exe NetClient::Send and live teleport ACK parity is green`
+- Last updated: `2026-04-17 (session 307)`
+- Pass result: `FG ACK corpus recorder captured live worldport ACKs from in-world cross-map teleports`
 - Last delta:
+  - Session 307 closed the earlier `MSG_MOVE_WORLDPORT_ACK` corpus gap without changing the deferred packet-hook startup. A new live BotRunner harness teleports the already-in-world FG client across maps, and the existing `PacketLogger` + `ForegroundAckCorpusRecorder` captured two real `MSG_MOVE_WORLDPORT_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`), both `DC000000`.
+  - The service-side conclusion is narrower now: the initial login-worldport send still happens before the current hook-init path, but P2.2 corpus coverage no longer depends on moving the hook earlier because the same opcode is observable from later cross-map transfers.
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the live capture build.
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
+    - `if (Test-Path 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK') { Remove-Item -LiteralPath 'Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK' -Recurse -Force }; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161214_670_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260417_161217_932_0002.json`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Services/ForegroundBotRunner/TASKS.md`
+  - Next command:
+    - `rg -n "CMSG_FORCE_.*ACK|MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK" Exports/WoWSharpClient Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Session 306 added raw-byte packet capture on top of the existing FG send/recv hooks. `PacketLogger` now exposes `OnPacketCapturedDetailed` plus a test helper `RecordOutboundPacket(...)`, so ACK parity tooling can consume exact outbound bytes from `WoW.exe NetClient::Send` (`0x005379A0`) instead of only opcode/size metadata.
   - Added `ForegroundAckCorpusRecorder` and started/stopped it from `ForegroundBotWorker` when `WWOW_ENABLE_RECORDING_ARTIFACTS=1` and `WWOW_CAPTURE_ACK_CORPUS=1` are both enabled. The recorder writes packet-derived JSON fixtures for outbound ACK opcodes under `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus` (or an override path).
   - Live FG capture produced `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260417_155147_750_0000.json`, and the new `AckParity` test proves BG builds that teleport ACK byte-for-byte. `MSG_MOVE_WORLDPORT_ACK` still did not appear in the live corpus; current evidence points to the recorder starting after the initial world-entry ACK was already sent.
