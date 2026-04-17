@@ -574,6 +574,7 @@ namespace WoWSharpClient
         {
             if (_isInControl
                 || Player == null
+                || _hasExplicitClientControlLockout
                 || _isBeingTeleported
                 || HasPendingWorldEntry
                 || PendingUpdateCount > 0
@@ -776,6 +777,7 @@ namespace WoWSharpClient
             HasEnteredWorld = false;
             ClearPendingWorldEntry();
             _isInControl = false;
+            _hasExplicitClientControlLockout = false;
             _isBeingTeleported = false;
             _pendingTeleportAck = null;
             _hasPendingKnockback = false;

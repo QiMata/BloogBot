@@ -74,6 +74,9 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         EventEmitter.OnTeleport += (_, args) =>
             Events.Add(new PacketFlowTraceEvent("event", "OnTeleport", Guid: args.Guid, Counter: args.Counter));
 
+        EventEmitter.OnClientControlUpdate += (_, args) =>
+            Events.Add(new PacketFlowTraceEvent("event", "OnClientControlUpdate", Guid: args.Guid, BooleanValue: args.CanControl));
+
         HandlerContext = new HandlerContext(ObjectManager, EventEmitter);
     }
 
@@ -113,7 +116,10 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         player.TurnRate = MathF.PI;
 
         SetProperty(ObjectManager, "HasEnteredWorld", true);
+        InvokePrivateMethod(ObjectManager, "ClearPendingWorldEntry");
         SetPrivateField(ObjectManager, "_isInControl", true);
+        SetPrivateField(ObjectManager, "_hasExplicitClientControlLockout", false);
+        SetPrivateField(ObjectManager, "_isBeingTeleported", false);
         SetPrivateField(ObjectManager, "_worldTimeTracker", new WorldTimeTracker(() => fixedWorldTimeMs));
     }
 
@@ -186,11 +192,20 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         return ObjectManager.TryFlushPendingTeleportAck();
     }
 
+    public void SetIsBeingTeleported(bool value) => SetPrivateField(ObjectManager, "_isBeingTeleported", value);
+
+    public bool IsInControl() => GetPrivateField<bool>(ObjectManager, "_isInControl");
+
+    public bool IsBeingTeleported() => GetPrivateField<bool>(ObjectManager, "_isBeingTeleported");
+
+    public void ReconcilePlayerControlState() => InvokePrivateMethod(ObjectManager, "ReconcilePlayerControlState");
+
     private static Action<Opcode, byte[], HandlerContext> ResolveHandler(Opcode opcode)
         => opcode switch
         {
             Opcode.SMSG_LOGIN_VERIFY_WORLD => LoginHandler.HandleLoginVerifyWorld,
             Opcode.SMSG_NEW_WORLD => LoginHandler.HandleNewWorld,
+            Opcode.SMSG_CLIENT_CONTROL_UPDATE => ClientControlHandler.HandleClientControlUpdate,
             Opcode.SMSG_UPDATE_OBJECT or Opcode.SMSG_COMPRESSED_UPDATE_OBJECT => ObjectUpdateHandler.HandleUpdateObject,
             Opcode.SMSG_FORCE_RUN_SPEED_CHANGE or Opcode.SMSG_FORCE_MOVE_ROOT or Opcode.SMSG_MOVE_KNOCK_BACK
                 or Opcode.MSG_MOVE_TELEPORT or Opcode.MSG_MOVE_TELEPORT_ACK or Opcode.SMSG_MONSTER_MOVE
@@ -203,6 +218,7 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         {
             Opcode.SMSG_LOGIN_VERIFY_WORLD => "LoginHandler.HandleLoginVerifyWorld",
             Opcode.SMSG_NEW_WORLD => "LoginHandler.HandleNewWorld",
+            Opcode.SMSG_CLIENT_CONTROL_UPDATE => "ClientControlHandler.HandleClientControlUpdate",
             Opcode.SMSG_UPDATE_OBJECT or Opcode.SMSG_COMPRESSED_UPDATE_OBJECT => "ObjectUpdateHandler.HandleUpdateObject",
             _ => "MovementHandler.HandleUpdateMovement"
         };
@@ -235,6 +251,15 @@ internal sealed class PacketFlowTraceFixture : IDisposable
 
         return (T)field.GetValue(target)!;
     }
+
+    private static void InvokePrivateMethod(object target, string methodName)
+    {
+        var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        if (method == null)
+            throw new InvalidOperationException($"Method '{methodName}' was not found on {target.GetType().Name}.");
+
+        method.Invoke(target, null);
+    }
 }
 
 internal sealed record PacketFlowTraceEvent(
@@ -245,6 +270,7 @@ internal sealed record PacketFlowTraceEvent(
     ulong? Guid = null,
     uint? Counter = null,
     float? NumericValue = null,
+    bool? BooleanValue = null,
     Position? Position = null,
     WorldInfo? WorldInfo = null,
     string? Context = null,

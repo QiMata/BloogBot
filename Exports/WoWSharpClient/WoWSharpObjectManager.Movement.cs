@@ -54,6 +54,7 @@ namespace WoWSharpClient
         private bool _isInFlight;
 
         private bool _isInControl = false;
+        private bool _hasExplicitClientControlLockout;
         private const float FacingPacketThresholdRadians = 0.1f; // WoW.exe 0x80C408
 
         private bool _isBeingTeleported = true;

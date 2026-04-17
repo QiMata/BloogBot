@@ -12,7 +12,7 @@ namespace WoWSharpClient.Handlers
             ulong guid = ReaderUtils.ReadPackedGuid(reader);
             bool canControl = reader.ReadByte() != 0;
 
-            ctx.EventEmitter.FireOnClientControlUpdate();
+            ctx.EventEmitter.FireOnClientControlUpdate(new ClientControlUpdateArgs(guid, canControl));
         }
     }
 }

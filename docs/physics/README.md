@@ -51,6 +51,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [0x601580_disasm.txt](./0x601580_disasm.txt) | Raw movement-dispatch wrapper below `0x603BB0` |
 | [0x602780_disasm.txt](./0x602780_disasm.txt) | Raw force-speed/root/flag dispatch wrapper below `0x603F90` |
 | [0x603F90_disasm.txt](./0x603F90_disasm.txt) | Raw top-level wrapper for force-speed/root/flag opcodes |
+| [0x603EA0_disasm.txt](./0x603EA0_disasm.txt) | Raw `SMSG_CLIENT_CONTROL_UPDATE` handler |
 | [0x602670_disasm.txt](./0x602670_disasm.txt) | Raw inbound `SMSG_MOVE_KNOCK_BACK` leaf |
 | [0x6026F0_disasm.txt](./0x6026F0_disasm.txt) | Raw `MSG_MOVE_KNOCK_BACK` local path |
 | [0x602FB0_disasm.txt](./0x602FB0_disasm.txt) | Raw teleport-ACK handler / sender path |
@@ -72,6 +73,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [msg_move_time_skipped_jump_land.md](./msg_move_time_skipped_jump_land.md) | `TIME_SKIPPED`, `JUMP`, and `FALL_LAND` dispatch/state notes |
 | [raw_position_and_flight_ack.md](./raw_position_and_flight_ack.md) | Evidence that `0x00E0` / `0x0340` are not active WoW.exe ACK surfaces |
 | [packet_ack_timing.md](./packet_ack_timing.md) | Q1-Q5 timing answers for knockback, speed, teleport, worldport, and spline/monster movement |
+| [state_client_control.md](./state_client_control.md) | `SMSG_CLIENT_CONTROL_UPDATE` control-bit state machine notes |
 | [smsg_update_object_handler.md](./smsg_update_object_handler.md) | `SMSG_UPDATE_OBJECT` multi-pass dispatch and type-`5` findings |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
 | [cgobject_layout.md](./cgobject_layout.md) | Confirmed typed storage offsets from `0x466C70` and related helpers |

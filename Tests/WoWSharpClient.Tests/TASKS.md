@@ -14,8 +14,12 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `Teleport state-machine coverage now closes the flag-clear and scene-data deadlock gaps`
+- Pass result: `StateMachineParity now covers the client-control GUID/lockout edge`
 - Last delta:
+  - Added `StateMachineParityTests.ClientControlUpdate_LocalPlayer_FollowsCanControlAndBlocksReconcile`, which proves the local `canControl=false` edge persists across `ReconcilePlayerControlState()` until a matching `canControl=true` packet arrives.
+  - Added `StateMachineParityTests.ClientControlUpdate_RemoteGuid_DoesNotChangeLocalControlState`, which pins the GUID significance recovered from `0x603EA0` / `0x5FA600`: remote-object control packets must not flip the local mover state.
+  - Hardened `PacketFlowTraceFixture.SeedLocalPlayer(...)` so every parity trace clears stale pending world-entry and client-control lockout state on the shared singleton object manager before assertions run.
+  - Added matching low-level `ObjectManagerWorldSessionTests` coverage so the same client-control rules are pinned outside the parity trace harness.
   - `NotifyTeleportIncoming_ClearsMovementFlagsToNone` now starts from a mixed grounded/air/swim state (`FORWARD | JUMPING | FALLINGFAR | SWIMMING`) and proves teleport entry clears every local movement bit, not just the old moving/turn mask.
   - `TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData` now proves the object manager no longer deadlocks `MSG_MOVE_TELEPORT_ACK` on a failed scene probe once pending updates are drained and `_needsGroundSnap` clears.
   - `StateMachineParityTests.MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData` carries the same fix into the new parity-tagged state-machine bundle.
@@ -25,7 +29,7 @@
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
@@ -33,13 +37,20 @@
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`
     - `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`
+    - `Exports/WoWSharpClient/ClientControlUpdateArgs.cs`
+    - `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`
+    - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+    - `docs/physics/0x603EA0_disasm.txt`
+    - `docs/physics/state_client_control.md`
+    - `docs/physics/README.md`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
     - `docs/TASKS.md`
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "ClientControl|OnClientControlUpdate|HandleClientControlUpdate|canControl|0x468570" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Added three deterministic `ObjectManagerWorldSessionTests` for the newly-wired packet gaps:
     - `EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase`
     - `EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime`

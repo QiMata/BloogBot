@@ -21,8 +21,16 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.6.4 is closed on the managed side: teleport flag clear and teleport ACK deadlock are both pinned`
+- Pass result: `client-control state is now binary-backed and parity-tested on the managed side`
 - Last delta:
+  - Added `ClientControlUpdateArgs` and rewired `ClientControlHandler` / `WoWSharpEventEmitter` so `SMSG_CLIENT_CONTROL_UPDATE` now carries the packet GUID and `canControl` bit instead of being reduced to a parameterless event.
+  - `docs/physics/0x603EA0_disasm.txt` and `docs/physics/state_client_control.md` now pin the WoW.exe behavior: `0x603EA0` reads packed GUID + control byte and calls `0x5FA600`, which toggles bit `0x400` in `[object + 0xC58]` and only propagates the follow-up global update for the active mover.
+  - `WoWSharpObjectManager.EventEmitter_OnClientControlUpdate(...)` now ignores non-local GUIDs, stores an explicit lockout on `canControl=false`, clears that lockout only on `canControl=true`, and blocks `ReconcilePlayerControlState()` from immediately undoing the server's lockout packet.
+  - Added deterministic coverage:
+    - `StateMachineParityTests.ClientControlUpdate_LocalPlayer_FollowsCanControlAndBlocksReconcile`
+    - `StateMachineParityTests.ClientControlUpdate_RemoteGuid_DoesNotChangeLocalControlState`
+    - `ObjectManagerWorldSessionTests.ClientControlUpdate_LocalPlayer_TracksCanControlAndBlocksReconcile`
+    - `ObjectManagerWorldSessionTests.ClientControlUpdate_RemoteGuid_DoesNotAffectLocalControl`
   - `TryFlushPendingTeleportAck()` no longer depends on `_sceneDataClient.EnsureSceneDataAround(...)`. The only binary-backed teleport ACK fact we currently have is the deferred `0x602FB0` gate (`0x468570`); tying ACK send to BG scene-tile availability had no VA support and created an indefinite stall when tiles were missing.
   - `NotifyTeleportIncoming(...)` already clears the full local movement state to `MOVEFLAG_NONE`; the deterministic coverage now starts from `FORWARD | JUMPING | FALLINGFAR | SWIMMING` so the old partial-mask regression cannot silently reappear.
   - Added state-machine/packet-flow regression coverage for the teleport edge:
@@ -34,7 +42,7 @@ Known remaining work in this owner: `0` items.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
@@ -44,11 +52,18 @@ Known remaining work in this owner: `0` items.
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`
     - `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`
     - `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`
+    - `Exports/WoWSharpClient/ClientControlUpdateArgs.cs`
+    - `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`
+    - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+    - `docs/physics/0x603EA0_disasm.txt`
+    - `docs/physics/state_client_control.md`
+    - `docs/physics/README.md`
     - `docs/TASKS.md`
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "ClientControl|OnClientControlUpdate|HandleClientControlUpdate|canControl|0x468570" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

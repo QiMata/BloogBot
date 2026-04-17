@@ -56,13 +56,34 @@ namespace WoWSharpClient
         private void EventEmitter_OnSpellGo(object? sender, EventArgs e) { }
 
 
-        private void EventEmitter_OnClientControlUpdate(object? sender, EventArgs e)
+        private void EventEmitter_OnClientControlUpdate(object? sender, ClientControlUpdateArgs e)
         {
-            _isInControl = true;
-            _isBeingTeleported = false;
+            var localGuid = Player?.Guid ?? PlayerGuid.FullGuid;
+            if (localGuid == 0 || localGuid != e.Guid)
+            {
+                Log.Debug(
+                    "[OnClientControlUpdate] ignoring guid=0x{Guid:X} canControl={CanControl}; localGuid=0x{LocalGuid:X}",
+                    e.Guid,
+                    e.CanControl,
+                    localGuid);
+                return;
+            }
 
-            Log.Information("[OnClientControlUpdate] pos=({X:F1},{Y:F1},{Z:F1}) — server confirmed teleport complete",
-                Player.Position.X, Player.Position.Y, Player.Position.Z);
+            _hasExplicitClientControlLockout = !e.CanControl;
+            _isInControl = e.CanControl;
+
+            if (e.CanControl)
+            {
+                _isBeingTeleported = false;
+            }
+
+            Log.Information(
+                "[OnClientControlUpdate] guid=0x{Guid:X} canControl={CanControl} pos=({X:F1},{Y:F1},{Z:F1})",
+                e.Guid,
+                e.CanControl,
+                Player.Position.X,
+                Player.Position.Y,
+                Player.Position.Z);
         }
 
 
@@ -346,6 +367,7 @@ namespace WoWSharpClient
                                             Log.Information("[LocalPlayer-Add] Taking control");
                                             _ = _woWClient.SendSetActiveMoverAsync(PlayerGuid.FullGuid);
                                             _isInControl = true;
+                                            _hasExplicitClientControlLockout = false;
                                             _isBeingTeleported = false;
 
                                             // Re-create MovementController after cross-map transfer.

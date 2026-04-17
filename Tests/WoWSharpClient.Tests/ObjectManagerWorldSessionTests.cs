@@ -2065,6 +2065,68 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void ClientControlUpdate_LocalPlayer_TracksCanControlAndBlocksReconcile()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E2;
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 1;
+        player.Position = new Position(4f, 5f, 6f);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", true);
+
+        ClientControlHandler.HandleClientControlUpdate(
+            Opcode.SMSG_CLIENT_CONTROL_UPDATE,
+            BuildClientControlPacket(playerGuid, canControl: false),
+            new HandlerContext(objectManager, WoWSharpEventEmitter.Instance));
+
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_hasExplicitClientControlLockout"));
+
+        InvokePrivateMethod(objectManager, "ReconcilePlayerControlState");
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+
+        ClientControlHandler.HandleClientControlUpdate(
+            Opcode.SMSG_CLIENT_CONTROL_UPDATE,
+            BuildClientControlPacket(playerGuid, canControl: true),
+            new HandlerContext(objectManager, WoWSharpEventEmitter.Instance));
+
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_hasExplicitClientControlLockout"));
+    }
+
+    [Fact]
+    public void ClientControlUpdate_RemoteGuid_DoesNotAffectLocalControl()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E3;
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", true);
+
+        ClientControlHandler.HandleClientControlUpdate(
+            Opcode.SMSG_CLIENT_CONTROL_UPDATE,
+            BuildClientControlPacket(0x998877ul, canControl: false),
+            new HandlerContext(objectManager, WoWSharpEventEmitter.Instance));
+
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_hasExplicitClientControlLockout"));
+    }
+
+    [Fact]
     public void PhysicsEnvironmentFlags_UsesObjectManagerFallbackWhenControllerStateIsUnresolved()
     {
         ResetObjectManager();
@@ -2496,6 +2558,15 @@ public class ObjectManagerWorldSessionTests
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         ReaderUtils.WritePackedGuid(writer, guid);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildClientControlPacket(ulong guid, bool canControl)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        writer.Write(canControl);
         return ms.ToArray();
     }
 
