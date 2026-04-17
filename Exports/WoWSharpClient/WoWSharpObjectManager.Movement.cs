@@ -871,11 +871,13 @@ namespace WoWSharpClient
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
         {
             ClearPendingWorldEntry();
-            ((WoWLocalPlayer)Player).MapId = e.MapId;
+            var player = (WoWLocalPlayer)Player;
+            player.MapId = e.MapId;
 
-            Player.Position.X = e.PositionX;
-            Player.Position.Y = e.PositionY;
-            Player.Position.Z = e.PositionZ;
+            player.Position.X = e.PositionX;
+            player.Position.Y = e.PositionY;
+            player.Position.Z = e.PositionZ;
+            player.Facing = e.Facing;
 
             // Reset movement controller for zone/map change — clears stale continuity
             // state (prevGroundZ, standingOn, etc.) from the old map and sets
@@ -886,8 +888,6 @@ namespace WoWSharpClient
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             _physicsTimeAccumulator = 0f; // Clear sub-step accumulator on zone/map change
             StartGameLoop();
-
-            _ = _woWClient.SendMoveWorldPortAcknowledgeAsync();
         }
 
 

@@ -21,34 +21,32 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.4 mutation-order slice is green, and the first managed field-audit doc now exists for the core object classes`
+- Pass result: `P2.5 packet-flow parity is green for the representative traces, and the first P2.6 state-machine checks are in place`
 - Last delta:
-  - `ObjectUpdateHandler.ParseCreateObjectBlock(...)` now resolves fallback GO typing from the GUID range before `ReadValuesUpdateBlock(...)` runs, so `ObjectType.None` bobber/trap-style create packets no longer lose `GAMEOBJECT_*` fields on parse.
-  - `WoWSharpObjectManager` now exposes a test-only mutation observer and uses it to pin the two WoW.exe-backed mutation orders from `docs/physics/smsg_update_object_handler.md`: new create path fields-before-movement, cached-create path movement-before-fields.
-  - The cached-create branch now also resolves fallback GO typing before deciding whether to mutate in place. That keeps duplicate `CREATE_OBJECT` packets on the `0x4660A0 -> 0x466350` shape instead of falling back to remove/recreate behavior when the raw packet byte is `None`.
+  - `WoWSharpObjectManager.EventEmitter_OnLoginVerifyWorld(...)` now carries `Facing` from the world-info payload into the local player instead of dropping it on the managed side.
+  - That fix is binary-backed by the login/worldport audit in `docs/physics/msg_move_worldport_ack.md`: `0x401DE0` reads map / XYZ / facing and reuses the deferred world-entry body with `edx = 0`, so BG must keep the world-info orientation while still suppressing `MSG_MOVE_WORLDPORT_ACK` on the login-verify edge.
+  - Added deterministic packet-flow/state-machine coverage around the managed movement/login seam:
+    - `PacketFlowTraceFixture` records ordered inbound dispatch, mutation-stage callbacks, event-emitter transitions, and outbound packets.
+    - `PacketFlowParityTests` now cover the eight representative P2.5 packet flows.
+    - `StateMachineParityTests` now pin the current `SMSG_LOGIN_VERIFY_WORLD` / `SMSG_NEW_WORLD -> MSG_MOVE_WORLDPORT_ACK` split.
   - Validation:
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (2/2)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
-  - Field-audit follow-up:
-    - Added `docs/physics/csharp_object_field_audit.md` to map the managed `WoWObject` / `WoWGameObject` / `WoWUnit` / `WoWPlayer` / `WoWLocalPlayer` / `WoWLocalPet` state back to the 1.12.1 descriptor and movement sources already documented in `cgobject_layout.md`.
-    - Indexed that doc from `docs/physics/README.md`.
-    - No extra tests were run after the doc-only audit slice.
   - Files changed:
-    - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
-    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
-    - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
-    - `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`
-    - `docs/physics/csharp_object_field_audit.md`
-    - `docs/physics/README.md`
-    - `docs/physics/smsg_update_object_handler.md`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`
     - `docs/TASKS.md`
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "CGPet_C|threat|spell cast state|inventory hydration|PLAYER_VISIBLE_ITEM|PLAYER_FIELD_INV_SLOT|cgobject_layout|csharp_object_field_audit" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient/Models -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "NotifyTeleportIncoming|TryFlushPendingTeleportAck|_isBeingTeleported|ResetMovementStateForTeleport|OnClientControlUpdate" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

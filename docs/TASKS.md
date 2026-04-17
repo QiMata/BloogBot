@@ -64,13 +64,13 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [ ] P2.4.4 Write `ObjectUpdateMutationOrderTests` replaying captured SMSG_UPDATE_OBJECT streams
   - [ ] P2.4.5 Fix mutation-order divergences
 - [ ] **P2.5** Packet-flow end-to-end parity
-  - [ ] P2.5.1 Build `PacketFlowTraceFixture` — bytes in, bytes out, state observer, ordered event log
-  - [ ] P2.5.2 Write one trace test per representative packet (8 tests: UPDATE_OBJECT Add, UPDATE_OBJECT Update, FORCE_RUN_SPEED_CHANGE, FORCE_MOVE_ROOT, MOVE_KNOCK_BACK, MOVE_TELEPORT, NEW_WORLD→WORLDPORT_ACK, MONSTER_MOVE)
-  - [ ] P2.5.3 Fix divergences discovered by trace tests
+  - [x] P2.5.1 Build `PacketFlowTraceFixture` — bytes in, bytes out, state observer, ordered event log
+  - [x] P2.5.2 Write one trace test per representative packet (8 tests: UPDATE_OBJECT Add, UPDATE_OBJECT Update, FORCE_RUN_SPEED_CHANGE, FORCE_MOVE_ROOT, MOVE_KNOCK_BACK, MOVE_TELEPORT, NEW_WORLD→WORLDPORT_ACK, MONSTER_MOVE)
+  - [x] P2.5.3 Fix divergences discovered by trace tests
 - [ ] **P2.6** State-machine parity
   - [ ] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
   - [ ] P2.6.2 Audit implementation against documented transitions
-  - [ ] P2.6.3 Write `StateMachineParityTests`
+  - [x] P2.6.3 Write `StateMachineParityTests`
   - [ ] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
 - [ ] **P2.7** Gap closure (G1-G10 verification)
   - [x] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
@@ -97,24 +97,22 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: advanced P2.4 mutation-order parity and started the P2.4.2 field audit. `WoWSharpObjectManager` now exposes a test-only mutation observer, the new `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs` covers four raw `SMSG_UPDATE_OBJECT` replay cases, `ObjectUpdateHandler` now resolves fallback GO typing before parsing create-block fields, and `docs/physics/csharp_object_field_audit.md` now maps the main managed object classes back to 1.12.1 descriptor/movement sources.
+- Completed: closed the first P2.5 packet-flow slice and started P2.6 state-machine coverage. `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs` now records ordered inbound dispatch, object-manager mutation stages, key movement/login events, and outbound packets; `PacketFlowParityTests` now cover the eight representative packet flows in the plan; `StateMachineParityTests` now pin the current login/worldport state edge.
 - Binary-backed note:
-  - `docs/physics/smsg_update_object_handler.md` already anchors the relevant order facts: create-path descriptor work runs before the later type-specific helper (`0x466320 -> 0x466590` before `0x466A20`), while the cached-object create branch does movement prepass before the descriptor walker (`0x466350` / `0x5FF070` before `0x466590`).
-  - The new BG fix follows that evidence by resolving fallback `ObjectType.None` GO GUIDs before both field decoding and the cached-create branch decision. Without that, bobber/trap-style create blocks skipped gameobject field parsing and missed the `0x466350` in-place mutate path entirely.
+  - `docs/physics/msg_move_worldport_ack.md` anchors the login/worldport split: `SMSG_NEW_WORLD` schedules `0x401BC0`, and the actual `MSG_MOVE_WORLDPORT_ACK` send happens inside `0x401CA5..0x401CF4`; `SMSG_LOGIN_VERIFY_WORLD` at `0x401DE0` reuses the callback body with `edx = 0`, so it does not send `0x0DC`.
+  - The same `0x401DE0` path reads map / XYZ / facing and stores the same world-entry globals, so BG now carries `Facing` through `EventEmitter_OnLoginVerifyWorld(...)` instead of dropping it on the managed side.
 - Commands run:
   - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
-  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the targeted build/test run.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the targeted build/test runs.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (2/2)`
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
-- Files changed: `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`, `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`, `docs/physics/smsg_update_object_handler.md`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
-- Field-audit follow-up:
-  - Added `docs/physics/csharp_object_field_audit.md` and indexed it from `docs/physics/README.md`.
-  - The doc covers `WoWObject`, `WoWGameObject`, `WoWUnit`, `WoWPlayer`, `WoWLocalPlayer`, and `WoWLocalPet`, separating descriptor-backed fields from movement/runtime-only state and calling out the remaining unresolved areas (`CGPet_C`, threat/spell-queue layout, full inventory hydration parity).
-  - No extra tests were run after that doc-only slice; the latest green validation remains the mutation-order + parity bundle listed above.
-- Next command: `rg -n "CGPet_C|threat|spell cast state|inventory hydration|PLAYER_VISIBLE_ITEM|PLAYER_FIELD_INV_SLOT|cgobject_layout|csharp_object_field_audit" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient/Models -g '!**/bin/**' -g '!**/obj/**'`
+- Files changed: `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`, `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
+- Next command: `rg -n "NotifyTeleportIncoming|TryFlushPendingTeleportAck|_isBeingTeleported|ResetMovementStateForTeleport|OnClientControlUpdate" Exports/WoWSharpClient Tests/WoWSharpClient.Tests docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 
