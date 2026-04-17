@@ -39,10 +39,25 @@ namespace WoWSharpClient
     public partial class WoWSharpObjectManager
     {
 
-        private WoWObject CreateObjectFromFields(
+        internal enum TestMutationStage
+        {
+            FieldsApplied,
+            MovementApplied
+        }
+
+        internal sealed record TestMutationTrace(
+            ulong Guid,
+            ObjectUpdateOperation Operation,
+            TestMutationStage Stage,
+            WoWObjectType ObjectType,
+            string Context
+        );
+
+        internal Action<TestMutationTrace>? TestMutationObserver { get; set; }
+
+        private WoWObject CreateObjectFromType(
             WoWObjectType objectType,
-            ulong guid,
-            Dictionary<uint, object?> fields
+            ulong guid
         )
         {
             WoWObject obj = objectType switch
@@ -61,8 +76,18 @@ namespace WoWSharpClient
             // Set back-reference so model classes can access this ObjectManager instance
             if (obj is WoWGameObject gameObj)
                 gameObj.ObjectManager = this;
-            ApplyFieldDiffs(obj, fields);
             return obj;
+        }
+
+        private static WoWObjectType ResolveEffectiveCreateObjectType(WoWObjectType objectType, ulong guid)
+        {
+            if (objectType != WoWObjectType.None)
+                return objectType;
+
+            ushort highType = (ushort)(guid >> 48);
+            return highType is 0xF110 or 0xF130
+                ? WoWObjectType.GameObj
+                : objectType;
         }
 
         /// <summary>

@@ -113,6 +113,7 @@ Practical implication:
 - on the cached-object create branch, movement prepass work can happen before descriptor fields are applied
 - BG must not replace the existing object instance when a duplicate create block arrives for the same typed GUID
 - for that branch, treating movement as "always after fields" is not WoW.exe-accurate
+- BG must resolve fallback object typing before that branch decision. `0x4660A0` does the GUID lookup before typed construction, so a cached bobber/trap-style gameobject cannot be allowed to miss the `0x466350` in-place path just because the packet byte was `ObjectType.None`.
 
 ## Descriptor storage / class sizing anchor
 

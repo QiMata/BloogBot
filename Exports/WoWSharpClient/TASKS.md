@@ -21,28 +21,28 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.7 G6/G7 are now closed as not-applicable WoW.exe surfaces; no BG bridge/send work was added`
+- Pass result: `P2.4 mutation-order slice is green; fallback GO create blocks now decode fields and follow cached-create parity`
 - Last delta:
-  - Static and live evidence contradicted the old plan assumption that BG still needed `MSG_MOVE_SET_RAW_POSITION_ACK` or `CMSG_MOVE_FLIGHT_ACK`.
-  - `docs/physics/opcode_dispatch_table.md` already showed no static registration for `0x00E0`, `0x00E1`, `0x033E`, `0x033F`, or `0x0340`. A fresh binary sweep found no `push 0x340`, no `push 0x33e`, one `push 0x33f` at `0x604999 -> 0x468460 -> 0x60ABE0`, and only three `push 0xe0` sites, all calling `0x496720`.
-  - Live FG probes on `2026-04-17` logged inbound `0x00E0`, `0x033F`, and `0x033E` with no outbound `0x00E0` or `0x0340`. That closes G6/G7 as "not applicable in WoW.exe 1.12.1" instead of "missing BG implementation".
-  - Practical implication for this owner: keep the movement opcode sweep closed and do not add BG handlers or ACK sends for those opcodes unless new WoW.exe evidence appears.
+  - `ObjectUpdateHandler.ParseCreateObjectBlock(...)` now resolves fallback GO typing from the GUID range before `ReadValuesUpdateBlock(...)` runs, so `ObjectType.None` bobber/trap-style create packets no longer lose `GAMEOBJECT_*` fields on parse.
+  - `WoWSharpObjectManager` now exposes a test-only mutation observer and uses it to pin the two WoW.exe-backed mutation orders from `docs/physics/smsg_update_object_handler.md`: new create path fields-before-movement, cached-create path movement-before-fields.
+  - The cached-create branch now also resolves fallback GO typing before deciding whether to mutate in place. That keeps duplicate `CREATE_OBJECT` packets on the `0x4660A0 -> 0x466350` shape instead of falling back to remove/recreate behavior when the raw packet byte is `None`.
   - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `docs/physics/raw_position_and_flight_ack.md`
-    - `docs/physics/README.md`
-    - `docs/WOW_EXE_PACKET_PARITY_PLAN.md`
+    - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+    - `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`
+    - `docs/physics/smsg_update_object_handler.md`
     - `docs/TASKS.md`
     - `Exports/WoWSharpClient/TASKS.md`
-    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
-    - `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`
-    - `memory/wow_exe_physics_decompilation.md`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "P2\\.4|cgobject_layout|HandleUpdateObject|ProcessUpdatesAsync|ObjectUpdateMutationOrderTests" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "class WoW(Object|Unit|Player|GameObject|LocalPet)|PLAYER_END|UNIT_END|GAMEOBJECT_END|cgobject_layout|P2\\.4\\.2" Exports/WoWSharpClient/Models docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

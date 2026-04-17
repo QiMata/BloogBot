@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using GameData.Core.Enums;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -74,9 +74,10 @@ namespace WoWSharpClient.Handlers
         private static void ParseCreateObjectBlock(BinaryReader reader, HandlerContext ctx)
         {
             var guid = ReaderUtils.ReadPackedGuid(reader);
-            var objectType = (WoWObjectType)reader.ReadByte();
+            var packetObjectType = (WoWObjectType)reader.ReadByte();
+            var objectType = ResolveEffectiveCreateObjectType(packetObjectType, guid);
 
-            Log.Information("[ParseCreateObject] GUID=0x{Guid:X} type={Type}", guid, objectType);
+            Log.Information("[ParseCreateObject] GUID=0x{Guid:X} type={Type} packetType={PacketType}", guid, objectType, packetObjectType);
 
             MovementInfoUpdate movementUpdateData = ParseMovementInfo(reader);
             var update = new WoWSharpObjectManager.ObjectStateUpdate(
@@ -99,6 +100,17 @@ namespace WoWSharpClient.Handlers
             }
 
             ctx.ObjectManager.QueueUpdate(update);
+        }
+
+        private static WoWObjectType ResolveEffectiveCreateObjectType(WoWObjectType objectType, ulong guid)
+        {
+            if (objectType != WoWObjectType.None)
+                return objectType;
+
+            ushort highType = (ushort)(guid >> 48);
+            return highType is 0xF110 or 0xF130
+                ? WoWObjectType.GameObj
+                : objectType;
         }
 
         private static MovementInfoUpdate ParseMovementInfo(BinaryReader reader)

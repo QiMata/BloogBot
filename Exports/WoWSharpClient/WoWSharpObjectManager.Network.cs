@@ -206,6 +206,16 @@ namespace WoWSharpClient
 
         internal int PendingUpdateCount => _pendingUpdates.Count;
 
+        private void ReportTestMutation(
+            ulong guid,
+            ObjectUpdateOperation operation,
+            TestMutationStage stage,
+            WoWObjectType objectType,
+            string context)
+        {
+            TestMutationObserver?.Invoke(new TestMutationTrace(guid, operation, stage, objectType, context));
+        }
+
 
         public async Task ProcessUpdatesAsync(CancellationToken token)
         {
@@ -243,9 +253,10 @@ namespace WoWSharpClient
                                         }
                                     }
 
+                                    var effectiveUpdateType = ResolveEffectiveCreateObjectType(update.ObjectType, update.Guid);
                                     if (existingObject != null
-                                        && update.ObjectType != WoWObjectType.None
-                                        && existingObject.ObjectType == update.ObjectType)
+                                        && effectiveUpdateType != WoWObjectType.None
+                                        && existingObject.ObjectType == effectiveUpdateType)
                                     {
                                         // WoW.exe `0x4660A0` looks up the object first (`0x464530`) and,
                                         // on a cache hit, routes the block to `0x466350` instead of the
@@ -259,16 +270,43 @@ namespace WoWSharpClient
                                             update.MovementData,
                                             isLocalPlayer,
                                             "[Movement-CreateExisting]");
+                                        if (update.MovementData != null)
+                                        {
+                                            ReportTestMutation(
+                                                update.Guid,
+                                                update.Operation,
+                                                TestMutationStage.MovementApplied,
+                                                existingObject.ObjectType,
+                                                "cached-create");
+                                        }
                                         ApplyFieldDiffs(existingObject, update.UpdatedFields);
+                                        if (update.UpdatedFields.Count > 0)
+                                        {
+                                            ReportTestMutation(
+                                                update.Guid,
+                                                update.Operation,
+                                                TestMutationStage.FieldsApplied,
+                                                existingObject.ObjectType,
+                                                "cached-create");
+                                        }
                                         FinalizeUpdatedObject(existingObject, existingIndex, update.Guid);
                                         break;
                                     }
 
-                                    var newObject = CreateObjectFromFields(
+                                    var newObject = CreateObjectFromType(
                                         update.ObjectType,
-                                        update.Guid,
-                                        update.UpdatedFields
+                                        update.Guid
                                     );
+                                    ApplyFieldDiffs(newObject, update.UpdatedFields);
+                                    if (update.UpdatedFields.Count > 0)
+                                    {
+                                        ReportTestMutation(
+                                            update.Guid,
+                                            update.Operation,
+                                            TestMutationStage.FieldsApplied,
+                                            newObject.ObjectType,
+                                            "create");
+                                    }
                                     lock (_objectsLock)
                                     {
                                         _objects.RemoveAll(existing => existing.Guid == newObject.Guid);
@@ -289,6 +327,15 @@ namespace WoWSharpClient
                                         update.MovementData,
                                         newObject is WoWLocalPlayer,
                                         "[Movement-Add]");
+                                    if (update.MovementData != null)
+                                    {
+                                        ReportTestMutation(
+                                            update.Guid,
+                                            update.Operation,
+                                            TestMutationStage.MovementApplied,
+                                            newObject.ObjectType,
+                                            "create");
+                                    }
 
                                     if (newObject is WoWPlayer)
                                     {
@@ -358,6 +405,15 @@ namespace WoWSharpClient
                                     }
 
                                     ApplyFieldDiffs(obj, update.UpdatedFields);
+                                    if (update.UpdatedFields.Count > 0)
+                                    {
+                                        ReportTestMutation(
+                                            update.Guid,
+                                            update.Operation,
+                                            TestMutationStage.FieldsApplied,
+                                            obj.ObjectType,
+                                            "update");
+                                    }
 
                                     ApplyMovementUpdateToExistingObject(
                                         obj,
@@ -365,6 +421,15 @@ namespace WoWSharpClient
                                         update.MovementData,
                                         isLocalPlayer,
                                         "[Movement-Update]");
+                                    if (update.MovementData != null)
+                                    {
+                                        ReportTestMutation(
+                                            update.Guid,
+                                            update.Operation,
+                                            TestMutationStage.MovementApplied,
+                                            obj.ObjectType,
+                                            "update");
+                                    }
                                     FinalizeUpdatedObject(obj, index, update.Guid);
 
                                     break;
@@ -536,15 +601,16 @@ namespace WoWSharpClient
             if (factory == null) return Array.Empty<uint>();
 
             var fm = factory.FlightMasterAgent;
-            await fm.HelloFlightMasterAsync(flightMasterGuid, ct);
-
-            for (int i = 0; i < 20; i++)
+            if (!await EnsureTaxiMapReadyAsync(fm, flightMasterGuid, ct))
             {
-                if (fm.IsTaxiMapOpen) break;
-                await Task.Delay(100, ct);
+                _logger.LogWarning(
+                    "DiscoverTaxiNodesAsync failed: taxi map never opened for FM {FlightMasterGuid:X}",
+                    flightMasterGuid);
+                try { await fm.CloseTaxiMapAsync(ct); } catch { }
+                return Array.Empty<uint>();
             }
 
-            var nodes = fm.AvailableTaxiNodes;
+            var nodes = fm.AvailableTaxiNodes.ToArray();
             try { await fm.CloseTaxiMapAsync(ct); } catch { }
             return nodes;
         }
@@ -656,24 +722,36 @@ namespace WoWSharpClient
         public async Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default)
         {
             var factory = _agentFactoryAccessor?.Invoke();
-            if (factory == null) return false;
+            if (factory == null)
+            {
+                _logger.LogWarning("ActivateFlightAsync failed: AgentFactory unavailable for FM {FlightMasterGuid:X} -> node {DestinationNodeId}", flightMasterGuid, destinationNodeId);
+                return false;
+            }
 
             var fm = factory.FlightMasterAgent;
 
-            if (!fm.IsTaxiMapOpen)
+            if (!await EnsureTaxiMapReadyAsync(fm, flightMasterGuid, ct))
             {
-                await fm.HelloFlightMasterAsync(flightMasterGuid, ct);
-                for (int i = 0; i < 20; i++)
-                {
-                    if (fm.IsTaxiMapOpen) break;
-                    await Task.Delay(100, ct);
-                }
-                if (!fm.IsTaxiMapOpen) return false;
+                _logger.LogWarning("ActivateFlightAsync failed: taxi map never opened for FM {FlightMasterGuid:X} -> node {DestinationNodeId}", flightMasterGuid, destinationNodeId);
+                return false;
             }
 
             var sourceNodeId = fm.CurrentNodeId;
             if (!sourceNodeId.HasValue || !fm.IsNodeAvailable(destinationNodeId))
             {
+                try { await fm.CloseTaxiMapAsync(ct); } catch { }
+                if (await EnsureTaxiMapReadyAsync(fm, flightMasterGuid, ct))
+                    sourceNodeId = fm.CurrentNodeId;
+            }
+
+            if (!sourceNodeId.HasValue || !fm.IsNodeAvailable(destinationNodeId))
+            {
+                _logger.LogWarning(
+                    "ActivateFlightAsync failed: source node unavailable or destination not known for FM {FlightMasterGuid:X}. CurrentNode={CurrentNodeId}, destination={DestinationNodeId}, availableCount={AvailableCount}",
+                    flightMasterGuid,
+                    sourceNodeId,
+                    destinationNodeId,
+                    fm.AvailableTaxiNodes.Count);
                 try { await fm.CloseTaxiMapAsync(ct); } catch { }
                 return false;
             }
@@ -683,11 +761,50 @@ namespace WoWSharpClient
                 await fm.ActivateFlightAsync(flightMasterGuid, sourceNodeId.Value, destinationNodeId, ct);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "ActivateFlightAsync failed while activating FM {FlightMasterGuid:X} from node {SourceNodeId} to {DestinationNodeId}", flightMasterGuid, sourceNodeId.Value, destinationNodeId);
                 try { await fm.CloseTaxiMapAsync(ct); } catch { }
                 return false;
             }
+        }
+
+        private async Task<bool> EnsureTaxiMapReadyAsync(
+            IFlightMasterNetworkClientComponent flightMasterAgent,
+            ulong flightMasterGuid,
+            CancellationToken ct)
+        {
+            if (HasTaxiMapData(flightMasterAgent))
+                return true;
+
+            await flightMasterAgent.HelloFlightMasterAsync(flightMasterGuid, ct);
+            if (await WaitForTaxiMapAsync(flightMasterAgent, ct))
+                return true;
+
+            await flightMasterAgent.QueryAvailableNodesAsync(flightMasterGuid, ct);
+            return await WaitForTaxiMapAsync(flightMasterAgent, ct);
+        }
+
+        private static bool HasTaxiMapData(IFlightMasterNetworkClientComponent flightMasterAgent)
+        {
+            return flightMasterAgent.IsTaxiMapOpen
+                && flightMasterAgent.CurrentNodeId.HasValue
+                && flightMasterAgent.AvailableTaxiNodes.Count > 0;
+        }
+
+        private static async Task<bool> WaitForTaxiMapAsync(
+            IFlightMasterNetworkClientComponent flightMasterAgent,
+            CancellationToken ct)
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                if (HasTaxiMapData(flightMasterAgent))
+                    return true;
+
+                await Task.Delay(100, ct);
+            }
+
+            return HasTaxiMapData(flightMasterAgent);
         }
 
 
