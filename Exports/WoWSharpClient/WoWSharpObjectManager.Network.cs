@@ -226,6 +226,44 @@ namespace WoWSharpClient
                             {
                                 case ObjectUpdateOperation.Add:
                                 {
+                                    WoWObject? existingObject;
+                                    int existingIndex;
+                                    var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
+                                    lock (_objectsLock)
+                                    {
+                                        if (isLocalPlayer)
+                                        {
+                                            existingIndex = -1;
+                                            existingObject = Player as WoWObject;
+                                        }
+                                        else
+                                        {
+                                            existingIndex = _objects.FindIndex(o => o.Guid == update.Guid);
+                                            existingObject = existingIndex >= 0 ? _objects[existingIndex] : null;
+                                        }
+                                    }
+
+                                    if (existingObject != null
+                                        && update.ObjectType != WoWObjectType.None
+                                        && existingObject.ObjectType == update.ObjectType)
+                                    {
+                                        // WoW.exe `0x4660A0` looks up the object first (`0x464530`) and,
+                                        // on a cache hit, routes the block to `0x466350` instead of the
+                                        // new-object path (`0x466E00`/`0x466C70`). That cached-object
+                                        // branch runs its movement prepass (`0x5FF070`) before the
+                                        // descriptor walker (`0x466590`), so duplicate CREATE blocks
+                                        // mutate the existing object in place instead of replacing it.
+                                        ApplyMovementUpdateToExistingObject(
+                                            existingObject,
+                                            update.Guid,
+                                            update.MovementData,
+                                            isLocalPlayer,
+                                            "[Movement-CreateExisting]");
+                                        ApplyFieldDiffs(existingObject, update.UpdatedFields);
+                                        FinalizeUpdatedObject(existingObject, existingIndex, update.Guid);
+                                        break;
+                                    }
+
                                     var newObject = CreateObjectFromFields(
                                         update.ObjectType,
                                         update.Guid,
@@ -245,23 +283,12 @@ namespace WoWSharpClient
                                         Log.Information("[ProcessUpdates] GAMEOBJ CREATED: Guid=0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} Pos=({X:F1},{Y:F1},{Z:F1})",
                                             update.Guid, go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, go.Position.X, go.Position.Y, go.Position.Z);
 
-                                    if (update.MovementData != null)
-                                    {
-                                        if (newObject is WoWUnit unit)
-                                        {
-                                            ApplyMovementData(unit, update.MovementData);
-                                            TryActivateSpline(update.Guid, update.MovementData, newObject is WoWLocalPlayer);
-                                        }
-                                        else if (newObject is WoWGameObject gameObj)
-                                        {
-                                            ApplyMovementData(gameObj, update.MovementData);
-                                            TryActivateSpline(update.Guid, update.MovementData, false);
-                                        }
-
-                                        Log.Verbose("[Movement-Add] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
-                                            update.Guid, update.MovementData.X, update.MovementData.Y,
-                                            update.MovementData.Z, (uint)update.MovementData.MovementFlags);
-                                    }
+                                    ApplyMovementUpdateToExistingObject(
+                                        newObject,
+                                        update.Guid,
+                                        update.MovementData,
+                                        newObject is WoWLocalPlayer,
+                                        "[Movement-Add]");
 
                                     if (newObject is WoWPlayer)
                                     {
@@ -332,87 +359,13 @@ namespace WoWSharpClient
 
                                     ApplyFieldDiffs(obj, update.UpdatedFields);
 
-                                    if (update.MovementData != null && obj is WoWUnit)
-                                    {
-                                        // Only guard position writes for the local player (client-side prediction handles it).
-                                        // Other units should always accept server position updates.
-                                        var movementData = update.MovementData;
-
-                                        // During teleports, clear queued moving/turn flags for local player updates.
-                                        // This prevents stale MOVEFLAG_FORWARD from pre-teleport packets from getting re-applied.
-                                        var rejectStaleTeleportMovement = false;
-                                        if (isLocalPlayer && _isBeingTeleported && movementData != null)
-                                        {
-                                            rejectStaleTeleportMovement = IsStaleLocalTeleportMovementUpdate(
-                                                (WoWUnit)obj,
-                                                movementData);
-                                            if (rejectStaleTeleportMovement)
-                                            {
-                                                Log.Warning(
-                                                    "[TeleportGuard] Ignoring stale local movement update during teleport: " +
-                                                    "current=({CurX:F1},{CurY:F1},{CurZ:F1}) incoming=({NewX:F1},{NewY:F1},{NewZ:F1})",
-                                                    obj.Position.X,
-                                                    obj.Position.Y,
-                                                    obj.Position.Z,
-                                                    movementData.X,
-                                                    movementData.Y,
-                                                    movementData.Z);
-                                            }
-                                            else
-                                            {
-                                                movementData = movementData.Clone();
-                                                movementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
-                                            }
-                                        }
-
-                                        bool allowLocalOverwrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
-                                        if (rejectStaleTeleportMovement)
-                                            allowLocalOverwrite = false;
-
-                                        var allowMovementFlagWrite = allowLocalOverwrite && !rejectStaleTeleportMovement;
-                                        ApplyMovementData((WoWUnit)obj, movementData, allowLocalOverwrite, allowMovementFlagWrite);
-
-                                        // Wire spline data to SplineController for server-driven movement
-                                        TryActivateSpline(update.Guid, movementData, isLocalPlayer);
-
-                                        Log.Verbose("[Movement-Update] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}{Local}",
-                                            update.Guid, movementData.X, movementData.Y,
-                                            movementData.Z, (uint)movementData.MovementFlags,
-                                            obj is WoWLocalPlayer ? " [LOCAL]" : "");
-                                    }
-                                    else if (update.MovementData != null && obj is WoWGameObject gameObj)
-                                    {
-                                        var movementData = update.MovementData;
-                                        ApplyMovementData(gameObj, movementData);
-                                        TryActivateSpline(update.Guid, movementData, false);
-
-                                        Log.Verbose("[Movement-Update-GO] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
-                                            update.Guid, movementData.X, movementData.Y,
-                                            movementData.Z, (uint)movementData.MovementFlags);
-                                    }
-
-                                    // Pet discovery on field update (SummonedBy may arrive in a later update)
-                                    if (obj is WoWUnit updatedUnit && updatedUnit is not WoWLocalPet
-                                        && updatedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
-                                        && PlayerGuid.FullGuid != 0)
-                                    {
-                                        var pet = new WoWLocalPet(updatedUnit.HighGuid, updatedUnit.ObjectType);
-                                        pet.ObjectManager = this;
-                                        pet.CopyFrom(updatedUnit);
-                                        if (index >= 0) { lock (_objectsLock) _objects[index] = pet; }
-                                        _activePet = pet;
-                                        Log.Information("[PET] Promoted unit 0x{Guid:X} to pet on update", pet.Guid);
-                                    }
-                                    else if (index >= 0)
-                                    {
-                                        lock (_objectsLock) _objects[index] = obj;
-                                    }
-
-                                    // Keep active pet state in sync with field diffs
-                                    if (_activePet != null && update.Guid == _activePet.Guid && obj is WoWUnit petUnit)
-                                    {
-                                        _activePet.CopyFrom(petUnit);
-                                    }
+                                    ApplyMovementUpdateToExistingObject(
+                                        obj,
+                                        update.Guid,
+                                        update.MovementData,
+                                        isLocalPlayer,
+                                        "[Movement-Update]");
+                                    FinalizeUpdatedObject(obj, index, update.Guid);
 
                                     break;
                                 }
@@ -594,6 +547,109 @@ namespace WoWSharpClient
             var nodes = fm.AvailableTaxiNodes;
             try { await fm.CloseTaxiMapAsync(ct); } catch { }
             return nodes;
+        }
+
+        private void ApplyMovementUpdateToExistingObject(
+            WoWObject obj,
+            ulong guid,
+            MovementInfoUpdate? movementData,
+            bool isLocalPlayer,
+            string logPrefix)
+        {
+            if (movementData == null)
+                return;
+
+            if (obj is WoWUnit unit)
+            {
+                // Only guard position writes for the local player (client-side prediction handles it).
+                // Other units should always accept server position updates.
+                var effectiveMovementData = movementData;
+
+                // During teleports, clear queued moving/turn flags for local player updates.
+                // This prevents stale MOVEFLAG_FORWARD from pre-teleport packets from getting re-applied.
+                var rejectStaleTeleportMovement = false;
+                if (isLocalPlayer && _isBeingTeleported)
+                {
+                    rejectStaleTeleportMovement = IsStaleLocalTeleportMovementUpdate(unit, effectiveMovementData);
+                    if (rejectStaleTeleportMovement)
+                    {
+                        Log.Warning(
+                            "[TeleportGuard] Ignoring stale local movement update during teleport: " +
+                            "current=({CurX:F1},{CurY:F1},{CurZ:F1}) incoming=({NewX:F1},{NewY:F1},{NewZ:F1})",
+                            obj.Position.X,
+                            obj.Position.Y,
+                            obj.Position.Z,
+                            effectiveMovementData.X,
+                            effectiveMovementData.Y,
+                            effectiveMovementData.Z);
+                    }
+                    else
+                    {
+                        effectiveMovementData = effectiveMovementData.Clone();
+                        effectiveMovementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
+                    }
+                }
+
+                bool allowLocalOverwrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
+                if (rejectStaleTeleportMovement)
+                    allowLocalOverwrite = false;
+
+                var allowMovementFlagWrite = allowLocalOverwrite && !rejectStaleTeleportMovement;
+                ApplyMovementData(unit, effectiveMovementData, allowLocalOverwrite, allowMovementFlagWrite);
+
+                // Wire spline data to SplineController for server-driven movement.
+                TryActivateSpline(guid, effectiveMovementData, isLocalPlayer);
+
+                Log.Verbose("{LogPrefix} Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}{Local}",
+                    logPrefix, guid, effectiveMovementData.X, effectiveMovementData.Y,
+                    effectiveMovementData.Z, (uint)effectiveMovementData.MovementFlags,
+                    obj is WoWLocalPlayer ? " [LOCAL]" : "");
+            }
+            else if (obj is WoWGameObject gameObj)
+            {
+                ApplyMovementData(gameObj, movementData);
+                TryActivateSpline(guid, movementData, false);
+
+                Log.Verbose("{LogPrefix}-GO Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
+                    logPrefix, guid, movementData.X, movementData.Y,
+                    movementData.Z, (uint)movementData.MovementFlags);
+            }
+        }
+
+        private void FinalizeUpdatedObject(WoWObject obj, int index, ulong guid)
+        {
+            // Pet discovery on field update (SummonedBy may arrive in a later update).
+            if (obj is WoWUnit updatedUnit && updatedUnit is not WoWLocalPet
+                && updatedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
+                && PlayerGuid.FullGuid != 0)
+            {
+                var pet = new WoWLocalPet(updatedUnit.HighGuid, updatedUnit.ObjectType);
+                pet.ObjectManager = this;
+                pet.CopyFrom(updatedUnit);
+                if (index >= 0)
+                {
+                    lock (_objectsLock)
+                    {
+                        _objects[index] = pet;
+                    }
+                }
+
+                _activePet = pet;
+                Log.Information("[PET] Promoted unit 0x{Guid:X} to pet on update", pet.Guid);
+            }
+            else if (index >= 0)
+            {
+                lock (_objectsLock)
+                {
+                    _objects[index] = obj;
+                }
+            }
+
+            // Keep active pet state in sync with field diffs.
+            if (_activePet != null && guid == _activePet.Guid && obj is WoWUnit petUnit)
+            {
+                _activePet.CopyFrom(petUnit);
+            }
         }
 
 

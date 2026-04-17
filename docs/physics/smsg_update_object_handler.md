@@ -72,6 +72,7 @@ The create path is split between prepass and direct handlers:
 
 - `0x465C50` is the direct create/create2 block reader
 - `0x4660A0` is the create/partial prepass
+- `0x466350` is the cached-object branch inside that prepass
 - `0x466E00` constructs or recovers the typed object instance
 - `0x466C70` zeroes the typed descriptor storage
 
@@ -92,6 +93,27 @@ Conservative conclusion:
 - on the create path, WoW.exe does descriptor/value work before it reaches the later type-specific movement/application helper
 - this matches the current BG `Add` order better than a "movement first, fields later" model
 
+## Cached-object create branch (`0x466350`)
+
+`0x4660A0` does not always go down the "construct a new object" path.
+
+- It first looks up the GUID via `0x464530`.
+- On a cache hit, it calls `0x466350`.
+- That hit path returns without calling `0x466E00`, `0x466C70`, or the later list-link step at `0x4662C0..0x4662E0`.
+
+That means duplicate `CREATE_OBJECT` / `CREATE_OBJECT2` blocks for an already-cached GUID are an **in-place mutate path**, not a remove-and-recreate path.
+
+There is also an ordering detail inside `0x466350`:
+
+- for the player / gameobject-style branch (`0x466383..0x4664BE`), `0x466350` parses the movement/update-flag payload and calls `0x5FF070`
+- only after that does it call the descriptor walker `0x466590` at `0x466570..0x466582`
+
+Practical implication:
+
+- on the cached-object create branch, movement prepass work can happen before descriptor fields are applied
+- BG must not replace the existing object instance when a duplicate create block arrives for the same typed GUID
+- for that branch, treating movement as "always after fields" is not WoW.exe-accurate
+
 ## Descriptor storage / class sizing anchor
 
 `0x466C70` is the best current layout anchor for object-class storage. It zeroes typed regions at exact offsets:
@@ -111,9 +133,8 @@ The local-player `0x1408` size matches `PLAYER_END * 4` exactly (`0x502 * 4`).
 
 ## What is still unresolved
 
-The fresh `0x4651A0` capture closes the dispatcher shape and the type-`5` gap, but one P2.4 question is still open:
+The fresh `0x4651A0` capture closes the dispatcher shape, the type-`5` gap, and the duplicate-create identity rule, but one P2.4 question is still open:
 
 - the exact final order inside the deep `0x466590` descriptor walker versus the later type-specific helpers still needs a dedicated follow-up capture if we want to prove aura-vs-position ordering at the "last applied field" level
 
 That means this capture is enough to justify the `NEAR_OBJECTS` parser fix and to anchor `cgobject_layout.md`, but it is not yet the final word on every descriptor-subfield mutation.
-

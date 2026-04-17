@@ -21,27 +21,25 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.4 kickoff recovered the real 0x4651A0 dispatcher shape, fixed the type-5 NEAR_OBJECTS parser gap, and parity bundles stayed green`
+- Pass result: `P2.4 now has binary-backed coverage for duplicate cached CREATE_OBJECT blocks; parity bundles stayed green`
 - Last delta:
-  - Added `docs/physics/0x4651A0_disasm.txt`, `smsg_update_object_handler.md`, and `cgobject_layout.md`. The fresh binary capture proves the real `SMSG_UPDATE_OBJECT` flow is `lead byte -> prepass(es) -> direct dispatch`, with the direct jump table at `0x465314` and the prepass jump table at `0x466084`.
-  - `ObjectUpdateHandler` now handles `ObjectUpdateType.NEAR_OBJECTS` instead of falling into the unhandled-default path. The fix is anchored to `0x467230 -> 0x4644F0` plus the top-level `0x4651A0 -> 0x465FD0` dispatch, which proves type `5` is an active stale-cache cleanup path before create blocks arrive.
-  - `cgobject_layout.md` now records the exact typed storage ranges from `0x466C70`, including the full local-player descriptor span `+0x1D70..+0x3178` (`0x1408` bytes) and the smaller remote-player subset `+0x1D70..+0x2578` (`0x798` bytes).
+  - `WoWSharpObjectManager.Network.cs` now mirrors the cached-object duplicate-create rule from WoW.exe. `0x4660A0` looks up the GUID first and routes cache hits to `0x466350` instead of the new-object path, so BG no longer removes and recreates an already-cached typed object when a second `CREATE_OBJECT` / `CREATE_OBJECT2` block arrives for the same GUID.
+  - The same capture proves an ordering detail for that branch: `0x466350` calls `0x5FF070` before the descriptor walker `0x466590` on the player/gameobject-style path. BG now uses that rule for duplicate create blocks by applying the movement prepass before descriptor field diffs.
+  - `docs/physics/smsg_update_object_handler.md` now documents the cached-object create path explicitly, and the external packet-handling memory note was extended with `0x466350` / `0x5FF070`.
   - Validation:
     - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the object-update test build pass.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NearObjects_RemovesStaleCachedObjectsBeforeCreateBlocksArrive" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DuplicateCreateObjectBlock_MutatesCachedGameObjectInPlace_AndDescriptorFieldsWinAfterMovementPrepass" --logger "console;verbosity=minimal"` -> first compile/build pass completed; final `--no-build` rerun `passed (1/1)`.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
-    - `docs/physics/0x4651A0_disasm.txt`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
     - `docs/physics/smsg_update_object_handler.md`
-    - `docs/physics/cgobject_layout.md`
-    - `docs/physics/README.md`
+    - `Tests/WoWSharpClient.Tests/Handlers/ObjectUpdateMutationOrderTests.cs`
     - `Exports/WoWSharpClient/TASKS.md`
   - Next command:
-    - `rg -n "466590|466320|466A20|ObjectUpdateMutationOrderTests|NEAR_OBJECTS" docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "P2\\.4\\.1|cgobject_layout|ApplyPlayerFieldDiffs|ApplyUnitFieldDiffs|ApplyGameObjectFieldDiffs" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
     - `SpellcastingManager.CastSpell(...)` no longer forces fishing through `CastSpellAtLocation(...)`; fishing now keeps the no-target `CMSG_CAST_SPELL` payload shape.
