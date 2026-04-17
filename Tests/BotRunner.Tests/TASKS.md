@@ -47,8 +47,27 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `FG cross-map ACK capture harness produced live worldport fixtures without regressing parity bundles`
+- Pass result: `Configurable FG ACK probe harness captured live force-speed ACK fixtures without regressing parity bundles`
 - Last delta:
+  - Added `Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled` to `LiveValidation/AckCaptureTests.cs`. The probe is driven by `WWOW_ACK_CAPTURE_GM_COMMAND`, `WWOW_ACK_CAPTURE_RESET_GM_COMMAND`, and optional `WWOW_ACK_CAPTURE_EXPECTED_OPCODES`, so future ACK-corpus investigations can reuse the same FG harness instead of adding one-off live tests.
+  - Live probes against `.modify aspeed 2` / `.modify aspeed 1` and `.modify bwalk 2` / `.modify bwalk 1` captured representative `CMSG_FORCE_WALK_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_SPEED_CHANGE_ACK`, `CMSG_FORCE_SWIM_SPEED_CHANGE_ACK`, and `CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK` fixtures from `WoW.exe NetClient::Send` (`0x005379A0`).
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the BotRunner build and the focused parity reruns.
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify aspeed 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify aspeed 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify bwalk 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify bwalk 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_WALK_SPEED_CHANGE_ACK/20260417_163614_067_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_SPEED_CHANGE_ACK/20260417_163614_076_0002.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK/20260417_164150_738_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_SPEED_CHANGE_ACK/20260417_163614_079_0003.json`
+    - `Tests/WoWSharpClient.Tests/Parity/AckBinaryParityTests.cs`
+    - `Tests/BotRunner.Tests/TASKS.md`
+  - Next command:
+    - `rg -n "aura|root|water walk|hover|feather fall|knockback|turn rate" Tests/BotRunner.Tests docs Services -g '!**/bin/**' -g '!**/obj/**'`
   - Added `LiveValidation/AckCaptureTests.cs` with `Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled`. The harness stages the FG bot in Orgrimmar, teleports it across maps to Ironforge, waits for the FG snapshot to settle in-world, and when `WWOW_CAPTURE_ACK_CORPUS=1` asserts that `MSG_MOVE_WORLDPORT_ACK` fixtures appear under the repo corpus directory.
   - Live execution with the ACK-corpus env vars enabled produced two `MSG_MOVE_WORLDPORT_ACK` fixtures (`DC000000`) while the FG client remained stable through both cross-map teleports. This closes the P2.2 worldport-capture blocker without changing the existing FG hook timing.
   - Validation:

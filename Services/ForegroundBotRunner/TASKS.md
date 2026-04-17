@@ -37,9 +37,26 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-17 (session 307)`
-- Pass result: `FG ACK corpus recorder captured live worldport ACKs from in-world cross-map teleports`
+- Last updated: `2026-04-17 (session 308)`
+- Pass result: `FG ACK corpus recorder captured four force-speed ACK families via the reusable GM-command probe harness`
 - Last delta:
+  - Session 308 proved the existing `PacketLogger` + `ForegroundAckCorpusRecorder` plumbing is reusable beyond worldport capture. The new BotRunner-side GM-command probe harness drove FG `.modify aspeed 2` / `.modify aspeed 1` and `.modify bwalk 2` / `.modify bwalk 1`, and FG captured live `CMSG_FORCE_WALK_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_SPEED_CHANGE_ACK`, `CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK`, and `CMSG_FORCE_SWIM_SPEED_CHANGE_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`).
+  - The service-side conclusion is now broader: the current ACK recorder/hook timing is sufficient not only for post-worldport transfers, but also for server-driven speed-family movement ACKs triggered after FG is actionable.
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the BotRunner build and focused parity reruns.
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `war-scenedata`, and `pathfinding-service` were healthy/running.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify aspeed 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify aspeed 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.modify bwalk 2'; $env:WWOW_ACK_CAPTURE_RESET_GM_COMMAND='.modify bwalk 1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+    - `$env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_WALK_SPEED_CHANGE_ACK/20260417_163614_067_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_SPEED_CHANGE_ACK/20260417_163614_076_0002.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK/20260417_164150_738_0001.json`
+    - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/CMSG_FORCE_SWIM_SPEED_CHANGE_ACK/20260417_163614_079_0003.json`
+    - `Services/ForegroundBotRunner/TASKS.md`
+  - Next command:
+    - `rg -n "aura|root|water walk|hover|feather fall|knockback|turn rate" Tests/BotRunner.Tests docs Services -g '!**/bin/**' -g '!**/obj/**'`
   - Session 307 closed the earlier `MSG_MOVE_WORLDPORT_ACK` corpus gap without changing the deferred packet-hook startup. A new live BotRunner harness teleports the already-in-world FG client across maps, and the existing `PacketLogger` + `ForegroundAckCorpusRecorder` captured two real `MSG_MOVE_WORLDPORT_ACK` packets from `WoW.exe NetClient::Send` (`0x005379A0`), both `DC000000`.
   - The service-side conclusion is narrower now: the initial login-worldport send still happens before the current hook-init path, but P2.2 corpus coverage no longer depends on moving the hook earlier because the same opcode is observable from later cross-map transfers.
   - Validation:

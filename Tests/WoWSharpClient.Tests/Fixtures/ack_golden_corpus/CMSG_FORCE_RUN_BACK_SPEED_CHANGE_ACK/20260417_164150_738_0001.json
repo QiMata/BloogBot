@@ -1,0 +1,33 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-17T16:41:50.7380721Z",
+  "Source": "WoW.exe NetClient::Send 0x005379A0",
+  "Opcode": 229,
+  "OpcodeName": "CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK",
+  "PacketSize": 48,
+  "PacketBytesHex": "E5000000BE00000000000000010000000000000004ED8A07CDACCB4433AB88C59C1BFA410DFBE53E2802000000001041",
+  "Guid": 190,
+  "Counter": 1,
+  "ClientTimeMs": 126545156,
+  "Speed": 9,
+  "Movement": {
+    "MovementFlags": 0,
+    "ClientTimeMs": 126545156,
+    "X": 1629.4,
+    "Y": -4373.4,
+    "Z": 31.263481,
+    "Facing": 0.449181,
+    "TransportGuid": null,
+    "TransportOffsetX": null,
+    "TransportOffsetY": null,
+    "TransportOffsetZ": null,
+    "TransportOrientation": null,
+    "SwimPitch": null,
+    "FallTimeMs": 552,
+    "JumpVerticalSpeed": null,
+    "JumpCosAngle": null,
+    "JumpSinAngle": null,
+    "JumpHorizontalSpeed": null,
+    "SplineElevation": null
+  }
+}
