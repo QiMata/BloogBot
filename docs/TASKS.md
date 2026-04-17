@@ -73,8 +73,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [ ] P2.6.3 Write `StateMachineParityTests`
   - [ ] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
 - [ ] **P2.7** Gap closure (G1-G10 verification)
-  - [ ] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
-  - [ ] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
+  - [x] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
+  - [x] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
   - [ ] P2.7.3 **G6** implement `MSG_MOVE_SET_RAW_POSITION_ACK`
   - [ ] P2.7.4 **G7** implement `CMSG_MOVE_FLIGHT_ACK`
   - [ ] P2.7.5 Final regression: all parity bundles + new `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green
@@ -97,19 +97,21 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: Continued the **P2.4 ObjectManager state mutation parity** pass. In addition to the earlier `NEAR_OBJECTS` fix, BG now mirrors the cached-object duplicate-create path: when a `CREATE_OBJECT` / `CREATE_OBJECT2` block arrives for an already-cached typed GUID, BG mutates that existing object in place instead of removing and recreating it.
-- Binary-backed note: the fresh `0x4651A0` capture still anchors the top-level three-stage `SMSG_UPDATE_OBJECT` flow (`lead byte -> prepass(es) -> direct dispatch`). The new mutation-order fix is backed by `0x4660A0 -> 0x464530 -> 0x466350`: on a cache hit WoW.exe does **not** go through `0x466E00` / `0x466C70`, and inside `0x466350` the player/gameobject branch calls `0x5FF070` before the descriptor walker `0x466590`. That proves duplicate create blocks are an in-place mutate path and that cached-object movement prepass work can happen before descriptor fields.
-- Layout note: `0x466C70` now anchors exact typed storage regions for object/unit/player/gameobject/dynamic object/corpse instances, including the full local-player descriptor span `+0x1D70..+0x3178` (`0x1408` bytes = `PLAYER_END * 4`). `cgobject_layout.md` exists now, but P2.4.1 stays open until the remaining unresolved member names/parent-pointer offsets are pinned.
+- Completed: Closed the next two packet-parity gaps in **P2.7**. BG now consumes `MSG_MOVE_TIME_SKIPPED` by advancing the outbound movement timestamp base, and it now consumes `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` for the local player so stale airborne state does not survive when normal local-player movement overwrites are suppressed.
+- Binary-backed note:
+  - `MSG_MOVE_TIME_SKIPPED` routes through `0x603B40 -> 0x601560 -> 0x61AB90`, and `0x61AB90` is a one-line add into the movement-local `+0xAC` accumulator. BG mirrors that by advancing `WorldTimeTracker`.
+  - `MSG_MOVE_JUMP` routes through `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970`, then calls `CMovement::BeginJump` at `0x7C6230`, which enters airborne state through `0x7C61F0` and zeroes `fallTime`.
+  - `MSG_MOVE_FALL_LAND` routes through `0x603BB0 -> 0x601580 -> 0x602C20 -> 0x61A750`. The wrapper is just a packet-parse/apply path, so BG now explicitly clears local airborne bits / `fallTime` on the event hook when in-control overwrite suppression would otherwise leave them stale.
 - Commands run:
   - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
-  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the object-update build/test pass.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DuplicateCreateObjectBlock_MutatesCachedGameObjectInPlace_AndDescriptorFieldsWinAfterMovementPrepass" --logger "console;verbosity=minimal"` -> first compile/build pass completed; final `--no-build` rerun `passed (1/1)`.
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the build/test pass.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase|FullyQualifiedName~EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime|FullyQualifiedName~EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`.
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`.
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`.
-- Files changed: `docs/TASKS.md`, `docs/physics/README.md`, `docs/physics/0x4651A0_disasm.txt`, `docs/physics/smsg_update_object_handler.md`, `docs/physics/cgobject_layout.md`, `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/TASKS.md`, `Tests/WoWSharpClient.Tests/Handlers/SMSG_UPDATE_OBJECT_Tests.cs`, `Tests/WoWSharpClient.Tests/Handlers/ObjectUpdateMutationOrderTests.cs`, `Tests/WoWSharpClient.Tests/TASKS.md`, and `memory/wow_exe_physics_decompilation.md`.
-- Next command: `rg -n "P2\\.4\\.1|cgobject_layout|ApplyPlayerFieldDiffs|ApplyUnitFieldDiffs|ApplyGameObjectFieldDiffs" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+- Files changed: `Exports/WoWSharpClient/Movement/MovementController.cs`, `Exports/WoWSharpClient/Utils/WorldTimeTracker.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, `docs/physics/msg_move_time_skipped_jump_land.md`, `docs/physics/README.md`, `Exports/WoWSharpClient/TASKS.md`, `Tests/WoWSharpClient.Tests/TASKS.md`, `docs/TASKS.md`, and `memory/wow_exe_physics_decompilation.md`.
+- Next command: `rg -n "MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK|MOVE_SET_RAW_POSITION|FLIGHT_ACK" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests Services -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 

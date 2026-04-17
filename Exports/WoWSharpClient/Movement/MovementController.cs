@@ -1305,6 +1305,16 @@ namespace WoWSharpClient.Movement
             _stopWhenGrounded = true;
         }
 
+        internal void NotifyServerJumpStart()
+        {
+            _fallTimeMs = 0;
+        }
+
+        internal void NotifyServerFallLand()
+        {
+            _fallTimeMs = 0;
+        }
+
         // ======== STEERING TARGET ========
 
         /// <summary>

@@ -14,23 +14,28 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.4 now has a deterministic duplicate-create mutation-order test and the parity bundles stayed green`
+- Pass result: `P2.7 G2/G3 now have deterministic local-player parity coverage and the parity bundles stayed green`
 - Last delta:
-  - Added `Handlers/ObjectUpdateMutationOrderTests.cs` with `DuplicateCreateObjectBlock_MutatesCachedGameObjectInPlace_AndDescriptorFieldsWinAfterMovementPrepass`.
-  - The new test replays a synthetic duplicate `CREATE_OBJECT` gameobject block for an already-cached GUID and proves two WoW.exe-backed rules: the object instance is mutated in place instead of recreated, and on that cached-object branch descriptor position/facing fields overwrite the earlier movement-prepass values.
-  - The assertions are anchored to `0x4660A0 -> 0x466350 -> 0x5FF070 -> 0x466590`, not protocol guesswork.
+  - Added three deterministic `ObjectManagerWorldSessionTests` for the newly-wired packet gaps:
+    - `EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase`
+    - `EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime`
+    - `EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent`
+  - The assertions are anchored to the new packet-handling evidence:
+    - `MSG_MOVE_TIME_SKIPPED` -> `0x603B40 -> 0x601560 -> 0x61AB90`
+    - `MSG_MOVE_JUMP` -> `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`
+    - `MSG_MOVE_FALL_LAND` -> `0x603BB0 -> 0x601580 -> 0x602C20 -> 0x61A750`
   - Validation:
     - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test build run.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DuplicateCreateObjectBlock_MutatesCachedGameObjectInPlace_AndDescriptorFieldsWinAfterMovementPrepass" --logger "console;verbosity=minimal"` -> first compile/build pass completed; final `--no-build` rerun `passed (1/1)`.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase|FullyQualifiedName~EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime|FullyQualifiedName~EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `Tests/WoWSharpClient.Tests/Handlers/ObjectUpdateMutationOrderTests.cs`
+    - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "P2\\.4\\.1|cgobject_layout|ApplyPlayerFieldDiffs|ApplyUnitFieldDiffs|ApplyGameObjectFieldDiffs" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK|MOVE_SET_RAW_POSITION|FLIGHT_ACK" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Added `WorldportAck_MatchesWoWExeBytes` to `Parity/AckBinaryParityTests.cs` and captured live `MSG_MOVE_WORLDPORT_ACK` fixtures via an FG cross-map teleport harness. The new fixtures (`20260417_161214_670_0001.json`, `20260417_161217_932_0002.json`) both prove the worldport ACK is just `DC000000`.
   - `AckParity` now passes for the live teleport/worldport corpus entries (`4/4` in the current corpus). The remaining P2.2 gap is fixture acquisition for the force-speed/root/flag/knockback/raw-position/flight ACK set.
   - Validation:

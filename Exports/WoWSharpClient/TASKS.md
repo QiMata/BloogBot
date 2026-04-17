@@ -21,25 +21,30 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.4 now has binary-backed coverage for duplicate cached CREATE_OBJECT blocks; parity bundles stayed green`
+- Pass result: `P2.7 G2/G3 are now wired with WoW.exe-backed local state updates; parity bundles stayed green`
 - Last delta:
-  - `WoWSharpObjectManager.Network.cs` now mirrors the cached-object duplicate-create rule from WoW.exe. `0x4660A0` looks up the GUID first and routes cache hits to `0x466350` instead of the new-object path, so BG no longer removes and recreates an already-cached typed object when a second `CREATE_OBJECT` / `CREATE_OBJECT2` block arrives for the same GUID.
-  - The same capture proves an ordering detail for that branch: `0x466350` calls `0x5FF070` before the descriptor walker `0x466590` on the player/gameobject-style path. BG now uses that rule for duplicate create blocks by applying the movement prepass before descriptor field diffs.
-  - `docs/physics/smsg_update_object_handler.md` now documents the cached-object create path explicitly, and the external packet-handling memory note was extended with `0x466350` / `0x5FF070`.
+  - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
+  - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
+  - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.
+  - `MSG_MOVE_FALL_LAND` now clears `MOVEFLAG_JUMPING` / `MOVEFLAG_FALLINGFAR` and resets the local fall timer when the landing event arrives, covering the in-control suppression case on top of the packet path `0x603BB0 -> 0x601580 -> 0x602C20 -> 0x61A750`.
+  - Added `docs/physics/msg_move_time_skipped_jump_land.md` to document the new packet-handling VAs and the inferred meaning of the `+0xAC` time accumulator.
   - Validation:
-    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the object-update test build pass.
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DuplicateCreateObjectBlock_MutatesCachedGameObjectInPlace_AndDescriptorFieldsWinAfterMovementPrepass" --logger "console;verbosity=minimal"` -> first compile/build pass completed; final `--no-build` rerun `passed (1/1)`.
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the test build pass.
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase|FullyQualifiedName~EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime|FullyQualifiedName~EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent" --logger "console;verbosity=minimal"` -> `passed (3/3)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
-    - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
-    - `docs/physics/smsg_update_object_handler.md`
-    - `Tests/WoWSharpClient.Tests/Handlers/ObjectUpdateMutationOrderTests.cs`
+    - `Exports/WoWSharpClient/Movement/MovementController.cs`
+    - `Exports/WoWSharpClient/Utils/WorldTimeTracker.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+    - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+    - `docs/physics/msg_move_time_skipped_jump_land.md`
+    - `docs/physics/README.md`
     - `Exports/WoWSharpClient/TASKS.md`
   - Next command:
-    - `rg -n "P2\\.4\\.1|cgobject_layout|ApplyPlayerFieldDiffs|ApplyUnitFieldDiffs|ApplyGameObjectFieldDiffs" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK|MOVE_SET_RAW_POSITION|FLIGHT_ACK" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests Services -g '!**/bin/**' -g '!**/obj/**'`
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
   - Session 342 closed the remaining Ratchet packet-sequence blocker:
     - `SpellcastingManager.CastSpell(...)` no longer forces fishing through `CastSpellAtLocation(...)`; fishing now keeps the no-target `CMSG_CAST_SPELL` payload shape.

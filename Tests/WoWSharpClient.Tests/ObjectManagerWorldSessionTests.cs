@@ -2339,6 +2339,74 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(-18f, player.Position.Z, 3);
     }
 
+    [Fact]
+    public void EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x130;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var tracker = new WorldTimeTracker(() => 1000);
+        SetPrivateField(objectManager, "_worldTimeTracker", tracker);
+
+        InvokePrivateMethod(objectManager, "EventEmitter_OnForceTimeSkipped", null, new RequiresAcknowledgementArgs(playerGuid, 250));
+        Assert.Equal(1250d, tracker.NowMS.TotalMilliseconds);
+
+        InvokePrivateMethod(objectManager, "EventEmitter_OnForceTimeSkipped", null, new RequiresAcknowledgementArgs(playerGuid + 1, 100));
+        Assert.Equal(1250d, tracker.NowMS.TotalMilliseconds);
+    }
+
+    [Fact]
+    public void EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x131;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+        player.FallTime = 91;
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_fallTimeMs", 91u);
+
+        InvokePrivateMethod(objectManager, "EventEmitter_OnCharacterJumpStart", null, new CharacterActionArgs(playerGuid));
+
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_JUMPING, player.MovementFlags);
+        Assert.Equal(0u, player.FallTime);
+        Assert.Equal(0u, GetPrivateFieldValue<uint>(controller, "_fallTimeMs"));
+    }
+
+    [Fact]
+    public void EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x132;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR;
+        player.FallTime = 177;
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_fallTimeMs", 177u);
+
+        InvokePrivateMethod(objectManager, "EventEmitter_OnCharacterFallLand", null, new CharacterActionArgs(playerGuid));
+
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
+        Assert.Equal(0u, player.FallTime);
+        Assert.Equal(0u, GetPrivateFieldValue<uint>(controller, "_fallTimeMs"));
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(

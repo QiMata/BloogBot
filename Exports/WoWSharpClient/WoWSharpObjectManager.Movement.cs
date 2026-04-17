@@ -243,7 +243,50 @@ namespace WoWSharpClient
             object? sender,
             RequiresAcknowledgementArgs e
         )
-        { }
+        {
+            if (Player is not WoWLocalPlayer player || player.Guid != e.Guid)
+                return;
+
+            // WoW.exe dispatches MSG_MOVE_TIME_SKIPPED through 0x603B40 -> 0x601560
+            // and the leaf helper 0x61AB90 adds the packet delta into the movement
+            // component's +0xAC time base. BG mirrors that by advancing the movement
+            // timestamp source used for outbound packets.
+            (_worldTimeTracker ??= new WorldTimeTracker()).AdvanceBy(e.Counter);
+        }
+
+        private void EventEmitter_OnCharacterJumpStart(
+            object? sender,
+            CharacterActionArgs e
+        )
+        {
+            if (Player is not WoWLocalPlayer player || player.Guid != e.Guid)
+                return;
+
+            // WoW.exe routes MSG_MOVE_JUMP through 0x602B00 -> 0x617970 and, on a
+            // successful parse, calls CMovement::BeginJump at 0x7C6230. That path
+            // enters airborne state via StartFall (0x7C61F0), zeroing fallTime and
+            // setting MOVEFLAG_JUMPING.
+            player.MovementFlags |= MovementFlags.MOVEFLAG_JUMPING;
+            player.FallTime = 0;
+            _movementController?.NotifyServerJumpStart();
+        }
+
+        private void EventEmitter_OnCharacterFallLand(
+            object? sender,
+            CharacterActionArgs e
+        )
+        {
+            if (Player is not WoWLocalPlayer player || player.Guid != e.Guid)
+                return;
+
+            // WoW.exe dispatches MSG_MOVE_FALL_LAND through 0x602C20 -> 0x61A750.
+            // For the local player, BG suppresses most server movement overwrites
+            // while in control, so the explicit event hook must still clear the
+            // airborne state that the landing packet carries.
+            player.MovementFlags &= ~(MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR);
+            player.FallTime = 0;
+            _movementController?.NotifyServerFallLand();
+        }
 
 
         private void EventEmitter_OnForceMoveKnockBack(

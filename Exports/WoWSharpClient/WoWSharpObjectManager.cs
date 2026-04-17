@@ -209,6 +209,8 @@ namespace WoWSharpClient
                 EventEmitter_OnForceTurnRateChange;
             _eventEmitter.OnForceMoveKnockBack += EventEmitter_OnForceMoveKnockBack;
             _eventEmitter.OnForceTimeSkipped += EventEmitter_OnForceTimeSkipped;
+            _eventEmitter.OnCharacterJumpStart += EventEmitter_OnCharacterJumpStart;
+            _eventEmitter.OnCharacterFallLand += EventEmitter_OnCharacterFallLand;
             _eventEmitter.OnTeleport += EventEmitter_OnTeleport;
             _eventEmitter.OnClientControlUpdate +=
                 EventEmitter_OnClientControlUpdate;
