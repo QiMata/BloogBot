@@ -196,9 +196,7 @@ public sealed class ForegroundAckCorpusRecorder : IDisposable
             or Opcode.CMSG_MOVE_WATER_WALK_ACK
             or Opcode.CMSG_MOVE_HOVER_ACK
             or Opcode.CMSG_MOVE_FEATHER_FALL_ACK
-            or Opcode.CMSG_MOVE_KNOCK_BACK_ACK
-            or Opcode.MSG_MOVE_SET_RAW_POSITION_ACK
-            or Opcode.CMSG_MOVE_FLIGHT_ACK;
+            or Opcode.CMSG_MOVE_KNOCK_BACK_ACK;
 
     private static bool IsSpeedAckOpcode(Opcode opcode)
         => opcode is Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK

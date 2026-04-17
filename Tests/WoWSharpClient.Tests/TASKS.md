@@ -14,8 +14,27 @@
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.7 G2/G3 now have deterministic local-player parity coverage and the parity bundles stayed green`
+- Pass result: `P2.7 G6/G7 are closed as not-applicable in WoW.exe 1.12.1; AckParity scope stays at the 14 observed ACK families`
 - Last delta:
+  - No new WoWSharpClient ACK tests were added for `MSG_MOVE_SET_RAW_POSITION_ACK` or `CMSG_MOVE_FLIGHT_ACK` because the latest binary and live evidence shows WoW.exe does not emit those ACKs on the wire.
+  - The new packet-handling note is `docs/physics/raw_position_and_flight_ack.md`. It ties the no-registration evidence from `opcode_dispatch_table.md` to live PacketLogger probes for inbound `0x00E0`, `0x033F`, and `0x033E`, all with no outbound ACK fixture.
+  - Practical implication for this test owner: keep `AckParity` focused on the 14 ACK families captured from `WoW.exe NetClient::Send (0x005379A0)`, and treat raw-position / flight as closed-not-applicable unless new client evidence appears.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
+    - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - Files changed:
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+    - `docs/physics/raw_position_and_flight_ack.md`
+    - `docs/physics/README.md`
+    - `docs/WOW_EXE_PACKET_PARITY_PLAN.md`
+    - `docs/TASKS.md`
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
+    - `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`
+    - `memory/wow_exe_physics_decompilation.md`
+  - Next command:
+    - `rg -n "P2\\.4|cgobject_layout|HandleUpdateObject|ProcessUpdatesAsync|ObjectUpdateMutationOrderTests" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Added three deterministic `ObjectManagerWorldSessionTests` for the newly-wired packet gaps:
     - `EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase`
     - `EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime`

@@ -70,6 +70,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [smsg_move_flag_toggle_handler.md](./smsg_move_flag_toggle_handler.md) | Water-walk, feather-fall, and hover toggle notes |
 | [msg_move_teleport_handler.md](./msg_move_teleport_handler.md) | Teleport apply vs teleport ACK send path |
 | [msg_move_time_skipped_jump_land.md](./msg_move_time_skipped_jump_land.md) | `TIME_SKIPPED`, `JUMP`, and `FALL_LAND` dispatch/state notes |
+| [raw_position_and_flight_ack.md](./raw_position_and_flight_ack.md) | Evidence that `0x00E0` / `0x0340` are not active WoW.exe ACK surfaces |
 | [packet_ack_timing.md](./packet_ack_timing.md) | Q1-Q5 timing answers for knockback, speed, teleport, worldport, and spline/monster movement |
 | [smsg_update_object_handler.md](./smsg_update_object_handler.md) | `SMSG_UPDATE_OBJECT` multi-pass dispatch and type-`5` findings |
 | [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |

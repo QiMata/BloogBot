@@ -32,8 +32,8 @@
 | `CMSG_MOVE_HOVER_ACK`                   |         ✓        |          ✗         | No                |
 | `CMSG_MOVE_FEATHER_FALL_ACK`            |         ✓        |          ✗         | No                |
 | `CMSG_MOVE_KNOCK_BACK_ACK`              |         ✓        |          ✗         | No                |
-| `MSG_MOVE_SET_RAW_POSITION_ACK`         |         ✗        |          ✗         | **NOT WIRED**     |
-| `CMSG_MOVE_FLIGHT_ACK`                  |         ✗        |          ✗         | **NOT WIRED**     |
+| `MSG_MOVE_SET_RAW_POSITION_ACK`         |         ✗        |          ✗         | Not observed in WoW.exe 1.12.1 |
+| `CMSG_MOVE_FLIGHT_ACK`                  |         ✗        |          ✗         | Not observed in WoW.exe 1.12.1 |
 
 **Live-validated parity bundles (2026-04-15):**
 
@@ -52,8 +52,8 @@ The following gaps have been identified and need binary-backed evidence before f
 | G3 | `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` fire events but no ObjectManager hook | `fallTime` not reset on landing; jump state may persist                                                 | Air-time accumulation; incorrect MovementFlags on next jump                |
 | G4 | Teleport flag-clear only masks `MOVEFLAG_MASK_MOVING_OR_TURN` (8 bits)    | `MOVEFLAG_JUMPING` / `MOVEFLAG_FALLING*` / `MOVEFLAG_SWIMMING` persist across teleport                  | Post-teleport stale aerial state, mid-air landing animation                |
 | G5 | `SMSG_MONSTER_MOVE` and `SMSG_SPLINE_MOVE_*` mutate state with no ACK     | Server-driven spline flag changes silently applied                                                      | Unclear — VMaNGOS may not require these ACKs but needs confirmation        |
-| G6 | `MSG_MOVE_SET_RAW_POSITION_ACK` never sent                                | Server-forced position resets not acknowledged                                                          | GM-teleport / anti-cheat raw-position resets break                         |
-| G7 | `CMSG_MOVE_FLIGHT_ACK` never sent                                         | Taxi mount/dismount FLIGHT flag toggles not acknowledged                                                | Flight mount transitions break                                             |
+| G6 | `MSG_MOVE_SET_RAW_POSITION_ACK` initially assumed missing                 | Static table has no `0x00E0/0x00E1` registration; live 2026-04-17 probe logged inbound `0x00E0` with no outbound ACK | Close as not-applicable in WoW.exe 1.12.1 |
+| G7 | `CMSG_MOVE_FLIGHT_ACK` initially assumed missing                          | Static table has no `0x033E/0x033F/0x0340` registration; live 2026-04-17 probes logged inbound `0x033E/0x033F` with no outbound `0x0340` | Close as not-applicable in WoW.exe 1.12.1 |
 | G8 | `IsSceneDataReady()` guard on teleport ACK may deadlock                   | If tile data missing, teleport ACK blocks indefinitely                                                  | Cross-zone teleports with missing tiles stall the state machine            |
 | G9 | Speed-change ACK format unverified vs WoW.exe byte layout                  | Our ACK includes full MovementInfo + speed; WoW.exe format unconfirmed                                 | Anti-cheat may reject malformed ACKs                                       |
 | G10 | Root/unroot ACK counter handling unverified                                | WoW.exe uses a shared movement counter; our code uses a local counter                                   | Counter mismatch → server drops ACKs                                       |
@@ -117,8 +117,8 @@ The decompilation targets below are the packet-handling twins of the physics fun
 | P2       | `CGWorldClient::HandleUpdateObject`            | SMSG_UPDATE_OBJECT block walk; Add/Update/OutOfRange   | `smsg_update_object_handler.md`            |
 | P2       | `CGObject_C` / `CGUnit_C` / `CGPlayer_C` vtables | Polymorphic dispatch for Update application           | `cgobject_vtables.md`                      |
 | P2       | Movement counter / sequence counter location   | What counter goes into each ACK                         | `movement_counter_tracking.md`             |
-| P2       | `MSG_MOVE_SET_RAW_POSITION` + ACK               | GM-forced position reset flow                           | `msg_move_set_raw_position.md`             |
-| P3       | `CMSG_MOVE_FLIGHT_ACK` trigger                 | Flight mode toggle during taxi                          | `cmsg_move_flight_ack.md`                  |
+| P2       | `MSG_MOVE_SET_RAW_POSITION` + ACK               | Confirm whether the assumed raw-position ACK exists at all | `raw_position_and_flight_ack.md`        |
+| P3       | `CMSG_MOVE_FLIGHT_ACK` trigger                 | Confirm whether the assumed flight ACK exists at all       | `raw_position_and_flight_ack.md`        |
 
 ### 2.4 Tooling: how to capture disassembly
 
@@ -177,7 +177,7 @@ Every outbound ACK we send must be **byte-for-byte identical** to what WoW.exe s
 
 ### 3.5 Exit criteria
 - All 14 currently-wired ACKs have byte-parity tests passing.
-- Previously-unwired ACKs (`MSG_MOVE_SET_RAW_POSITION_ACK`, `CMSG_MOVE_FLIGHT_ACK`) either land in a later phase or are explicitly deferred in this doc.
+- Previously-unwired ACKs (`MSG_MOVE_SET_RAW_POSITION_ACK`, `CMSG_MOVE_FLIGHT_ACK`) must either be proven on the wire or explicitly closed as not-applicable in WoW.exe 1.12.1.
 
 ---
 
@@ -375,18 +375,18 @@ Each gap G1-G10 should have been closed by an earlier phase. This phase is a **v
 | G3  | P2.7            | Jump/fall land hook + fallTime test  |
 | G4  | P2.6            | Teleport state machine fix           |
 | G5  | P2.3 / P2.1     | Documented as "no ACK needed" OR closed |
-| G6  | P2.7            | MSG_MOVE_SET_RAW_POSITION_ACK wired  |
-| G7  | P2.7            | CMSG_MOVE_FLIGHT_ACK wired           |
+| G6  | P2.7            | Not applicable: no static registration + no live ACK emission |
+| G7  | P2.7            | Not applicable: no static registration + no live ACK emission |
 | G8  | P2.6            | Teleport ACK guard fix               |
 | G9  | P2.2            | Byte parity test                     |
 | G10 | P2.2            | Byte parity test + counter doc       |
 
 ### 8.3 Residual sub-tasks (those not closed by prior phases)
 
-- [ ] P2.7.1 **G2** — Wire `MSG_MOVE_TIME_SKIPPED` listener in ObjectManager. Find VA of WoW.exe's time-skip handler. Document what state it mutates. Match.
-- [ ] P2.7.2 **G3** — Wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer in ObjectManager. Verify fallTime reset semantics against WoW.exe.
-- [ ] P2.7.3 **G6** — Implement `MSG_MOVE_SET_RAW_POSITION_ACK`. Build from decompilation.
-- [ ] P2.7.4 **G7** — Implement `CMSG_MOVE_FLIGHT_ACK`. Wire to taxi mount/dismount flow.
+- [x] P2.7.1 **G2** — Wire `MSG_MOVE_TIME_SKIPPED` listener in ObjectManager. Find VA of WoW.exe's time-skip handler. Document what state it mutates. Match.
+- [x] P2.7.2 **G3** — Wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer in ObjectManager. Verify fallTime reset semantics against WoW.exe.
+- [x] P2.7.3 **G6** — Close `MSG_MOVE_SET_RAW_POSITION_ACK` as not-applicable in WoW.exe 1.12.1. Evidence: no static registration and a 2026-04-17 live probe logged inbound `0x00E0` with no outbound ACK.
+- [x] P2.7.4 **G7** — Close `CMSG_MOVE_FLIGHT_ACK` as not-applicable in WoW.exe 1.12.1. Evidence: no static registration and 2026-04-17 live probes logged inbound `0x033E/0x033F` with no outbound `0x0340`.
 - [ ] P2.7.5 Final full-stack regression: run all three parity bundles + new AckParity bundle + new PacketFlowParity bundle. All green.
 
 ### 8.4 Exit criteria

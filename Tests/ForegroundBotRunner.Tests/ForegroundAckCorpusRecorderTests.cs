@@ -97,6 +97,33 @@ public sealed class ForegroundAckCorpusRecorderTests
         }
     }
 
+    [Theory]
+    [InlineData(Opcode.MSG_MOVE_SET_RAW_POSITION_ACK)]
+    [InlineData(Opcode.CMSG_MOVE_FLIGHT_ACK)]
+    public void Start_RecordNonWoWExeAckCandidates_DoesNotWriteFixture(Opcode opcode)
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundAckCorpusRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundAckCorpusRecorder.OutputDirEnvVar, tempDir);
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundAckCorpusRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordOutboundPacket((ushort)opcode, BitConverter.GetBytes((uint)opcode));
+
+            var opcodeDir = Path.Combine(tempDir, opcode.ToString());
+            Assert.False(Directory.Exists(opcodeDir));
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
     private static byte[] BuildForceSpeedAckPacket(Opcode opcode, ulong guid, uint counter, uint clientTimeMs, float speed)
     {
         var player = new WoWLocalPlayer(new HighGuid(guid))

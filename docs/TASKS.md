@@ -75,8 +75,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - [ ] **P2.7** Gap closure (G1-G10 verification)
   - [x] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
   - [x] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
-  - [ ] P2.7.3 **G6** implement `MSG_MOVE_SET_RAW_POSITION_ACK`
-  - [ ] P2.7.4 **G7** implement `CMSG_MOVE_FLIGHT_ACK`
+  - [x] P2.7.3 **G6** close `MSG_MOVE_SET_RAW_POSITION_ACK` as not-applicable in WoW.exe 1.12.1
+  - [x] P2.7.4 **G7** close `CMSG_MOVE_FLIGHT_ACK` as not-applicable in WoW.exe 1.12.1
   - [ ] P2.7.5 Final regression: all parity bundles + new `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green
 
 ### Gaps identified (2026-04-16)
@@ -87,8 +87,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G3  | Jump/fall land events fire but no consumer                           | P2.7.2    |
 | G4  | Teleport flag-clear only masks 8 bits (jump/fall/swim persist)       | P2.6.4    |
 | G5  | SPLINE_MOVE opcodes ACK behavior unverified                          | P2.3      |
-| G6  | `MSG_MOVE_SET_RAW_POSITION_ACK` not wired                            | P2.7.3    |
-| G7  | `CMSG_MOVE_FLIGHT_ACK` not wired                                     | P2.7.4    |
+| G6  | `0x00E0` has no static registration and no live WoW.exe ACK emission | P2.7.3    |
+| G7  | `0x033E/0x033F/0x0340` have no static registration and no live WoW.exe ACK emission | P2.7.4    |
 | G8  | Teleport ACK `IsSceneDataReady()` may deadlock                       | P2.6.4    |
 | G9  | ACK byte format vs WoW.exe unverified                                | P2.2      |
 | G10 | Movement counter semantics unverified                                | P2.2      |
@@ -97,21 +97,24 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: Closed the next two packet-parity gaps in **P2.7**. BG now consumes `MSG_MOVE_TIME_SKIPPED` by advancing the outbound movement timestamp base, and it now consumes `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` for the local player so stale airborne state does not survive when normal local-player movement overwrites are suppressed.
+- Completed: Closed the remaining two explicit P2.7 ACK-candidate gaps as **not applicable in WoW.exe 1.12.1**. `MSG_MOVE_SET_RAW_POSITION_ACK` and `CMSG_MOVE_FLIGHT_ACK` are no longer treated as required parity work, and the FG ACK corpus recorder now ignores them.
 - Binary-backed note:
-  - `MSG_MOVE_TIME_SKIPPED` routes through `0x603B40 -> 0x601560 -> 0x61AB90`, and `0x61AB90` is a one-line add into the movement-local `+0xAC` accumulator. BG mirrors that by advancing `WorldTimeTracker`.
-  - `MSG_MOVE_JUMP` routes through `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970`, then calls `CMovement::BeginJump` at `0x7C6230`, which enters airborne state through `0x7C61F0` and zeroes `fallTime`.
-  - `MSG_MOVE_FALL_LAND` routes through `0x603BB0 -> 0x601580 -> 0x602C20 -> 0x61A750`. The wrapper is just a packet-parse/apply path, so BG now explicitly clears local airborne bits / `fallTime` on the event hook when in-control overwrite suppression would otherwise leave them stale.
+  - `docs/physics/opcode_dispatch_table.md` already shows no static registrations for `0x00E0`, `0x00E1`, `0x033E`, `0x033F`, or `0x0340`.
+  - A fresh `objdump` sweep over `0x520000..0x620000` found no `push 0x340` and no `push 0x33e`. The only `push 0x33f` site is `0x604999`, which routes through `0x468460` then `0x60ABE0`. The only `push 0xe0` sites are `0x5F34B9`, `0x5F34D8`, and `0x60C121`, all calling `0x496720`.
+  - Live FG probes on `2026-04-17` logged inbound `0x00E0` at `17:04:43.671`, inbound `0x033F` at `17:14:53.417`, and inbound `0x033E` at `17:18:40.848` in `D:/World of Warcraft/WWoWLogs/packet_logger.log`. The paired `foreground_bot_debug.log` entries confirm the injected server opcodes `224`, `831`, and `830`, and no outbound `0x00E0` or `0x0340` was captured.
 - Commands run:
   - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running.
-  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the build/test pass.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase|FullyQualifiedName~EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime|FullyQualifiedName~EventEmitter_OnCharacterFallLand_LocalPlayer_ClearsAirborneStateAndPreservesDirectionalIntent" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (26/26)`.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`.
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`.
-- Files changed: `Exports/WoWSharpClient/Movement/MovementController.cs`, `Exports/WoWSharpClient/Utils/WorldTimeTracker.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, `docs/physics/msg_move_time_skipped_jump_land.md`, `docs/physics/README.md`, `Exports/WoWSharpClient/TASKS.md`, `Tests/WoWSharpClient.Tests/TASKS.md`, `docs/TASKS.md`, and `memory/wow_exe_physics_decompilation.md`.
-- Next command: `rg -n "MSG_MOVE_SET_RAW_POSITION_ACK|CMSG_MOVE_FLIGHT_ACK|MOVE_SET_RAW_POSITION|FLIGHT_ACK" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests Services -g '!**/bin/**' -g '!**/obj/**'`
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> initially no running `WoW.exe` before the live ACK probes; rerun before the validation build/test pass.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n224\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: no new ACK fixture appeared after inbound 0x00E0`
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n831\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: no new ACK fixture appeared after inbound 0x033F`
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n830\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: no new ACK fixture appeared after inbound 0x033E`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAckCorpusRecorderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+- Files changed: `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`, `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`, `docs/physics/raw_position_and_flight_ack.md`, `docs/physics/README.md`, `docs/WOW_EXE_PACKET_PARITY_PLAN.md`, `docs/TASKS.md`, `Services/ForegroundBotRunner/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, `Tests/WoWSharpClient.Tests/TASKS.md`, and `memory/wow_exe_physics_decompilation.md`.
+- Next command: `rg -n "P2\\.4|cgobject_layout|HandleUpdateObject|ProcessUpdatesAsync|ObjectUpdateMutationOrderTests" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 

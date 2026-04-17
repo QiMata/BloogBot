@@ -37,9 +37,32 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
-- Last updated: `2026-04-17 (session 309)`
-- Pass result: `FG ACK corpus recorder now has live fixtures for all 14 wired ACK families`
+- Last updated: `2026-04-17 (session 310)`
+- Pass result: `FG ACK corpus recorder now excludes raw-position/flight opcodes that WoW.exe never ACKs`
 - Last delta:
+  - Session 310 closed the remaining raw-position / flight ACK assumption gap without adding synthetic behavior. The FG recorder no longer treats `MSG_MOVE_SET_RAW_POSITION_ACK` or `CMSG_MOVE_FLIGHT_ACK` as ACK-corpus candidates.
+  - Static evidence stayed aligned with the existing dispatch-table sweep: no registration for `0x00E0`, `0x00E1`, `0x033E`, `0x033F`, or `0x0340`. The fresh `0x520000..0x620000` immediate scan found no `push 0x340`, no `push 0x33e`, one `push 0x33f` at `0x604999 -> 0x468460 -> 0x60ABE0`, and three `push 0xe0` sites at `0x5F34B9`, `0x5F34D8`, and `0x60C121`, all calling `0x496720`.
+  - Live FG probes on `2026-04-17` confirmed the same conclusion. `packet_logger.log` captured inbound `0x00E0` at `17:04:43.671`, inbound `0x033F` at `17:14:53.417`, and inbound `0x033E` at `17:18:40.848`, while the harness never saw an outbound `0x00E0` or `0x0340` and therefore never wrote a new corpus fixture.
+  - Added deterministic coverage in `ForegroundAckCorpusRecorderTests` to keep the recorder from regressing and reintroducing those two non-WoW.exe opcodes into the ACK corpus surface.
+  - Validation:
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the live probe pass.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n224\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: inbound 0x00E0 produced no new ACK fixture`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n831\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: inbound 0x033F produced no new ACK fixture`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_ACK_CORPUS='1'; $env:WWOW_ACK_CORPUS_OUTPUT='E:/repos/Westworld of Warcraft/Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; $env:WWOW_ACK_CAPTURE_GM_COMMAND='.debug send opcode'; Remove-Item Env:WWOW_ACK_CAPTURE_EXPECTED_OPCODES -ErrorAction SilentlyContinue; docker exec mangosd sh -lc "cat > /home/vmangos/opcode.txt <<'EOF'\n830\npguid\nuint32 1\nEOF"; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests.Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled" --logger "console;verbosity=minimal"` -> `failed as expected: inbound 0x033E produced no new ACK fixture`
+    - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAckCorpusRecorderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - Files changed:
+    - `Services/ForegroundBotRunner/Diagnostics/ForegroundAckCorpusRecorder.cs`
+    - `Tests/ForegroundBotRunner.Tests/ForegroundAckCorpusRecorderTests.cs`
+    - `docs/physics/raw_position_and_flight_ack.md`
+    - `docs/physics/README.md`
+    - `docs/WOW_EXE_PACKET_PARITY_PLAN.md`
+    - `docs/TASKS.md`
+    - `Services/ForegroundBotRunner/TASKS.md`
+    - `Exports/WoWSharpClient/TASKS.md`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+    - `memory/wow_exe_physics_decompilation.md`
+  - Next command:
+    - `rg -n "P2\\.4|cgobject_layout|HandleUpdateObject|ProcessUpdatesAsync|ObjectUpdateMutationOrderTests" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Session 309 closed the remaining three corpus gaps without changing the recorder. The correct server debug path is `.debug send opcode`, not `.debug opcode`, and it successfully emitted source-backed `SMSG_FORCE_TURN_RATE_CHANGE` / `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE` payloads from `/home/vmangos/opcode.txt`.
   - The last family came from the server's built-in `.knockback 5 5` GM command. That path is source-backed through `HandleKnockBackCommand -> Unit::KnockBackFrom -> MovementPacketSender::SendKnockBackToController`, and FG captured the resulting `CMSG_MOVE_KNOCK_BACK_ACK` bytes from `WoW.exe NetClient::Send` (`0x005379A0`).
   - The service-side conclusion is now complete for P2.2: the current packet hook and corpus recorder are sufficient for teleport/worldport, server-driven speed ACKs, movement-flag toggles, root/unroot, and knockback.
