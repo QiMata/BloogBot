@@ -39,13 +39,13 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 **Full plan:** `docs/WOW_EXE_PACKET_PARITY_PLAN.md` (10 gaps identified, 7 sub-phases).
 
 ### Sub-phases
-- [ ] **P2.1** Decompilation research: packet dispatch & ACK generation
-  - [ ] P2.1.1 Capture `NetClient::ProcessMessage` (0x537AA0) disassembly; identify opcode dispatch mechanism
-  - [ ] P2.1.2 Dump opcode → handler mapping as `docs/physics/opcode_dispatch_table.md`
-  - [ ] P2.1.3 Capture `NetClient::Send` (0x005379A0) disassembly
-  - [ ] P2.1.4 Decompile P1 handlers: speed change, root, knockback, water walk, hover, teleport, worldport ACK
-  - [ ] P2.1.5 Decompile `CGPlayer_C` / `CGUnit_C` / `CGObject_C` vtables
-  - [ ] P2.1.6 Trace movement counter: CMovement offset, increment points, packet inclusion
+- [x] **P2.1** Decompilation research: packet dispatch & ACK generation
+  - [x] P2.1.1 Capture `NetClient::ProcessMessage` (0x537AA0) disassembly; identify opcode dispatch mechanism
+  - [x] P2.1.2 Dump opcode -> handler mapping as `docs/physics/opcode_dispatch_table.md`
+  - [x] P2.1.3 Capture `NetClient::Send` (0x005379A0) disassembly
+  - [x] P2.1.4 Decompile P1 handlers: speed change, root, knockback, water walk, hover, teleport, worldport ACK
+  - [x] P2.1.5 Decompile `CGPlayer_C` / `CGUnit_C` / `CGObject_C` vtables
+  - [x] P2.1.6 Trace movement counter: CMovement offset, increment points, packet inclusion
 - [ ] **P2.2** ACK format parity (byte-level)
   - [ ] P2.2.1 Capture golden corpus ACK bytes from FG bot for each ACK opcode
   - [ ] P2.2.2 Add `AckBinaryParityTests` — one test per ACK opcode asserting byte equality
@@ -94,6 +94,19 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G10 | Movement counter semantics unverified                                | P2.2      |
 
 ---
+
+## Handoff (2026-04-17)
+
+- Completed: P2.1 decompilation research. Captured `NetClient::ProcessMessage` (`0x537AA0`) and `NetClient::Send` (`0x005379A0`), generated the opcode dispatch table, documented the P1-priority movement handlers, traced movement-counter reads/writes, and indexed the packet-handling material in `docs/physics/README.md`. `docs/physics/opcode_dispatch_table.md` currently enumerates 906 opcode values from `Exports/GameData.Core/Enums/Opcode.cs`; entries without a static registration in WoW.exe are marked `N/A`.
+- Commands run:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `scene-data-service`, `scene-data-db`, and `scene-data-redis` were healthy/running.
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before validation.
+  - `dotnet build WestworldOfWarcraft.sln --configuration Release` -> failed on `Exports/Loader/Loader.vcxproj` and `Exports/FastCall/FastCall.vcxproj` with `MSB4278` (`Microsoft.Cpp.Default.props` import under `dotnet` CLI).
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> passed (`30/30`).
+  - `$env:WWOW_DATA_DIR='D:\\MaNGOS\\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> passed (`8/8`).
+  - `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> cleanup removed repo-scoped `dotnet.exe` PID `33208`; parity bundle passed (`80/80`).
+- Files changed: `docs/TASKS.md`, `docs/physics/README.md`, `docs/physics/0x005379A0_disasm.txt`, `docs/physics/0x537AA0_disasm.txt`, `docs/physics/0x537AA0_pseudocode.md`, `docs/physics/opcode_dispatch_table.md`, the additional packet-handler disassembly/analysis files under `docs/physics/`, and the helper scripts `docs/physics/packet_parity_extract.py` / `docs/physics/ida_dump_names.py`.
+- Next command: `git grep -n "AckParity\\|PacketFlowParity\\|StateMachineParity" -- Tests/WoWSharpClient.Tests Tests/BotRunner.Tests`.
 
 ## Canonical Commands
 

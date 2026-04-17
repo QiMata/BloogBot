@@ -35,6 +35,42 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [VANILLA_WOW_PHYSICS_INTENTION_RESEARCH.md](./VANILLA_WOW_PHYSICS_INTENTION_RESEARCH.md) | Research on WoW physics intentions |
 | [WOW_PHYSICS_SERVICE_GUIDE.md](./WOW_PHYSICS_SERVICE_GUIDE.md) | Integration guide for the physics service |
 
+### Packet Handling
+
+| Document | Description |
+|----------|-------------|
+| [0x537AA0_disasm.txt](./0x537AA0_disasm.txt) | Raw `NetClient::ProcessMessage` dispatcher disassembly |
+| [0x537AA0_pseudocode.md](./0x537AA0_pseudocode.md) | C-like translation of `NetClient::ProcessMessage` |
+| [0x005379A0_disasm.txt](./0x005379A0_disasm.txt) | Raw `NetClient::Send` disassembly |
+| [opcode_dispatch_table.md](./opcode_dispatch_table.md) | Static opcode -> handler registration map recovered from WoW.exe |
+| [0x401B00_disasm.txt](./0x401B00_disasm.txt) | Raw `SMSG_NEW_WORLD` handler disassembly |
+| [0x401BC0_disasm.txt](./0x401BC0_disasm.txt) | Raw deferred world-entry callback disassembly |
+| [0x401DE0_disasm.txt](./0x401DE0_disasm.txt) | Raw `SMSG_LOGIN_VERIFY_WORLD` handler disassembly |
+| [msg_move_worldport_ack.md](./msg_move_worldport_ack.md) | World-entry and `MSG_MOVE_WORLDPORT_ACK` send conditions |
+| [0x601580_disasm.txt](./0x601580_disasm.txt) | Raw movement-dispatch wrapper below `0x603BB0` |
+| [0x602780_disasm.txt](./0x602780_disasm.txt) | Raw force-speed/root/flag dispatch wrapper below `0x603F90` |
+| [0x603F90_disasm.txt](./0x603F90_disasm.txt) | Raw top-level wrapper for force-speed/root/flag opcodes |
+| [0x602670_disasm.txt](./0x602670_disasm.txt) | Raw inbound `SMSG_MOVE_KNOCK_BACK` leaf |
+| [0x6026F0_disasm.txt](./0x6026F0_disasm.txt) | Raw `MSG_MOVE_KNOCK_BACK` local path |
+| [0x602FB0_disasm.txt](./0x602FB0_disasm.txt) | Raw teleport-ACK handler / sender path |
+| [0x61A380_disasm.txt](./0x61A380_disasm.txt) | Raw water-walk / land-walk inbound toggle leaf |
+| [0x61A430_disasm.txt](./0x61A430_disasm.txt) | Raw local water-walk apply helper |
+| [0x61A490_disasm.txt](./0x61A490_disasm.txt) | Raw feather-fall / normal-fall inbound toggle leaf |
+| [0x61A550_disasm.txt](./0x61A550_disasm.txt) | Raw local feather-fall apply helper |
+| [0x61A5D0_disasm.txt](./0x61A5D0_disasm.txt) | Raw hover / unhover inbound toggle leaf |
+| [0x61A700_disasm.txt](./0x61A700_disasm.txt) | Raw root / unroot inbound leaf |
+| [0x616800_disasm.txt](./0x616800_disasm.txt) | Raw movement-counter initialization / refresh path |
+| [0x617570_disasm.txt](./0x617570_disasm.txt) | Raw pending movement queue helpers |
+| [0x619500_disasm.txt](./0x619500_disasm.txt) | Raw speed-change queue / apply helper family |
+| [0x619DE0_disasm.txt](./0x619DE0_disasm.txt) | Raw companion-counter consumer and dequeue path |
+| [smsg_force_speed_change_handler.md](./smsg_force_speed_change_handler.md) | Speed-change queue / apply notes |
+| [smsg_force_move_root_handler.md](./smsg_force_move_root_handler.md) | Root / unroot queue behavior |
+| [smsg_move_knock_back_handler.md](./smsg_move_knock_back_handler.md) | Inbound knockback staging notes |
+| [smsg_move_flag_toggle_handler.md](./smsg_move_flag_toggle_handler.md) | Water-walk, feather-fall, and hover toggle notes |
+| [msg_move_teleport_handler.md](./msg_move_teleport_handler.md) | Teleport apply vs teleport ACK send path |
+| [cgobject_vtables.md](./cgobject_vtables.md) | Confirmed `CGObject_C` vfptr evidence and current limits |
+| [movement_counter_tracking.md](./movement_counter_tracking.md) | `local + 0x128` / `local + 0x12C` counter trace |
+
 ## Physics Pipeline Summary
 
 ```

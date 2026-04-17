@@ -1,0 +1,23 @@
+0x0061A700: push     ebp
+0x0061A701: mov      ebp, esp
+0x0061A703: sub      esp, 0xc
+0x0061A706: mov      edx, dword ptr [ebp + 0xc]
+0x0061A709: push     0
+0x0061A70B: push     0
+0x0061A70D: lea      eax, [ebp - 0xc]
+0x0061A710: push     eax
+0x0061A711: mov      eax, dword ptr [ebp + 0x10]
+0x0061A714: push     edx
+0x0061A715: mov      edx, dword ptr [ebp + 8]
+0x0061A718: neg      eax
+0x0061A71A: sbb      eax, eax
+0x0061A71C: push     1
+0x0061A71E: add      eax, 0x24
+0x0061A721: push     eax
+0x0061A722: push     edx
+0x0061A723: mov      dword ptr [ebp - 0xc], 0
+0x0061A72A: mov      dword ptr [ebp - 8], 0
+0x0061A731: mov      dword ptr [ebp - 4], 0
+0x0061A738: call     0x617570
+0x0061A73D: mov      esp, ebp
+0x0061A73F: pop      ebp

@@ -1,0 +1,41 @@
+0x00537AA0: push     ebp
+0x00537AA1: mov      ebp, esp
+0x00537AA3: mov      edx, dword ptr [0xc0d46c]
+0x00537AA9: push     ebx
+0x00537AAA: mov      ebx, dword ptr [ebp + 0xc]
+0x00537AAD: push     esi
+0x00537AAE: push     edi
+0x00537AAF: lea      eax, [ebp + 0xe]
+0x00537AB2: mov      esi, ecx
+0x00537AB4: inc      edx
+0x00537AB5: push     eax
+0x00537AB6: mov      ecx, ebx
+0x00537AB8: mov      dword ptr [0xc0d46c], edx
+0x00537ABE: call     0x418db0
+0x00537AC3: movzx    edi, word ptr [ebp + 0xe]
+0x00537AC7: mov      edx, dword ptr [esi]
+0x00537AC9: push     edi
+0x00537ACA: mov      ecx, esi
+0x00537ACC: call     dword ptr [edx + 0x40]
+0x00537ACF: mov      eax, dword ptr [esi + edi*4 + 0x74]
+0x00537AD3: test     eax, eax
+0x00537AD5: je       0x537aee
+0x00537AD7: mov      ecx, dword ptr [ebp + 8]
+0x00537ADA: push     ebx
+0x00537ADB: push     ecx
+0x00537ADC: mov      ecx, dword ptr [esi + edi*4 + 0xd64]
+0x00537AE3: mov      edx, edi
+0x00537AE5: call     eax
+0x00537AE7: pop      edi
+0x00537AE8: pop      esi
+0x00537AE9: pop      ebx
+0x00537AEA: pop      ebp
+0x00537AEB: ret      8
+0x00537AEE: mov      edx, dword ptr [ebx]
+0x00537AF0: mov      ecx, ebx
+0x00537AF2: call     dword ptr [edx + 0x18]
+0x00537AF5: pop      edi
+0x00537AF6: pop      esi
+0x00537AF7: pop      ebx
+0x00537AF8: pop      ebp
+0x00537AF9: ret      8

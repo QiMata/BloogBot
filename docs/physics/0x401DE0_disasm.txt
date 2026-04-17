@@ -1,0 +1,65 @@
+0x00401DE0: push     ebp
+0x00401DE1: mov      ebp, esp
+0x00401DE3: sub      esp, 0x10
+0x00401DE6: push     esi
+0x00401DE7: mov      esi, dword ptr [ebp + 0xc]
+0x00401DEA: lea      eax, [ebp + 0xc]
+0x00401DED: push     eax
+0x00401DEE: mov      ecx, esi
+0x00401DF0: mov      dword ptr [ebp - 0x10], 0
+0x00401DF7: mov      dword ptr [ebp - 0xc], 0
+0x00401DFE: mov      dword ptr [ebp - 8], 0
+0x00401E05: call     0x418eb0
+0x00401E0A: lea      ecx, [ebp - 0x10]
+0x00401E0D: push     ecx
+0x00401E0E: mov      ecx, esi
+0x00401E10: call     0x419130
+0x00401E15: lea      edx, [ebp - 0xc]
+0x00401E18: push     edx
+0x00401E19: mov      ecx, esi
+0x00401E1B: call     0x419130
+0x00401E20: lea      eax, [ebp - 8]
+0x00401E23: push     eax
+0x00401E24: mov      ecx, esi
+0x00401E26: call     0x419130
+0x00401E2B: lea      ecx, [ebp - 4]
+0x00401E2E: push     ecx
+0x00401E2F: mov      ecx, esi
+0x00401E31: call     0x419130
+0x00401E36: call     0x468580
+0x00401E3B: mov      ecx, dword ptr [ebp + 0xc]
+0x00401E3E: cmp      ecx, eax
+0x00401E40: pop      esi
+0x00401E41: je       0x401ea9
+0x00401E43: test     ecx, ecx
+0x00401E45: mov      edx, dword ptr [ebp - 0x10]
+0x00401E48: mov      eax, dword ptr [ebp - 0xc]
+0x00401E4B: mov      dword ptr [0x88268c], edx
+0x00401E51: mov      edx, dword ptr [ebp - 8]
+0x00401E54: mov      dword ptr [0x882690], eax
+0x00401E59: mov      eax, dword ptr [ebp - 4]
+0x00401E5C: mov      dword ptr [0x88262c], ecx
+0x00401E62: mov      dword ptr [0x882694], edx
+0x00401E68: mov      dword ptr [0x882680], eax
+0x00401E6D: jl       0x401e84
+0x00401E6F: cmp      ecx, dword ptr [0xc0daac]
+0x00401E75: jg       0x401e84
+0x00401E77: mov      edx, dword ptr [0xc0daa8]
+0x00401E7D: mov      ecx, dword ptr [edx + ecx*4]
+0x00401E80: test     ecx, ecx
+0x00401E82: jne      0x401e98
+0x00401E84: xor      edx, edx
+0x00401E86: mov      ecx, 0x82e3b0
+0x00401E8B: call     0x63cb50
+0x00401E90: xor      eax, eax
+0x00401E92: mov      esp, ebp
+0x00401E94: pop      ebp
+0x00401E95: ret      8
+0x00401E98: mov      eax, dword ptr [ecx + 4]
+0x00401E9B: xor      edx, edx
+0x00401E9D: xor      ecx, ecx
+0x00401E9F: mov      dword ptr [0x8826e4], eax
+0x00401EA4: call     0x401bc0
+0x00401EA9: mov      eax, 1
+0x00401EAE: mov      esp, ebp
+0x00401EB0: pop      ebp

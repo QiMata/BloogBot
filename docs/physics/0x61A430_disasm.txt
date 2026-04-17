@@ -1,0 +1,34 @@
+0x0061A430: push     ebp
+0x0061A431: mov      ebp, esp
+0x0061A433: mov      eax, dword ptr [ebp + 0xc]
+0x0061A436: mov      edx, dword ptr [ebp + 8]
+0x0061A439: push     esi
+0x0061A43A: mov      esi, ecx
+0x0061A43C: mov      ecx, dword ptr [eax + 0x10]
+0x0061A43F: and      ecx, 0x10000000
+0x0061A445: neg      ecx
+0x0061A447: sbb      ecx, ecx
+0x0061A449: push     0
+0x0061A44B: add      ecx, 0x22
+0x0061A44E: push     ecx
+0x0061A44F: push     eax
+0x0061A450: push     edx
+0x0061A451: mov      ecx, esi
+0x0061A453: call     0x618f20
+0x0061A458: test     eax, eax
+0x0061A45A: je       0x61a481
+0x0061A45C: test     dword ptr [esi + 0x40], 0x10000000
+0x0061A463: jne      0x61a477
+0x0061A465: mov      ecx, esi
+0x0061A467: call     0x7c61c0
+0x0061A46C: test     eax, eax
+0x0061A46E: je       0x61a477
+0x0061A470: mov      ecx, esi
+0x0061A472: call     0x619ca0
+0x0061A477: mov      eax, 1
+0x0061A47C: pop      esi
+0x0061A47D: pop      ebp
+0x0061A47E: ret      8
+0x0061A481: xor      eax, eax
+0x0061A483: pop      esi
+0x0061A484: pop      ebp

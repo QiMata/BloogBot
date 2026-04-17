@@ -1,0 +1,461 @@
+0x00619500: push     ebp
+0x00619501: mov      ebp, esp
+0x00619503: mov      eax, dword ptr [ebp + 0x10]
+0x00619506: mov      edx, dword ptr [ebp + 0xc]
+0x00619509: push     0
+0x0061950B: push     eax
+0x0061950C: mov      eax, dword ptr [ebp + 8]
+0x0061950F: push     edx
+0x00619510: push     1
+0x00619512: push     0x14
+0x00619514: push     eax
+0x00619515: call     0x6176a0
+0x0061951A: pop      ebp
+0x0061951B: ret      0xc
+0x0061951E: nop
+0x0061951F: nop
+0x00619520: push     ebp
+0x00619521: mov      ebp, esp
+0x00619523: mov      eax, dword ptr [ebp + 8]
+0x00619526: push     eax
+0x00619527: call     0x7c7030
+0x0061952C: pop      ebp
+0x0061952D: ret      4
+0x00619530: push     ebp
+0x00619531: mov      ebp, esp
+0x00619533: mov      eax, dword ptr [ebp + 0xc]
+0x00619536: mov      edx, dword ptr [ebp + 8]
+0x00619539: push     0
+0x0061953B: push     eax
+0x0061953C: push     0
+0x0061953E: push     0
+0x00619540: push     0x14
+0x00619542: push     edx
+0x00619543: call     0x6176a0
+0x00619548: pop      ebp
+0x00619549: ret      8
+0x0061954C: nop
+0x0061954D: nop
+0x0061954E: nop
+0x0061954F: nop
+0x00619550: push     ebp
+0x00619551: mov      ebp, esp
+0x00619553: mov      eax, dword ptr [ebp + 0xc]
+0x00619556: push     esi
+0x00619557: push     edi
+0x00619558: mov      edi, dword ptr [ebp + 0x10]
+0x0061955B: push     edi
+0x0061955C: push     0x14
+0x0061955E: mov      esi, ecx
+0x00619560: mov      ecx, dword ptr [ebp + 8]
+0x00619563: push     eax
+0x00619564: push     ecx
+0x00619565: mov      ecx, esi
+0x00619567: call     0x618f20
+0x0061956C: test     eax, eax
+0x0061956E: jne      0x619576
+0x00619570: pop      edi
+0x00619571: pop      esi
+0x00619572: pop      ebp
+0x00619573: ret      0xc
+0x00619576: push     edi
+0x00619577: mov      ecx, esi
+0x00619579: call     0x7c7030
+0x0061957E: pop      edi
+0x0061957F: pop      esi
+0x00619580: pop      ebp
+0x00619581: ret      0xc
+0x00619584: nop
+0x00619585: nop
+0x00619586: nop
+0x00619587: nop
+0x00619588: nop
+0x00619589: nop
+0x0061958A: nop
+0x0061958B: nop
+0x0061958C: nop
+0x0061958D: nop
+0x0061958E: nop
+0x0061958F: nop
+0x00619590: push     ebp
+0x00619591: mov      ebp, esp
+0x00619593: mov      eax, dword ptr [ebp + 0x10]
+0x00619596: mov      edx, dword ptr [ebp + 0xc]
+0x00619599: push     0
+0x0061959B: push     eax
+0x0061959C: mov      eax, dword ptr [ebp + 8]
+0x0061959F: push     edx
+0x006195A0: push     1
+0x006195A2: push     0x15
+0x006195A4: push     eax
+0x006195A5: call     0x6176a0
+0x006195AA: pop      ebp
+0x006195AB: ret      0xc
+0x006195AE: nop
+0x006195AF: nop
+0x006195B0: push     ebp
+0x006195B1: mov      ebp, esp
+0x006195B3: mov      eax, dword ptr [ebp + 8]
+0x006195B6: push     eax
+0x006195B7: call     0x7c7080
+0x006195BC: pop      ebp
+0x006195BD: ret      4
+0x006195C0: push     ebp
+0x006195C1: mov      ebp, esp
+0x006195C3: mov      eax, dword ptr [ebp + 0xc]
+0x006195C6: mov      edx, dword ptr [ebp + 8]
+0x006195C9: push     0
+0x006195CB: push     eax
+0x006195CC: push     0
+0x006195CE: push     0
+0x006195D0: push     0x15
+0x006195D2: push     edx
+0x006195D3: call     0x6176a0
+0x006195D8: pop      ebp
+0x006195D9: ret      8
+0x006195DC: nop
+0x006195DD: nop
+0x006195DE: nop
+0x006195DF: nop
+0x006195E0: push     ebp
+0x006195E1: mov      ebp, esp
+0x006195E3: mov      eax, dword ptr [ebp + 0xc]
+0x006195E6: push     esi
+0x006195E7: push     edi
+0x006195E8: mov      edi, dword ptr [ebp + 0x10]
+0x006195EB: push     edi
+0x006195EC: push     0x15
+0x006195EE: mov      esi, ecx
+0x006195F0: mov      ecx, dword ptr [ebp + 8]
+0x006195F3: push     eax
+0x006195F4: push     ecx
+0x006195F5: mov      ecx, esi
+0x006195F7: call     0x618f20
+0x006195FC: test     eax, eax
+0x006195FE: jne      0x619606
+0x00619600: pop      edi
+0x00619601: pop      esi
+0x00619602: pop      ebp
+0x00619603: ret      0xc
+0x00619606: push     edi
+0x00619607: mov      ecx, esi
+0x00619609: call     0x7c7080
+0x0061960E: pop      edi
+0x0061960F: pop      esi
+0x00619610: pop      ebp
+0x00619611: ret      0xc
+0x00619614: nop
+0x00619615: nop
+0x00619616: nop
+0x00619617: nop
+0x00619618: nop
+0x00619619: nop
+0x0061961A: nop
+0x0061961B: nop
+0x0061961C: nop
+0x0061961D: nop
+0x0061961E: nop
+0x0061961F: nop
+0x00619620: push     ebp
+0x00619621: mov      ebp, esp
+0x00619623: mov      eax, dword ptr [ebp + 0x10]
+0x00619626: mov      edx, dword ptr [ebp + 0xc]
+0x00619629: push     0
+0x0061962B: push     eax
+0x0061962C: mov      eax, dword ptr [ebp + 8]
+0x0061962F: push     edx
+0x00619630: push     1
+0x00619632: push     0x16
+0x00619634: push     eax
+0x00619635: call     0x6176a0
+0x0061963A: pop      ebp
+0x0061963B: ret      0xc
+0x0061963E: nop
+0x0061963F: nop
+0x00619640: push     ebp
+0x00619641: mov      ebp, esp
+0x00619643: mov      eax, dword ptr [ebp + 8]
+0x00619646: push     eax
+0x00619647: call     0x7c70d0
+0x0061964C: pop      ebp
+0x0061964D: ret      4
+0x00619650: push     ebp
+0x00619651: mov      ebp, esp
+0x00619653: mov      eax, dword ptr [ebp + 0xc]
+0x00619656: mov      edx, dword ptr [ebp + 8]
+0x00619659: push     0
+0x0061965B: push     eax
+0x0061965C: push     0
+0x0061965E: push     0
+0x00619660: push     0x16
+0x00619662: push     edx
+0x00619663: call     0x6176a0
+0x00619668: pop      ebp
+0x00619669: ret      8
+0x0061966C: nop
+0x0061966D: nop
+0x0061966E: nop
+0x0061966F: nop
+0x00619670: push     ebp
+0x00619671: mov      ebp, esp
+0x00619673: mov      eax, dword ptr [ebp + 0xc]
+0x00619676: push     esi
+0x00619677: push     edi
+0x00619678: mov      edi, dword ptr [ebp + 0x10]
+0x0061967B: push     edi
+0x0061967C: push     0x16
+0x0061967E: mov      esi, ecx
+0x00619680: mov      ecx, dword ptr [ebp + 8]
+0x00619683: push     eax
+0x00619684: push     ecx
+0x00619685: mov      ecx, esi
+0x00619687: call     0x618f20
+0x0061968C: test     eax, eax
+0x0061968E: jne      0x619696
+0x00619690: pop      edi
+0x00619691: pop      esi
+0x00619692: pop      ebp
+0x00619693: ret      0xc
+0x00619696: push     edi
+0x00619697: mov      ecx, esi
+0x00619699: call     0x7c70d0
+0x0061969E: pop      edi
+0x0061969F: pop      esi
+0x006196A0: pop      ebp
+0x006196A1: ret      0xc
+0x006196A4: nop
+0x006196A5: nop
+0x006196A6: nop
+0x006196A7: nop
+0x006196A8: nop
+0x006196A9: nop
+0x006196AA: nop
+0x006196AB: nop
+0x006196AC: nop
+0x006196AD: nop
+0x006196AE: nop
+0x006196AF: nop
+0x006196B0: push     ebp
+0x006196B1: mov      ebp, esp
+0x006196B3: mov      eax, dword ptr [ebp + 0x10]
+0x006196B6: mov      edx, dword ptr [ebp + 0xc]
+0x006196B9: push     0
+0x006196BB: push     eax
+0x006196BC: mov      eax, dword ptr [ebp + 8]
+0x006196BF: push     edx
+0x006196C0: push     1
+0x006196C2: push     0x17
+0x006196C4: push     eax
+0x006196C5: call     0x6176a0
+0x006196CA: pop      ebp
+0x006196CB: ret      0xc
+0x006196CE: nop
+0x006196CF: nop
+0x006196D0: push     ebp
+0x006196D1: mov      ebp, esp
+0x006196D3: mov      eax, dword ptr [ebp + 8]
+0x006196D6: push     eax
+0x006196D7: call     0x7c7120
+0x006196DC: pop      ebp
+0x006196DD: ret      4
+0x006196E0: push     ebp
+0x006196E1: mov      ebp, esp
+0x006196E3: mov      eax, dword ptr [ebp + 0xc]
+0x006196E6: mov      edx, dword ptr [ebp + 8]
+0x006196E9: push     0
+0x006196EB: push     eax
+0x006196EC: push     0
+0x006196EE: push     0
+0x006196F0: push     0x17
+0x006196F2: push     edx
+0x006196F3: call     0x6176a0
+0x006196F8: pop      ebp
+0x006196F9: ret      8
+0x006196FC: nop
+0x006196FD: nop
+0x006196FE: nop
+0x006196FF: nop
+0x00619700: push     ebp
+0x00619701: mov      ebp, esp
+0x00619703: mov      eax, dword ptr [ebp + 0xc]
+0x00619706: push     esi
+0x00619707: push     edi
+0x00619708: mov      edi, dword ptr [ebp + 0x10]
+0x0061970B: push     edi
+0x0061970C: push     0x17
+0x0061970E: mov      esi, ecx
+0x00619710: mov      ecx, dword ptr [ebp + 8]
+0x00619713: push     eax
+0x00619714: push     ecx
+0x00619715: mov      ecx, esi
+0x00619717: call     0x618f20
+0x0061971C: test     eax, eax
+0x0061971E: jne      0x619726
+0x00619720: pop      edi
+0x00619721: pop      esi
+0x00619722: pop      ebp
+0x00619723: ret      0xc
+0x00619726: push     edi
+0x00619727: mov      ecx, esi
+0x00619729: call     0x7c7120
+0x0061972E: pop      edi
+0x0061972F: pop      esi
+0x00619730: pop      ebp
+0x00619731: ret      0xc
+0x00619734: nop
+0x00619735: nop
+0x00619736: nop
+0x00619737: nop
+0x00619738: nop
+0x00619739: nop
+0x0061973A: nop
+0x0061973B: nop
+0x0061973C: nop
+0x0061973D: nop
+0x0061973E: nop
+0x0061973F: nop
+0x00619740: push     ebp
+0x00619741: mov      ebp, esp
+0x00619743: mov      eax, dword ptr [ebp + 0x10]
+0x00619746: mov      edx, dword ptr [ebp + 0xc]
+0x00619749: push     0
+0x0061974B: push     eax
+0x0061974C: mov      eax, dword ptr [ebp + 8]
+0x0061974F: push     edx
+0x00619750: push     1
+0x00619752: push     0x18
+0x00619754: push     eax
+0x00619755: call     0x6176a0
+0x0061975A: pop      ebp
+0x0061975B: ret      0xc
+0x0061975E: nop
+0x0061975F: nop
+0x00619760: push     ebp
+0x00619761: mov      ebp, esp
+0x00619763: mov      eax, dword ptr [ebp + 8]
+0x00619766: push     eax
+0x00619767: call     0x7c7170
+0x0061976C: pop      ebp
+0x0061976D: ret      4
+0x00619770: push     ebp
+0x00619771: mov      ebp, esp
+0x00619773: mov      eax, dword ptr [ebp + 0xc]
+0x00619776: mov      edx, dword ptr [ebp + 8]
+0x00619779: push     0
+0x0061977B: push     eax
+0x0061977C: push     0
+0x0061977E: push     0
+0x00619780: push     0x18
+0x00619782: push     edx
+0x00619783: call     0x6176a0
+0x00619788: pop      ebp
+0x00619789: ret      8
+0x0061978C: nop
+0x0061978D: nop
+0x0061978E: nop
+0x0061978F: nop
+0x00619790: push     ebp
+0x00619791: mov      ebp, esp
+0x00619793: mov      eax, dword ptr [ebp + 0xc]
+0x00619796: push     esi
+0x00619797: push     edi
+0x00619798: mov      edi, dword ptr [ebp + 0x10]
+0x0061979B: push     edi
+0x0061979C: push     0x18
+0x0061979E: mov      esi, ecx
+0x006197A0: mov      ecx, dword ptr [ebp + 8]
+0x006197A3: push     eax
+0x006197A4: push     ecx
+0x006197A5: mov      ecx, esi
+0x006197A7: call     0x618f20
+0x006197AC: test     eax, eax
+0x006197AE: jne      0x6197b6
+0x006197B0: pop      edi
+0x006197B1: pop      esi
+0x006197B2: pop      ebp
+0x006197B3: ret      0xc
+0x006197B6: push     edi
+0x006197B7: mov      ecx, esi
+0x006197B9: call     0x7c7170
+0x006197BE: pop      edi
+0x006197BF: pop      esi
+0x006197C0: pop      ebp
+0x006197C1: ret      0xc
+0x006197C4: nop
+0x006197C5: nop
+0x006197C6: nop
+0x006197C7: nop
+0x006197C8: nop
+0x006197C9: nop
+0x006197CA: nop
+0x006197CB: nop
+0x006197CC: nop
+0x006197CD: nop
+0x006197CE: nop
+0x006197CF: nop
+0x006197D0: push     ebp
+0x006197D1: mov      ebp, esp
+0x006197D3: mov      eax, dword ptr [ebp + 0x10]
+0x006197D6: mov      edx, dword ptr [ebp + 0xc]
+0x006197D9: push     0
+0x006197DB: push     eax
+0x006197DC: mov      eax, dword ptr [ebp + 8]
+0x006197DF: push     edx
+0x006197E0: push     1
+0x006197E2: push     0x19
+0x006197E4: push     eax
+0x006197E5: call     0x6176a0
+0x006197EA: pop      ebp
+0x006197EB: ret      0xc
+0x006197EE: nop
+0x006197EF: nop
+0x006197F0: push     ebp
+0x006197F1: mov      ebp, esp
+0x006197F3: mov      eax, dword ptr [ebp + 8]
+0x006197F6: push     eax
+0x006197F7: call     0x7c6ff0
+0x006197FC: pop      ebp
+0x006197FD: ret      4
+0x00619800: push     ebp
+0x00619801: mov      ebp, esp
+0x00619803: mov      eax, dword ptr [ebp + 0xc]
+0x00619806: mov      edx, dword ptr [ebp + 8]
+0x00619809: push     0
+0x0061980B: push     eax
+0x0061980C: push     0
+0x0061980E: push     0
+0x00619810: push     0x19
+0x00619812: push     edx
+0x00619813: call     0x6176a0
+0x00619818: pop      ebp
+0x00619819: ret      8
+0x0061981C: nop
+0x0061981D: nop
+0x0061981E: nop
+0x0061981F: nop
+0x00619820: push     ebp
+0x00619821: mov      ebp, esp
+0x00619823: mov      eax, dword ptr [ebp + 0xc]
+0x00619826: push     esi
+0x00619827: push     edi
+0x00619828: mov      edi, dword ptr [ebp + 0x10]
+0x0061982B: push     edi
+0x0061982C: push     0x19
+0x0061982E: mov      esi, ecx
+0x00619830: mov      ecx, dword ptr [ebp + 8]
+0x00619833: push     eax
+0x00619834: push     ecx
+0x00619835: mov      ecx, esi
+0x00619837: call     0x618f20
+0x0061983C: test     eax, eax
+0x0061983E: jne      0x619846
+0x00619840: pop      edi
+0x00619841: pop      esi
+0x00619842: pop      ebp
+0x00619843: ret      0xc
+0x00619846: push     edi
+0x00619847: mov      ecx, esi
+0x00619849: call     0x7c6ff0
+0x0061984E: pop      edi
+0x0061984F: pop      esi
+0x00619850: pop      ebp

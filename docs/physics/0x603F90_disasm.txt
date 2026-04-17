@@ -1,0 +1,36 @@
+0x00603F90: push     ebp
+0x00603F91: mov      ebp, esp
+0x00603F93: sub      esp, 8
+0x00603F96: push     esi
+0x00603F97: push     edi
+0x00603F98: mov      edi, dword ptr [ebp + 0xc]
+0x00603F9B: mov      esi, edx
+0x00603F9D: lea      edx, [ebp - 8]
+0x00603FA0: mov      ecx, edi
+0x00603FA2: call     0x642ed0
+0x00603FA7: mov      eax, dword ptr [ebp - 4]
+0x00603FAA: mov      ecx, dword ptr [ebp - 8]
+0x00603FAD: push     0x4f4
+0x00603FB2: push     eax
+0x00603FB3: push     ecx
+0x00603FB4: mov      edx, 0x860c0c
+0x00603FB9: mov      ecx, 8
+0x00603FBE: call     0x468460
+0x00603FC3: test     eax, eax
+0x00603FC5: je       0x603fdc
+0x00603FC7: mov      edx, dword ptr [ebp + 8]
+0x00603FCA: push     edi
+0x00603FCB: push     esi
+0x00603FCC: push     edx
+0x00603FCD: mov      ecx, eax
+0x00603FCF: call     0x602780
+0x00603FD4: pop      edi
+0x00603FD5: pop      esi
+0x00603FD6: mov      esp, ebp
+0x00603FD8: pop      ebp
+0x00603FD9: ret      8
+0x00603FDC: pop      edi
+0x00603FDD: mov      eax, 1
+0x00603FE2: pop      esi
+0x00603FE3: mov      esp, ebp
+0x00603FE5: pop      ebp

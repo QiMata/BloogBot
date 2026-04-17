@@ -1,0 +1,44 @@
+0x00602670: push     ebp
+0x00602671: mov      ebp, esp
+0x00602673: sub      esp, 0x10
+0x00602676: push     esi
+0x00602677: push     edi
+0x00602678: push     0
+0x0060267A: push     1
+0x0060267C: mov      edi, ecx
+0x0060267E: call     0x60e990
+0x00602683: mov      esi, dword ptr [ebp + 0x10]
+0x00602686: lea      eax, [ebp - 0x10]
+0x00602689: push     eax
+0x0060268A: mov      ecx, esi
+0x0060268C: mov      dword ptr [ebp - 0x10], 0
+0x00602693: mov      dword ptr [ebp - 0xc], 0
+0x0060269A: call     0x419130
+0x0060269F: lea      ecx, [ebp - 0xc]
+0x006026A2: push     ecx
+0x006026A3: mov      ecx, esi
+0x006026A5: call     0x419130
+0x006026AA: lea      edx, [ebp - 8]
+0x006026AD: push     edx
+0x006026AE: mov      ecx, esi
+0x006026B0: call     0x419130
+0x006026B5: lea      eax, [ebp - 4]
+0x006026B8: push     eax
+0x006026B9: mov      ecx, esi
+0x006026BB: call     0x419130
+0x006026C0: mov      ecx, dword ptr [ebp - 4]
+0x006026C3: mov      edx, dword ptr [ebp - 8]
+0x006026C6: push     ecx
+0x006026C7: mov      ecx, dword ptr [ebp + 0xc]
+0x006026CA: push     edx
+0x006026CB: mov      edx, dword ptr [ebp + 8]
+0x006026CE: lea      eax, [ebp - 0x10]
+0x006026D1: push     eax
+0x006026D2: push     ecx
+0x006026D3: push     edx
+0x006026D4: lea      ecx, [edi + 0x9a8]
+0x006026DA: call     0x617a30
+0x006026DF: pop      edi
+0x006026E0: pop      esi
+0x006026E1: mov      esp, ebp
+0x006026E3: pop      ebp

@@ -1,0 +1,81 @@
+0x00616800: push     esi
+0x00616801: push     edi
+0x00616802: call     0x42c010
+0x00616807: mov      esi, eax
+0x00616809: call     0x630a40
+0x0061680E: mov      edi, eax
+0x00616810: mov      ecx, dword ptr [edi + 0x128]
+0x00616816: mov      edx, esi
+0x00616818: sub      edx, ecx
+0x0061681A: test     edx, edx
+0x0061681C: jle      0x61684c
+0x0061681E: mov      ecx, esi
+0x00616820: call     0x630970
+0x00616825: mov      eax, dword ptr [edi + 0x120]
+0x0061682B: test     al, 1
+0x0061682D: jne      0x616840
+0x0061682F: test     eax, eax
+0x00616831: je       0x616840
+0x00616833: mov      edx, dword ptr [edi + 0x128]
+0x00616839: mov      ecx, esi
+0x0061683B: call     0x615b10
+0x00616840: mov      dword ptr [edi + 0x12c], esi
+0x00616846: mov      dword ptr [edi + 0x128], esi
+0x0061684C: pop      edi
+0x0061684D: mov      eax, 1
+0x00616852: pop      esi
+0x00616853: ret
+0x00616854: nop
+0x00616855: nop
+0x00616856: nop
+0x00616857: nop
+0x00616858: nop
+0x00616859: nop
+0x0061685A: nop
+0x0061685B: nop
+0x0061685C: nop
+0x0061685D: nop
+0x0061685E: nop
+0x0061685F: nop
+0x00616860: push     esi
+0x00616861: push     edi
+0x00616862: xor      esi, esi
+0x00616864: push     esi
+0x00616865: push     0x2b0
+0x0061686A: push     0x861418
+0x0061686F: push     0x138
+0x00616874: mov      edi, ecx
+0x00616876: call     0x6462e0
+0x0061687B: cmp      eax, esi
+0x0061687D: je       0x6168c3
+0x0061687F: mov      dword ptr [eax + 0x104], esi
+0x00616885: mov      dword ptr [eax + 0x108], esi
+0x0061688B: mov      dword ptr [eax + 0x110], esi
+0x00616891: mov      dword ptr [eax + 0x114], esi
+0x00616897: mov      dword ptr [eax + 0x11c], esi
+0x0061689D: mov      dword ptr [eax + 0x120], esi
+0x006168A3: lea      ecx, [eax + 0x11c]
+0x006168A9: mov      dword ptr [ecx], ecx
+0x006168AB: or       ecx, 1
+0x006168AE: mov      dword ptr [eax + 0x120], ecx
+0x006168B4: mov      dword ptr [eax + 0x118], esi
+0x006168BA: and      dword ptr [eax + 0x124], 0xfffffffe
+0x006168C1: jmp      0x6168c5
+0x006168C3: xor      eax, eax
+0x006168C5: mov      ecx, eax
+0x006168C7: call     0x630a30
+0x006168CC: call     0x630a40
+0x006168D1: push     0x104
+0x006168D6: mov      esi, eax
+0x006168D8: push     edi
+0x006168D9: push     esi
+0x006168DA: call     0x64a5a0
+0x006168DF: call     0x42c010
+0x006168E4: mov      dword ptr [esi + 0x12c], eax
+0x006168EA: mov      dword ptr [esi + 0x128], eax
+0x006168F0: mov      eax, dword ptr [esi + 0x124]
+0x006168F6: or       eax, 1
+0x006168F9: pop      edi
+0x006168FA: mov      dword ptr [esi + 0x124], eax
+0x00616900: pop      esi
+0x00616901: ret

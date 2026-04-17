@@ -1,0 +1,15 @@
+0x0061A550: push     ebp
+0x0061A551: mov      ebp, esp
+0x0061A553: mov      eax, dword ptr [ebp + 0xc]
+0x0061A556: mov      edx, dword ptr [eax + 0x10]
+0x0061A559: and      edx, 0x20000000
+0x0061A55F: neg      edx
+0x0061A561: push     0
+0x0061A563: sbb      edx, edx
+0x0061A565: add      edx, 0x1e
+0x0061A568: push     edx
+0x0061A569: push     eax
+0x0061A56A: mov      eax, dword ptr [ebp + 8]
+0x0061A56D: push     eax
+0x0061A56E: call     0x618f20
+0x0061A573: pop      ebp
