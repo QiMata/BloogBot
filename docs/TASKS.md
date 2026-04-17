@@ -31,6 +31,70 @@
 
 ---
 
+## P2 - WoW.exe Packet Handling & ACK Parity (ACTIVE)
+
+### Context
+Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mutation, and ACK generation still have unverified corners. This phase closes those gaps with binary-backed evidence.
+
+**Full plan:** `docs/WOW_EXE_PACKET_PARITY_PLAN.md` (10 gaps identified, 7 sub-phases).
+
+### Sub-phases
+- [ ] **P2.1** Decompilation research: packet dispatch & ACK generation
+  - [ ] P2.1.1 Capture `NetClient::ProcessMessage` (0x537AA0) disassembly; identify opcode dispatch mechanism
+  - [ ] P2.1.2 Dump opcode → handler mapping as `docs/physics/opcode_dispatch_table.md`
+  - [ ] P2.1.3 Capture `NetClient::Send` (0x005379A0) disassembly
+  - [ ] P2.1.4 Decompile P1 handlers: speed change, root, knockback, water walk, hover, teleport, worldport ACK
+  - [ ] P2.1.5 Decompile `CGPlayer_C` / `CGUnit_C` / `CGObject_C` vtables
+  - [ ] P2.1.6 Trace movement counter: CMovement offset, increment points, packet inclusion
+- [ ] **P2.2** ACK format parity (byte-level)
+  - [ ] P2.2.1 Capture golden corpus ACK bytes from FG bot for each ACK opcode
+  - [ ] P2.2.2 Add `AckBinaryParityTests` — one test per ACK opcode asserting byte equality
+  - [ ] P2.2.3 Fix every byte divergence citing a VA
+  - [ ] P2.2.4 Confirm movement counter semantics match WoW.exe
+  - [ ] P2.2.5 Gate: all 14 wired ACKs have passing byte-parity tests
+- [ ] **P2.3** ACK timing & ordering parity
+  - [ ] P2.3.1 Answer Q1-Q5 (sync vs deferred; see plan §4.3) with binary evidence
+  - [ ] P2.3.2 Write failing tests for current timing divergences
+  - [ ] P2.3.3 Fix timing via defer-to-controller or immediate-after-mutation pattern
+  - [ ] P2.3.4 Close **G1** knockback ACK race
+- [ ] **P2.4** ObjectManager state mutation parity
+  - [ ] P2.4.1 Produce `docs/physics/cgobject_layout.md` with exact field offsets
+  - [ ] P2.4.2 Audit C# classes — each field mapped to a WoW.exe field or documented as intentional omission
+  - [ ] P2.4.3 Decompile `CGWorldClient::HandleUpdateObject` block-walk order
+  - [ ] P2.4.4 Write `ObjectUpdateMutationOrderTests` replaying captured SMSG_UPDATE_OBJECT streams
+  - [ ] P2.4.5 Fix mutation-order divergences
+- [ ] **P2.5** Packet-flow end-to-end parity
+  - [ ] P2.5.1 Build `PacketFlowTraceFixture` — bytes in, bytes out, state observer, ordered event log
+  - [ ] P2.5.2 Write one trace test per representative packet (8 tests: UPDATE_OBJECT Add, UPDATE_OBJECT Update, FORCE_RUN_SPEED_CHANGE, FORCE_MOVE_ROOT, MOVE_KNOCK_BACK, MOVE_TELEPORT, NEW_WORLD→WORLDPORT_ACK, MONSTER_MOVE)
+  - [ ] P2.5.3 Fix divergences discovered by trace tests
+- [ ] **P2.6** State-machine parity
+  - [ ] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
+  - [ ] P2.6.2 Audit implementation against documented transitions
+  - [ ] P2.6.3 Write `StateMachineParityTests`
+  - [ ] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
+- [ ] **P2.7** Gap closure (G1-G10 verification)
+  - [ ] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
+  - [ ] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
+  - [ ] P2.7.3 **G6** implement `MSG_MOVE_SET_RAW_POSITION_ACK`
+  - [ ] P2.7.4 **G7** implement `CMSG_MOVE_FLIGHT_ACK`
+  - [ ] P2.7.5 Final regression: all parity bundles + new `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green
+
+### Gaps identified (2026-04-16)
+| Gap | Summary                                                             | Close in  |
+| --- | ------------------------------------------------------------------- | --------- |
+| G1  | Knockback ACK sent before physics consumes impulse                  | P2.3      |
+| G2  | `MSG_MOVE_TIME_SKIPPED` has no ObjectManager listener                | P2.7.1    |
+| G3  | Jump/fall land events fire but no consumer                           | P2.7.2    |
+| G4  | Teleport flag-clear only masks 8 bits (jump/fall/swim persist)       | P2.6.4    |
+| G5  | SPLINE_MOVE opcodes ACK behavior unverified                          | P2.3      |
+| G6  | `MSG_MOVE_SET_RAW_POSITION_ACK` not wired                            | P2.7.3    |
+| G7  | `CMSG_MOVE_FLIGHT_ACK` not wired                                     | P2.7.4    |
+| G8  | Teleport ACK `IsSceneDataReady()` may deadlock                       | P2.6.4    |
+| G9  | ACK byte format vs WoW.exe unverified                                | P2.2      |
+| G10 | Movement counter semantics unverified                                | P2.2      |
+
+---
+
 ## Canonical Commands
 
 ```bash
