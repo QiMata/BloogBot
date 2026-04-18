@@ -6,16 +6,26 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Build out the live-backed ACK corpus for P2.2 so `AckParity` has one fixture/test per outbound ACK opcode from `WoW.exe NetClient::Send`.
-2. Add recorded directional remote-unit packet fixtures so extrapolation accuracy can be measured against real movement data instead of only deterministic math.
-3. Keep remote extrapolation work focused on fixture-backed parity gaps; deterministic math thresholds and basis handling are already covered here.
-4. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
-5. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
+1. Start P2.4 deterministic replay coverage for `SMSG_UPDATE_OBJECT` mutation order and layout parity.
+2. Keep `AckParity`, `PacketFlowParity`, and `StateMachineParity` green while closing object-mutation gaps.
+3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
+4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `StateMachineParity covers client-control, and P2.6.1 state docs are fully written`
+- Pass result: `StateMachineParity now covers all documented P2.6 transitions, and the final parity regression gate is green`
 - Last delta:
+  - Closed the remaining state-machine audit gap by adding parity-tagged tests for the documented root/unroot and knockback transitions:
+    - `StateMachineParityTests.ForceMoveRootOpcodes_StageStateUntilDeferredFlush`
+    - `StateMachineParityTests.MoveKnockBack_StagesImpulseUntilConsumedThenAcks`
+  - `PacketFlowTraceFixture` now records `OnForceMoveUnroot` and dispatches `SMSG_FORCE_MOVE_UNROOT`, so the harness can assert both root-state branches rather than only the root edge.
+  - Final regression gate for `P2.7.5` is now green:
+    - `AckParity` -> `passed (29/29)`
+    - `MovementParity` in `WoWSharpClient.Tests` -> `passed (32/32)`
+    - `PacketFlowParity` -> `passed (8/8)`
+    - `StateMachineParity` -> `passed (8/8)`
+    - `MovementParity` in `Navigation.Physics.Tests` -> `passed (8/8)`
+    - `NavigationPathTests` -> `passed (80/80)`
   - Added `StateMachineParityTests.ClientControlUpdate_LocalPlayer_FollowsCanControlAndBlocksReconcile`, which proves the local `canControl=false` edge persists across `ReconcilePlayerControlState()` until a matching `canControl=true` packet arrives.
   - The state-machine documentation set is now complete on the physics side:
     - `state_client_control.md`
@@ -32,11 +42,12 @@
   - `StateMachineParityTests.MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData` carries the same fix into the new parity-tagged state-machine bundle.
   - `PacketFlowParityTests.MoveTeleport_UpdatesPlayerState_ThenFlushesDeferredAck` now also pins the flag-clear side of the teleport transition by starting from airborne/swimming bits and asserting `MOVEFLAG_NONE` after dispatch.
   - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
@@ -57,7 +68,7 @@
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "P2\\.4|ObjectUpdateMutationOrderTests|HandleUpdateObject|cgobject_layout|TestMutationStage" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - Added three deterministic `ObjectManagerWorldSessionTests` for the newly-wired packet gaps:
     - `EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase`
     - `EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime`

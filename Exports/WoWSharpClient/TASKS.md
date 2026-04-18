@@ -6,8 +6,8 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Keep recorded-motion validation in place for remote extrapolation and knockback handling.
-2. Support the FG hardening sweep where WoWSharpClient contracts or offsets are shared with injected/runtime code.
+1. Start P2.4 ObjectManager mutation-order parity with binary-backed `SMSG_UPDATE_OBJECT` layout and block-walk evidence.
+2. Keep the `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green while closing mutation-order gaps.
 3. Keep the movement opcode sweep closed by only adding new bridge/application handlers when a binary-backed non-cheat gap is found.
 
 ## MovementController Parity Backlog
@@ -21,8 +21,20 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `client-control state is now binary-backed, and all six P2.6 state docs exist`
+- Pass result: `P2.6 state-machine audit is closed and the final parity regression gate is green`
 - Last delta:
+  - Closed the remaining P2.6 audit gap by extending `StateMachineParityTests` over the documented root/unroot and knockback transitions.
+  - `PacketFlowTraceFixture` now records `OnForceMoveUnroot` and dispatches `SMSG_FORCE_MOVE_UNROOT`, so the parity harness covers both sides of the root state machine instead of only the root edge.
+  - Added parity-tagged coverage:
+    - `StateMachineParityTests.ForceMoveRootOpcodes_StageStateUntilDeferredFlush`
+    - `StateMachineParityTests.MoveKnockBack_StagesImpulseUntilConsumedThenAcks`
+  - Final regression gate for `P2.7.5` is now green:
+    - `AckParity` -> `passed (29/29)`
+    - `MovementParity` in `WoWSharpClient.Tests` -> `passed (32/32)`
+    - `PacketFlowParity` -> `passed (8/8)`
+    - `StateMachineParity` -> `passed (8/8)`
+    - `MovementParity` in `Navigation.Physics.Tests` -> `passed (8/8)`
+    - `NavigationPathTests` -> `passed (80/80)`
   - Added `ClientControlUpdateArgs` and rewired `ClientControlHandler` / `WoWSharpEventEmitter` so `SMSG_CLIENT_CONTROL_UPDATE` now carries the packet GUID and `canControl` bit instead of being reduced to a parameterless event.
   - Added the remaining P2.6.1 state docs from existing evidence:
     - `docs/physics/state_teleport.md`
@@ -44,11 +56,12 @@ Known remaining work in this owner: `0` items.
     - `PacketFlowParityTests.MoveTeleport_UpdatesPlayerState_ThenFlushesDeferredAck`
     - `ObjectManagerWorldSessionTests.TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData`
   - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
   - Files changed:
@@ -69,7 +82,7 @@ Known remaining work in this owner: `0` items.
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "P2\\.4|ObjectUpdateMutationOrderTests|HandleUpdateObject|cgobject_layout|TestMutationStage" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

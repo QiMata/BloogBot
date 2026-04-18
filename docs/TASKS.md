@@ -63,21 +63,21 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - [ ] P2.4.3 Decompile `CGWorldClient::HandleUpdateObject` block-walk order
   - [ ] P2.4.4 Write `ObjectUpdateMutationOrderTests` replaying captured SMSG_UPDATE_OBJECT streams
   - [ ] P2.4.5 Fix mutation-order divergences
-- [ ] **P2.5** Packet-flow end-to-end parity
+- [x] **P2.5** Packet-flow end-to-end parity
   - [x] P2.5.1 Build `PacketFlowTraceFixture` — bytes in, bytes out, state observer, ordered event log
   - [x] P2.5.2 Write one trace test per representative packet (8 tests: UPDATE_OBJECT Add, UPDATE_OBJECT Update, FORCE_RUN_SPEED_CHANGE, FORCE_MOVE_ROOT, MOVE_KNOCK_BACK, MOVE_TELEPORT, NEW_WORLD→WORLDPORT_ACK, MONSTER_MOVE)
   - [x] P2.5.3 Fix divergences discovered by trace tests
-- [ ] **P2.6** State-machine parity
+- [x] **P2.6** State-machine parity
   - [x] P2.6.1 Document each state machine (control, teleport, worldport, login, knockback, root) in `docs/physics/state_<name>.md`
-  - [ ] P2.6.2 Audit implementation against documented transitions
+  - [x] P2.6.2 Audit implementation against documented transitions
   - [x] P2.6.3 Write `StateMachineParityTests`
   - [x] P2.6.4 Close **G4** (teleport flag clear) and **G8** (teleport ACK deadlock)
-- [ ] **P2.7** Gap closure (G1-G10 verification)
+- [x] **P2.7** Gap closure (G1-G10 verification)
   - [x] P2.7.1 **G2** wire `MSG_MOVE_TIME_SKIPPED` listener
   - [x] P2.7.2 **G3** wire `MSG_MOVE_JUMP` / `MSG_MOVE_FALL_LAND` consumer
   - [x] P2.7.3 **G6** close `MSG_MOVE_SET_RAW_POSITION_ACK` as not-applicable in WoW.exe 1.12.1
   - [x] P2.7.4 **G7** close `CMSG_MOVE_FLIGHT_ACK` as not-applicable in WoW.exe 1.12.1
-  - [ ] P2.7.5 Final regression: all parity bundles + new `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green
+  - [x] P2.7.5 Final regression: all parity bundles + new `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green
 
 ### Gaps identified (2026-04-16)
 | Gap | Summary                                                             | Close in  |
@@ -97,7 +97,10 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-17)
 
-- Completed: advanced P2.6 with the client-control slice and closed the documentation half of `P2.6.1`. `docs/physics/state_client_control.md`, `state_teleport.md`, `state_worldport.md`, `state_login.md`, `state_knockback.md`, and `state_root.md` now cover all six planned state machines.
+- Completed: closed `P2.6.2` and `P2.7.5`. `StateMachineParity` now covers the documented root/unroot and knockback transitions in addition to the earlier login/worldport/teleport/client-control cases, and the final parity regression gate is green.
+- Binary-backed note:
+  - `docs/physics/state_root.md` already pins the WoW.exe root/unroot queue-first path (`0x61A700` staging through `0x617570`), and the parity harness now proves both `SMSG_FORCE_MOVE_ROOT` and `SMSG_FORCE_MOVE_UNROOT` defer mutation/ACK until the later flush.
+  - `docs/physics/state_knockback.md` already pins the WoW.exe knockback queue path (`0x603F90 -> 0x602780 -> 0x602670 -> 0x617A30 -> 0x6177A0`), and the parity harness now proves BG stages the impulse first, consumes it later, and ACKs only after that consume step.
 - Binary-backed note:
   - `opcode_dispatch_table.md` already pinned `SMSG_CLIENT_CONTROL_UPDATE` to `0x603EA0`; the new disasm now proves that WoW.exe reads a packed GUID, reads a one-byte `canControl` flag, looks up the target object, and forwards the normalized bool into `0x5FA600`.
   - `0x5FA600` toggles bit `0x400` in `[object + 0xC58]` and only runs the follow-up global update when the object's GUID matches the active mover. That means the packet's GUID and byte both matter, so BG now ignores non-local GUIDs and preserves an explicit local lockout until `canControl=true` arrives.
@@ -111,12 +114,13 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
   - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
 - Files changed: `Exports/WoWSharpClient/ClientControlUpdateArgs.cs`, `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`, `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Tests/WoWSharpClient.Tests/Parity/PacketFlowTraceFixture.cs`, `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`, `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`, `docs/physics/0x603EA0_disasm.txt`, `docs/physics/state_client_control.md`, `docs/physics/README.md`, `docs/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, and `Tests/WoWSharpClient.Tests/TASKS.md`.
 - Documentation-only follow-up: added `docs/physics/state_teleport.md`, `docs/physics/state_worldport.md`, `docs/physics/state_login.md`, `docs/physics/state_knockback.md`, and `docs/physics/state_root.md`, then indexed them in `docs/physics/README.md`.
-- Next command: `rg -n "state_(teleport|worldport|login|knockback|root)|_isBeingTeleported|HasPendingWorldEntry|_hasPendingKnockback|ForceMoveRoot|ForceMoveUnroot" docs/physics docs/WOW_EXE_PACKET_PARITY_PLAN.md Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+- Next command: `rg -n "P2\\.4|ObjectUpdateMutationOrderTests|HandleUpdateObject|cgobject_layout|TestMutationStage" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
 
 ## Canonical Commands
 

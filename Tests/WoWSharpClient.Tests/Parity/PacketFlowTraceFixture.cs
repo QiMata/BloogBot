@@ -68,6 +68,9 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         EventEmitter.OnForceMoveRoot += (_, args) =>
             Events.Add(new PacketFlowTraceEvent("event", "OnForceMoveRoot", Guid: args.Guid, Counter: args.Counter));
 
+        EventEmitter.OnForceMoveUnroot += (_, args) =>
+            Events.Add(new PacketFlowTraceEvent("event", "OnForceMoveUnroot", Guid: args.Guid, Counter: args.Counter));
+
         EventEmitter.OnForceMoveKnockBack += (_, args) =>
             Events.Add(new PacketFlowTraceEvent("event", "OnForceMoveKnockBack", Guid: args.Guid, Counter: args.Counter));
 
@@ -207,7 +210,7 @@ internal sealed class PacketFlowTraceFixture : IDisposable
             Opcode.SMSG_NEW_WORLD => LoginHandler.HandleNewWorld,
             Opcode.SMSG_CLIENT_CONTROL_UPDATE => ClientControlHandler.HandleClientControlUpdate,
             Opcode.SMSG_UPDATE_OBJECT or Opcode.SMSG_COMPRESSED_UPDATE_OBJECT => ObjectUpdateHandler.HandleUpdateObject,
-            Opcode.SMSG_FORCE_RUN_SPEED_CHANGE or Opcode.SMSG_FORCE_MOVE_ROOT or Opcode.SMSG_MOVE_KNOCK_BACK
+            Opcode.SMSG_FORCE_RUN_SPEED_CHANGE or Opcode.SMSG_FORCE_MOVE_ROOT or Opcode.SMSG_FORCE_MOVE_UNROOT or Opcode.SMSG_MOVE_KNOCK_BACK
                 or Opcode.MSG_MOVE_TELEPORT or Opcode.MSG_MOVE_TELEPORT_ACK or Opcode.SMSG_MONSTER_MOVE
                 or Opcode.SMSG_MONSTER_MOVE_TRANSPORT => MovementHandler.HandleUpdateMovement,
             _ => throw new NotSupportedException($"Opcode {opcode} is not wired in PacketFlowTraceFixture.")
