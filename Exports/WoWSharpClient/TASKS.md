@@ -6,8 +6,8 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Start P2.4 ObjectManager mutation-order parity with binary-backed `SMSG_UPDATE_OBJECT` layout and block-walk evidence.
-2. Keep the `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green while closing mutation-order gaps.
+1. `P2` packet-handling / ACK parity is closed; only reopen this surface when a new WoW.exe-backed gap is found.
+2. Keep the `AckParity` / `PacketFlowParity` / `StateMachineParity` bundles green on future protocol changes.
 3. Keep the movement opcode sweep closed by only adding new bridge/application handlers when a binary-backed non-cheat gap is found.
 
 ## MovementController Parity Backlog
@@ -21,8 +21,16 @@ Known remaining work in this owner: `0` items.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `P2.6 state-machine audit is closed and the final parity regression gate is green`
+- Pass result: `P2 packet-handling / ACK parity is complete`
 - Last delta:
+  - Synced the previously-landed P2.4 work into the evidence/docs surface:
+    - added `docs/physics/0x466590_disasm.txt`
+    - added `docs/physics/0x466C70_disasm.txt`
+    - updated `cgobject_layout.md`, `csharp_object_field_audit.md`, and `smsg_update_object_handler.md`
+  - New hard findings from those captures:
+    - `0x466590` walks descriptor fields in ascending descriptor-index order and forwards each present field through `0x466A00 -> 0x6142E0`
+    - `0x466C70` only instantiates typed storage cases `0..7`, so there is no separate packet-instantiated `CGPet_C` branch in the update-object create path
+  - `ObjectUpdateMutationOrderTests` is already covering the required P2.4 replay set and is green (`passed (4/4)`), so P2.4 and the full P2 packet-parity track are now closed.
   - Closed the remaining P2.6 audit gap by extending `StateMachineParityTests` over the documented root/unroot and knockback transitions.
   - `PacketFlowTraceFixture` now records `OnForceMoveUnroot` and dispatches `SMSG_FORCE_MOVE_UNROOT`, so the parity harness covers both sides of the root state machine instead of only the root edge.
   - Added parity-tagged coverage:
@@ -56,6 +64,7 @@ Known remaining work in this owner: `0` items.
     - `PacketFlowParityTests.MoveTeleport_UpdatesPlayerState_ThenFlushesDeferredAck`
     - `ObjectManagerWorldSessionTests.TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData`
   - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
@@ -82,7 +91,7 @@ Known remaining work in this owner: `0` items.
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "P2\\.4|ObjectUpdateMutationOrderTests|HandleUpdateObject|cgobject_layout|TestMutationStage" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "^- \\[ \\]" docs/TASKS.md -g '!**/TASKS_ARCHIVE.md'`
   - `WoWSharpObjectManager` now subscribes to `OnCharacterJumpStart` and `OnCharacterFallLand`, and the movement partial applies the local-player parity fix directly from the binary-backed event paths.
   - `MSG_MOVE_TIME_SKIPPED` now advances the BG movement timestamp base instead of being silently dropped. The evidence chain is `0x603B40 -> 0x601560 -> 0x61AB90`, where `0x61AB90` adds the packet delta into the movement component's `+0xAC` accumulator.
   - `MSG_MOVE_JUMP` now forces the local player into airborne state and zeroes the local fall timer, matching `0x603BB0 -> 0x601580 -> 0x602B00 -> 0x617970 -> 0x7C6230 -> 0x7C61F0`.

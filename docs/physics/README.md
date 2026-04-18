@@ -48,6 +48,8 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [0x401DE0_disasm.txt](./0x401DE0_disasm.txt) | Raw `SMSG_LOGIN_VERIFY_WORLD` handler disassembly |
 | [msg_move_worldport_ack.md](./msg_move_worldport_ack.md) | World-entry and `MSG_MOVE_WORLDPORT_ACK` send conditions |
 | [0x4651A0_disasm.txt](./0x4651A0_disasm.txt) | Raw `SMSG_UPDATE_OBJECT` top-level dispatcher disassembly |
+| [0x466590_disasm.txt](./0x466590_disasm.txt) | Raw descriptor walker / field-application helper below `SMSG_UPDATE_OBJECT` |
+| [0x466C70_disasm.txt](./0x466C70_disasm.txt) | Raw typed object zero/init helper for object create-paths |
 | [0x601580_disasm.txt](./0x601580_disasm.txt) | Raw movement-dispatch wrapper below `0x603BB0` |
 | [0x602780_disasm.txt](./0x602780_disasm.txt) | Raw force-speed/root/flag dispatch wrapper below `0x603F90` |
 | [0x603F90_disasm.txt](./0x603F90_disasm.txt) | Raw top-level wrapper for force-speed/root/flag opcodes |

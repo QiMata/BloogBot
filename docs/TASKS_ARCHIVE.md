@@ -2,6 +2,31 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-17) - WoW.exe packet handling & ACK parity closeout
+
+- [x] `P2` packet dispatch, ACK generation, timing, mutation order, packet-flow, and state-machine parity.
+- Completion notes:
+  - `docs/physics/0x466590_disasm.txt` now anchors the deep `SMSG_UPDATE_OBJECT` descriptor walker: field application is in ascending descriptor-index order, and each present field forwards through `0x466A00 -> 0x6142E0`.
+  - `docs/physics/0x466C70_disasm.txt` now anchors the typed create-path layout switch directly and proves there is no separate packet-instantiated `CGPet_C` branch in the `SMSG_UPDATE_OBJECT` path.
+  - `cgobject_layout.md`, `csharp_object_field_audit.md`, and `smsg_update_object_handler.md` now reflect the raw WoW.exe evidence instead of leaving the remaining P2.4 conclusions implicit.
+  - `ObjectUpdateMutationOrderTests` already covered the required replay set for local cached-create, remote unit create, local player update-with-movement, and duplicate fallback gameobject create.
+  - The deterministic parity bundles remained green after the final closeout:
+    - `AckParity` `29/29`
+    - `MovementParity` in `WoWSharpClient.Tests` `32/32`
+    - `PacketFlowParity` `8/8`
+    - `StateMachineParity` `8/8`
+    - `MovementParity` in `Navigation.Physics.Tests` `8/8`
+    - `NavigationPathTests` `80/80`
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (32/32)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=PacketFlowParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=StateMachineParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+
 ## Archived Snapshot (2026-04-15) - Corpse-run probe-policy closeout
 
 - [x] `RPT-MISS-003` foreground corpse-run live validation.

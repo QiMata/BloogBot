@@ -17,6 +17,7 @@ parity in WoW 1.12.1:
 - `docs/physics/cgobject_layout.md`
   - descriptor storage regions proved from `0x466C70`
   - `CMovement` inner offsets already pinned (`+0x10` position, `+0x1C` facing, `+0x40` flags, `+0x78` fall time, `+0x88..+0x9C` speeds)
+  - `0x466C70` switch now proves there is no separate packet-instantiated `CGPet_C` type case in this create path
 - `docs/physics/smsg_update_object_handler.md`
   - create-path vs cached-create mutation order from `0x4651A0`, `0x4660A0`, `0x466350`, `0x466590`, `0x466A20`
 - Managed application sites
@@ -175,14 +176,15 @@ descriptor map:
 `WoWUnit`. It is a runtime wrapper that exposes local pet commands after the bot
 promotes a `WoWUnit` whose `SummonedBy` matches the local player.
 
-Intentional omission:
+Binary-backed note:
 
-- The promotion decision itself is runtime policy. P2.4 still needs binary evidence for
-  whether WoW.exe has separate add/update promotion points for `CGPet_C`.
+- `0x466C70` only instantiates typed storage for packet type ids `0..7`; there is
+  no distinct `CGPet_C` create-path branch in the `SMSG_UPDATE_OBJECT` layout helper.
+- For packet parity, that means local pets share the unit descriptor layout and the
+  managed promotion to `WoWLocalPet` is correctly modeled as a runtime wrapper.
 
 ## Current gaps that remain real
 
-- `CGPet_C`-specific layout is still not proven in `cgobject_layout.md`.
 - The exact WoW.exe fields behind threat-table and spell-cast queue state remain unresolved.
 - Local-player inventory hydration is still incomplete because the slot GUID snapshot is not
   yet sourced with full WoW.exe parity.

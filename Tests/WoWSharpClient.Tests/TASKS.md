@@ -6,15 +6,20 @@
 - Master tracker: `docs/TASKS.md`
 
 ## Active Priorities
-1. Start P2.4 deterministic replay coverage for `SMSG_UPDATE_OBJECT` mutation order and layout parity.
-2. Keep `AckParity`, `PacketFlowParity`, and `StateMachineParity` green while closing object-mutation gaps.
+1. `P2` packet-handling / ACK parity is closed; add new deterministic coverage only when a new WoW.exe-backed gap is found.
+2. Keep `AckParity`, `PacketFlowParity`, and `StateMachineParity` green on future packet/state changes.
 3. Keep the movement-opcode sweep closed by adding coverage only when a new binary-backed non-cheat dispatch gap is discovered.
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
 - Last updated: `2026-04-17`
-- Pass result: `StateMachineParity now covers all documented P2.6 transitions, and the final parity regression gate is green`
+- Pass result: `P2 packet-handling / ACK parity is complete`
 - Last delta:
+  - Synced the existing P2.4 replay/evidence work into the doc surface:
+    - `ObjectUpdateMutationOrderTests` is green (`passed (4/4)`)
+    - `0x466590_disasm.txt` now anchors the descriptor-walker ordering
+    - `0x466C70_disasm.txt` now anchors the typed-storage switch and the no-separate-`CGPet_C` conclusion for packet-instantiated objects
+  - That closes the remaining P2.4 tracker debt and, with the already-green parity bundles, closes the full P2 packet-parity effort.
   - Closed the remaining state-machine audit gap by adding parity-tagged tests for the documented root/unroot and knockback transitions:
     - `StateMachineParityTests.ForceMoveRootOpcodes_StageStateUntilDeferredFlush`
     - `StateMachineParityTests.MoveKnockBack_StagesImpulseUntilConsumedThenAcks`
@@ -42,6 +47,7 @@
   - `StateMachineParityTests.MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData` carries the same fix into the new parity-tagged state-machine bundle.
   - `PacketFlowParityTests.MoveTeleport_UpdatesPlayerState_ThenFlushesDeferredAck` now also pins the flag-clear side of the teleport transition by starting from airborne/swimming bits and asserting `MOVEFLAG_NONE` after dispatch.
   - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectUpdateMutationOrderTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateMachineParityTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PacketFlowParityTests|FullyQualifiedName~StateMachineParityTests|FullyQualifiedName~NotifyTeleportIncoming_ClearsMovementFlagsToNone|FullyQualifiedName~TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData" --logger "console;verbosity=minimal"` -> `passed (13/13)`
     - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=AckParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
@@ -68,7 +74,7 @@
     - `Exports/WoWSharpClient/TASKS.md`
     - `Tests/WoWSharpClient.Tests/TASKS.md`
   - Next command:
-    - `rg -n "P2\\.4|ObjectUpdateMutationOrderTests|HandleUpdateObject|cgobject_layout|TestMutationStage" docs/WOW_EXE_PACKET_PARITY_PLAN.md docs/physics Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g '!**/bin/**' -g '!**/obj/**'`
+    - `rg -n "^- \\[ \\]" docs/TASKS.md -g '!**/TASKS_ARCHIVE.md'`
   - Added three deterministic `ObjectManagerWorldSessionTests` for the newly-wired packet gaps:
     - `EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase`
     - `EventEmitter_OnCharacterJumpStart_LocalPlayer_SetsJumpingAndResetsFallTime`

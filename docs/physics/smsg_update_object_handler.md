@@ -3,6 +3,7 @@
 ## Primary evidence
 - `0x4651A0` top-level `CGWorldClient::HandleUpdateObject` dispatcher
 - `0x466010` prepass dispatcher
+- `0x466590` descriptor walker / field-application helper
 - `0x465330` direct values/partial handler
 - `0x465C50` direct create/create2 handler
 - `0x465EA0` direct movement-only handler
@@ -93,6 +94,29 @@ Conservative conclusion:
 - on the create path, WoW.exe does descriptor/value work before it reaches the later type-specific movement/application helper
 - this matches the current BG `Add` order better than a "movement first, fields later" model
 
+## Descriptor walker findings (`0x466590`)
+
+The fresh `0x466590` capture closes the main "how are descriptor fields actually walked?" gap:
+
+1. `0x46659C..0x4665F0` reads the update-mask block count and copies up to `0x29`
+   mask dwords into stack scratch.
+2. `0x466630..0x4666FE` walks a monotonically increasing field index (`edi`) across
+   the descriptor space rather than doing any field-type-specific reordering.
+3. For each present field, `0x4666DA..0x4666F0` reads the next 4-byte payload and
+   immediately forwards it through `0x466A00 -> 0x6142E0`.
+4. `0x4667A0` / `0x466830` resolve the typed destination storage for the current
+   field index before the copy completes.
+
+Safe parity conclusion:
+
+- within the descriptor walker itself, field application order is descriptor-index order
+- the higher-level ordering questions are therefore:
+  - whether a block reaches the cached-create movement-prepass branch first (`0x466350`)
+  - whether the block is a normal create/update path where descriptor work runs before
+    the later outer helper returns
+- our mutation-order tests only need to pin those branch-level orderings, not invent an
+  extra field-category reorder that WoW.exe does not have here
+
 ## Cached-object create branch (`0x466350`)
 
 `0x4660A0` does not always go down the "construct a new object" path.
@@ -134,8 +158,10 @@ The local-player `0x1408` size matches `PLAYER_END * 4` exactly (`0x502 * 4`).
 
 ## What is still unresolved
 
-The fresh `0x4651A0` capture closes the dispatcher shape, the type-`5` gap, and the duplicate-create identity rule, but one P2.4 question is still open:
+The update-object ordering questions that matter for parity are now materially closed,
+but some naming/detail work is still open:
 
-- the exact final order inside the deep `0x466590` descriptor walker versus the later type-specific helpers still needs a dedicated follow-up capture if we want to prove aura-vs-position ordering at the "last applied field" level
-
-That means this capture is enough to justify the `NEAR_OBJECTS` parser fix and to anchor `cgobject_layout.md`, but it is not yet the final word on every descriptor-subfield mutation.
+- exact semantic names for every allocator/helper reached from `0x466830`
+- final symbolic names for the object-cache/link members used by the create helpers
+- whether later non-packet systems introduce a distinct pet wrapper after the unit
+  create path, even though `0x466C70` has no separate packet-instantiated pet type
