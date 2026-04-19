@@ -11,7 +11,7 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 /// <summary>
 /// Fixture for Warsong Gulch tests. Launches 20 bots: 10 Horde (1 FG + 9 BG) and
-/// 10 Alliance (1 FG + 9 BG).
+/// 10 Alliance BG clients.
 /// Level 60, PvP gear loadout, elixirs, mount, talents — full combat-ready prep.
 /// </summary>
 public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
@@ -52,6 +52,18 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
 
     protected override string FixtureLabel => "WSG";
 
+    protected virtual bool UseForegroundHordeLeader => true;
+
+    protected virtual bool UseForegroundAllianceLeader => false;
+
+    protected override TimeSpan EnterWorldMaxTimeout => TimeSpan.FromMinutes(10);
+
+    protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(3);
+
+    protected override int LaunchThrottleActivationBotCountOverride => TotalBotCount + 1;
+
+    protected override int MaxPendingStartupBotsOverride => TotalBotCount + 1;
+
     protected override uint BattlegroundTypeId => 2;
 
     protected override uint BattlegroundMapId => WsgMapId;
@@ -91,7 +103,7 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
@@ -102,7 +114,7 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         return bots;

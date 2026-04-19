@@ -944,11 +944,20 @@ namespace BotRunner
                                 bgClient = factory.BattlegroundAgent;
                             }
 
-                            _botTasks.Push(new Tasks.Battlegrounds.BattlegroundQueueTask(
+                            var result = UpsertBattlegroundQueueTask(
+                                _botTasks,
                                 context,
                                 (BotRunner.Travel.BattlemasterData.BattlegroundType)bgTypeId,
                                 expectedMapId,
-                                bgClient));
+                                bgClient);
+
+                            if (result != BattlegroundQueueTaskUpsertResult.Duplicate)
+                            {
+                                Log.Information("[BOT RUNNER] BG queue upsert: {Result} bgType={BgTypeId} expectedMap={ExpectedMapId}",
+                                    result,
+                                    bgTypeId,
+                                    expectedMapId);
+                            }
 
                             return BehaviourTreeStatus.Success;
                         });
@@ -1086,6 +1095,12 @@ namespace BotRunner
             Duplicate
         }
 
+        internal enum BattlegroundQueueTaskUpsertResult
+        {
+            Pushed,
+            Duplicate
+        }
+
         internal static GoToTaskUpsertResult UpsertGoToTask(
             Stack<Interfaces.IBotTask> botTasks,
             Interfaces.IBotContext botContext,
@@ -1108,6 +1123,24 @@ namespace BotRunner
 
             botTasks.Push(new Tasks.GoToTask(botContext, target.X, target.Y, target.Z, normalizedTolerance));
             return GoToTaskUpsertResult.Pushed;
+        }
+
+        internal static BattlegroundQueueTaskUpsertResult UpsertBattlegroundQueueTask(
+            Stack<Interfaces.IBotTask> botTasks,
+            Interfaces.IBotContext botContext,
+            BotRunner.Travel.BattlemasterData.BattlegroundType bgType,
+            uint expectedMapId,
+            WoWSharpClient.Networking.ClientComponents.BattlegroundNetworkClientComponent? bgClient = null)
+        {
+            if (botTasks.OfType<Tasks.Battlegrounds.BattlegroundQueueTask>().Any())
+                return BattlegroundQueueTaskUpsertResult.Duplicate;
+
+            botTasks.Push(new Tasks.Battlegrounds.BattlegroundQueueTask(
+                botContext,
+                bgType,
+                expectedMapId,
+                bgClient));
+            return BattlegroundQueueTaskUpsertResult.Pushed;
         }
 
         private static List<uint> ParseGatheringEntries(string csv)

@@ -274,11 +274,21 @@ namespace BackgroundBotRunner
         {
             var worldClient = _wowClient.WorldClient;
 
-            if (worldClient?.IsConnected == true)
+            if (worldClient == null)
             {
-                EnsureAgentFactory(worldClient);
+                ResetAgentFactory();
+                return;
             }
-            else
+
+            if (!ReferenceEquals(worldClient, _activeWorldClient))
+            {
+                // WorldClient is created before the auth/world handshake completes.
+                // Bind the factory immediately so early packets have their handlers registered.
+                EnsureAgentFactory(worldClient);
+                return;
+            }
+
+            if (worldClient.IsConnected != true && _worldDisconnectSubscription == null)
             {
                 ResetAgentFactory();
             }

@@ -12,9 +12,21 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
-- Last updated: `2026-04-17`
-- Pass result: `P2 packet-handling / ACK parity is complete`
+- Last updated: `2026-04-19`
+- Pass result: `Early battleground-status handler registration is pinned by deterministic factory coverage`
 - Last delta:
+  - Added `AgentFactoryTests.InitializeEssentialAgents_EagerlyRegistersEarlyWorldHandlers`, which proves the eager factory path now creates the Friend/Ignore/Battleground agents before the first login/world burst and registers the early battleground status opcodes deterministically.
+  - That deterministic coverage supports the live battleground queue/entry stabilization slice: the background worker now binds the factory as soon as a new `WorldClient` exists, and the fresh AB queue/entry rerun stayed green once the fixture avoided the foreground transfer crash edge.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AgentFactoryTests" --logger "console;verbosity=minimal"` -> `passed (101/101)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests|FullyQualifiedName~BotRunnerServiceBattlegroundDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:/repos/Westworld of Warcraft/tmp/test-runtime/results-live" --logger "trx;LogFileName=ab_queue_entry_background_only_recheck.trx"` -> `passed (1/1)`
+  - Files changed:
+    - `Tests/WoWSharpClient.Tests/Agent/AgentFactoryTests.cs`
+    - `Exports/WoWSharpClient/Networking/ClientComponents/NetworkClientComponentFactory.cs`
+    - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - Next command:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WsgObjectiveTests" --logger "console;verbosity=minimal"`
   - Synced the existing P2.4 replay/evidence work into the doc surface:
     - `ObjectUpdateMutationOrderTests` is green (`passed (4/4)`)
     - `0x466590_disasm.txt` now anchors the descriptor-walker ordering

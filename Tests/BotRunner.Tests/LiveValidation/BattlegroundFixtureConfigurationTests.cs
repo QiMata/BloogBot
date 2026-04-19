@@ -14,25 +14,63 @@ namespace BotRunner.Tests.LiveValidation;
 public sealed class BattlegroundFixtureConfigurationTests
 {
     [Fact]
-    public void WarsongGulchFixture_UsesForegroundLeadersForBothFactions()
+    public void WarsongGulchFixture_UsesSingleForegroundHordeLeaderAndBackgroundAllianceLeader()
     {
         var fixture = new WarsongGulchFixture();
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        AssertForegroundLeaders(settings, WarsongGulchFixture.HordeLeaderAccount, WarsongGulchFixture.AllianceLeaderAccount);
+
+        var hordeLeader = Assert.Single(settings.Where(setting => setting.AccountName == WarsongGulchFixture.HordeLeaderAccount));
+        Assert.Equal(SettingsBotRunnerType.Foreground, hordeLeader.RunnerType);
+
+        var allianceLeader = Assert.Single(settings.Where(setting => setting.AccountName == WarsongGulchFixture.AllianceLeaderAccount));
+        Assert.Equal(SettingsBotRunnerType.Background, allianceLeader.RunnerType);
+
+        var foregroundAccounts = settings
+            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
+            .Select(setting => setting.AccountName)
+            .ToArray();
+        Assert.Equal([WarsongGulchFixture.HordeLeaderAccount], foregroundAccounts);
     }
 
     [Fact]
-    public void ArathiBasinFixture_UsesForegroundLeadersForBothFactions()
+    public void WarsongGulchObjectiveFixture_UsesBackgroundLeadersForBothFactions()
+    {
+        var fixture = new WarsongGulchObjectiveFixture();
+        var settings = GetCharacterSettings(fixture);
+
+        Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
+        Assert.False(GetPrepareDuringInitialization(fixture));
+
+        var foregroundAccounts = settings
+            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
+            .Select(setting => setting.AccountName)
+            .ToArray();
+        Assert.Empty(foregroundAccounts);
+    }
+
+    [Fact]
+    public void ArathiBasinFixture_UsesBackgroundLeadersForBothFactions()
     {
         var fixture = new ArathiBasinFixture();
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(ArathiBasinFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-        AssertForegroundLeaders(settings, ArathiBasinFixture.HordeLeaderAccount, ArathiBasinFixture.AllianceLeaderAccount);
+
+        var hordeLeader = Assert.Single(settings.Where(setting => setting.AccountName == ArathiBasinFixture.HordeLeaderAccount));
+        Assert.Equal(SettingsBotRunnerType.Background, hordeLeader.RunnerType);
+
+        var allianceLeader = Assert.Single(settings.Where(setting => setting.AccountName == ArathiBasinFixture.AllianceLeaderAccount));
+        Assert.Equal(SettingsBotRunnerType.Background, allianceLeader.RunnerType);
+
+        var foregroundAccounts = settings
+            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
+            .Select(setting => setting.AccountName)
+            .ToArray();
+        Assert.Empty(foregroundAccounts);
     }
 
     [Fact]
@@ -191,6 +229,8 @@ public sealed class BattlegroundFixtureConfigurationTests
     {
         var originalInjectionDisablePacketHooks = Environment.GetEnvironmentVariable("Injection__DisablePacketHooks");
         var originalDisablePacketHooks = Environment.GetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS");
+        var originalLaunchThrottleActivation = Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar);
+        var originalMaxPendingStartupBots = Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar);
 
         try
         {
@@ -200,11 +240,15 @@ public sealed class BattlegroundFixtureConfigurationTests
 
             Assert.Equal("true", Environment.GetEnvironmentVariable("Injection__DisablePacketHooks"));
             Assert.Equal("1", Environment.GetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS"));
+            Assert.Equal("21", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar));
+            Assert.Equal("21", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar));
         }
         finally
         {
             Environment.SetEnvironmentVariable("Injection__DisablePacketHooks", originalInjectionDisablePacketHooks);
             Environment.SetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS", originalDisablePacketHooks);
+            Environment.SetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar, originalLaunchThrottleActivation);
+            Environment.SetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar, originalMaxPendingStartupBots);
         }
     }
 
@@ -213,9 +257,9 @@ public sealed class BattlegroundFixtureConfigurationTests
     {
         var fixture = new WarsongGulchFixture();
 
-        Assert.Equal(TimeSpan.FromMinutes(5), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
-        Assert.Equal(TimeSpan.FromMinutes(5), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
-        Assert.Equal(TimeSpan.FromSeconds(90), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(10), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(10), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(3), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
     }
 
     [Fact]
@@ -226,6 +270,28 @@ public sealed class BattlegroundFixtureConfigurationTests
         Assert.Equal(TimeSpan.FromMinutes(10), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
         Assert.Equal(TimeSpan.FromMinutes(10), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
         Assert.Equal(TimeSpan.FromMinutes(2), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
+    }
+
+    [Fact]
+    public void ArathiBasinFixture_ExtendsEnterWorldTimeouts_ForTwentyBotColdStarts()
+    {
+        var fixture = new ArathiBasinFixture();
+
+        Assert.Equal(TimeSpan.FromMinutes(12), GetProtectedTimeSpanProperty(fixture, "EnterWorldMaxTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(12), GetBaseFixtureTimeSpanProperty(fixture, "InitialWorldEntryTimeout"));
+        Assert.Equal(TimeSpan.FromMinutes(4), GetProtectedTimeSpanProperty(fixture, "EnterWorldStaleTimeout"));
+    }
+
+    [Fact]
+    public void ArathiBasinFixture_UsesGroundLevelAllianceQueueLocation_InChampionsHall()
+    {
+        var fixture = new ArathiBasinFixture();
+        var allianceQueueLocation = GetProtectedTeleportTargetProperty(fixture, "AllianceQueueLocation");
+
+        Assert.Equal((int)BattlemasterData.StormwindAb.MapId, GetTeleportTargetValue<int>(allianceQueueLocation, "MapId"));
+        Assert.Equal(BattlemasterData.StormwindAb.Position.X, GetTeleportTargetValue<float>(allianceQueueLocation, "X"));
+        Assert.Equal(BattlemasterData.StormwindAb.Position.Y, GetTeleportTargetValue<float>(allianceQueueLocation, "Y"));
+        Assert.Equal(BattlemasterData.StormwindAb.Position.Z, GetTeleportTargetValue<float>(allianceQueueLocation, "Z"));
     }
 
     [Fact]
@@ -290,6 +356,24 @@ public sealed class BattlegroundFixtureConfigurationTests
         Assert.NotNull(property);
 
         return Assert.IsType<bool>(property!.GetValue(fixture));
+    }
+
+    private static object GetProtectedTeleportTargetProperty(CoordinatorFixtureBase fixture, string propertyName)
+    {
+        var property = fixture.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(property);
+
+        var value = property!.GetValue(fixture);
+        Assert.NotNull(value);
+        return value!;
+    }
+
+    private static T GetTeleportTargetValue<T>(object teleportTarget, string propertyName)
+    {
+        var property = teleportTarget.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        Assert.NotNull(property);
+
+        return Assert.IsType<T>(property!.GetValue(teleportTarget));
     }
 
     private static void AssertForegroundLeaders(

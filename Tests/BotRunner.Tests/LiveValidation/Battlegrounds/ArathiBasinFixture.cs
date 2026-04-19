@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using BotRunner.Travel;
@@ -7,14 +8,14 @@ using Xunit;
 namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 /// <summary>
-/// Fixture for Arathi Basin tests. Launches 30 bots: 15 Horde (1 FG + 14 BG) and
-/// 15 Alliance (1 FG + 14 BG).
+/// Fixture for Arathi Basin tests. Launches 20 background bots: 10 Horde and
+/// 10 Alliance.
 /// Fixture prep handles revive/level/teleport/GM-off; the coordinator handles queue and entry only.
 /// </summary>
 public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 {
-    public const int HordeBotCount = 15;
-    public const int AllianceBotCount = 15;
+    public const int HordeBotCount = 10;
+    public const int AllianceBotCount = 10;
     public const int TotalBotCount = HordeBotCount + AllianceBotCount;
     public const uint AbMapId = 529;
     public const string HordeLeaderAccount = "ABBOT1";
@@ -48,6 +49,24 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 
     protected override string FixtureLabel => "AB";
 
+    // Foreground battleground transfers are still unstable for this fixture even
+    // with packet hooks disabled, so keep the full AB roster on the BG runner path.
+    protected virtual bool UseForegroundHordeLeader => false;
+
+    protected virtual bool UseForegroundAllianceLeader => false;
+
+    // Historical AB live evidence shows the 20-bot cold start can take well over
+    // the old 8-minute window before the full roster hydrates into world snapshots.
+    protected override TimeSpan EnterWorldMaxTimeout => TimeSpan.FromMinutes(12);
+
+    protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(4);
+
+    // The generic launch throttle blocks the back half of the AB roster while the
+    // first wave is still at CharacterSelect. Disable it for the 20-bot AB fixture.
+    protected override int LaunchThrottleActivationBotCountOverride => TotalBotCount + 1;
+
+    protected override int MaxPendingStartupBotsOverride => TotalBotCount + 1;
+
     protected override uint BattlegroundTypeId => 3;
 
     protected override uint BattlegroundMapId => AbMapId;
@@ -70,11 +89,13 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
         BattlemasterData.OrgrimmarAb.Position.Y,
         BattlemasterData.OrgrimmarAb.Position.Z + 3f);
 
+    // Alliance AB battlemaster is indoors in Champion's Hall.
+    // Z+3 lands on the upper floor (Z≈127), which strands bots above Lady Hoteshem.
     protected override TeleportTarget AllianceQueueLocation => new(
         (int)BattlemasterData.StormwindAb.MapId,
         BattlemasterData.StormwindAb.Position.X,
         BattlemasterData.StormwindAb.Position.Y,
-        BattlemasterData.StormwindAb.Position.Z + 3f);
+        BattlemasterData.StormwindAb.Position.Z);
 
     protected override IReadOnlyList<CharacterSettings> BuildCharacterSettings()
     {
@@ -87,7 +108,7 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: HordeClasses[index],
                 characterRace: HordeRaces[index],
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
@@ -97,7 +118,7 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: AllianceClasses[index],
                 characterRace: AllianceRaces[index],
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         return bots;

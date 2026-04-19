@@ -20,9 +20,23 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
-- Last updated: `2026-04-17`
-- Pass result: `P2 packet-handling / ACK parity is complete`
+- Last updated: `2026-04-19`
+- Pass result: `Early battleground-status handler registration is pinned for fresh WorldClient startup`
 - Last delta:
+  - `NetworkClientComponentFactory.InitializeEssentialAgents()` now eagerly constructs `FriendAgent`, `IgnoreAgent`, and `BattlegroundAgent` alongside the earlier CharacterInit/Party/Looting/GameObject essentials.
+  - Added `AgentFactoryTests.InitializeEssentialAgents_EagerlyRegistersEarlyWorldHandlers`, which proves the factory registers `SMSG_FRIEND_LIST`, `SMSG_FRIEND_STATUS`, `SMSG_IGNORE_LIST`, `SMSG_BATTLEFIELD_STATUS`, `SMSG_BATTLEFIELD_LIST`, and `SMSG_GROUP_JOINED_BATTLEGROUND` before the first world-login packet burst can race past handler creation.
+  - This early-registration fix pairs with the BackgroundBotWorker world-client rebind change and underpins the now-passing live AB queue/entry rerun.
+  - Validation:
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AgentFactoryTests" --logger "console;verbosity=minimal"` -> `passed (101/101)`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests|FullyQualifiedName~BotRunnerServiceBattlegroundDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:/repos/Westworld of Warcraft/tmp/test-runtime/results-live" --logger "trx;LogFileName=ab_queue_entry_background_only_recheck.trx"` -> `passed (1/1)`
+  - Files changed:
+    - `Exports/WoWSharpClient/Networking/ClientComponents/NetworkClientComponentFactory.cs`
+    - `Tests/WoWSharpClient.Tests/Agent/AgentFactoryTests.cs`
+    - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
+    - `Exports/WoWSharpClient/TASKS.md`
+  - Next command:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WsgObjectiveTests" --logger "console;verbosity=minimal"`
   - Synced the previously-landed P2.4 work into the evidence/docs surface:
     - added `docs/physics/0x466590_disasm.txt`
     - added `docs/physics/0x466C70_disasm.txt`

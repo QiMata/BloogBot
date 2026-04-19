@@ -51,9 +51,31 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: `2026-04-17`
-- Pass result: `Configurable FG ACK probe harness closed the final three ACK corpus gaps and AckParity is green across all wired ACKs`
+- Last updated: `2026-04-19`
+- Pass result: `AB queue-entry stabilization is green with tracked dispatch coverage and a passing live rerun`
 - Last delta:
+  - Added `BotRunnerServiceBattlegroundDispatchTests` to pin the `JoinBattleground` dispatch contract: the first dispatch pushes exactly one `BattlegroundQueueTask`, and a duplicate dispatch leaves the task stack at size `1`.
+  - `ArathiBasinFixture` now keeps both leaders on background runners, extends the cold-start enter-world window to `12m/4m`, disables the launch throttle for the 20-bot roster, and uses the ground-level Stormwind AB battlemaster Z instead of the old Champion's Hall upper-floor offset.
+  - `ab_queue_entry_alliance_groundlevel_recheck.trx` exposed the remaining harness issue: `ABBOT1` crashed during foreground battleground transfer. `ab_queue_entry_background_only_recheck.trx` then passed after the fixture stayed background-only end-to-end.
+  - Validation:
+    - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running for the live reruns.
+    - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> no running `WoW.exe` before the deterministic/live reruns.
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests|FullyQualifiedName~BotRunnerServiceBattlegroundDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+    - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AgentFactoryTests" --logger "console;verbosity=minimal"` -> `passed (101/101)`
+    - `powershell -ExecutionPolicy Bypass -File ./run-tests.ps1 -CleanupRepoScopedOnly` -> repo-scoped cleanup completed before each live run.
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:/repos/Westworld of Warcraft/tmp/test-runtime/results-live" --logger "trx;LogFileName=ab_queue_entry_alliance_groundlevel_recheck.trx"` -> `failed` with `[AB:BG] CRASHED`
+    - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:/repos/Westworld of Warcraft/tmp/test-runtime/results-live" --logger "trx;LogFileName=ab_queue_entry_background_only_recheck.trx"` -> `passed (1/1)`
+  - Files changed:
+    - `Tests/BotRunner.Tests/BotRunnerServiceBattlegroundDispatchTests.cs`
+    - `Tests/BotRunner.Tests/LiveValidation/BattlegroundFixtureConfigurationTests.cs`
+    - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/ArathiBasinFixture.cs`
+    - `Tests/BotRunner.Tests/TASKS.md`
+    - `Exports/BotRunner/ActionDispatcher.cs`
+    - `Exports/WoWSharpClient/Networking/ClientComponents/NetworkClientComponentFactory.cs`
+    - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
+    - `Tests/WoWSharpClient.Tests/Agent/AgentFactoryTests.cs`
+  - Next command:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WsgObjectiveTests" --logger "console;verbosity=minimal"`
   - Reused `Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled` unchanged to finish the corpus. The final server debug syntax is `.debug send opcode`, and the payload file is `/home/vmangos/opcode.txt` inside the running `mangosd` container.
   - That source-backed debug path captured representative `CMSG_FORCE_TURN_RATE_CHANGE_ACK` and `CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK` fixtures, while `.targetself` plus `.knockback 5 5` captured `CMSG_MOVE_KNOCK_BACK_ACK`. This closes the last live-capture gap without adding one-off test methods.
   - Validation:

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using System;
+using System.Reactive.Linq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -804,6 +805,37 @@ namespace WoWSharpClient.Tests.Agent
             Assert.Same(mockQuestAgent.Object, factory.QuestAgent);
             Assert.Same(mockLootingAgent.Object, factory.LootingAgent);
             Assert.Same(mockGameObjectAgent.Object, factory.GameObjectAgent);
+        }
+
+        [Fact]
+        public void InitializeEssentialAgents_EagerlyRegistersEarlyWorldHandlers()
+        {
+            // Arrange
+            _mockWorldClient
+                .Setup(x => x.RegisterOpcodeHandler(It.IsAny<GameData.Core.Enums.Opcode>()))
+                .Returns(Observable.Empty<ReadOnlyMemory<byte>>());
+
+            var factory = AgentFactory.CreateNetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var concreteFactory = Assert.IsType<NetworkClientComponentFactory>(factory);
+
+            // Act
+            concreteFactory.InitializeEssentialAgents();
+
+            // Assert
+            Assert.IsType<CharacterInitNetworkClientComponent>(concreteFactory.CharacterInitAgent);
+            Assert.IsType<PartyNetworkClientComponent>(concreteFactory.PartyAgent);
+            Assert.IsType<LootingNetworkClientComponent>(concreteFactory.LootingAgent);
+            Assert.IsType<GameObjectNetworkClientComponent>(concreteFactory.GameObjectAgent);
+            Assert.IsType<FriendNetworkClientComponent>(concreteFactory.FriendAgent);
+            Assert.IsType<IgnoreNetworkClientComponent>(concreteFactory.IgnoreAgent);
+            Assert.IsType<BattlegroundNetworkClientComponent>(concreteFactory.BattlegroundAgent);
+
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_FRIEND_LIST), Times.Once);
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_FRIEND_STATUS), Times.Once);
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_IGNORE_LIST), Times.Once);
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_BATTLEFIELD_STATUS), Times.Once);
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_BATTLEFIELD_LIST), Times.Once);
+            _mockWorldClient.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_GROUP_JOINED_BATTLEGROUND), Times.Once);
         }
 
         #endregion

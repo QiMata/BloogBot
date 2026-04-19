@@ -77,9 +77,9 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Eagerly creates essential agents whose opcode handlers must be registered
-        /// before login packets arrive (e.g., CharacterInit for ACTION_BUTTONS/INITIALIZE_FACTIONS,
-        /// Party for GROUP_INVITE/GROUP_LIST).
-        /// Call this immediately after constructing the factory with a connected WorldClient.
+        /// before early world/login packets arrive (e.g., CharacterInit for ACTION_BUTTONS/INITIALIZE_FACTIONS,
+        /// Party for GROUP_INVITE/GROUP_LIST, Battleground for battlefield status updates).
+        /// Call this immediately after constructing the factory for a new WorldClient.
         /// </summary>
         public void InitializeEssentialAgents()
         {
@@ -89,7 +89,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             _ = PartyAgent;
             _ = LootingAgent;
             _ = GameObjectAgent;
-            _logger?.LogInformation("Essential agents initialized (CharacterInit, Party, Looting, GameObject).");
+            _ = FriendAgent;
+            _ = IgnoreAgent;
+            _ = BattlegroundAgent;
+            _logger?.LogInformation("Essential agents initialized (CharacterInit, Party, Looting, GameObject, Friend, Ignore, Battleground).");
         }
 
         private void EnsureLazyAvailable()
