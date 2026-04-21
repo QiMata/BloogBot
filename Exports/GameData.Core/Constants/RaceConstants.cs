@@ -45,7 +45,8 @@ namespace GameData.Core.Constants
         // Raw data storage
         private static Dictionary<string, (uint id, float radius, float height)> playerModelDimensions;
         private static Dictionary<string, (uint id, float radius, float height)> druidFormDimensions;
-        private static bool isInitialized = false;
+        private static volatile bool isInitialized = false;
+        private static readonly object _initLock = new object();
 
         #endregion
 
@@ -363,33 +364,42 @@ namespace GameData.Core.Constants
         {
             if (isInitialized) return;
 
-            // Initialize all caches
-            dimensionCache = new Dictionary<Race, (float radius, float height)>();
-            raceGenderCache = new Dictionary<(Race, Gender), (float radius, float height)>();
-            druidFormCache = new Dictionary<(Race, DruidForm), (float radius, float height)>();
-            playerModelDimensions = new Dictionary<string, (uint, float, float)>();
-            druidFormDimensions = new Dictionary<string, (uint, float, float)>();
-
-            try
+            // Double-checked locking: two concurrent physics ticks (e.g. 20 BG bot
+            // workers all ticking MovementController.RunPhysics → NativeLocalPhysics.Step →
+            // GetCapsuleForRace) can both see isInitialized==false and race into
+            // the dictionary allocations, corrupting the shared caches.
+            lock (_initLock)
             {
-                string dbcPath = FindDbcFile();
+                if (isInitialized) return;
 
-                if (dbcPath == null)
+                // Initialize all caches
+                dimensionCache = new Dictionary<Race, (float radius, float height)>();
+                raceGenderCache = new Dictionary<(Race, Gender), (float radius, float height)>();
+                druidFormCache = new Dictionary<(Race, DruidForm), (float radius, float height)>();
+                playerModelDimensions = new Dictionary<string, (uint, float, float)>();
+                druidFormDimensions = new Dictionary<string, (uint, float, float)>();
+
+                try
+                {
+                    string dbcPath = FindDbcFile();
+
+                    if (dbcPath == null)
+                    {
+                        UseHardcodedValues();
+                        isInitialized = true;
+                        return;
+                    }
+
+                    LoadModelData(dbcPath);
+                    CacheRaceDimensions();
+                    CacheDruidFormDimensions();
+                    isInitialized = true;
+                }
+                catch (Exception ex)
                 {
                     UseHardcodedValues();
                     isInitialized = true;
-                    return;
                 }
-
-                LoadModelData(dbcPath);
-                CacheRaceDimensions();
-                CacheDruidFormDimensions();
-                isInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                UseHardcodedValues();
-                isInitialized = true;
             }
         }
 
