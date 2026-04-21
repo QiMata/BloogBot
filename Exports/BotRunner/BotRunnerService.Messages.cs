@@ -71,6 +71,26 @@ namespace BotRunner
                     }
                 };
 
+                eh.OnLearnedSpell += (_, args) =>
+                {
+                    lock (_recentChatMessages)
+                    {
+                        _recentChatMessages.Enqueue($"[SKILL] Learned spell {args.SpellId}");
+                        while (_recentChatMessages.Count > MaxBufferedMessages)
+                            _recentChatMessages.Dequeue();
+                    }
+                };
+
+                eh.OnUnlearnedSpell += (_, args) =>
+                {
+                    lock (_recentChatMessages)
+                    {
+                        _recentChatMessages.Enqueue($"[SKILL] Unlearned spell {args.SpellId}");
+                        while (_recentChatMessages.Count > MaxBufferedMessages)
+                            _recentChatMessages.Dequeue();
+                    }
+                };
+
                 eh.OnWorldStatesInit += (_, worldStates) =>
                 {
                     var summary = string.Join(

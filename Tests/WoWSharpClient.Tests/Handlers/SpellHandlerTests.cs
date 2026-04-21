@@ -347,6 +347,35 @@ namespace WoWSharpClient.Tests.Handlers
         }
 
         [Fact]
+        public void HandleLearnedSpell_AddsKnownSpellAndFiresEvent()
+        {
+            WoWSharpObjectManager.Instance.Spells =
+            [
+                new GameData.Core.Models.Spell(133, 0, "", "", "")
+            ];
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write(18248u);
+
+            uint? learnedSpellId = null;
+            EventHandler<SpellChangedArgs> handler = (_, args) => learnedSpellId = args.SpellId;
+            WoWSharpEventEmitter.Instance.OnLearnedSpell += handler;
+
+            try
+            {
+                SpellHandler.HandleLearnedSpell(Opcode.SMSG_LEARNED_SPELL, ms.ToArray(), ctx);
+
+                Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
+                Assert.Equal((uint)18248, learnedSpellId);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnLearnedSpell -= handler;
+            }
+        }
+
+        [Fact]
         public void HandleSupercededSpell_ReplacesOldRankWithNewRank()
         {
             WoWSharpObjectManager.Instance.Spells =
@@ -368,7 +397,7 @@ namespace WoWSharpClient.Tests.Handlers
         }
 
         [Fact]
-        public void HandleRemovedSpell_RemovesKnownSpell()
+        public void HandleRemovedSpell_RemovesKnownSpellAndFiresEvent()
         {
             WoWSharpObjectManager.Instance.Spells =
             [
@@ -380,10 +409,22 @@ namespace WoWSharpClient.Tests.Handlers
             using var writer = new BinaryWriter(ms);
             writer.Write((ushort)18248);
 
-            SpellHandler.HandleRemovedSpell(Opcode.SMSG_REMOVED_SPELL, ms.ToArray(), ctx);
+            uint? removedSpellId = null;
+            EventHandler<SpellChangedArgs> handler = (_, args) => removedSpellId = args.SpellId;
+            WoWSharpEventEmitter.Instance.OnUnlearnedSpell += handler;
 
-            Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
-            Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
+            try
+            {
+                SpellHandler.HandleRemovedSpell(Opcode.SMSG_REMOVED_SPELL, ms.ToArray(), ctx);
+
+                Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
+                Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
+                Assert.Equal((uint)18248, removedSpellId);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnUnlearnedSpell -= handler;
+            }
         }
 
         [Fact]

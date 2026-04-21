@@ -51,6 +51,8 @@ namespace WoWSharpClient
         public event EventHandler<OnUiMessageArgs> OnUiMessage;
         public event EventHandler<OnUiMessageArgs> OnSystemMessage;
         public event EventHandler<OnUiMessageArgs> OnSkillMessage;
+        public event EventHandler<SpellChangedArgs> OnLearnedSpell;
+        public event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
         public event EventHandler<CharacterActionArgs> OnCharacterJumpStart;
         public event EventHandler<CharacterActionArgs> OnCharacterFallLand;
         public event EventHandler<CharacterActionArgs> OnCharacterStartForward;
@@ -175,6 +177,8 @@ namespace WoWSharpClient
         public void FireOnUiMessage(string message) => FireEvent(OnUiMessage, new OnUiMessageArgs(message));
         public void FireOnSystemMessage(string message) => FireEvent(OnSystemMessage, new OnUiMessageArgs(message));
         public void FireOnSkillMessage(string message) => FireEvent(OnSkillMessage, new OnUiMessageArgs(message));
+        public void FireOnLearnedSpell(uint spellId) => FireEvent(OnLearnedSpell, new SpellChangedArgs(spellId));
+        public void FireOnUnlearnedSpell(uint spellId) => FireEvent(OnUnlearnedSpell, new SpellChangedArgs(spellId));
         public void FireOnBlockParryDodge() => FireEvent(OnBlockParryDodge, new EventArgs());
         public void FireOnParry() => FireEvent(OnParry, new EventArgs());
         public void FireOnSlamReady() => FireEvent(OnSlamReady, new EventArgs());

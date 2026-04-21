@@ -240,6 +240,17 @@ namespace ForegroundBotRunner.Statics
                             _lastKnownSpellIds = publishedIds;
                         }
 
+                        if (EventHandler is WoWEventHandler eventHandler)
+                        {
+                            foreach (var id in ids.OrderBy(id => id))
+                            {
+                                if (learned)
+                                    eventHandler.FireOnLearnedSpell(id);
+                                else
+                                    eventHandler.FireOnUnlearnedSpell(id);
+                            }
+                        }
+
                         var action = learned ? "added" : "removed";
                         DiagLog($"[SPELLBOOK] '{spellName}' -> {ids.Count} IDs {action} (total={publishedIds.Count})");
                     }

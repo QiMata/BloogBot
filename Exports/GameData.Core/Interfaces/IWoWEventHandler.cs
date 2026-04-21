@@ -30,6 +30,8 @@ namespace GameData.Core.Interfaces
         event EventHandler<OnUiMessageArgs> OnUiMessage;
         event EventHandler<OnUiMessageArgs> OnSystemMessage;
         event EventHandler<OnUiMessageArgs> OnSkillMessage;
+        event EventHandler<SpellChangedArgs> OnLearnedSpell;
+        event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
         event EventHandler<EventArgs> OnBlockParryDodge;
         event EventHandler<EventArgs> OnParry;
         event EventHandler<EventArgs> OnSlamReady;
@@ -112,6 +114,11 @@ namespace GameData.Core.Interfaces
     public class OnUiMessageArgs(string message) : EventArgs
     {
         public readonly string Message = message;
+    }
+
+    public class SpellChangedArgs(uint spellId) : EventArgs
+    {
+        public uint SpellId { get; } = spellId;
     }
 
     public class OnXpGainArgs(int xp) : EventArgs

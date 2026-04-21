@@ -100,6 +100,10 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public event EventHandler<OnUiMessageArgs> OnSkillMessage;
 
+        public event EventHandler<SpellChangedArgs> OnLearnedSpell;
+
+        public event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
+
         public event EventHandler<EventArgs> OnBlockParryDodge;
 
         public event EventHandler<EventArgs> OnParry;
@@ -239,6 +243,16 @@ namespace ForegroundBotRunner.Statics
         internal void FireOnPlayerInit()
         {
             Task.Run(() => OnPlayerInit?.Invoke(this, new EventArgs()));
+        }
+
+        internal void FireOnLearnedSpell(uint spellId)
+        {
+            OnLearnedSpell?.Invoke(this, new SpellChangedArgs(spellId));
+        }
+
+        internal void FireOnUnlearnedSpell(uint spellId)
+        {
+            OnUnlearnedSpell?.Invoke(this, new SpellChangedArgs(spellId));
         }
 
 

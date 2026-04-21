@@ -68,6 +68,7 @@ namespace WoWSharpClient.Handlers
                     {
                         existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
                         Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+                        ctx.EventEmitter.FireOnLearnedSpell(spellId);
                     }
                 }
             }
@@ -118,6 +119,8 @@ namespace WoWSharpClient.Handlers
                     var removed = existing.RemoveAll(s => s.Id == spellId);
                     Log.Information("[SpellHandler] Removed spell: {SpellId} (removed={Removed}, total={Count})",
                         spellId, removed, existing.Count);
+                    if (removed > 0)
+                        ctx.EventEmitter.FireOnUnlearnedSpell(spellId);
                 }
             }
             catch (EndOfStreamException) { }

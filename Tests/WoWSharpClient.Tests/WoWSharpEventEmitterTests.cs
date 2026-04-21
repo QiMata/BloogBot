@@ -127,6 +127,8 @@ namespace WoWSharpClient.Tests
             _emitter.FireOnUiMessage("ui");
             _emitter.FireOnSystemMessage("system");
             _emitter.FireOnSkillMessage("skill");
+            _emitter.FireOnLearnedSpell(18248);
+            _emitter.FireOnUnlearnedSpell(18248);
             _emitter.FireOnPartyInvite("Player");
             _emitter.FireOnXpGain(100);
             _emitter.FireOnLootMoney(5000);
@@ -235,6 +237,24 @@ namespace WoWSharpClient.Tests
             _emitter.OnErrorMessage += (s, e) => msg = e.Message;
             _emitter.FireOnErrorMessage("Not enough mana");
             Assert.Equal("Not enough mana", msg);
+        }
+
+        [Fact]
+        public void OnLearnedSpell_PassesSpellId()
+        {
+            uint spellId = 0;
+            _emitter.OnLearnedSpell += (s, e) => spellId = e.SpellId;
+            _emitter.FireOnLearnedSpell(18248);
+            Assert.Equal((uint)18248, spellId);
+        }
+
+        [Fact]
+        public void OnUnlearnedSpell_PassesSpellId()
+        {
+            uint spellId = 0;
+            _emitter.OnUnlearnedSpell += (s, e) => spellId = e.SpellId;
+            _emitter.FireOnUnlearnedSpell(18248);
+            Assert.Equal((uint)18248, spellId);
         }
 
         [Fact]

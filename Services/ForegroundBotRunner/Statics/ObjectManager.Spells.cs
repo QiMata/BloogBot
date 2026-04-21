@@ -85,6 +85,11 @@ namespace ForegroundBotRunner.Statics
             // Throttle to once per 2 seconds — unless a LEARNED_SPELL/UNLEARNED_SPELL event
             // fired since the last refresh (in which case _forceSpellRefresh bypasses the wait).
             var forced = _forceSpellRefresh;
+            var hasPendingSpellEvent = forced
+                || _eventLearnedIds.Count > 0
+                || _eventRemovedIds.Count > 0
+                || _pendingLearnedSpellNames.Count > 0
+                || _pendingUnlearnedSpellNames.Count > 0;
             if (!forced && (DateTime.UtcNow - _lastSpellRefreshUtc).TotalSeconds < 2.0)
                 return;
             _forceSpellRefresh = false;
@@ -104,6 +109,8 @@ namespace ForegroundBotRunner.Statics
                 _pendingUnlearnedSpellNames.Clear();
                 _persistentLearnedCharacter = charName;
                 _initialSpellsSeeded = false;
+                _lastKnownSpellIds = Array.Empty<uint>();
+                _spellDeltaEventsArmed = false;
                 DiagLog($"[SPELLBOOK] Character changed -> '{charName}' (was '{previousCharacter}'), resetting spell list");
             }
 
@@ -216,6 +223,7 @@ namespace ForegroundBotRunner.Statics
                 }
             }
 
+            var previousPublishedSpellIds = _lastKnownSpellIds;
             var reconciledSpellKnowledge = SpellKnowledgeReconciler.Reconcile(
                 stableSpellIds,
                 _eventLearnedIds,
@@ -223,6 +231,7 @@ namespace ForegroundBotRunner.Statics
             _eventLearnedIds = reconciledSpellKnowledge.StickyLearnedIds;
             _eventRemovedIds = reconciledSpellKnowledge.StickyRemovedIds;
             PublishKnownSpellIds(localPlayer, reconciledSpellKnowledge.PublishedIds);
+            FireSpellDeltaEvents(previousPublishedSpellIds, reconciledSpellKnowledge.PublishedIds, hasPendingSpellEvent);
 
             // Diagnostic
             if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 2)
@@ -297,6 +306,27 @@ namespace ForegroundBotRunner.Statics
             _persistentLearnedIds = spellSnapshot;
             localPlayer.RawSpellBookIds = spellSnapshot;
             _lastKnownSpellIds = spellSnapshot;
+        }
+
+        private void FireSpellDeltaEvents(
+            IReadOnlyCollection<uint> previousKnownSpellIds,
+            IReadOnlyCollection<uint> nextKnownSpellIds,
+            bool hasPendingSpellEvent)
+        {
+            if (!_spellDeltaEventsArmed)
+            {
+                _spellDeltaEventsArmed = true;
+                return;
+            }
+
+            if (!hasPendingSpellEvent || EventHandler is not WoWEventHandler eventHandler)
+                return;
+
+            foreach (var spellId in nextKnownSpellIds.Except(previousKnownSpellIds).OrderBy(id => id))
+                eventHandler.FireOnLearnedSpell(spellId);
+
+            foreach (var spellId in previousKnownSpellIds.Except(nextKnownSpellIds).OrderBy(id => id))
+                eventHandler.FireOnUnlearnedSpell(spellId);
         }
 
 
@@ -415,6 +445,8 @@ namespace ForegroundBotRunner.Statics
         /// so newly-learned spells are visible even if RefreshSpells() hasn't run yet.
         /// </summary>
         private volatile IReadOnlyCollection<uint> _lastKnownSpellIds = Array.Empty<uint>();
+
+        private bool _spellDeltaEventsArmed = false;
 
         /// <summary>
         /// Spell names queued from LEARNED_SPELL events that arrived before the name→ID cache
