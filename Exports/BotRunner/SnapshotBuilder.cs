@@ -287,17 +287,26 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating inventory: {ex.Message}");
             }
 
-            // Nearby units (within 40y)
+            // Nearby units (within 40y). Re-check the transition guard *inside* the
+            // enumeration — a cross-map transfer (battleground entry, teleport) that
+            // starts between the top-of-populate guard and this loop invalidates unit
+            // pointers mid-iteration. Spline/unit-reaction reads in BuildUnitSnapshot /
+            // BuildUnitProtobuf dereference WoW memory directly; an ACCESS_VIOLATION
+            // from a stale pointer during transfer teardown cannot be caught by
+            // managed catch blocks in .NET 8 and terminates the host WoW.exe.
             try
             {
                 _activitySnapshot.NearbyUnits.Clear();
                 _activitySnapshot.MovementData?.NearbyUnits.Clear();
                 var playerPos = player.Position;
-                if (playerPos != null)
+                if (playerPos != null && !_objectManager.IsInMapTransition)
                 {
                     foreach (var unit in _objectManager.Units
                         .Where(u => u.Guid != player.Guid && u.Position != null && u.Position.DistanceTo(playerPos) < 40f))
                     {
+                        if (_objectManager.IsInMapTransition)
+                            break;
+
                         var protoUnit = BuildUnitProtobuf(unit);
                         _activitySnapshot.NearbyUnits.Add(protoUnit);
                         _activitySnapshot.MovementData?.NearbyUnits.Add(
@@ -310,17 +319,23 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating nearby units: {ex.Message}");
             }
 
-            // Nearby game objects (within 40y)
+            // Nearby game objects (within 40y). Same transition-race concern as the
+            // nearby-units loop above — BuildGameObjectProtobuf reads game-object
+            // fields directly from WoW memory, and a transition starting mid-loop
+            // can hand us a freed pointer.
             try
             {
                 _activitySnapshot.NearbyObjects.Clear();
                 _activitySnapshot.MovementData?.NearbyGameObjects.Clear();
                 var playerPos = player.Position;
-                if (playerPos != null)
+                if (playerPos != null && !_objectManager.IsInMapTransition)
                 {
                     foreach (var go in _objectManager.GameObjects
                         .Where(g => g.Position != null && g.Position.DistanceTo(playerPos) < 40f))
                     {
+                        if (_objectManager.IsInMapTransition)
+                            break;
+
                         var protoGameObject = BuildGameObjectProtobuf(go);
                         _activitySnapshot.NearbyObjects.Add(protoGameObject);
                         _activitySnapshot.MovementData?.NearbyGameObjects.Add(new Game.GameObjectSnapshot

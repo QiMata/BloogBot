@@ -75,6 +75,52 @@ public class BotRunnerServiceSnapshotTests
     }
 
     [Fact]
+    public void PopulateSnapshotFromObjectManager_SkipsNearbyEntitiesWhenTransitionStartsMidPopulate()
+    {
+        // Regression guard for the FG BG-transfer crash: a cross-map transfer that
+        // begins after the top-of-populate guard passes must still prevent the
+        // nearby-unit / nearby-object enumeration from dereferencing freed WoW
+        // pointers. We simulate the race by letting IsInMapTransition return
+        // false on the first read (top guard) and true on every subsequent read
+        // (the in-loop guard added alongside this test).
+        var playerPosition = new Position(100f, 200f, 30f);
+        var player = CreatePlayer(playerPosition);
+        var nearbyUnit = CreateUnit(2UL, new Position(110f, 205f, 30f), "Nearby Guard");
+        var nearbyGameObject = CreateGameObject(4UL, 176495u, new Position(108f, 198f, 30f), "Zeppelin");
+
+        var transitionCallCount = 0;
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(x => x.EventHandler).Returns(new Mock<IWoWEventHandler>(MockBehavior.Loose).Object);
+        objectManager.SetupGet(x => x.HasEnteredWorld).Returns(true);
+        objectManager.SetupGet(x => x.IsInMapTransition)
+            .Returns(() => Interlocked.Increment(ref transitionCallCount) > 1);
+        objectManager.SetupGet(x => x.Player).Returns(player.Object);
+        objectManager.SetupGet(x => x.Objects).Returns(new IWoWObject[] { player.Object, nearbyUnit.Object, nearbyGameObject.Object });
+        objectManager.SetupGet(x => x.Units).Returns(new IWoWUnit[] { player.Object, nearbyUnit.Object });
+        objectManager.SetupGet(x => x.GameObjects).Returns(new IWoWGameObject[] { nearbyGameObject.Object });
+        objectManager.SetupGet(x => x.KnownSpellIds).Returns(Array.Empty<uint>());
+        objectManager.Setup(x => x.GetContainedItems()).Returns(Array.Empty<IWoWItem>());
+
+        var service = new BotRunnerService(
+            objectManager.Object,
+            new CharacterStateUpdateClient(NullLogger.Instance),
+            new Mock<IDependencyContainer>(MockBehavior.Loose).Object);
+
+        InvokePopulateSnapshot(service);
+        var snapshot = ReadActivitySnapshot(service);
+
+        Assert.Empty(snapshot.NearbyUnits);
+        Assert.Empty(snapshot.NearbyObjects);
+        if (snapshot.MovementData != null)
+        {
+            Assert.Empty(snapshot.MovementData.NearbyUnits);
+            Assert.Empty(snapshot.MovementData.NearbyGameObjects);
+        }
+        Assert.True(transitionCallCount >= 2,
+            $"Expected at least two IsInMapTransition reads (top guard + in-loop guard), got {transitionCallCount}.");
+    }
+
+    [Fact]
     public void Start_WhenInMapTransition_StillPublishesTransferringSnapshot()
     {
         var player = CreatePlayer(new Position(1500f, -4200f, 30f), mapId: 529u);
