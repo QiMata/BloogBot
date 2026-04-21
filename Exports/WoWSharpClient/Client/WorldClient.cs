@@ -256,6 +256,7 @@ namespace WoWSharpClient.Client
                 }
                 return Task.CompletedTask;
             });
+            _pipeline.RegisterHandler(Opcode.SMSG_NOTIFICATION, HandleNotification);
 
             // Bridge all legacy OpCodeDispatcher handlers so WoWSharpObjectManager
             // receives events for object updates, movement, position, spells, etc.
@@ -743,6 +744,24 @@ namespace WoWSharpClient.Client
                     _attackErrors.OnNext("Attack failed: Can't attack.");
             }
             _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Can't attack.");
+            return Task.CompletedTask;
+        }
+
+        private Task HandleNotification(ReadOnlyMemory<byte> payload)
+        {
+            if (payload.Length == 0)
+                return Task.CompletedTask;
+
+            var bytes = payload.ToArray();
+            var terminatorIndex = Array.IndexOf(bytes, (byte)0);
+            var messageLength = terminatorIndex >= 0 ? terminatorIndex : bytes.Length;
+            var message = Encoding.UTF8.GetString(bytes, 0, messageLength);
+
+            if (string.IsNullOrWhiteSpace(message))
+                return Task.CompletedTask;
+
+            Log.Information("[SYSTEM] SMSG_NOTIFICATION: {Message}", message);
+            _handlerContext?.EventEmitter.FireOnSystemMessage(message);
             return Task.CompletedTask;
         }
 
