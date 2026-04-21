@@ -93,6 +93,25 @@ namespace BotRunner
         private int _consecutiveNullStateResponses;
         private int _consecutiveStateUpdateFailures;
 
+        private SnapshotChangeSignature _lastSentSignature;
+        private DateTime _lastFullSnapshotSentAt = DateTime.MinValue;
+        private static readonly TimeSpan FullSnapshotHeartbeatInterval = TimeSpan.FromSeconds(2);
+
+        private readonly record struct SnapshotChangeSignature(
+            string ScreenState,
+            int ConnectionState,
+            uint CurrentMapId,
+            bool IsObjectManagerValid,
+            bool IsMapTransition,
+            bool IsIndoors,
+            ulong PartyLeaderGuid,
+            int RecentChatCount,
+            int RecentErrorCount,
+            int PositionBucketX,
+            int PositionBucketY,
+            int HealthBucket,
+            bool IsDead);
+
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
         private readonly InteractionSequenceBuilder _interactionSequences;
@@ -215,13 +234,41 @@ namespace BotRunner
                     if (snapMapId == 489 && _tickCount % 10 == 0)
                         Log.Information("[BG-DIAG] Snapshot contains MapId=489 at tick {Tick}", _tickCount);
 
+                    var currentSignature = ComputeSnapshotSignature(_activitySnapshot);
+                    var nowUtc = DateTime.UtcNow;
+                    var shouldSendFull =
+                        !currentSignature.Equals(_lastSentSignature)
+                        || nowUtc - _lastFullSnapshotSentAt >= FullSnapshotHeartbeatInterval;
+
+                    WoWActivitySnapshot payload;
+                    if (shouldSendFull)
+                    {
+                        _activitySnapshot.IsHeartbeatOnly = false;
+                        payload = _activitySnapshot;
+                    }
+                    else
+                    {
+                        payload = new WoWActivitySnapshot
+                        {
+                            AccountName = _activitySnapshot.AccountName ?? _initialAccountName,
+                            CharacterName = _activitySnapshot.CharacterName ?? string.Empty,
+                            IsHeartbeatOnly = true,
+                        };
+                    }
+
                     Communication.WoWActivitySnapshot? incomingActivityMemberState = null;
                     var stateSendStopwatch = Stopwatch.StartNew();
                     try
                     {
                         incomingActivityMemberState = await _characterStateUpdateClient
-                            .SendMemberStateUpdateAsync(_activitySnapshot, cancellationToken);
+                            .SendMemberStateUpdateAsync(payload, cancellationToken);
                         stateSendStopwatch.Stop();
+
+                        if (shouldSendFull)
+                        {
+                            _lastSentSignature = currentSignature;
+                            _lastFullSnapshotSentAt = nowUtc;
+                        }
 
                         if (_consecutiveStateUpdateFailures > 0)
                         {
@@ -286,7 +333,10 @@ namespace BotRunner
 
                         if (incomingActivityMemberState != null)
                         {
-                            _activitySnapshot = incomingActivityMemberState;
+                            if (shouldSendFull)
+                                _activitySnapshot = incomingActivityMemberState;
+                            else
+                                ApplyServerResponseFields(_activitySnapshot, incomingActivityMemberState);
                         }
 
                         var jitter = 500 + Random.Shared.Next(0, 1000);
@@ -357,7 +407,10 @@ namespace BotRunner
 
                     if (incomingActivityMemberState != null)
                     {
-                        _activitySnapshot = incomingActivityMemberState;
+                        if (shouldSendFull)
+                            _activitySnapshot = incomingActivityMemberState;
+                        else
+                            ApplyServerResponseFields(_activitySnapshot, incomingActivityMemberState);
                     }
                 }
                 catch (Exception ex)
@@ -368,6 +421,53 @@ namespace BotRunner
 
                 await Task.Delay(100, cancellationToken);
             }
+        }
+
+        private static SnapshotChangeSignature ComputeSnapshotSignature(WoWActivitySnapshot snapshot)
+        {
+            if (snapshot == null)
+                return default;
+
+            var unit = snapshot.Player?.Unit;
+            var pos = unit?.GameObject?.Base?.Position;
+            var positionBucketX = pos != null ? (int)MathF.Floor(pos.X / 5f) : 0;
+            var positionBucketY = pos != null ? (int)MathF.Floor(pos.Y / 5f) : 0;
+
+            var healthBucket = 0;
+            var isDead = false;
+            if (unit != null)
+            {
+                var max = unit.MaxHealth;
+                var current = unit.Health;
+                if (max > 0)
+                    healthBucket = (int)((current * 10L) / max);
+                isDead = current == 0 && max > 0;
+            }
+
+            return new SnapshotChangeSignature(
+                snapshot.ScreenState ?? string.Empty,
+                (int)snapshot.ConnectionState,
+                snapshot.CurrentMapId,
+                snapshot.IsObjectManagerValid,
+                snapshot.IsMapTransition,
+                snapshot.IsIndoors,
+                snapshot.PartyLeaderGuid,
+                snapshot.RecentChatMessages?.Count ?? 0,
+                snapshot.RecentErrors?.Count ?? 0,
+                positionBucketX,
+                positionBucketY,
+                healthBucket,
+                isDead);
+        }
+
+        private static void ApplyServerResponseFields(WoWActivitySnapshot target, WoWActivitySnapshot source)
+        {
+            target.CurrentAction = source.CurrentAction;
+            target.DesiredPartyLeaderName = source.DesiredPartyLeaderName ?? string.Empty;
+            target.DesiredPartyIsRaid = source.DesiredPartyIsRaid;
+            target.DesiredPartyMembers.Clear();
+            foreach (var member in source.DesiredPartyMembers)
+                target.DesiredPartyMembers.Add(member);
         }
 
         private void EnsureActivitySnapshot()

@@ -214,6 +214,7 @@ message WoWActivitySnapshot {
     string desired_party_leader_name = 25;      // Desired party/raid leader character name for local reconciliation
     repeated string desired_party_members = 26; // Desired party member character names this bot should ensure are grouped
     bool desired_party_is_raid = 27;            // True when the desired party shape should be upgraded to a raid
+    bool is_heartbeat_only = 28;                // True when the bot is polling for a pending action without a meaningful state change; server must not overwrite CurrentActivityMemberList from this request
 }
 
 // Progress toward character goals. StateManager populates from snapshot + goal comparison.

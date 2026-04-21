@@ -165,9 +165,13 @@ namespace WoWStateManager.Listeners
                 request.CharacterName = currentSnapshot.CharacterName;
             }
 
-            // Store the incoming state update from the bot
-            CurrentActivityMemberList[accountName] = request;
-            // Build the response — start with the stored snapshot
+            // Heartbeat requests carry no meaningful state; keep the cached snapshot intact.
+            // Full requests replace the cache so coordinators and tests observe fresh data.
+            if (!request.IsHeartbeatOnly)
+            {
+                CurrentActivityMemberList[accountName] = request;
+            }
+            // Build the response from the stored snapshot (post-write for full, cached for heartbeat)
             var response = CurrentActivityMemberList[accountName];
 
             // Clear any stale action/desired party state from the request so only freshly injected data is returned
