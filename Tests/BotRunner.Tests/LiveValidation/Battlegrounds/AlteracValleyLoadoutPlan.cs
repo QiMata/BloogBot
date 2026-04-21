@@ -80,6 +80,18 @@ internal static class AlteracValleyLoadoutPlan
         var mountSpellId = isHorde ? 23509u : 23510u;
         var supplementals = AlteracValleyFixture.BuildSupplementalItemIds(loadout);
 
+        // P3.7: .learn all_myclass / .learn all_myspells taught spells outside
+        // the intended rotation (wrong-spec utility, debug spells, etc.), so
+        // the fixture now hands BotRunner an explicit per-(class, race) ID list
+        // plus the apprentice-riding + mount spells plus weapon/armor
+        // proficiencies a .levelup'd character would otherwise miss.
+        var spellIdsToLearn = new List<uint>(ClassLoadoutSpells
+            .ResolveHighestRankClassSpellIds(settings.CharacterClass!, settings.CharacterRace ?? string.Empty))
+        {
+            ApprenticeRidingSpellId,
+            mountSpellId,
+        };
+
         return new LoadoutSpecSettings
         {
             TargetLevel = TargetLevel,
@@ -87,7 +99,7 @@ internal static class AlteracValleyLoadoutPlan
             RidingSkill = (uint)EpicRidingSkill,
             MountSpellId = mountSpellId,
             ArmorSetId = loadout.ArmorSetId,
-            SpellIdsToLearn = new[] { ApprenticeRidingSpellId, mountSpellId },
+            SpellIdsToLearn = spellIdsToLearn.Distinct().ToArray(),
             EquipItems = loadout.EquipItemIds
                 .Select(id => new LoadoutEquipItemSettings { ItemId = id })
                 .ToArray(),

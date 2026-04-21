@@ -147,7 +147,8 @@ public class AvObjectiveTests
             minimumReadyHorde: MinimumReadyHordeCount,
             minimumReadyAlliance: MinimumReadyAllianceCount,
             phaseName: "AV:ReadyRoster");
-        await _bot.EnsureObjectivePreparedAsync();
+        // Loadout prep flows through BattlegroundCoordinator.ApplyingLoadouts (P3.4)
+        // off CharacterSettings.Loadout; no fixture-side call needed.
 
         var minBotsOnMap = Math.Min(MinimumReadyOnMapCount, readyRoster.TotalReadyBots);
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, AlteracValleyFixture.AvMapId, minBotsOnMap, "AV");

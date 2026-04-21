@@ -90,8 +90,11 @@ public class AlteracValleyTests
         // Phase 1: All 80 bots enter world
         await BgTestHelper.WaitForBotsAsync(_bot, _output, AlteracValleyFixture.TotalBotCount, "AV");
 
-        // Phase 2: Loadout prep (level, gear, elixirs, mount item)
-        await _bot.EnsureObjectivePreparedAsync();
+        // Phase 2: Loadout prep is driven by the BattlegroundCoordinator's
+        // ApplyingLoadouts state (P3.4) off CharacterSettings.Loadout stamped
+        // at fixture init (P3.6) with explicit per-(class, race) spell IDs
+        // (P3.7). The coordinator gates BG queue on every bot reporting
+        // LoadoutReady — no fixture-side prep call needed here.
 
         // Phase 3: Queue and enter AV instance (individual queue — no group queue to avoid anticheat)
         // Keep queue fill above the minimum objective roster before disabling coordinator push.

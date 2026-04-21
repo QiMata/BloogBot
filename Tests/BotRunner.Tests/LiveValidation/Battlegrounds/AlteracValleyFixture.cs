@@ -17,31 +17,8 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 /// </summary>
 public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 {
-    private readonly object _objectivePrepareLock = new();
-    private Task? _objectivePrepareTask;
-    private static readonly uint[] EquipmentProficiencySpellIds =
-    [
-        750,   // Plate Mail
-        8737,  // Mail
-        9077,  // Cloth
-        9078,  // Leather
-        9116,  // Shield
-        196,   // One-Handed Axes
-        197,   // Two-Handed Axes
-        198,   // One-Handed Maces
-        199,   // Two-Handed Maces
-        200,   // Polearms
-        201,   // One-Handed Swords
-        202,   // Two-Handed Swords
-        227,   // Staves
-        264,   // Bows
-        266,   // Guns
-        1180,  // Daggers
-        2567,  // Thrown
-        5009,  // Wands
-        5011,  // Crossbows
-        15590, // Fist Weapons
-    ];
+    // Weapon/armor proficiency spells moved to ClassLoadoutSpells (P3.7) and
+    // are taught explicitly via CharacterSettings.Loadout.SpellIdsToLearn.
 
     public const int HordeBotCount = 40;
     public const int AllianceBotCount = 40;
@@ -193,46 +170,12 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
         await Task.Delay(1000);
     }
 
-    internal async Task EnsureObjectivePreparedAsync()
-    {
-        Task prepareTask;
-        lock (_objectivePrepareLock)
-        {
-            _objectivePrepareTask ??= PrepareObjectiveLoadoutOnceAsync();
-            prepareTask = _objectivePrepareTask;
-        }
-
-        await prepareTask;
-    }
-
-    private async Task PrepareObjectiveLoadoutOnceAsync()
-    {
-        await EnsurePreparedAsync();
-
-        await SetCoordinatorEnabledForObjectivePushAsync(false);
-
-        try
-        {
-            var loadouts = BuildLoadoutMap();
-            foreach (var batch in CharacterSettings.Chunk(LoadoutPreparationBatchSize))
-            {
-                var batchTasks = batch.Select(async settings =>
-                {
-                    if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
-                        throw new InvalidOperationException($"AV loadout missing for '{settings.AccountName}'.");
-
-                    await PrepareObjectiveReadyLoadoutAsync(settings.AccountName, loadout);
-                }).ToArray();
-
-                await Task.WhenAll(batchTasks);
-                await Task.Delay(300);
-            }
-        }
-        finally
-        {
-            await SetCoordinatorEnabledForObjectivePushAsync(true);
-        }
-    }
+    // EnsureObjectivePreparedAsync / PrepareObjectiveLoadoutOnceAsync /
+    // PrepareObjectiveReadyLoadoutAsync were removed in P3.7. AV loadout prep now
+    // runs through the BattlegroundCoordinator's ApplyingLoadouts state: each
+    // bot receives an ActionType.ApplyLoadout with the full LoadoutSpec
+    // (explicit per-(class, race) spell IDs, proficiencies, armor set, gear,
+    // elixirs) that BotRunner's LoadoutTask executes at its own pace.
 
     internal async Task MountRaidForFirstObjectiveAsync()
     {
@@ -286,114 +229,6 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
         {
             await SendSilentGmChatCommandAsync(accountName, ".gm off");
             await Task.Delay(50);
-        }
-    }
-
-    private async Task PrepareObjectiveReadyLoadoutAsync(
-        string accountName,
-        AlteracValleyLoadoutPlan.AlteracValleyLoadout loadout)
-    {
-        var supplementalItemIds = BuildSupplementalItemIds(loadout);
-
-        await SendSilentGmChatCommandAsync(accountName, ".reset items");
-        await WaitForSnapshotConditionAsync(
-            accountName,
-            snapshot => (snapshot.Player?.BagContents?.Count ?? 1) == 0,
-            TimeSpan.FromSeconds(5),
-            pollIntervalMs: 250);
-
-        // Characters boosted via .levelup can miss class trainer proficiencies.
-        // Teach class spellbooks before adding/equipping rank gear.
-        await SendSilentGmChatCommandAsync(accountName, ".learn all_myclass");
-        await Task.Delay(100);
-        await SendSilentGmChatCommandAsync(accountName, ".learn all_myspells");
-        await Task.Delay(100);
-        foreach (var spellId in EquipmentProficiencySpellIds)
-        {
-            await SendSilentGmChatCommandAsync(accountName, $".learn {spellId}");
-            await Task.Delay(30);
-        }
-
-        // Learn riding + mount spell. Mount spells (23509/23510) are used directly
-        // via CastSpell action since UseItem fails for GM-added items.
-        await SendSilentGmChatCommandAsync(accountName, $".learn {AlteracValleyLoadoutPlan.ApprenticeRidingSpellId}");
-        await Task.Delay(75);
-        var mountSpellId = HordeAccountsOrdered.Contains(accountName, StringComparer.OrdinalIgnoreCase) ? 23509 : 23510;
-        await SendSilentGmChatCommandAsync(accountName, $".learn {mountSpellId}");
-        await Task.Delay(75);
-        await SendSilentGmChatCommandAsync(
-            accountName,
-            $".setskill {AlteracValleyLoadoutPlan.RidingSkillId} {AlteracValleyLoadoutPlan.EpicRidingSkill} {AlteracValleyLoadoutPlan.EpicRidingSkill}");
-        await Task.Delay(150);
-        await SendSilentGmChatCommandAsync(accountName, $".additemset {loadout.ArmorSetId}");
-        await Task.Delay(500); // Wait for server to process full item set addition
-
-        foreach (var itemId in supplementalItemIds)
-        {
-            await SendSilentGmChatCommandAsync(accountName, $".additem {itemId}");
-            await Task.Delay(75);
-        }
-
-        var stagedItemIds = loadout.EquipItemIds.Concat(supplementalItemIds).ToArray();
-        await WaitForSnapshotConditionAsync(
-            accountName,
-            snapshot =>
-            {
-                var bagContents = snapshot.Player?.BagContents?.Values;
-                return bagContents != null && stagedItemIds.All(bagContents.Contains);
-            },
-            TimeSpan.FromSeconds(12),
-            pollIntervalMs: 300);
-
-        // Fire-and-forget equip: send all equip actions with short spacing.
-        // Server may reject some (rank, class, timing) — that's OK, the BG queue
-        // pipeline doesn't require gear. Blocking retry was causing 18s+ timeouts.
-        foreach (var itemId in loadout.EquipItemIds)
-        {
-            await SendSilentActionAsync(accountName, new ActionMessage
-            {
-                ActionType = ActionType.EquipItem,
-                Parameters = { new RequestParameter { IntParam = (int)itemId } }
-            });
-            await Task.Delay(150);
-        }
-
-        // Fire-and-forget elixirs
-        foreach (var elixirItemId in loadout.ElixirItemIds)
-        {
-            await SendSilentActionAsync(accountName, new ActionMessage
-            {
-                ActionType = ActionType.UseItem,
-                Parameters = { new RequestParameter { IntParam = (int)elixirItemId } }
-            });
-            await Task.Delay(150);
-        }
-
-        // Give server time to process equip/use actions, but don't block on it
-        await Task.Delay(2000);
-        var loadoutApplied = await WaitForSnapshotConditionAsync(
-            accountName,
-            snapshot =>
-            {
-                var bagContents = snapshot.Player?.BagContents?.Values;
-                return bagContents != null
-                    && loadout.EquipItemIds.All(itemId => !bagContents.Contains(itemId))
-                    && loadout.ElixirItemIds.All(itemId => !bagContents.Contains(itemId));
-            },
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 250);
-                if (!loadoutApplied)
-        {
-            var snapshot = await GetSnapshotAsync(accountName);
-            var bagItemIds = snapshot?.Player?.BagContents?.Values?.ToArray() ?? Array.Empty<uint>();
-            var remainingEquip = loadout.EquipItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
-            var remainingElixirs = loadout.ElixirItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
-            var bagPreview = bagItemIds.Take(12).ToArray();
-            Console.WriteLine(
-                $"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' - " +
-                $"remainingEquip=[{string.Join(",", remainingEquip)}], " +
-                $"remainingElixirs=[{string.Join(",", remainingElixirs)}], " +
-                $"bagCount={bagItemIds.Length}, bagPreview=[{string.Join(",", bagPreview)}]. Continuing.");
         }
     }
 
