@@ -13,6 +13,48 @@ namespace BotRunner.Tests.LiveValidation;
 
 public sealed class BattlegroundFixtureConfigurationTests
 {
+    public static IEnumerable<object[]> BattlegroundConfigFiles => new[]
+    {
+        new object[] { "WarsongGulch.config.json" },
+        new object[] { "ArathiBasin.config.json" },
+        new object[] { "AlteracValley.config.json" },
+    };
+
+    [Theory]
+    [MemberData(nameof(BattlegroundConfigFiles))]
+    public void BattlegroundConfig_HonorsRaceClassGenderRestrictions(string configFileName)
+    {
+        var roster = CoordinatorFixtureBase.LoadCharacterSettingsFromConfig(configFileName);
+
+        foreach (var setting in roster)
+        {
+            var expected = ExpectedGender(setting.CharacterRace!, setting.CharacterClass!);
+            var actual = setting.CharacterGender;
+
+            Assert.True(
+                string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase),
+                $"{configFileName}: {setting.AccountName} ({setting.CharacterRace}/{setting.CharacterClass}) has gender '{actual}', expected '{expected}'.");
+        }
+    }
+
+    private static string ExpectedGender(string race, string @class)
+    {
+        // Vanilla 1.12.1 gender-locked race/class combos.
+        if (string.Equals(race, "NightElf", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(@class, "Priest", StringComparison.OrdinalIgnoreCase))
+            return "Female";
+        if (string.Equals(race, "NightElf", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(@class, "Druid", StringComparison.OrdinalIgnoreCase))
+            return "Male";
+
+        // Otherwise follow the name-generator class default (WoWNameGenerator.DetermineGender).
+        return @class switch
+        {
+            "Mage" or "Warlock" or "Priest" or "Druid" or "Shaman" => "Male",
+            _ => "Female",
+        };
+    }
+
     [Fact]
     public void WarsongGulchFixture_UsesSingleForegroundHordeLeaderAndBackgroundAllianceLeader()
     {
@@ -36,19 +78,14 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     [Fact]
-    public void WarsongGulchObjectiveFixture_UsesBackgroundLeadersForBothFactions()
+    public void WarsongGulchObjectiveFixture_UsesForegroundLeadersForBothFactions()
     {
         var fixture = new WarsongGulchObjectiveFixture();
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
         Assert.False(GetPrepareDuringInitialization(fixture));
-
-        var foregroundAccounts = settings
-            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
-            .Select(setting => setting.AccountName)
-            .ToArray();
-        Assert.Empty(foregroundAccounts);
+        AssertForegroundLeaders(settings, WarsongGulchFixture.HordeLeaderAccount, WarsongGulchFixture.AllianceLeaderAccount);
     }
 
     [Fact]
@@ -259,8 +296,9 @@ public sealed class BattlegroundFixtureConfigurationTests
 
             Assert.Equal("true", Environment.GetEnvironmentVariable("Injection__DisablePacketHooks"));
             Assert.Equal("1", Environment.GetEnvironmentVariable("WWOW_DISABLE_PACKET_HOOKS"));
-            Assert.Equal("21", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar));
-            Assert.Equal("21", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar));
+            // Staggered launch: WSG activates throttle for any ≥2 bot fixture with 6 in-flight cap.
+            Assert.Equal("2", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar));
+            Assert.Equal("6", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar));
         }
         finally
         {

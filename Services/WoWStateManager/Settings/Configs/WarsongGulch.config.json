@@ -13,7 +13,7 @@
     "ShouldRun": true,
     "RunnerType": "Foreground"
   },
-  { "AccountName": "WSGBOT2", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOT2", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOT3", "CharacterClass": "Druid", "CharacterRace": "Tauren", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOT4", "CharacterClass": "Priest", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOT5", "CharacterClass": "Warlock", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
@@ -36,13 +36,13 @@
     "ShouldRun": true,
     "RunnerType": "Foreground"
   },
-  { "AccountName": "WSGBOTA2", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
-  { "AccountName": "WSGBOTA3", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
-  { "AccountName": "WSGBOTA4", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOTA2", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOTA3", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOTA4", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOTA5", "CharacterClass": "Warlock", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOTA6", "CharacterClass": "Hunter", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
-  { "AccountName": "WSGBOTA7", "CharacterClass": "Rogue", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOTA7", "CharacterClass": "Rogue", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
   { "AccountName": "WSGBOTA8", "CharacterClass": "Mage", "CharacterRace": "Gnome", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
-  { "AccountName": "WSGBOTA9", "CharacterClass": "Warrior", "CharacterRace": "Dwarf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
-  { "AccountName": "WSGBOTA10", "CharacterClass": "Paladin", "CharacterRace": "Dwarf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" }
+  { "AccountName": "WSGBOTA9", "CharacterClass": "Warrior", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "WSGBOTA10", "CharacterClass": "Paladin", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" }
 ]

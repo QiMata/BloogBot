@@ -26,20 +26,6 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
     public const string HordeLeaderAccount = "WSGBOT1";
     public const string AllianceLeaderAccount = "WSGBOTA1";
 
-    private static readonly (string Class, string Race)[] HordeTemplates =
-    [
-        ("Warrior", "Orc"), ("Shaman", "Orc"), ("Druid", "Tauren"), ("Priest", "Undead"),
-        ("Warlock", "Undead"), ("Hunter", "Orc"), ("Rogue", "Undead"), ("Mage", "Troll"),
-        ("Warrior", "Tauren"), ("Shaman", "Troll"),
-    ];
-
-    private static readonly (string Class, string Race)[] AllianceTemplates =
-    [
-        ("Paladin", "Human"), ("Warrior", "Human"), ("Druid", "NightElf"), ("Priest", "Human"),
-        ("Warlock", "Human"), ("Hunter", "NightElf"), ("Rogue", "Human"), ("Mage", "Gnome"),
-        ("Warrior", "Dwarf"), ("Paladin", "Dwarf"),
-    ];
-
     internal static readonly IReadOnlyList<string> HordeAccountsOrdered = Enumerable.Range(0, HordeBotCount)
         .Select(index => index == 0 ? HordeLeaderAccount : $"WSGBOT{index + 1}")
         .ToArray();
@@ -93,31 +79,17 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
 
     protected override IReadOnlyList<CharacterSettings> BuildCharacterSettings()
     {
-        var bots = new List<CharacterSettings>(TotalBotCount);
+        var roster = LoadCharacterSettingsFromConfig("WarsongGulch.config.json").ToList();
 
-        for (var index = 0; index < HordeBotCount; index++)
+        foreach (var setting in roster)
         {
-            var template = HordeTemplates[index];
-            bots.Add(CreateCharacterSetting(
-                accountName: index == 0 ? HordeLeaderAccount : $"WSGBOT{index + 1}",
-                characterClass: template.Class,
-                characterRace: template.Race,
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
+            if (setting.AccountName.Equals(HordeLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
+            else if (setting.AccountName.Equals(AllianceLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
         }
 
-        for (var index = 0; index < AllianceBotCount; index++)
-        {
-            var template = AllianceTemplates[index];
-            bots.Add(CreateCharacterSetting(
-                accountName: index == 0 ? AllianceLeaderAccount : $"WSGBOTA{index + 1}",
-                characterClass: template.Class,
-                characterRace: template.Race,
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
-        }
-
-        return bots;
+        return roster;
     }
 
     // ---- Loadout prep (reuses AV loadout plan for level 60 PvP gear) ----

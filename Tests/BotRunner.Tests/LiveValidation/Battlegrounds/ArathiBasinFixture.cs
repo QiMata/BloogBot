@@ -28,30 +28,6 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
         .Select(index => $"ABBOTA{index + 1}")
         .ToArray();
 
-    private static readonly string[] HordeClasses =
-    [
-        "Warrior", "Shaman", "Druid", "Priest", "Warlock", "Hunter", "Rogue", "Mage",
-        "Warrior", "Warrior", "Shaman", "Priest", "Warlock", "Hunter", "Rogue"
-    ];
-
-    private static readonly string[] HordeRaces =
-    [
-        "Orc", "Orc", "Tauren", "Undead", "Undead", "Orc", "Undead", "Troll",
-        "Orc", "Tauren", "Orc", "Undead", "Undead", "Troll", "Undead"
-    ];
-
-    private static readonly string[] AllianceClasses =
-    [
-        "Warrior", "Paladin", "Druid", "Priest", "Warlock", "Hunter", "Rogue", "Mage",
-        "Warrior", "Warrior", "Paladin", "Priest", "Warlock", "Hunter", "Rogue"
-    ];
-
-    private static readonly string[] AllianceRaces =
-    [
-        "Human", "Human", "NightElf", "Human", "Human", "NightElf", "Human", "Gnome",
-        "Human", "Dwarf", "Dwarf", "NightElf", "Gnome", "Dwarf", "NightElf"
-    ];
-
     protected override string SettingsFileName => "ArathiBasin.settings.json";
 
     protected override string FixtureLabel => "AB";
@@ -102,29 +78,17 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 
     protected override IReadOnlyList<CharacterSettings> BuildCharacterSettings()
     {
-        var bots = new List<CharacterSettings>(TotalBotCount);
+        var roster = LoadCharacterSettingsFromConfig("ArathiBasin.config.json").ToList();
 
-        for (var index = 0; index < HordeBotCount; index++)
+        foreach (var setting in roster)
         {
-            bots.Add(CreateCharacterSetting(
-                accountName: $"ABBOT{index + 1}",
-                characterClass: HordeClasses[index],
-                characterRace: HordeRaces[index],
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
+            if (setting.AccountName.Equals(HordeLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
+            else if (setting.AccountName.Equals(AllianceLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
         }
 
-        for (var index = 0; index < AllianceBotCount; index++)
-        {
-            bots.Add(CreateCharacterSetting(
-                accountName: $"ABBOTA{index + 1}",
-                characterClass: AllianceClasses[index],
-                characterRace: AllianceRaces[index],
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
-        }
-
-        return bots;
+        return roster;
     }
 
     internal Task<Communication.ResponseResult> SetRuntimeCoordinatorEnabledAsync(bool enabled)

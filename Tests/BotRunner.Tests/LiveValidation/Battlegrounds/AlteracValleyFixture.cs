@@ -51,20 +51,6 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
     public const string AllianceLeaderAccount = "AVBOTA1";
     internal const int LoadoutPreparationBatchSize = 4;
 
-    private static readonly (string Class, string Race)[] HordeTemplates =
-    [
-        ("Warrior", "Tauren"), ("Shaman", "Orc"), ("Druid", "Tauren"), ("Priest", "Undead"),
-        ("Warlock", "Undead"), ("Hunter", "Orc"), ("Rogue", "Undead"), ("Mage", "Troll"),
-        ("Warrior", "Tauren"), ("Hunter", "Troll"), ("Shaman", "Troll"), ("Mage", "Undead"),
-    ];
-
-    private static readonly (string Class, string Race)[] AllianceTemplates =
-    [
-        ("Paladin", "Human"), ("Warrior", "Human"), ("Druid", "NightElf"), ("Priest", "Human"),
-        ("Warlock", "Human"), ("Hunter", "NightElf"), ("Rogue", "Human"), ("Mage", "Gnome"),
-        ("Warrior", "Dwarf"), ("Hunter", "Dwarf"), ("Paladin", "Dwarf"), ("Priest", "NightElf"),
-    ];
-
     internal static readonly IReadOnlyList<string> HordeAccountsOrdered = Enumerable.Range(0, HordeBotCount)
         .Select(index => index == 0 ? HordeLeaderAccount : $"AVBOT{index + 1}")
         .ToArray();
@@ -125,31 +111,17 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     protected override IReadOnlyList<CharacterSettings> BuildCharacterSettings()
     {
-        var bots = new List<CharacterSettings>(TotalBotCount);
+        var roster = LoadCharacterSettingsFromConfig("AlteracValley.config.json").ToList();
 
-        for (var index = 0; index < HordeBotCount; index++)
+        foreach (var setting in roster)
         {
-            var template = HordeTemplates[index % HordeTemplates.Length];
-            bots.Add(CreateCharacterSetting(
-                accountName: index == 0 ? HordeLeaderAccount : $"AVBOT{index + 1}",
-                characterClass: template.Class,
-                characterRace: template.Race,
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
+            if (setting.AccountName.Equals(HordeLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
+            else if (setting.AccountName.Equals(AllianceLeaderAccount, StringComparison.OrdinalIgnoreCase))
+                setting.RunnerType = UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
         }
 
-        for (var index = 0; index < AllianceBotCount; index++)
-        {
-            var template = AllianceTemplates[index % AllianceTemplates.Length];
-            bots.Add(CreateCharacterSetting(
-                accountName: $"AVBOTA{index + 1}",
-                characterClass: template.Class,
-                characterRace: template.Race,
-                characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
-        }
-
-        return bots;
+        return roster;
     }
 
     protected override async Task PrepareOfflineAccountStateAsync()

@@ -211,6 +211,40 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     internal static string SerializeSettings(IEnumerable<CharacterSettings> settings)
         => JsonSerializer.Serialize(settings, SettingsSerializerOptions);
 
+    /// <summary>
+    /// Loads a bot roster from the authoritative config at
+    /// <c>Services/WoWStateManager/Settings/Configs/{configFileName}</c>. Fixtures that
+    /// use this must name the config identically to the fixture's expected roster
+    /// (e.g., <c>WarsongGulch.config.json</c> for the WSG fixture).
+    /// </summary>
+    internal static IReadOnlyList<CharacterSettings> LoadCharacterSettingsFromConfig(string configFileName)
+    {
+        var configPath = ResolveConfigPath(configFileName);
+        if (!File.Exists(configPath))
+            throw new FileNotFoundException($"Bot roster config not found at {configPath}", configPath);
+
+        var json = File.ReadAllText(configPath);
+        var settings = JsonSerializer.Deserialize<List<CharacterSettings>>(json, SettingsSerializerOptions);
+        if (settings is null || settings.Count == 0)
+            throw new InvalidOperationException($"Bot roster config {configPath} deserialized to an empty list.");
+
+        return settings;
+    }
+
+    private static string ResolveConfigPath(string configFileName)
+    {
+        var start = AppContext.BaseDirectory;
+        var dir = new DirectoryInfo(start);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "Services", "WoWStateManager", "Settings", "Configs", configFileName);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+        throw new FileNotFoundException($"Could not locate {configFileName} by walking up from {start}.", configFileName);
+    }
+
     internal static async Task<bool> WaitForConditionAsync(
         Func<Task<bool>> condition,
         TimeSpan timeout,

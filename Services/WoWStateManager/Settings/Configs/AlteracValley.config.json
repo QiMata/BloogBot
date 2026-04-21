@@ -1,722 +1,82 @@
 [
-  {
-    "AccountName": "AVBOT1",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Foreground"
-  },
-  {
-    "AccountName": "AVBOT2",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT3",
-    "CharacterClass": "Druid",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT4",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT5",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT6",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT7",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT8",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT9",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT10",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT11",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT12",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT13",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT14",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT15",
-    "CharacterClass": "Druid",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT16",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT17",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT18",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT19",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT20",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT21",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT22",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT23",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT24",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT25",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT26",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT27",
-    "CharacterClass": "Druid",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT28",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT29",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT30",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT31",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT32",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT33",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT34",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT35",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Troll",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT36",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT37",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT38",
-    "CharacterClass": "Shaman",
-    "CharacterRace": "Orc",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT39",
-    "CharacterClass": "Druid",
-    "CharacterRace": "Tauren",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOT40",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Undead",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA1",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Foreground"
-  },
-  {
-    "AccountName": "AVBOTA2",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA3",
-    "CharacterClass": "Druid",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA4",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA5",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA6",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA7",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA8",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Gnome",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA9",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA10",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA11",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA12",
-    "CharacterClass": "Priest",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA13",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA14",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA15",
-    "CharacterClass": "Druid",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA16",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA17",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA18",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA19",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA20",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Gnome",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA21",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA22",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA23",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA24",
-    "CharacterClass": "Priest",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA25",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA26",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA27",
-    "CharacterClass": "Druid",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA28",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA29",
-    "CharacterClass": "Warlock",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA30",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA31",
-    "CharacterClass": "Rogue",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA32",
-    "CharacterClass": "Mage",
-    "CharacterRace": "Gnome",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA33",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA34",
-    "CharacterClass": "Hunter",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA35",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Dwarf",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA36",
-    "CharacterClass": "Priest",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA37",
-    "CharacterClass": "Paladin",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA38",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Human",
-    "CharacterGender": "Male",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA39",
-    "CharacterClass": "Druid",
-    "CharacterRace": "NightElf",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  },
-  {
-    "AccountName": "AVBOTA40",
-    "CharacterClass": "Priest",
-    "CharacterRace": "Human",
-    "CharacterGender": "Female",
-    "GmLevel": 6,
-    "ShouldRun": true,
-    "RunnerType": "Background"
-  }
+  { "AccountName": "AVBOT1", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Foreground" },
+  { "AccountName": "AVBOT2", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT3", "CharacterClass": "Druid", "CharacterRace": "Tauren", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT4", "CharacterClass": "Priest", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT5", "CharacterClass": "Warlock", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT6", "CharacterClass": "Hunter", "CharacterRace": "Orc", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT7", "CharacterClass": "Rogue", "CharacterRace": "Undead", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT8", "CharacterClass": "Mage", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT9", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT10", "CharacterClass": "Hunter", "CharacterRace": "Troll", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT11", "CharacterClass": "Shaman", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT12", "CharacterClass": "Mage", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT13", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT14", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT15", "CharacterClass": "Druid", "CharacterRace": "Tauren", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT16", "CharacterClass": "Priest", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT17", "CharacterClass": "Warlock", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT18", "CharacterClass": "Hunter", "CharacterRace": "Orc", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT19", "CharacterClass": "Rogue", "CharacterRace": "Undead", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT20", "CharacterClass": "Mage", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT21", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT22", "CharacterClass": "Hunter", "CharacterRace": "Troll", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT23", "CharacterClass": "Shaman", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT24", "CharacterClass": "Mage", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT25", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT26", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT27", "CharacterClass": "Druid", "CharacterRace": "Tauren", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT28", "CharacterClass": "Priest", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT29", "CharacterClass": "Warlock", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT30", "CharacterClass": "Hunter", "CharacterRace": "Orc", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT31", "CharacterClass": "Rogue", "CharacterRace": "Undead", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT32", "CharacterClass": "Mage", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT33", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT34", "CharacterClass": "Hunter", "CharacterRace": "Troll", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT35", "CharacterClass": "Shaman", "CharacterRace": "Troll", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT36", "CharacterClass": "Mage", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT37", "CharacterClass": "Warrior", "CharacterRace": "Tauren", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT38", "CharacterClass": "Shaman", "CharacterRace": "Orc", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT39", "CharacterClass": "Druid", "CharacterRace": "Tauren", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOT40", "CharacterClass": "Priest", "CharacterRace": "Undead", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA1", "CharacterClass": "Paladin", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Foreground" },
+  { "AccountName": "AVBOTA2", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA3", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA4", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA5", "CharacterClass": "Warlock", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA6", "CharacterClass": "Hunter", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA7", "CharacterClass": "Rogue", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA8", "CharacterClass": "Mage", "CharacterRace": "Gnome", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA9", "CharacterClass": "Warrior", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA10", "CharacterClass": "Hunter", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA11", "CharacterClass": "Paladin", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA12", "CharacterClass": "Priest", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA13", "CharacterClass": "Paladin", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA14", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA15", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA16", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA17", "CharacterClass": "Warlock", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA18", "CharacterClass": "Hunter", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA19", "CharacterClass": "Rogue", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA20", "CharacterClass": "Mage", "CharacterRace": "Gnome", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA21", "CharacterClass": "Warrior", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA22", "CharacterClass": "Hunter", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA23", "CharacterClass": "Paladin", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA24", "CharacterClass": "Priest", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA25", "CharacterClass": "Paladin", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA26", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA27", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA28", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA29", "CharacterClass": "Warlock", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA30", "CharacterClass": "Hunter", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA31", "CharacterClass": "Rogue", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA32", "CharacterClass": "Mage", "CharacterRace": "Gnome", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA33", "CharacterClass": "Warrior", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA34", "CharacterClass": "Hunter", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA35", "CharacterClass": "Paladin", "CharacterRace": "Dwarf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA36", "CharacterClass": "Priest", "CharacterRace": "NightElf", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA37", "CharacterClass": "Paladin", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA38", "CharacterClass": "Warrior", "CharacterRace": "Human", "CharacterGender": "Female", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA39", "CharacterClass": "Druid", "CharacterRace": "NightElf", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" },
+  { "AccountName": "AVBOTA40", "CharacterClass": "Priest", "CharacterRace": "Human", "CharacterGender": "Male", "GmLevel": 6, "ShouldRun": true, "RunnerType": "Background" }
 ]
