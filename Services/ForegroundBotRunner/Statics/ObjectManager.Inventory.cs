@@ -358,7 +358,19 @@ namespace ForegroundBotRunner.Statics
 
         public IEnumerable<IWoWItem> GetContainedItems()
         {
+            var characterName = Player?.Name ?? string.Empty;
+            if (!string.Equals(_inventorySnapshotCharacter, characterName, StringComparison.Ordinal))
+            {
+                _lastBagItemsBySlot.Clear();
+                _lastBagItemTotals.Clear();
+                _bagDeltaEventsArmed = false;
+                _inventorySnapshotCharacter = characterName;
+            }
+
             var items = new List<IWoWItem>();
+            var currentBagItemsBySlot = new Dictionary<(uint Bag, uint Slot), (uint ItemId, uint Count)>();
+            var currentBagItemTotals = new Dictionary<uint, uint>();
+
             for (var bag = 0; bag < 5; bag++)
             {
                 int slots;
@@ -376,9 +388,45 @@ namespace ForegroundBotRunner.Statics
                 {
                     var item = GetItem(bag, slot);
                     if (item != null)
+                    {
                         items.Add(item);
+                        currentBagItemsBySlot[((uint)bag, (uint)slot)] = (item.ItemId, item.StackCount);
+                        currentBagItemTotals[item.ItemId] =
+                            currentBagItemTotals.TryGetValue(item.ItemId, out var totalCount)
+                                ? totalCount + item.StackCount
+                                : item.StackCount;
+                    }
                 }
             }
+
+            if (_bagDeltaEventsArmed && EventHandler is WoWEventHandler eventHandler)
+            {
+                foreach (var entry in currentBagItemsBySlot)
+                {
+                    var (bag, slot) = entry.Key;
+                    var currentState = entry.Value;
+
+                    if (!currentBagItemTotals.TryGetValue(currentState.ItemId, out var currentTotalCount)
+                        || currentTotalCount <= _lastBagItemTotals.GetValueOrDefault(currentState.ItemId))
+                    {
+                        continue;
+                    }
+
+                    if (_lastBagItemsBySlot.TryGetValue((bag, slot), out var previousState)
+                        && previousState.ItemId == currentState.ItemId
+                        && previousState.Count >= currentState.Count)
+                    {
+                        continue;
+                    }
+
+                    eventHandler.FireOnItemAddedToBag(bag, slot, currentState.ItemId, currentState.Count);
+                }
+            }
+
+            _lastBagItemsBySlot = currentBagItemsBySlot;
+            _lastBagItemTotals = currentBagItemTotals;
+            _bagDeltaEventsArmed = true;
+
             return items;
         }
 
@@ -388,6 +436,11 @@ namespace ForegroundBotRunner.Statics
         {
             return (uint)GetEquippedItemGuid(equipSlot);
         }
+
+        private Dictionary<(uint Bag, uint Slot), (uint ItemId, uint Count)> _lastBagItemsBySlot = new();
+        private Dictionary<uint, uint> _lastBagItemTotals = new();
+        private bool _bagDeltaEventsArmed;
+        private string _inventorySnapshotCharacter = string.Empty;
 
 
 

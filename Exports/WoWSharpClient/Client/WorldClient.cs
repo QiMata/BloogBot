@@ -40,6 +40,8 @@ namespace WoWSharpClient.Client
             _handlerContext = new Handlers.HandlerContext(objectManager, eventEmitter);
         }
 
+        internal WoWSharpEventEmitter? HandlerEventEmitter => _handlerContext?.EventEmitter;
+
         // Authentication state
         private string _username = string.Empty;
         private byte[] _sessionKey = [];

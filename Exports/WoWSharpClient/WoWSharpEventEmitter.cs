@@ -54,6 +54,7 @@ namespace WoWSharpClient
         public event EventHandler<SpellChangedArgs> OnLearnedSpell;
         public event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
         public event EventHandler<SkillUpdatedArgs> OnSkillUpdated;
+        public event EventHandler<ItemAddedToBagArgs> OnItemAddedToBag;
         public event EventHandler<CharacterActionArgs> OnCharacterJumpStart;
         public event EventHandler<CharacterActionArgs> OnCharacterFallLand;
         public event EventHandler<CharacterActionArgs> OnCharacterStartForward;
@@ -181,6 +182,7 @@ namespace WoWSharpClient
         public void FireOnLearnedSpell(uint spellId) => FireEvent(OnLearnedSpell, new SpellChangedArgs(spellId));
         public void FireOnUnlearnedSpell(uint spellId) => FireEvent(OnUnlearnedSpell, new SpellChangedArgs(spellId));
         public void FireOnSkillUpdated(uint skillId, uint oldValue, uint newValue, uint maxValue) => FireEvent(OnSkillUpdated, new SkillUpdatedArgs(skillId, oldValue, newValue, maxValue));
+        public void FireOnItemAddedToBag(uint bag, uint slot, uint itemId, uint count) => FireEvent(OnItemAddedToBag, new ItemAddedToBagArgs(bag, slot, itemId, count));
         public void FireOnBlockParryDodge() => FireEvent(OnBlockParryDodge, new EventArgs());
         public void FireOnParry() => FireEvent(OnParry, new EventArgs());
         public void FireOnSlamReady() => FireEvent(OnSlamReady, new EventArgs());

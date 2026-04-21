@@ -273,6 +273,20 @@ namespace WoWSharpClient.Tests
         }
 
         [Fact]
+        public void OnItemAddedToBag_PassesBagSlotAndCount()
+        {
+            ItemAddedToBagArgs? args = null;
+            _emitter.OnItemAddedToBag += (s, e) => args = e;
+            _emitter.FireOnItemAddedToBag(0, 15, 2589, 3);
+
+            Assert.NotNull(args);
+            Assert.Equal((uint)0, args!.Bag);
+            Assert.Equal((uint)15, args.Slot);
+            Assert.Equal((uint)2589, args.ItemId);
+            Assert.Equal((uint)3, args.Count);
+        }
+
+        [Fact]
         public void OnGuildInvite_Fires()
         {
             bool fired = false;

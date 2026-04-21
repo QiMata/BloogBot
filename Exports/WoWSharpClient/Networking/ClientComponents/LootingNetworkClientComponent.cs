@@ -990,26 +990,28 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 var span = payload.Span;
-                if (span.Length < 41) return;
+                if (span.Length < 44) return;
 
                 ulong playerGuid = BitConverter.ToUInt64(span[..8]);
                 uint received = BitConverter.ToUInt32(span.Slice(8, 4));   // 0=looted, 1=from NPC
                 // created at offset 12 (4 bytes)
                 // showInChat at offset 16 (4 bytes)
-                byte bagSlot = span[20];
-                uint itemSlot = BitConverter.ToUInt32(span.Slice(21, 4));
-                uint itemEntry = BitConverter.ToUInt32(span.Slice(25, 4));
-                // suffixFactor at offset 29 (4 bytes)
-                // randomPropertyId at offset 33 (4 bytes)
-                uint count = BitConverter.ToUInt32(span.Slice(37, 4));
+                uint bagSlot = BitConverter.ToUInt32(span.Slice(20, 4));
+                uint itemSlot = BitConverter.ToUInt32(span.Slice(24, 4));
+                uint itemEntry = BitConverter.ToUInt32(span.Slice(28, 4));
+                // suffixFactor at offset 32 (4 bytes)
+                // randomPropertyId at offset 36 (4 bytes)
+                uint count = BitConverter.ToUInt32(span.Slice(40, 4));
 
                 _logger.LogDebug("SMSG_ITEM_PUSH_RESULT: player={Guid:X}, item={ItemId}, count={Count}, bag={Bag}, slot={Slot}",
                     playerGuid, itemEntry, count, bagSlot, itemSlot);
 
+                ResolveEventEmitter()?.FireOnItemAddedToBag(bagSlot, itemSlot, itemEntry, count);
+
                 // Only report as loot if received == 0 (looted, not from NPC)
                 if (received == 0)
                 {
-                    HandleItemLooted(_currentLootTarget ?? 0, itemEntry, $"Item#{itemEntry}", count, ItemQuality.Common, bagSlot);
+                    HandleItemLooted(_currentLootTarget ?? 0, itemEntry, $"Item#{itemEntry}", count, ItemQuality.Common, (byte)bagSlot);
                 }
             }
             catch (Exception ex)
@@ -1017,6 +1019,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogWarning(ex, "Failed to parse SMSG_ITEM_PUSH_RESULT");
             }
         }
+
+        private WoWSharpEventEmitter? ResolveEventEmitter() =>
+            EventEmitter ?? (_worldClient as WorldClient)?.HandlerEventEmitter;
 
         /// <summary>
         /// Handles SMSG_LOOT_START_ROLL (0x2A1).

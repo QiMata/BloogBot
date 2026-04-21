@@ -106,6 +106,8 @@ namespace ForegroundBotRunner.Statics
 
         public event EventHandler<SkillUpdatedArgs> OnSkillUpdated;
 
+        public event EventHandler<ItemAddedToBagArgs> OnItemAddedToBag;
+
         public event EventHandler<EventArgs> OnBlockParryDodge;
 
         public event EventHandler<EventArgs> OnParry;
@@ -260,6 +262,11 @@ namespace ForegroundBotRunner.Statics
         internal void FireOnSkillUpdated(uint skillId, uint oldValue, uint newValue, uint maxValue)
         {
             OnSkillUpdated?.Invoke(this, new SkillUpdatedArgs(skillId, oldValue, newValue, maxValue));
+        }
+
+        internal void FireOnItemAddedToBag(uint bag, uint slot, uint itemId, uint count)
+        {
+            OnItemAddedToBag?.Invoke(this, new ItemAddedToBagArgs(bag, slot, itemId, count));
         }
 
 

@@ -2,12 +2,14 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using System.Threading.Tasks;
 using System;
 using System.Threading;
 using System.Collections.Generic;
+using System.Reactive.Subjects;
 
 namespace WoWSharpClient.Tests.Agent
 {
@@ -78,6 +80,54 @@ namespace WoWSharpClient.Tests.Agent
                 ),
                 Times.Once
             );
+        }
+
+        [Fact]
+        public void ItemPushResult_FiresOnItemAddedToBag()
+        {
+            var itemPushSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(Opcode.SMSG_ITEM_PUSH_RESULT))
+                .Returns(itemPushSubject);
+
+            var lootingAgent = new LootingNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object)
+            {
+                EventEmitter = WoWSharpEventEmitter.Instance
+            };
+
+            ItemAddedToBagArgs? args = null;
+            EventHandler<ItemAddedToBagArgs> handler = (_, eventArgs) => args = eventArgs;
+            WoWSharpEventEmitter.Instance.OnItemAddedToBag += handler;
+
+            try
+            {
+                var payload = new byte[44];
+                BitConverter.GetBytes(0x0000000000000007UL).CopyTo(payload, 0);
+                BitConverter.GetBytes(1u).CopyTo(payload, 8);
+                BitConverter.GetBytes(0u).CopyTo(payload, 12);
+                BitConverter.GetBytes(0u).CopyTo(payload, 16);
+                BitConverter.GetBytes(0u).CopyTo(payload, 20);
+                BitConverter.GetBytes(15u).CopyTo(payload, 24);
+                BitConverter.GetBytes(2589u).CopyTo(payload, 28);
+                BitConverter.GetBytes(0u).CopyTo(payload, 32);
+                BitConverter.GetBytes(0u).CopyTo(payload, 36);
+                BitConverter.GetBytes(3u).CopyTo(payload, 40);
+
+                itemPushSubject.OnNext(new ReadOnlyMemory<byte>(payload));
+
+                Assert.NotNull(args);
+                var itemArgs = args!;
+                Assert.Equal((uint)0, itemArgs.Bag);
+                Assert.Equal((uint)15, itemArgs.Slot);
+                Assert.Equal((uint)2589, itemArgs.ItemId);
+                Assert.Equal((uint)3, itemArgs.Count);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnItemAddedToBag -= handler;
+                WoWSharpEventEmitter.Instance.Reset();
+                lootingAgent.Dispose();
+                itemPushSubject.Dispose();
+            }
         }
 
         [Fact]

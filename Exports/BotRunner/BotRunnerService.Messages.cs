@@ -102,6 +102,17 @@ namespace BotRunner
                     }
                 };
 
+                eh.OnItemAddedToBag += (_, args) =>
+                {
+                    lock (_recentChatMessages)
+                    {
+                        _recentChatMessages.Enqueue(
+                            $"[UI] Item {args.ItemId} x{args.Count} -> bag {args.Bag}/{args.Slot}");
+                        while (_recentChatMessages.Count > MaxBufferedMessages)
+                            _recentChatMessages.Dequeue();
+                    }
+                };
+
                 eh.OnWorldStatesInit += (_, worldStates) =>
                 {
                     var summary = string.Join(

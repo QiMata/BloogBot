@@ -33,6 +33,7 @@ namespace GameData.Core.Interfaces
         event EventHandler<SpellChangedArgs> OnLearnedSpell;
         event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
         event EventHandler<SkillUpdatedArgs> OnSkillUpdated;
+        event EventHandler<ItemAddedToBagArgs> OnItemAddedToBag;
         event EventHandler<EventArgs> OnBlockParryDodge;
         event EventHandler<EventArgs> OnParry;
         event EventHandler<EventArgs> OnSlamReady;
@@ -128,6 +129,14 @@ namespace GameData.Core.Interfaces
         public uint OldValue { get; } = oldValue;
         public uint NewValue { get; } = newValue;
         public uint MaxValue { get; } = maxValue;
+    }
+
+    public class ItemAddedToBagArgs(uint bag, uint slot, uint itemId, uint count) : EventArgs
+    {
+        public uint Bag { get; } = bag;
+        public uint Slot { get; } = slot;
+        public uint ItemId { get; } = itemId;
+        public uint Count { get; } = count;
     }
 
     public class OnXpGainArgs(int xp) : EventArgs
